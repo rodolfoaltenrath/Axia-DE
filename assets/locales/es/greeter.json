@@ -1,0 +1,19 @@
+{
+  "bootTest": "Midiendo el tiempo de arranque: arranque {k} de {n} listo. Reinicia en {s} s. Iniciar sesión también detiene la prueba.",
+  "bootTestCancel": "Detener la prueba",
+  "busy": "Un momento…",
+  "cancel": "Cancelar",
+  "confirmRestart": "Hay sesiones abiertas: lo que no esté guardado se pierde. ¿Reiniciar igual?",
+  "confirmShutdown": "Hay sesiones abiertas: lo que no esté guardado se pierde. ¿Apagar igual?",
+  "error": "No se pudo abrir la sesión.",
+  "locked": "Pantalla bloqueada",
+  "noUsers": "No hay usuarios",
+  "password": "Contraseña",
+  "restart": "Reiniciar",
+  "shutdown": "Apagar",
+  "wait": {
+    "one": "Demasiados intentos. Esperá {count} segundo.",
+    "other": "Demasiados intentos. Esperá {count} segundos."
+  },
+  "wrong": "Contraseña incorrecta."
+}

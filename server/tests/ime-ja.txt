@@ -1,0 +1,20 @@
+# Frases para la conversión japonesa por frase (ime.c). romaji|esperado. Ver tests/ime_test.c.
+# 16/18 al 2026-10-16: 機能/昨日 y 画布/が降り necesitan frecuencias que SKK no trae.
+watashihanihongowobenkyoushiteimasu|私は日本語を勉強しています
+kyouhaiitenkidesune|今日はいい天気ですね
+toukyouniikimasu|東京に行きます
+hon'wokakimasu|本を書きます
+gakkouheikimashita|学校へ行きました
+kanojohasenseidesu|彼女は先生です
+konohonhaomoshiroidesu|この本は面白いです
+ekimadearukimasu|駅まで歩きます
+nihongowohanashimasu|日本語を話します
+denshadekaishanikayoimasu|電車で会社に通います
+kurumawokaimashita|車を買いました
+tomodachitoeigawomimashita|友達と映画を見ました
+ashitahaamegafurisoudesu|明日は雨が降りそうです
+mainichiko-hi-wonomimasu|毎日珈琲を飲みます
+kinouhanihonnnokotowohanashimashita|昨日は日本のことを話しました
+gohanwotabemasu|御飯を食べます
+kanojonitegamiwokakimashita|彼女に手紙を書きました
+yamadasannnihaimasenndeshita|山田さんにはいませんでした

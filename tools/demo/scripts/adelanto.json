@@ -1,0 +1,263 @@
+[
+ {
+  "chapter": "LordOS",
+  "chapter_es": "Adelanto · versión 0.7",
+  "en": "This is LordOS: a desktop environment built from scratch, with its own display server written in C and an interface written in React.",
+  "es": "Esto es LordOS: un entorno de escritorio hecho desde cero, con su propio servidor gráfico en C y una interfaz en React.",
+  "actions": [
+   [
+    "click",
+    410,
+    175
+   ],
+   [
+    "move",
+    1180,
+    700
+   ]
+  ],
+  "min": 3
+ },
+ {
+  "chapter": "Archivos",
+  "chapter_es": "Íconos, lista, columnas y galería",
+  "en": "The Files app has icons with real thumbnails, a list with sortable columns, Miller columns, and a gallery.",
+  "es": "La app Archivos tiene íconos con miniaturas reales, lista con columnas, columnas Miller y galería.",
+  "actions": [
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    735,
+    138
+   ],
+   [
+    "wait",
+    2.2
+   ],
+   [
+    "click",
+    763,
+    138
+   ],
+   [
+    "wait",
+    2.2
+   ],
+   [
+    "click",
+    707,
+    138
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "It has tabs, a sidebar with your places and color tags, a recycle bin, and Quick Preview with the space bar.",
+  "es": "Tiene pestañas, una barra lateral con tus lugares y etiquetas de colores, papelera y Vista rápida con la barra espaciadora.",
+  "actions": [
+   [
+    "click",
+    160,
+    291
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    357,
+    215
+   ],
+   [
+    "wait",
+    0.6
+   ],
+   [
+    "key",
+    "{spc}"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "key",
+    "{esc}"
+   ],
+   [
+    "wait",
+    0.5
+   ],
+   [
+    "click",
+    159,
+    397
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "chapter": "Buscar",
+  "chapter_es": "Buscar todo con Super + Espacio",
+  "en": "Press Super and Space to open Search. It finds apps, files, settings and notes, and it can also do math and unit conversions.",
+  "es": "Con Super + Espacio se abre Buscar: encuentra apps, archivos, ajustes y notas, y también hace cuentas y conversiones.",
+  "actions": [
+   [
+    "key",
+    "{meta_l-spc}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "type",
+    "15% de 2400"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "key",
+    "{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}"
+   ],
+   [
+    "type",
+    "72 f a c"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "key",
+    "{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}"
+   ],
+   [
+    "type",
+    "termi"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 8
+ },
+ {
+  "chapter": "Notas",
+  "chapter_es": "Post-its para tu escritorio",
+  "en": "Notes are sticky notes for your desktop. They are written in Markdown, with images, files and emoji, and every change is saved automatically in your home folder.",
+  "es": "Notas son post-its para el escritorio, escritas en Markdown, con imágenes, archivos y emojis. Se guardan solas en tu carpeta personal.",
+  "actions": [
+   [
+    "click",
+    142,
+    95
+   ],
+   [
+    "move",
+    640,
+    500
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "move",
+    1000,
+    75
+   ],
+   [
+    "wait",
+    2
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "chapter": "Tienda",
+  "chapter_es": "Todo Debian, con un motor propio",
+  "en": "The Store brings the whole Debian catalog, organized by category. It uses our own package engine, which checks signatures and resolves dependencies, and it shows you exactly what will change before you install anything.",
+  "es": "La Tienda trae todo el catálogo de Debian por categorías, con un motor de paquetes propio que verifica firmas y te muestra qué va a cambiar antes de instalar.",
+  "actions": [
+   [
+    "key",
+    "{f4}"
+   ],
+   [
+    "wait",
+    1.2
+   ],
+   [
+    "type",
+    "tienda{ret}"
+   ],
+   [
+    "wait",
+    3
+   ],
+   [
+    "move",
+    700,
+    500
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "chapter": "Dock",
+  "chapter_es": "Clic derecho en todas partes",
+  "en": "Right click an icon in the Dock to see every window of that app, open a new one, or keep the app in the Dock.",
+  "es": "Con clic derecho en el Dock ves todas las ventanas de la app, abrís una nueva o la fijás en el Dock.",
+  "actions": [
+   [
+    "move",
+    453,
+    757
+   ],
+   [
+    "wait",
+    0.8
+   ],
+   [
+    "rclick",
+    453,
+    757
+   ],
+   [
+    "wait",
+    3.5
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 5
+ },
+ {
+  "chapter": "LordOS",
+  "chapter_es": "Muy pronto: la instalación y todas las funciones",
+  "en": "That was a quick look. The full video will show the installation and every feature. LordOS: fast, light, and all its own.",
+  "es": "Esto fue un adelanto. El video completo va a mostrar la instalación y todas las funciones. LordOS: rápido, liviano y propio.",
+  "actions": [
+   [
+    "move",
+    1180,
+    700
+   ]
+  ],
+  "min": 3
+ }
+]

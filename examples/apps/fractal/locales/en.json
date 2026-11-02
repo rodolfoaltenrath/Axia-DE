@@ -1,0 +1,7 @@
+{
+  "hint": "Click: zoom in · Right click: zoom out · Pinch: zoom · Two fingers: move",
+  "reset": "Reset view",
+  "stats": "{w}×{h} · {iter} iterations · {ms} ms",
+  "engine": "Engine: {engine}",
+  "error": "The WebAssembly module could not be loaded: {error}"
+}

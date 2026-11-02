@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in LordOS doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Security problems go privately to https://lordos.org/legal/security/, never here.**
+        Please don't include passwords, keys, email contents or other personal data.
+  - type: input
+    id: version
+    attributes:
+      label: LordOS version
+      description: Open the About LordOS app and copy the version (for example "0.8.4 · Beta").
+      placeholder: 0.8.4 · Beta
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install LordOS?
+      options:
+        - ISO (live or installed)
+        - Raspberry Pi 5 image
+        - Debian package (install.sh or .deb)
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware
+      description: Computer or board model, processor, graphics card, memory, and the devices involved (display, printer, Wi-Fi…).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant lines from the Logs app. Remove anything personal before pasting.
+      render: text
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you submit
+      options:
+        - label: This report contains no passwords, keys or personal data.
+          required: true
+        - label: This is not a security vulnerability (those go to https://lordos.org/legal/security/).
+          required: true

@@ -1,0 +1,10 @@
+{
+  "openTitle": "“{app}” wants to open a file",
+  "saveTitle": "“{app}” wants to save a file",
+  "open": "Open",
+  "save": "Save",
+  "cancel": "Cancel",
+  "up": "Up",
+  "name": "Name",
+  "folder": "Folder"
+}

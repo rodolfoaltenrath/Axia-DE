@@ -1,0 +1,22 @@
+{
+  "folder": "Recordings",
+  "name": "Recording {date} {time}",
+  "all": "All recordings",
+  "empty": "There are no recordings yet",
+  "hint": "Press the red button (or R) to record with the microphone",
+  "denied": "Voice Recorder is not allowed to use the microphone",
+  "play": "Play",
+  "pause": "Pause",
+  "rename": "Rename",
+  "trim": "Trim",
+  "cancelTrim": "Cancel trim",
+  "saveTrim": "Save trimmed copy",
+  "trimmed": "trimmed",
+  "export": "Export as",
+  "exportBtn": "Export",
+  "working": "Exporting…",
+  "exported": "Saved “{name}”",
+  "exportError": "Could not export",
+  "renameError": "Could not rename (does that name exist already?)",
+  "emptyTitle": "Pick or make a recording"
+}

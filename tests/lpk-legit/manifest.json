@@ -1,0 +1,23 @@
+{
+  "id": "grabadora",
+  "name": {
+    "es": "Grabadora (prueba)",
+    "en": "Recorder (test)",
+    "pt": "Gravador (teste)"
+  },
+  "description": {
+    "es": "Graba una nota de voz y adjunta un archivo",
+    "en": "Record a voice note and attach a file"
+  },
+  "version": "1.1.0",
+  "icon": "icon.png",
+  "size": [
+    520,
+    420
+  ],
+  "permissions": [
+    "microphone",
+    "camera",
+    "files"
+  ]
+}

@@ -1,0 +1,5 @@
+name,url,username,password,note
+ejemplo.com,https://ejemplo.com/login,ana@ejemplo.com,"pa,ss""word",
+banco.example,https://banco.example/,juan,ñandú-€-123,"nota con
+salto de línea"
+,https://www.sin-nombre.example.org:8443/x,u2,p2,

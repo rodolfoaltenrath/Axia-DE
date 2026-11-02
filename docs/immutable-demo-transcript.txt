@@ -1,0 +1,146 @@
+##### [   0.0s] copying the factory image (version 1) and fresh UEFI variables
+##### [   4.5s] 1. first boot of the factory image
+$ cat /usr/lib/lordos/immutable/VERSION
+  LordOS immutable prototype, image version 1, built 2026-10-19T05:14:54Z
+$ /usr/lib/lordos/immutable/update --status
+  running: image version 1, /usr = /dev/mapper/usr erofs ro
+  slot A: /dev/vda2  label=lordos_usr_1  <- running
+  slot B: /dev/vda4  label=_empty
+  boot entries (ESP /efi/EFI/Linux):
+    lordos_1.efi
+$ ls /efi > /dev/null; findmnt -lno TARGET,SOURCE,FSTYPE,OPTIONS | grep -E '^(/|/usr|/efi) ' | cut -c1-110
+  /                                           /dev/vda6       ext4       rw,relatime
+  /usr                                        /dev/mapper/usr erofs      ro,relatime,user_xattr,acl,cache_strate
+  /efi                                        /dev/vda1       vfat       rw,relatime,fmask=0077,dmask=0077,codep
+$ veritysetup status usr | sed -n '1,4p;/root hash/p'
+  /dev/mapper/usr is active and is in use.
+    type:        VERITY
+    status:      verified
+    hash type:   1
+    root hash:   bf374417b142c8bbf506aa09bdeee633e3cfa5f37910872ff4edc24f13ab8dbb
+$ touch /usr/bin/evil; echo exit=$?
+  touch: cannot touch '/usr/bin/evil': Read-only file system
+  exit=1
+$ echo 'kept across updates' > /etc/lordos-demo.conf; mkdir -p /home/demo && echo 'my file' > /home/demo/notes.txt; echo ok
+  ok
+$ systemctl is-active lordos-health systemd-bless-boot; echo
+  inactive
+  inactive
+##### [  28.2s] 2. signed update to version 2 (into slot B)
+$ /usr/lib/lordos/immutable/update http://10.0.2.2:8642
+  checking http://10.0.2.2:8642
+  signature: good (update key)
+  installing version 2 (running 1)
+  writing slot B (/dev/vda4, was _empty)
+  slot verified against usrhash 5305fd2bf370e9b7119ffdd6acd6e128e597c596a163feb4fd950d6e364915a3
+  version 2 installed; it boots next (3 tries), version 1 stays as the fallback.
+  Restart to finish.
+$ /usr/lib/lordos/immutable/update --status
+  running: image version 1, /usr = /dev/mapper/usr erofs ro
+  slot A: /dev/vda2  label=lordos_usr_1  <- running
+  slot B: /dev/vda4  label=lordos_usr_2
+  boot entries (ESP /efi/EFI/Linux):
+    lordos_1.efi
+    lordos_2+3.efi
+$ systemctl reboot
+##### [ 149.1s] booted after the update
+$ cat /usr/lib/lordos/immutable/VERSION
+  LordOS immutable prototype, image version 2, built 2026-10-19T05:15:14Z
+$ cat /etc/lordos-demo.conf /home/demo/notes.txt
+  kept across updates
+  my file
+$ systemctl is-active lordos-health systemd-bless-boot; journalctl -b -u systemd-bless-boot -o cat | tail -3
+  active
+  active
+  Starting systemd-bless-boot.service - Mark the Current Boot Loader Entry as Good...
+  Marked boot as 'good'. (Boot attempt counter is at 1.)
+  Finished systemd-bless-boot.service - Mark the Current Boot Loader Entry as Good.
+$ /usr/lib/lordos/immutable/update --status
+  running: image version 2, /usr = /dev/mapper/usr erofs ro
+  slot A: /dev/vda2  label=lordos_usr_1
+  slot B: /dev/vda4  label=lordos_usr_2  <- running
+  boot entries (ESP /efi/EFI/Linux):
+    lordos_1.efi
+    lordos_2.efi
+##### [ 149.3s] 3. a broken release: version 3 (fails its health check) into slot A
+$ /usr/lib/lordos/immutable/update http://10.0.2.2:8642
+  checking http://10.0.2.2:8642
+  signature: good (update key)
+  installing version 3 (running 2)
+  writing slot A (/dev/vda2, was lordos_usr_1)
+  slot verified against usrhash 58641627e865809540d4ee5a93f27e09134584433b2892fc04d3f19ec35aaaff
+  version 3 installed; it boots next (3 tries), version 2 stays as the fallback.
+  Restart to finish.
+$ /usr/lib/lordos/immutable/update --status
+  running: image version 2, /usr = /dev/mapper/usr erofs ro
+  slot A: /dev/vda2  label=lordos_usr_3
+  slot B: /dev/vda4  label=lordos_usr_2  <- running
+  boot entries (ESP /efi/EFI/Linux):
+    lordos_2.efi
+    lordos_3+3.efi
+$ systemctl reboot
+  [console] lordos: this version failed its health check; restarting in 5 s (systemd-boot counts the attempt)
+##### [ 185.4s] version 3 failed its health check (attempt 1); the system restarts itself
+  [console] lordos: this version failed its health check; restarting in 5 s (systemd-boot counts the attempt)
+##### [ 212.9s] version 3 failed its health check (attempt 2); the system restarts itself
+  [console] lordos: this version failed its health check; restarting in 5 s (systemd-boot counts the attempt)
+##### [ 240.5s] version 3 failed its health check (attempt 3); the system restarts itself
+##### [ 267.9s] booted on its own after the failed attempts
+$ cat /usr/lib/lordos/immutable/VERSION
+  LordOS immutable prototype, image version 2, built 2026-10-19T05:15:14Z
+$ /usr/lib/lordos/immutable/update --status
+  running: image version 2, /usr = /dev/mapper/usr erofs ro
+  slot A: /dev/vda2  label=lordos_usr_3
+  slot B: /dev/vda4  label=lordos_usr_2  <- running
+  boot entries (ESP /efi/EFI/Linux):
+    lordos_2.efi
+    lordos_3+0-3.efi
+$ cat /etc/lordos-demo.conf /home/demo/notes.txt
+  kept across updates
+  my file
+$ journalctl -b -1 -u lordos-health -o cat --no-pager | grep health-check
+  health-check: FAILED: this test release is built broken on purpose (simulate-broken-release)
+$ journalctl --list-boots --no-pager | tail -5
+   -4 caac959c230346ad9a4b74a45a360367 Mon 2026-10-19 05:19:11 UTC Mon 2026-10-19 05:19:35 UTC
+   -3 631a7513343d442087d2da3ab8603ccf Mon 2026-10-19 05:19:48 UTC Mon 2026-10-19 05:20:01 UTC
+   -2 838ac15c526b4d43a464151907ec1c64 Mon 2026-10-19 05:20:14 UTC Mon 2026-10-19 05:20:28 UTC
+   -1 81970bae0c824434958bc679dca2bd9f Mon 2026-10-19 05:20:41 UTC Mon 2026-10-19 05:20:55 UTC
+    0 f98762ba2744458b9299f2beb2dcdaea Mon 2026-10-19 05:21:07 UTC Mon 2026-10-19 05:21:15 UTC
+$ /usr/lib/lordos/immutable/update http://10.0.2.2:8642
+  checking http://10.0.2.2:8642
+  signature: good (update key)
+  version 3 could not start on this computer (all tries failed); staying on 2 until a newer version is published
+##### [ 268.3s] 3b. a hostile mirror: SHA256SUMS changed on the server (a version 9 added) without the key
+$ /usr/lib/lordos/immutable/update http://10.0.2.2:8642; echo exit=$?
+  checking http://10.0.2.2:8642
+  update: SHA256SUMS: BAD or missing signature, nothing installed
+  exit=1
+$ /usr/lib/lordos/immutable/update --status
+  running: image version 2, /usr = /dev/mapper/usr erofs ro
+  slot A: /dev/vda2  label=lordos_usr_3
+  slot B: /dev/vda4  label=lordos_usr_2  <- running
+  boot entries (ESP /efi/EFI/Linux):
+    lordos_2.efi
+    lordos_3+0-3.efi
+##### [ 274.6s] 4. tampering: corrupt 8 MiB of the running /usr slot's blocks underneath dm-verity
+$ DATA=$(veritysetup status usr | awk '/data device/ {print $3}'); echo $DATA
+  /dev/vda4
+$ dd if=/dev/urandom of=$DATA bs=1M count=8 seek=40 conv=fsync status=none; echo 3 > /proc/sys/vm/drop_caches; echo written
+  written
+$ find /usr -type f -exec cat {} + > /dev/null 2> /tmp/err; echo read-errors=$(grep -c 'Input/output error' /tmp/err)
+  [kernel] device-mapper: verity: 253:4: data block 10241 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10241 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10241 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10280 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10280 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10280 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10901 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10901 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10901 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10862 is corrupted
+  read-errors=228
+$ dmesg | grep -m3 'is corrupted'
+  [kernel] device-mapper: verity: 253:4: data block 10241 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10241 is corrupted
+  [kernel] device-mapper: verity: 253:4: data block 10241 is corrupted
+##### [ 281.4s] done

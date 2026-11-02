@@ -1,0 +1,25 @@
+{
+  "id": "fractal",
+  "name": {
+    "es": "Fractal",
+    "en": "Fractal",
+    "pt": "Fractal"
+  },
+  "description": {
+    "es": "Explorador del conjunto de Mandelbrot, calculado en WebAssembly",
+    "en": "Mandelbrot set explorer, computed in WebAssembly",
+    "pt": "Explorador do conjunto de Mandelbrot, calculado em WebAssembly"
+  },
+  "version": "1.1.0",
+  "icon": "icon.png",
+  "size": [
+    660,
+    520
+  ],
+  "minSize": [
+    360,
+    300
+  ],
+  "permissions": [],
+  "category": "Graphics"
+}

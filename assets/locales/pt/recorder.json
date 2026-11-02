@@ -1,0 +1,22 @@
+{
+  "folder": "Gravações",
+  "name": "Gravação {date} {time}",
+  "all": "Todas as gravações",
+  "empty": "Ainda não há gravações",
+  "hint": "Aperte o botão vermelho (ou R) para gravar com o microfone",
+  "denied": "O Gravador não tem permissão para usar o microfone",
+  "play": "Reproduzir",
+  "pause": "Pausar",
+  "rename": "Renomear",
+  "trim": "Cortar",
+  "cancelTrim": "Cancelar corte",
+  "saveTrim": "Salvar corte",
+  "trimmed": "cortada",
+  "export": "Exportar como",
+  "exportBtn": "Exportar",
+  "working": "Exportando…",
+  "exported": "“{name}” foi salvo",
+  "exportError": "Não foi possível exportar",
+  "renameError": "Não foi possível renomear (esse nome já existe?)",
+  "emptyTitle": "Escolha ou faça uma gravação"
+}

@@ -1,0 +1,200 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      4
+    ],
+    "pre_release": false,
+    "svn_revision": "5530",
+    "platform_info": "aarch64-linux-6.18.57-lordos-rpi-2712",
+    "build_info": "(local build)",
+    "argv": [
+      "smartctl",
+      "-j",
+      "-x",
+      "/dev/nvme0n1"
+    ],
+    "exit_status": 0
+  },
+  "local_time": {
+    "time_t": 1792378099,
+    "asctime": "Sun Oct 18 23:48:19 2026 -03"
+  },
+  "device": {
+    "name": "/dev/nvme0n1",
+    "info_name": "/dev/nvme0n1",
+    "type": "nvme",
+    "protocol": "NVMe"
+  },
+  "model_name": "M.2 NVMe SSD 1TB",
+  "serial_number": "TEST0000000003",
+  "firmware_version": "2B2QEXM7",
+  "nvme_pci_vendor": {
+    "id": 5197,
+    "subsystem_id": 5197
+  },
+  "nvme_ieee_oui_identifier": 9528,
+  "nvme_total_capacity": 1000204886016,
+  "nvme_unallocated_capacity": 0,
+  "nvme_controller_id": 6,
+  "nvme_version": {
+    "string": "1.4",
+    "value": 66560
+  },
+  "nvme_number_of_namespaces": 1,
+  "nvme_namespaces": [
+    {
+      "id": 1,
+      "size": {
+        "blocks": 1953525168,
+        "bytes": 1000204886016
+      },
+      "capacity": {
+        "blocks": 1953525168,
+        "bytes": 1000204886016
+      },
+      "utilization": {
+        "blocks": 402653184,
+        "bytes": 206158430208
+      },
+      "formatted_lba_size": 512,
+      "eui64": {
+        "oui": 9528,
+        "ext_id": 1234567890
+      }
+    }
+  ],
+  "user_capacity": {
+    "blocks": 1953525168,
+    "bytes": 1000204886016
+  },
+  "logical_block_size": 512,
+  "smart_support": {
+    "available": true,
+    "enabled": true
+  },
+  "nvme_firmware_update_capabilities": {
+    "value": 22,
+    "slots": 3,
+    "first_slot_is_read_only": false,
+    "activiation_without_reset": true,
+    "multiple_update_detection": false,
+    "other": 0
+  },
+  "nvme_optional_admin_commands": {
+    "value": 23,
+    "security_send_receive": true,
+    "format_nvm": true,
+    "firmware_download": true,
+    "namespace_management": false,
+    "self_test": true,
+    "directives": false,
+    "mi_send_receive": false,
+    "virtualization_management": false,
+    "doorbell_buffer_config": false,
+    "get_lba_status": false,
+    "command_and_feature_lockdown": false
+  },
+  "nvme_power_states": [
+    {
+      "non_operational_state": false,
+      "relative_read_latency": 0,
+      "relative_read_throughput": 0,
+      "relative_write_latency": 0,
+      "relative_write_throughput": 0,
+      "entry_latency_us": 0,
+      "exit_latency_us": 0,
+      "max_power": {
+        "value": 690,
+        "scale": 2,
+        "units_per_watt": 100
+      }
+    }
+  ],
+  "smart_status": {
+    "passed": true,
+    "nvme": {
+      "value": 0
+    }
+  },
+  "nvme_smart_health_information_log": {
+    "critical_warning": 0,
+    "temperature": 41,
+    "available_spare": 100,
+    "available_spare_threshold": 10,
+    "percentage_used": 3,
+    "data_units_read": 12345678,
+    "data_units_written": 23456789,
+    "host_reads": 234567890,
+    "host_writes": 345678901,
+    "controller_busy_time": 1234,
+    "power_cycles": 812,
+    "power_on_hours": 5021,
+    "unsafe_shutdowns": 37,
+    "media_errors": 0,
+    "num_err_log_entries": 12,
+    "warning_temp_time": 0,
+    "critical_comp_time": 0,
+    "temperature_sensors": [
+      41,
+      47
+    ]
+  },
+  "temperature": {
+    "current": 41,
+    "op_limit_max": 82,
+    "critical_limit_max": 85
+  },
+  "power_cycle_count": 812,
+  "power_on_time": {
+    "hours": 5021
+  },
+  "nvme_error_information_log": {
+    "size": 64,
+    "read": 16,
+    "unread": 0,
+    "table": [
+      {
+        "error_count": 12,
+        "submission_queue_id": 0,
+        "command_id": 4105,
+        "status_field": {
+          "value": 8194,
+          "do_not_retry": true,
+          "status_code_type": 0,
+          "status_code": 2,
+          "string": "Invalid Field in Command"
+        },
+        "phase_tag": false,
+        "parm_error_location": 40,
+        "lba": {
+          "value": 0
+        },
+        "nsid": 0
+      }
+    ]
+  },
+  "nvme_self_test_log": {
+    "current_self_test_operation": {
+      "value": 0,
+      "string": "No self-test in progress"
+    },
+    "table": [
+      {
+        "self_test_code": {
+          "value": 1,
+          "string": "Short"
+        },
+        "self_test_result": {
+          "value": 0,
+          "string": "Completed without error"
+        },
+        "power_on_hours": 5000
+      }
+    ]
+  }
+}

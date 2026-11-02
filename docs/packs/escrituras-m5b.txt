@@ -1,0 +1,14 @@
+# Frases de prueba de las escrituras de M5b (jemer, birmano, USE, corte del tailandés).
+# Una por renglón: "escritura<TAB>texto". Para las capturas: crear archivos con estos nombres
+# en Archivos, o pegarlas en la Terminal (`cat docs/packs/escrituras-m5b.txt`).
+# Todas se arman igual que HarfBuzz (server/tests/hb_compare.py).
+jemer	ព្រះរាជាណាចក្រកម្ពុជា ភាសាខ្មែរ ស្ត្រី គ្រឿង
+birmano	မင်္ဂလာပါ မြန်မာစာ ကျေးဇူးတင်ပါတယ် သင်္ချိုင်း
+tibetano	བཀྲ་ཤིས་བདེ་ལེགས། བོད་ཡིག ཨོཾ་མ་ཎི་པདྨེ་ཧཱུྃ
+cingalés	ශ්‍රී ලංකා ආයුබෝවන් ප්‍රශ්නය ස්තූතියි
+balinés	ᬅᬓ᭄ᬱᬭᬩᬮᬶ ᬦ᭄ᬢ᭄ᬭ
+javanés	ꦲꦏ꧀ꦱꦫꦗꦮ ꦥꦿꦤꦺꦴꦠꦺꦴ
+mongol	ᠮᠣᠩᠭᠣᠯ ᠪᠢᠴᠢᠭ
+tai tham	ᨽᩣᩈᩤᩃ᩶ᩣ᩠ᨶᨶᩣ
+sundanés	ᮃᮊ᮪ᮞᮛ ᮞᮥᮔ᮪ᮓ
+tailandés (corte por palabras; poner en una ventana angosta)	ภาษาไทยเป็นภาษาราชการของประเทศไทย วันนี้อากาศดีมากเราไปเที่ยวทะเลกันเถอะ คอมพิวเตอร์เครื่องนี้ทำงานเร็วมาก

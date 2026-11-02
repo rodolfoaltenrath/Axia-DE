@@ -1,0 +1,11 @@
+{
+  "id": "pdf",
+  "version": "0.8.5",
+  "name": "PDF Viewer",
+  "description": "Preview-style PDF viewer: thumbnails, outline, search, annotations, forms and printing",
+  "size": [980, 680],
+  "minSize": [560, 380],
+  "dock": false,
+  "category": "Office",
+  "permissions": ["fs:home:read", "fs:home:write", "print"]
+}

@@ -1,0 +1,41 @@
+# One destination's verdict, as the Monitor's per-domain switch shows it (sdk/fwrule.js decide) and
+# as the store decides it (fw_decide). Checked by build/fwdest-test (C, also after a JSON round trip
+# through the firewall.json text) and by tests/fwrule_input_test.mjs (JS).
+# rules (action dst [port] [proto]; ...  or -) | names (comma-separated or -) | address | proto port | restrictions (comma-separated or -) | expected: allow | deny | none (no rule: the mode) | restricted
+- | example.com | 93.184.216.34 | tcp 443 | - | none
+deny example.com | example.com | 93.184.216.34 | tcp 443 | - | deny
+deny example.com | www.example.com | 93.184.216.34 | tcp 443 | - | none
+deny *.example.com | www.example.com | 93.184.216.34 | tcp 443 | - | deny
+deny *.example.com | example.com | 93.184.216.34 | tcp 443 | - | deny
+deny *.example.com | otherexample.com | 93.184.216.34 | tcp 443 | - | none
+deny *.example.com; allow api.example.com | api.example.com | 93.184.216.34 | tcp 443 | - | allow
+deny *.example.com; allow api.example.com | www.example.com | 93.184.216.34 | tcp 443 | - | deny
+deny any; allow api.example.com | api.example.com | 93.184.216.34 | udp 443 | - | allow
+deny any; allow api.example.com | www.example.com | 93.184.216.34 | udp 443 | - | deny
+allow *.example.com; deny *.cdn.example.com | a.cdn.example.com | 203.0.113.9 | tcp 443 | - | deny
+allow *.cdn.example.com; deny *.example.com | a.cdn.example.com | 203.0.113.9 | tcp 443 | - | allow
+allow example.com; deny example.com | example.com | 93.184.216.34 | tcp 443 | - | deny
+deny 93.184.216.0/24 | example.com | 93.184.216.34 | tcp 443 | - | deny
+deny 93.184.216.0/24; allow example.com | example.com | 93.184.216.34 | tcp 443 | - | allow
+deny 93.184.216.34; allow 93.184.216.0/24 | - | 93.184.216.34 | tcp 443 | - | deny
+allow 93.184.216.34; deny 93.184.216.0/24 | - | 93.184.216.34 | tcp 443 | - | allow
+deny example.com 80 | example.com | 93.184.216.34 | tcp 443 | - | none
+deny example.com 443 tcp; allow example.com | example.com | 93.184.216.34 | tcp 443 | - | deny
+deny example.com 443 tcp | example.com | 93.184.216.34 | udp 443 | - | none
+deny example.com 8000-8080 | example.com | 93.184.216.34 | tcp 8080 | - | deny
+deny internet | example.com | 93.184.216.34 | tcp 443 | - | deny
+deny internet | printer.local | 192.168.1.20 | tcp 631 | - | none
+deny lan | printer.local | 192.168.1.20 | tcp 631 | - | deny
+deny lan; allow 192.168.1.20 | printer.local | 192.168.1.20 | tcp 631 | - | allow
+deny internet; allow *.debian.org | deb.debian.org | 151.101.2.132 | tcp 443 | - | allow
+- | example.com | 93.184.216.34 | tcp 443 | no-internet | restricted
+allow example.com | example.com | 93.184.216.34 | tcp 443 | no-internet | restricted
+- | printer.local | 192.168.1.20 | tcp 631 | no-internet | none
+- | printer.local | 192.168.1.20 | tcp 631 | no-lan | restricted
+- | example.com | 93.184.216.34 | tcp 443 | no-network | restricted
+deny 2001:db8::/32 | v6.example.com | 2001:db8::7 | tcp 443 | - | deny
+allow 2001:db8::7; deny 2001:db8::/32 | v6.example.com | 2001:db8::7 | tcp 443 | - | allow
+deny lan | - | fd00::1 | udp 53 | - | deny
+deny *.Example.COM. | WWW.example.com | 93.184.216.34 | tcp 443 | - | deny
+deny a.example.com | b.example.com,a.example.com | 93.184.216.34 | tcp 443 | - | deny
+deny example.com; allow www.example.com | www.example.com,example.com | 93.184.216.34 | tcp 443 | - | allow

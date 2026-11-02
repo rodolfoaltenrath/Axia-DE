@@ -1,0 +1,67 @@
+# fw_dest_cases.txt — destinations a user may type for a firewall rule, and what the store keeps.
+# One case per line: input, a tab, then the canonical destination or "!" if it must be refused.
+# Both parsers read this file: the C one (fw_parse_dest + fw_format_dest, build/fwdest-test) and
+# the JS one the Settings sheet uses (sdk/fwrule.js, tests/fwrule_input_test.mjs), so they can't
+# drift apart.
+example.com	example.com
+Example.COM	example.com
+example.com.	example.com
+www.example.com	www.example.com
+a_b.example.com	a_b.example.com
+xn--bcher-kva.example	xn--bcher-kva.example
+localhost	localhost
+*.example.com	*.example.com
+*.Example.com.	*.example.com
+*.cdn.example.com	*.cdn.example.com
+*.com	*.com
+*example.com	!
+**.example.com	!
+*.	!
+*.*.example.com	!
+example..com	!
+.example.com	!
+-	-
+exa mple.com	!
+exämple.com	!
+example.123	!
+1.2.3	!
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com	!
+any	any
+lan	lan
+internet	internet
+192.0.2.7	192.0.2.7
+192.0.2.7/32	192.0.2.7
+10.0.0.0/8	10.0.0.0/8
+10.0.0.1/8	!
+0.0.0.0/0	0.0.0.0/0
+192.168.1.0/24	192.168.1.0/24
+192.168.1.0/33	!
+192.168.1.0/	!
+192.168.1.0/08	!
+192.168.1.0/-1	!
+256.1.1.1	!
+01.2.3.4	!
+1.2.3.4.5	!
+2001:db8::1	2001:db8::1
+2001:DB8::1	2001:db8::1
+2001:db8::/32	2001:db8::/32
+2001:db8::1/32	!
+2001:0db8:0000:0000:0000:0000:0000:0001	2001:db8::1
+::1	::1
+::	::
+::/0	::/0
+fe80::/10	fe80::/10
+1:0:0:2:0:0:0:3	1:0:0:2::3
+1:0:0:0:2:0:0:3	1::2:0:0:3
+::ffff:192.0.2.7	192.0.2.7
+::ffff:10.0.0.0/104	10.0.0.0/8
+::ffff:c000:207	192.0.2.7
+1::2::3	!
+:::	!
+:1	!
+1:	!
+12345::1	!
+1:2:3:4:5:6:7:8:9	!
+1:2:3:4:5:6:7::	1:2:3:4:5:6:7:0
+2001:db8::/129	!
+2001:db8::g	!

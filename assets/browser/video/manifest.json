@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_name__",
+  "description": "__MSG_description__",
+  "version": "1.0.0",
+  "default_locale": "en",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxa5oje2B7tq1K0FxP9Viwaq58r7wpHO+mZJKEJVaqb6yTxOtQlatHDREPfNIaVlmkU2/qsQgH7e8LP7YObNsatQiwXdgFxIlLJFbHb51Fo+HL5TATKhmAUh2LRM7I8i7zTg41CgGmOnkcyqsm+FdWkvffv43M8NXPVmZ2xJwdsi070fOTIrEztRO7imLSOhN0NS1KFADPpvQTIBJEwqY0N0insTqMWjvgj+eUDsmX7pL4HXPlpYbcBHTGEfUC8lBx1rQo8BqqylLx9RyrYV7goebVjhzoNhdDP8p3oGI6BIfEYxqHOIBAi4KqDmAZLdM7ieGJiUxWGIukw+1Whhy8wIDAQAB",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://www.youtube-nocookie.com/*"
+  ],
+  "storage": {
+    "managed_schema": "schema.json"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://www.youtube-nocookie.com/*"
+      ],
+      "js": [
+        "page.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://www.youtube-nocookie.com/*"
+      ],
+      "js": [
+        "policy.js",
+        "stutter.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

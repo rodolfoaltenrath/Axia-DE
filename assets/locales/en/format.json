@@ -1,0 +1,84 @@
+{
+  "months": [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+  ],
+  "monthsShort": [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+  ],
+  "weekdays": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+  ],
+  "weekdaysShort": [
+    "Sun",
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat"
+  ],
+  "date": {
+    "short": "{wd} {mon} {day}",
+    "long": "{weekday}, {month} {day}, {yyyy}",
+    "dayMonth": "{weekday}, {month} {day}",
+    "numeric": "{mm}/{dd}/{yyyy}"
+  },
+  "decimal": ".",
+  "group": ",",
+  "hour12": true,
+  "am": "AM",
+  "pm": "PM",
+  "regions": {
+    "en_GB": {
+      "date": {
+        "short": "{wd} {day} {mon}",
+        "long": "{weekday} {day} {month} {yyyy}",
+        "numeric": "{dd}/{mm}/{yyyy}"
+      },
+      "hour12": false
+    },
+    "en_AU": {
+      "date": {
+        "short": "{wd} {day} {mon}",
+        "long": "{weekday}, {day} {month} {yyyy}",
+        "numeric": "{dd}/{mm}/{yyyy}"
+      }
+    },
+    "en_IE": {
+      "date": {
+        "short": "{wd} {day} {mon}",
+        "long": "{weekday} {day} {month} {yyyy}",
+        "numeric": "{dd}/{mm}/{yyyy}"
+      },
+      "hour12": false
+    }
+  }
+}

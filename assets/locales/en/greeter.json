@@ -1,0 +1,19 @@
+{
+  "bootTest": "Measuring the boot time: boot {k} of {n} done. Restarting in {s} s. Logging in also stops the test.",
+  "bootTestCancel": "Stop the test",
+  "busy": "One moment…",
+  "cancel": "Cancel",
+  "confirmRestart": "There are open sessions: unsaved work will be lost. Restart anyway?",
+  "confirmShutdown": "There are open sessions: unsaved work will be lost. Shut down anyway?",
+  "error": "The session could not be opened.",
+  "locked": "Screen locked",
+  "noUsers": "No users",
+  "password": "Password",
+  "restart": "Restart",
+  "shutdown": "Shut down",
+  "wait": {
+    "one": "Too many attempts. Wait {count} second.",
+    "other": "Too many attempts. Wait {count} seconds."
+  },
+  "wrong": "Wrong password."
+}

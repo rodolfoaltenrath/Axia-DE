@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" font-family="Inter, 'DejaVu Sans', Arial, sans-serif">
+  <rect width="1200" height="640" fill="#ffffff"/>
+  <text x="40" y="48" font-size="26" font-weight="700" fill="#1d2433">Immutable LordOS (prototype): A/B disk layout and boot assessment</text>
+  <text x="40" y="76" font-size="15" fill="#5b6475">GPT disk as built by tools/immutable/build.sh — verified in QEMU (UEFI) on VM 122, 2026-10-19</text>
+
+  <!-- disk layout -->
+  <g font-size="14">
+    <rect x="40" y="100" width="150" height="110" rx="8" fill="#e8eefc" stroke="#3b5bdb" stroke-width="2"/>
+    <text x="115" y="128" text-anchor="middle" font-weight="700" fill="#1d2433">ESP (FAT)</text>
+    <text x="115" y="150" text-anchor="middle" fill="#334">systemd-boot</text>
+    <text x="115" y="170" text-anchor="middle" fill="#334">lordos_2.efi</text>
+    <text x="115" y="190" text-anchor="middle" fill="#334">lordos_3+0-3.efi</text>
+
+    <rect x="200" y="100" width="230" height="110" rx="8" fill="#e6f6ec" stroke="#2f9e44" stroke-width="2"/>
+    <text x="315" y="128" text-anchor="middle" font-weight="700" fill="#1d2433">usr slot A (EROFS, ro)</text>
+    <text x="315" y="150" text-anchor="middle" fill="#334">lordos_usr_&lt;v&gt;</text>
+    <text x="315" y="170" text-anchor="middle" fill="#334">UUID = first 128 bits</text>
+    <text x="315" y="190" text-anchor="middle" fill="#334">of the root hash</text>
+
+    <rect x="440" y="100" width="90" height="110" rx="8" fill="#e6f6ec" stroke="#2f9e44" stroke-width="2"/>
+    <text x="485" y="140" text-anchor="middle" font-weight="700" fill="#1d2433">verity</text>
+    <text x="485" y="160" text-anchor="middle" fill="#334">hash</text>
+    <text x="485" y="180" text-anchor="middle" fill="#334">tree A</text>
+
+    <rect x="540" y="100" width="230" height="110" rx="8" fill="#fff4e6" stroke="#e8590c" stroke-width="2"/>
+    <text x="655" y="128" text-anchor="middle" font-weight="700" fill="#1d2433">usr slot B (EROFS, ro)</text>
+    <text x="655" y="150" text-anchor="middle" fill="#334">written by the updater</text>
+    <text x="655" y="170" text-anchor="middle" fill="#334">while A runs, checked</text>
+    <text x="655" y="190" text-anchor="middle" fill="#334">against the signed hash</text>
+
+    <rect x="780" y="100" width="90" height="110" rx="8" fill="#fff4e6" stroke="#e8590c" stroke-width="2"/>
+    <text x="825" y="140" text-anchor="middle" font-weight="700" fill="#1d2433">verity</text>
+    <text x="825" y="160" text-anchor="middle" fill="#334">hash</text>
+    <text x="825" y="180" text-anchor="middle" fill="#334">tree B</text>
+
+    <rect x="880" y="100" width="280" height="110" rx="8" fill="#f3f0ff" stroke="#7048e8" stroke-width="2"/>
+    <text x="1020" y="128" text-anchor="middle" font-weight="700" fill="#1d2433">root (ext4, writable)</text>
+    <text x="1020" y="150" text-anchor="middle" fill="#334">/etc  /var  /home</text>
+    <text x="1020" y="170" text-anchor="middle" fill="#334">kept across updates</text>
+    <text x="1020" y="190" text-anchor="middle" fill="#334">and rollbacks</text>
+  </g>
+
+  <text x="40" y="245" font-size="15" fill="#334">Each UKI carries <tspan font-family="monospace">usrhash=&lt;root hash&gt;</tspan> in its sealed command line, so a boot entry can only boot the exact /usr it was built with.</text>
+
+  <!-- flow -->
+  <g font-size="14">
+    <defs>
+      <marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6475"/></marker>
+    </defs>
+    <rect x="40" y="280" width="200" height="80" rx="10" fill="#f8f9fb" stroke="#adb5bd"/>
+    <text x="140" y="312" text-anchor="middle" font-weight="700" fill="#1d2433">1. Update</text>
+    <text x="140" y="334" text-anchor="middle" fill="#334">signed SHA256SUMS,</text>
+    <text x="140" y="352" text-anchor="middle" fill="#334">write inactive slot</text>
+
+    <rect x="290" y="280" width="200" height="80" rx="10" fill="#f8f9fb" stroke="#adb5bd"/>
+    <text x="390" y="312" text-anchor="middle" font-weight="700" fill="#1d2433">2. New entry</text>
+    <text x="390" y="334" text-anchor="middle" fill="#334">lordos_&lt;v&gt;+3.efi</text>
+    <text x="390" y="352" text-anchor="middle" fill="#334">3 boot tries</text>
+
+    <rect x="540" y="280" width="200" height="80" rx="10" fill="#f8f9fb" stroke="#adb5bd"/>
+    <text x="640" y="312" text-anchor="middle" font-weight="700" fill="#1d2433">3. Restart</text>
+    <text x="640" y="334" text-anchor="middle" fill="#334">systemd-boot counts</text>
+    <text x="640" y="352" text-anchor="middle" fill="#334">the attempt (+2-1)</text>
+
+    <rect x="790" y="280" width="200" height="80" rx="10" fill="#f8f9fb" stroke="#adb5bd"/>
+    <text x="890" y="312" text-anchor="middle" font-weight="700" fill="#1d2433">4. Health check</text>
+    <text x="890" y="334" text-anchor="middle" fill="#334">required by</text>
+    <text x="890" y="352" text-anchor="middle" fill="#334">boot-complete.target</text>
+
+    <line x1="240" y1="320" x2="286" y2="320" stroke="#5b6475" stroke-width="2" marker-end="url(#a)"/>
+    <line x1="490" y1="320" x2="536" y2="320" stroke="#5b6475" stroke-width="2" marker-end="url(#a)"/>
+    <line x1="740" y1="320" x2="786" y2="320" stroke="#5b6475" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="700" y="420" width="290" height="80" rx="10" fill="#e6f6ec" stroke="#2f9e44" stroke-width="2"/>
+    <text x="845" y="452" text-anchor="middle" font-weight="700" fill="#1d2433">OK → marked good</text>
+    <text x="845" y="474" text-anchor="middle" fill="#334">systemd-bless-boot renames it</text>
+    <text x="845" y="492" text-anchor="middle" fill="#334">to lordos_&lt;v&gt;.efi (verified, v2)</text>
+
+    <rect x="1010" y="420" width="160" height="80" rx="10" fill="#fff0f0" stroke="#e03131" stroke-width="2"/>
+    <text x="1090" y="452" text-anchor="middle" font-weight="700" fill="#1d2433">Fails</text>
+    <text x="1090" y="474" text-anchor="middle" fill="#334">restart, next try</text>
+    <text x="1090" y="492" text-anchor="middle" fill="#334">(+1-2, +0-3)</text>
+
+    <line x1="870" y1="360" x2="850" y2="416" stroke="#2f9e44" stroke-width="2" marker-end="url(#a)"/>
+    <line x1="930" y1="360" x2="1060" y2="416" stroke="#e03131" stroke-width="2" marker-end="url(#a)"/>
+    <path d="M1090,420 C1090,390 1100,330 994,326" fill="none" stroke="#e03131" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+
+    <rect x="700" y="540" width="470" height="70" rx="10" fill="#fff4e6" stroke="#e8590c" stroke-width="2"/>
+    <text x="935" y="570" text-anchor="middle" font-weight="700" fill="#1d2433">No tries left → entry is bad → previous version boots</text>
+    <text x="935" y="592" text-anchor="middle" fill="#334">on its own, from the other slot (verified: v3 ×3 failures → v2)</text>
+    <line x1="1090" y1="500" x2="1090" y2="536" stroke="#e8590c" stroke-width="2" marker-end="url(#a)"/>
+
+    <text x="40" y="440" font-size="15" fill="#334">Nothing is replaced under the running system:</text>
+    <text x="40" y="462" font-size="15" fill="#334">the old slot stays bootable until the next update</text>
+    <text x="40" y="484" font-size="15" fill="#334">overwrites it, and only after the new one was</text>
+    <text x="40" y="506" font-size="15" fill="#334">marked good. A corrupted /usr block is refused</text>
+    <text x="40" y="528" font-size="15" fill="#334">by dm-verity (I/O error, verified).</text>
+  </g>
+</svg>

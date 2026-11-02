@@ -1,0 +1,390 @@
+// hardware.jsx — the session side of Settings' hardware pages (docs/SETTINGS.md):
+//
+//   displays      store with lord.display.list() (outputs, modes, Night Light, backlight)
+//   applyDisplay  change resolution/refresh/rotation/main display live, with the 15-second
+//                 "Keep these display settings?" countdown (<DisplayConfirm />, drawn by the system)
+//   night         Night Light scheduler: sunset to sunrise (from the time zone's coordinates, never
+//                 from the network) or custom hours, with a 30-minute fade, plus "on until tomorrow"
+//   battery       store with lord.power.state(); low-battery notice; battery in the menu bar
+//   idle          screen off / lock / sleep after N minutes (deadlines live in lord-server)
+//   bluetooth     store with lord.bt.state(); pairing requests (<BluetoothPrompt />)
+//   timedate      NTP state from timedated (read-only)
+//   menuClock(d)  the menu bar clock with the format chosen in Settings → Date & Time
+//
+// Everything arrives as __lordHw(kind, data) from lord-server (ui/js_hw.c): no polling.
+import { createElement as h, useEffect, useState } from 'react';
+import { View, Text, mainBox } from '@lordos/runtime';
+import { createStore, useStore } from './store.js';
+import { settings } from './settings.js';
+import { useTheme } from './theme.js';
+import { t, formatDate, formatTime, weekdayName } from './i18n.js';
+import { notify, dismissNotification } from './notify.js';
+import { linuxAppFor, shortAppName } from './apps.js';
+import { admin } from './admin.js';
+import { registerStatusItem } from './statusitems.js';
+import { TextInput } from './components.jsx';
+
+const has = (name) => typeof lord !== 'undefined' && lord[name] && typeof lord[name] === 'object';
+const call = (fn, fallback) => { try { return fn(); } catch (e) { return fallback; } };
+
+export const displays = createStore(has('display') ? call(() => lord.display.list(), null) : null);
+export const battery = createStore(has('power') ? call(() => lord.power.state(), null) : null);
+export const powerProfiles = createStore(has('power') ? call(() => lord.power.profiles(), null) : null);
+export const bluetooth = createStore(has('bt') ? call(() => lord.bt.state(), null) : null);
+export const timedate = createStore(null);
+export const displayConfirm = createStore(null);   // { conn, old, deadline, left }
+const btResults = new Set();
+const ppdResults = new Set();
+
+export const useDisplays = () => useStore(displays);
+export const useBattery = () => useStore(battery);
+export const useBluetooth = () => useStore(bluetooth);
+export const usePowerProfiles = () => useStore(powerProfiles);
+export const useTimedate = () => useStore(timedate);
+export const onBluetoothResult = (fn) => { btResults.add(fn); return () => btResults.delete(fn); };
+export const onPowerProfileResult = (fn) => { ppdResults.add(fn); return () => ppdResults.delete(fn); };
+
+// ---- defaults kept in settings.json ----
+
+export const NIGHT_DEFAULTS = { schedule: 'off', from: 22 * 60, to: 7 * 60, temp: 3400, manual: null };
+export const POWER_DEFAULTS = { offAC: 600, offBattery: 180, lockDelay: 0, sleepAC: 0, sleepBattery: 900, lowBattery: true, menuPercent: true };
+export const CLOCK_DEFAULTS = { hour24: 'auto', date: 'short', seconds: false };
+export const nightPrefs = (s = settings.get()) => ({ ...NIGHT_DEFAULTS, ...(s.night || {}) });
+export const powerPrefs = (s = settings.get()) => ({ ...POWER_DEFAULTS, ...(s.power || {}) });
+export const clockPrefs = (s = settings.get()) => ({ ...CLOCK_DEFAULTS, ...(s.clock || {}) });
+
+// ---- the menu bar clock ----
+
+export function menuClock(d) {
+  const c = clockPrefs();
+  const time = formatTime(d, { seconds: !!c.seconds });
+  if (c.date === 'none') return time;
+  if (c.date === 'weekday') return `${weekdayName(d.getDay())}   ${time}`;
+  return `${formatDate(d, 'short')}   ${time}`;
+}
+
+// ---- Night Light ----
+
+const NEUTRAL = 6500;
+const minutesOf = (d) => d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+
+// Same as night_amount() in server/src/hw/night.c (tested there).
+export function nightAmount(now, from, to, fade = 30) {
+  const len = (((to - from) % 1440) + 1440) % 1440;
+  if (!len) return 0;
+  const d = (((now - from) % 1440) + 1440) % 1440;
+  if (d >= len) return 0;
+  if (fade <= 0) return 1;
+  return Math.max(0, Math.min(1, d / fade, (len - d) / fade));
+}
+
+// Sunset and sunrise today, in local minutes, from the chosen time zone's coordinates.
+export function sunTimes(day = new Date()) {
+  if (!has('display') || !lord.time) return null;
+  const zone = call(() => lord.time.zone(), '');
+  const s = call(() => lord.display.sun(zone, day.getFullYear(), day.getMonth() + 1, day.getDate()), null);
+  if (!s) return null;
+  const local = (utcMin) => {
+    const d = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()) + utcMin * 60000);
+    return d.getHours() * 60 + d.getMinutes();
+  };
+  return { sunset: local(s.set), sunrise: local(s.rise) };
+}
+
+// The window (local minutes) when the schedule is on, or null.
+export function nightWindow(p = nightPrefs()) {
+  if (p.schedule === 'custom') return { from: p.from, to: p.to };
+  if (p.schedule === 'sun') {
+    const s = sunTimes();
+    return s ? { from: s.sunset, to: s.sunrise } : { from: NIGHT_DEFAULTS.from, to: NIGHT_DEFAULTS.to };
+  }
+  return null;
+}
+
+function nightTarget(now = new Date()) {
+  const p = nightPrefs();
+  const w = nightWindow(p);
+  let amount = w ? nightAmount(minutesOf(now), w.from, w.to) : 0;
+  if (p.manual && now.getTime() < p.manual.until) amount = p.manual.on ? 1 : 0;
+  return { kelvin: Math.round(NEUTRAL - (NEUTRAL - p.temp) * amount), amount, fading: amount > 0 && amount < 1 };
+}
+
+export const nightActive = () => nightTarget().amount > 0;
+
+// "Turn on until tomorrow" / "off until the next night" (from Control Center): an override
+// that lasts until the end of the current (or next) scheduled night, or 07:00 without a schedule.
+export function setNightManual(on) {
+  const now = new Date(), m = minutesOf(now), w = nightWindow();
+  const scheduled = w ? nightAmount(m, w.from, w.to, 0) > 0 : false;
+  const manual = on === scheduled ? null
+    : { on: !!on, until: now.getTime() + ((((((w ? w.to : 7 * 60) - m) % 1440) + 1440) % 1440) || 1440) * 60000 };
+  settings.set({ night: { ...nightPrefs(), manual } });
+}
+
+let nightTimer = 0;
+export function nightTick() {
+  clearTimeout(nightTimer);
+  if (!has('display')) return;
+  const { kelvin, fading } = nightTarget();
+  if (call(() => lord.display.temperature(), NEUTRAL) !== kelvin) call(() => lord.display.setTemperature(kelvin));
+  const p = nightPrefs();
+  if (p.schedule === 'off' && !(p.manual && Date.now() < p.manual.until)) return;
+  // next check: every 30 s while fading, else at most 5 minutes (survives clock and zone changes)
+  nightTimer = setTimeout(nightTick, fading ? 30000 : 300000);
+}
+
+// Preview while dragging the warmth slider in Settings.
+export function previewNight(kelvin) { if (has('display')) call(() => lord.display.setTemperature(kelvin)); }
+
+// ---- displays ----
+
+// Applies a mode live and starts the 15-second countdown; keepDisplay() saves it, revert brings back
+// the previous one (also when the countdown runs out with nobody answering).
+// scale is in percent (100–200, 25 % steps; docs/DISPLAYS.md).
+export function applyDisplay(out, { w, h: hh, refresh = 0, rotation = 0, scale = 100, conn = out.id }) {
+  if (!has('display')) return false;
+  const d = displays.get();
+  const cur = (d?.outputs || []).find((o) => o.id === conn) || out;
+  const old = { conn: cur.id, w: cur.mode?.w || 0, h: cur.mode?.h || 0, refresh: cur.mode?.refresh || 0, rotation: cur.rotation || 0, scale: cur.scale || 100 };
+  if (!lord.display.apply(conn, w, hh, refresh, rotation, scale)) return false;
+  const prev = displayConfirm.get();
+  displayConfirm.set({ conn, old: prev ? prev.old : old, deadline: Date.now() + 15000, left: 15 });
+  scheduleConfirm();
+  return true;
+}
+
+let confirmTimer = 0;
+function scheduleConfirm() {
+  clearTimeout(confirmTimer);
+  const c = displayConfirm.get();
+  if (!c) return;
+  const left = Math.ceil((c.deadline - Date.now()) / 1000);
+  if (left <= 0) { revertDisplay(); return; }
+  if (left !== c.left) displayConfirm.set({ ...c, left });
+  confirmTimer = setTimeout(scheduleConfirm, 250);
+}
+
+export function keepDisplay() {
+  const c = displayConfirm.get();
+  clearTimeout(confirmTimer);
+  displayConfirm.set(null);
+  if (c && has('display')) lord.display.save(c.conn);
+}
+
+export function revertDisplay() {
+  const c = displayConfirm.get();
+  clearTimeout(confirmTimer);
+  displayConfirm.set(null);
+  if (c && has('display')) lord.display.apply(c.old.conn, c.old.w, c.old.h, c.old.refresh, c.old.rotation, c.old.scale || 100);
+}
+
+// Arrangement, mirror, main display, capture: applied and kept right away (nothing goes dark).
+export function arrangeDisplay(conn, x, y, apply = true) {
+  if (!has('display') || !lord.display.arrange) return null;
+  const r = lord.display.arrange(conn, Math.round(x), Math.round(y), apply);
+  if (r && apply) lord.display.save(conn);
+  return r;
+}
+export function setDisplayMirror(on) {
+  if (!has('display') || !lord.display.setMirror) return false;
+  const ok = lord.display.setMirror(on);
+  if (ok) setTimeout(() => lord.display.save(0), 0);
+  return ok;
+}
+export function setMainDisplay(conn) {
+  if (!has('display') || !lord.display.setMain) return false;
+  const ok = lord.display.setMain(conn);
+  if (ok) setTimeout(() => lord.display.save(conn), 0);
+  return ok;
+}
+export function setCaptureAllDisplays(on) { return has('display') && lord.display.setCaptureAll ? lord.display.setCaptureAll(on) : false; }
+
+// System dialogs are drawn outside the theme's provider: light or dark from the user's setting.
+function useSystemTokens() {
+  const th = useTheme();
+  const mode = useStore(settings, (s) => s.mode);
+  return mode === 'light' ? { ...th, mode: 'light', windowBg: '#f6f6f8', text: '#1d1d1f', textDim: 'rgba(60,60,67,0.62)',
+    separator: 'rgba(0,0,0,0.12)', control: '#e2e2e7' } : th;
+}
+
+// The "Keep these display settings?" alert, drawn like a standard system alert: a 260 px panel with the icon on
+// top, a 13/700 title, an 11 px body with the countdown and two equal buttons (the default one in the
+// accent color).
+export function DisplayConfirm() {
+  const c = useStore(displayConfirm);
+  const th = useSystemTokens();
+  if (!c) return null;
+  const dark = th.mode !== 'light';
+  return h(View, { style: { position: 'absolute', ...mainBox(), alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.12)', zIndex: 100001 } },
+  h(View, { style: { width: 260, borderRadius: 12, paddingTop: 20, paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center',
+    backgroundColor: dark ? '#2b2b2f' : '#ececee', border: `1px solid ${dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'}`,
+    boxShadow: '0 18px 50px rgba(0,0,0,0.4)' } },
+  h(DisplayGlyph, { size: 56, color: th.accent }),
+  h(Text, { style: { width: 228, marginTop: 10, fontSize: 13, fontWeight: 700, color: th.text, textAlign: 'center', lineHeight: 1.3 } }, t('prefs.display.keepTitle')),
+  h(Text, { style: { width: 228, marginTop: 6, fontSize: 11, color: th.text, opacity: 0.8, textAlign: 'center', lineHeight: 1.4 } }, t('prefs.display.keepBody', { count: c.left })),
+  h(View, { style: { flexDirection: 'row', gap: 8, marginTop: 16, alignSelf: 'stretch' } },
+    h(DialogButton, { label: t('prefs.display.revert'), onClick: revertDisplay, th, dark }),
+    h(DialogButton, { label: t('prefs.display.keep'), onClick: keepDisplay, primary: true, th, dark }))));
+}
+
+export function DisplayGlyph({ size = 40, color = '#0a84ff' }) {
+  const w = size, hh = size * 0.68;
+  return h(View, { style: { width: w, height: size, alignItems: 'center' } },
+    h(View, { style: { width: w, height: hh, borderRadius: size * 0.08, border: `${Math.max(2, size / 18)}px solid ${color}`, backgroundColor: 'rgba(10,132,255,0.12)' } }),
+    h(View, { style: { width: size * 0.12, height: size * 0.14, backgroundColor: color } }),
+    h(View, { style: { width: size * 0.42, height: Math.max(2, size / 18), borderRadius: 2, backgroundColor: color } }));
+}
+
+function DialogButton({ label, onClick, primary, th, dark = th.mode !== 'light' }) {
+  const [hover, setHover] = useState(false);
+  return h(View, { onClick, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false),
+    style: { flex: 1, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: primary ? th.accent : dark ? 'rgba(255,255,255,0.14)' : '#ffffff',
+      boxShadow: primary ? 'none' : '0 0.5px 1.5px rgba(0,0,0,0.25)', opacity: hover ? 0.88 : 1 } },
+  h(Text, { style: { fontSize: 13, fontWeight: 500, color: primary ? '#fff' : th.text } }, label));
+}
+
+// ---- idle: screen off, lock, sleep ----
+
+export function applyIdle() {
+  if (!has('display')) return;
+  const p = powerPrefs();
+  const ac = battery.get()?.onAC !== false;
+  const off = ac ? p.offAC : p.offBattery;
+  const lock = p.lockDelay < 0 || !off ? 0 : off + p.lockDelay;
+  call(() => lord.display.setIdle(off || 0, lock, (ac ? p.sleepAC : p.sleepBattery) || 0));
+}
+
+function onIdle(stage) {
+  if (stage === 'lock' && typeof lord.session !== 'undefined' && lord.session.managed()) lord.session.lock();
+  if (stage === 'sleep') admin.run('power-suspend', '', undefined, { quiet: true }).catch((e) => console.log(`suspender: ${e.message}`));
+}
+
+// ---- battery: low-battery notice and the menu bar item ----
+
+let lowNotified = 100;
+function checkLow(b) {
+  if (!b || !b.hasBattery) return;
+  if (b.charging || b.onAC) { lowNotified = 100; return; }
+  if (!powerPrefs().lowBattery || b.percent < 0) return;
+  const level = b.percent <= 5 ? 5 : b.percent <= 10 ? 10 : b.percent <= 20 ? 20 : 100;
+  if (level >= lowNotified || level === 100) return;
+  lowNotified = level;
+  notify({ app: 'settings', title: t(level === 5 ? 'prefs.power.criticalTitle' : 'prefs.power.lowTitle'),
+    body: t('prefs.power.lowBody', { pct: b.percent }), sticky: level === 5 });
+}
+
+export function BatteryGlyph({ percent, charging, color, width = 24 }) {
+  const hh = Math.round(width / 2);
+  const fill = Math.max(0, Math.min(100, percent < 0 ? 0 : percent));
+  const low = !charging && percent >= 0 && percent <= 20;
+  return h(View, { style: { flexDirection: 'row', alignItems: 'center', direction: 'ltr' } },
+    h(View, { style: { width, height: hh, borderRadius: 3, border: `1.2px solid ${color}`, padding: 1.5, opacity: 0.95 } },
+      h(View, { style: { width: `${fill}%`, height: '100%', borderRadius: 1.5, backgroundColor: low ? '#ff453a' : charging ? '#30d158' : color } })),
+    h(View, { style: { width: 2, height: hh * 0.4, borderRadius: 1, backgroundColor: color, opacity: 0.7, marginLeft: 1 } }),
+    charging ? h(Text, { style: { position: 'absolute', left: width / 2 - 4, top: -2, fontSize: 10, color: '#fff' } }, '⚡') : null);
+}
+
+function BatteryStatus({ color, height }) {
+  const b = useBattery();
+  const s = useStore(settings);
+  if (!b || !b.hasBattery) return null;
+  const p = powerPrefs(s);
+  return h(View, { style: { height, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 5 } },
+    p.menuPercent && b.percent >= 0 ? h(Text, { style: { fontSize: 12, fontWeight: 500, color } }, `${b.percent}%`) : null,
+    h(BatteryGlyph, { percent: b.percent, charging: b.charging, color }));
+}
+
+// ---- Bluetooth pairing requests (drawn by the system) ----
+
+export function BluetoothPrompt() {
+  const st = useBluetooth();
+  const th = useSystemTokens();
+  const [value, setValue] = useState('');
+  const p = st?.prompt;
+  useEffect(() => setValue(''), [p?.id]);
+  if (!p) return null;
+  const typed = p.kind === 'pin' || p.kind === 'passkey';
+  const shows = p.kind === 'confirm' || p.kind === 'display-pin' || p.kind === 'display-passkey';
+  const answer = (ok) => lord.bt.answer(p.id, ok, typed ? value : null);
+  const valid = !typed || (p.kind === 'pin' ? /^[A-Za-z0-9]{1,16}$/.test(value) : /^\d{1,6}$/.test(value));
+  return h(View, { style: { position: 'absolute', ...mainBox(), alignItems: 'center', justifyContent: 'flex-start',
+    backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100000 } },
+  h(View, { style: { marginTop: 90, width: 340, borderRadius: 14, padding: 22, gap: 10, alignItems: 'center', backgroundColor: th.windowBg,
+    border: `1px solid ${th.separator}`, boxShadow: '0 20px 60px rgba(0,0,0,0.45)' } },
+  h(View, { style: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#0a84ff', alignItems: 'center', justifyContent: 'center' } },
+    h(Text, { style: { fontSize: 24, fontWeight: 700, color: '#fff' } }, 'ᛒ')),
+  h(Text, { style: { fontSize: 14, fontWeight: 700, color: th.text, textAlign: 'center' } }, t(`prefs.bt.prompt.${p.kind}.title`, { name: p.name })),
+  h(Text, { style: { fontSize: 12, color: th.textDim, textAlign: 'center', lineHeight: 1.4 } }, t(`prefs.bt.prompt.${p.kind}.body`, { name: p.name })),
+  shows && p.value ? h(Text, { style: { fontSize: 28, fontWeight: 700, color: th.text, letterSpacing: 4, marginVertical: 4, direction: 'ltr' } }, p.value) : null,
+  typed ? h(View, { style: { alignSelf: 'stretch' } }, h(TextInput, { value, onChange: setValue, autoFocus: true, placeholder: t(`prefs.bt.prompt.${p.kind}.placeholder`),
+    onSubmit: () => valid && answer(true), onCancel: () => answer(false) })) : null,
+  h(View, { style: { flexDirection: 'row', gap: 10, marginTop: 8, alignSelf: 'stretch' } },
+    p.kind.startsWith('display-')
+      ? h(DialogButton, { label: t('prefs.bt.prompt.cancel'), onClick: () => answer(false), th })
+      : [h(DialogButton, { key: 'n', label: t(p.kind === 'service' || p.kind === 'authorize' ? 'prefs.bt.prompt.deny' : 'prefs.bt.prompt.cancel'), onClick: () => answer(false), th }),
+        h(DialogButton, { key: 'y', label: t(p.kind === 'service' || p.kind === 'authorize' ? 'prefs.bt.prompt.allow' : 'prefs.bt.prompt.pair'), primary: true, th,
+          onClick: () => valid && answer(true) })])));
+}
+
+// ---- Linux apps' notifications (org.freedesktop.Notifications, server/src/hw/notifyd.c) ----
+
+const fromLinux = new Map();            // D-Bus id → our notification id
+function linuxNotify(n) {
+  if (!n || !n.id) return;
+  const app = linuxAppFor(n.desktop || n.app);
+  const key = `linux:${app?.desktopId || n.desktop || n.app || 'app'}`;
+  const prev = fromLinux.get(n.id);
+  if (prev) dismissNotification(prev, 'replaced');
+  const reason = { closed: 2, expired: 1, action: 2, replaced: 0, remote: 0 };
+  const id = notify({
+    app: key, label: shortAppName(app) || n.app, icon: app?.Icon || null, title: n.title, body: n.body, sticky: n.urgency === 2,
+    timeout: n.timeout > 0 ? n.timeout : 6000,
+    actions: (n.actions || []).filter(([k]) => k !== 'default').map(([k, label]) => ({ id: k, label, run: () => lord.notifyd.action(n.id, k) })),
+    onClose: (why) => { if (fromLinux.get(n.id) === id) fromLinux.delete(n.id); if (reason[why]) lord.notifyd.closed(n.id, reason[why]); },
+  });
+  if (id) fromLinux.set(n.id, id);
+}
+
+// ---- events from lord-server ----
+
+globalThis.__lordHw = (kind, data) => {
+  switch (kind) {
+    case 'display': displays.set(data); break;
+    case 'idle': onIdle(data?.stage); break;
+    case 'power': {
+      const wasAC = battery.get()?.onAC;
+      battery.set(data);
+      checkLow(data);
+      if (data?.onAC !== wasAC) applyIdle();
+      break;
+    }
+    case 'bt': case 'bt-prompt': bluetooth.set(data); break;
+    case 'bt-result': for (const fn of btResults) { try { fn(data); } catch (e) { console.log(`bt: ${e}`); } } break;
+    case 'ppd': powerProfiles.set(data); break;
+    case 'ppd-result': for (const fn of ppdResults) { try { fn(data); } catch (e) { console.log(`ppd: ${e}`); } } break;
+    case 'timedate': timedate.set(data); break;
+    case 'notify': linuxNotify(data); break;
+    case 'notify-close': { const own = fromLinux.get(data?.id); if (own) dismissNotification(own, 'remote'); break; }
+    default: break;
+  }
+};
+
+// Called once by startShell: Night Light, idle timers and the battery item.
+export function startHardware() {
+  if (!has('display')) return;
+  nightTick();
+  applyIdle();
+  let last = '';
+  settings.subscribe(() => {
+    const s = settings.get();
+    const key = JSON.stringify([s.night, s.power]);
+    if (key === last) return;
+    last = key;
+    nightTick();
+    applyIdle();
+  });
+  registerStatusItem('battery', BatteryStatus, 5);
+  checkLow(battery.get());
+}

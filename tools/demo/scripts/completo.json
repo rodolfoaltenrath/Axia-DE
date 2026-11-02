@@ -1,0 +1,986 @@
+[
+ {
+  "chapter": "LordOS",
+  "chapter_es": "Instalación y recorrido completo · versión 0.7",
+  "en": "This is LordOS, a desktop environment built from scratch: its own display server in C, its own React engine, and its own apps, on top of Debian. Let's install it.",
+  "es": "Esto es LordOS, un escritorio hecho desde cero: servidor gráfico propio en C, motor de React propio y apps propias, sobre Debian. Vamos a instalarlo.",
+  "actions": [],
+  "min": 4
+ },
+ {
+  "chapter": "Arranque",
+  "chapter_es": "Desde el ISO, como un pendrive",
+  "en": "We boot a new virtual machine from the LordOS ISO, exactly as you would from a USB stick. In about fifteen seconds you are in a live LordOS desktop, and the installer opens on its own.",
+  "es": "Arrancamos una máquina virtual nueva desde el ISO de LordOS, igual que desde un pendrive. En unos quince segundos estás en LordOS en vivo, y el instalador se abre solo.",
+  "actions": [
+   [
+    "host",
+    "qm stop 120 --skiplock 1; sleep 2; qm set 120 --boot 'order=ide2;scsi0' >/dev/null; qm start 120"
+   ],
+   [
+    "wait",
+    34
+   ]
+  ],
+  "min": 34,
+  "speed": 2.5
+ },
+ {
+  "chapter": "Instalación",
+  "chapter_es": "Un asistente de cinco pasos",
+  "en": "The installer has five steps. First, language, region and time zone.",
+  "es": "El instalador tiene cinco pasos. Primero, idioma, región y zona horaria.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    1.2
+   ],
+   [
+    "click",
+    503,
+    497
+   ],
+   [
+    "wait",
+    0.5
+   ],
+   [
+    "click",
+    868,
+    460
+   ],
+   [
+    "type",
+    "Buenos"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "click",
+    847,
+    497
+   ],
+   [
+    "wait",
+    1.2
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "en": "Then the keyboard layout. LordOS supports every layout, plus Japanese, Chinese and Korean input methods.",
+  "es": "Después, la distribución del teclado. LordOS trae todas, más métodos de entrada para japonés, chino y coreano.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    2.5
+   ]
+  ],
+  "min": 4
+ },
+ {
+  "en": "Choose the disk. Since everything on it will be erased, you have to confirm twice, by turning on the switch and typing the disk name.",
+  "es": "Elegís el disco. Como se borra entero, hay que confirmarlo dos veces: con el interruptor y escribiendo el nombre del disco.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    1.2
+   ],
+   [
+    "click",
+    734,
+    292
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "click",
+    509,
+    436
+   ],
+   [
+    "wait",
+    0.5
+   ],
+   [
+    "click",
+    734,
+    490
+   ],
+   [
+    "type",
+    "sda"
+   ],
+   [
+    "wait",
+    1.2
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "Create your user. You will be an administrator, and your password is stored only as a secure hash.",
+  "es": "Creás tu usuario: vas a ser administrador, y la contraseña se guarda solo como un hash seguro.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "click",
+    734,
+    285
+   ],
+   [
+    "type",
+    "Ana Garcia"
+   ],
+   [
+    "click",
+    734,
+    343
+   ],
+   [
+    "type",
+    "{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}ana"
+   ],
+   [
+    "click",
+    600,
+    420
+   ],
+   [
+    "type",
+    "lordos2026"
+   ],
+   [
+    "click",
+    868,
+    420
+   ],
+   [
+    "type",
+    "lordos2026"
+   ],
+   [
+    "click",
+    734,
+    480
+   ],
+   [
+    "type",
+    "{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}lordospc"
+   ],
+   [
+    "wait",
+    1
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "Check the summary and press Install.",
+  "es": "Revisás el resumen y apretás Instalar.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    3
+   ]
+  ],
+  "min": 4
+ },
+ {
+  "en": "The installer partitions the disk, copies the system, configures it, and installs the boot loader for both UEFI and BIOS. It takes less than a minute.",
+  "es": "El instalador particiona el disco, copia el sistema, lo configura e instala el arranque para UEFI y BIOS. Tarda menos de un minuto.",
+  "actions": [
+   [
+    "click",
+    967,
+    685
+   ],
+   [
+    "wait",
+    50
+   ],
+   [
+    "assert",
+    "sfdisk -d /dev/pve/vm-120-disk-1 | grep -q 'type='"
+   ]
+  ],
+  "min": 8,
+  "speed": 4
+ },
+ {
+  "chapter": "Primer arranque",
+  "chapter_es": "LordOS instalado en el disco",
+  "en": "We take out the installation media and reboot. LordOS starts from the disk and logs in automatically with the user we just created.",
+  "es": "Sacamos el medio de instalación y reiniciamos. LordOS arranca desde el disco y entra solo con el usuario que creamos.",
+  "actions": [
+   [
+    "host",
+    "qm stop 120 --skiplock 1; sleep 2; qm set 120 --boot 'order=scsi0;ide2' >/dev/null; qm start 120"
+   ],
+   [
+    "wait",
+    36
+   ]
+  ],
+  "min": 30,
+  "speed": 2.5
+ },
+ {
+  "chapter": "Tu escritorio",
+  "chapter_es": "LordOS recién instalado",
+  "en": "This is LordOS right after installation. It has a menu bar, a Dock with magnification, and fast, smooth windows, all drawn by our own display server.",
+  "es": "Así queda LordOS recién instalado: barra de menú, un Dock con lupa y ventanas fluidas, todo dibujado por nuestro propio servidor gráfico.",
+  "actions": [
+   [
+    "click",
+    410,
+    175
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "move",
+    380,
+    757
+   ],
+   [
+    "wait",
+    0.6
+   ],
+   [
+    "move",
+    640,
+    757
+   ],
+   [
+    "wait",
+    0.6
+   ],
+   [
+    "move",
+    900,
+    757
+   ],
+   [
+    "wait",
+    0.6
+   ],
+   [
+    "move",
+    1100,
+    500
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "en": "The Control Center gives you quick access to dark mode, sound, network, VPN, and live stats about your system.",
+  "es": "El Centro de control tiene el modo oscuro, el sonido, la red, las VPN y el uso del sistema en vivo.",
+  "actions": [
+   [
+    "click",
+    1133,
+    14
+   ],
+   [
+    "wait",
+    4
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 5
+ },
+ {
+  "chapter": "Aplicaciones",
+  "chapter_es": "Todas tus apps, por categoría",
+  "en": "The app launcher shows every app: our own LordOS apps, Linux apps, and installed packages, organized by category. Press F4 or tap the Super key to open it.",
+  "es": "Aplicaciones muestra todas las apps: las de LordOS, las de Linux y los paquetes instalados, por categoría. Se abre con F4 o la tecla Super.",
+  "actions": [
+   [
+    "key",
+    "{f4}"
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    766,
+    112
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    419,
+    112
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "chapter": "Tienda",
+  "chapter_es": "Todo Debian, con un motor de paquetes propio",
+  "en": "The Store comes first. It downloads the Debian package lists and verifies every signature with our own OpenPGP code. No apt, no gpg.",
+  "es": "Primero, la Tienda. Baja las listas de paquetes de Debian y verifica cada firma con código OpenPGP propio. Sin apt ni gpg.",
+  "actions": [
+   [
+    "key",
+    "{f4}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "type",
+    "tienda{ret}"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "click",
+    709,
+    214
+   ],
+   [
+    "wait",
+    20
+   ]
+  ],
+  "min": 8,
+  "speed": 2
+ },
+ {
+  "en": "Search for an app, open it, and before installing, the Store shows you exactly which packages will be installed and how much space they need.",
+  "es": "Buscás una app y, antes de instalar, la Tienda te muestra qué paquetes se instalan y cuánto ocupan.",
+  "actions": [
+   [
+    "click",
+    270,
+    181
+   ],
+   [
+    "type",
+    "sudoku"
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    898,
+    277
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    993,
+    283
+   ],
+   [
+    "wait",
+    3
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "Our own resolver picks the same packages as apt, and plain dpkg does the final unpacking.",
+  "es": "El resolvedor propio elige los mismos paquetes que apt, y al final dpkg los desempaqueta.",
+  "actions": [
+   [
+    "click",
+    445,
+    459
+   ],
+   [
+    "wait",
+    35
+   ]
+  ],
+  "min": 6,
+  "speed": 4
+ },
+ {
+  "en": "And here it is: a GTK 4 app from Debian, running as a native LordOS window through our own Wayland compositor.",
+  "es": "Y acá está: una app GTK 4 de Debian, corriendo como ventana de LordOS gracias a nuestro propio compositor Wayland.",
+  "actions": [
+   [
+    "click",
+    1001,
+    265
+   ],
+   [
+    "wait",
+    5
+   ],
+   [
+    "click",
+    687,
+    566
+   ],
+   [
+    "wait",
+    4
+   ],
+   [
+    "click",
+    989,
+    107
+   ],
+   [
+    "wait",
+    1
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "chapter": "Archivos",
+  "chapter_es": "Íconos, lista, columnas y galería",
+  "en": "Files has icons with thumbnails, a list with sortable columns, Miller columns and a gallery, plus tabs, tags and a real trash.",
+  "es": "Archivos tiene íconos con miniaturas, lista, columnas Miller y galería, más pestañas, etiquetas y una papelera de verdad.",
+  "actions": [
+   [
+    "click",
+    423,
+    757
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    735,
+    138
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    763,
+    138
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    791,
+    138
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    707,
+    138
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "key",
+    "{meta_l-shift-n}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "type",
+    "Proyectos{ret}"
+   ],
+   [
+    "wait",
+    2
+   ]
+  ],
+  "min": 9
+ },
+ {
+  "chapter": "Terminal",
+  "chapter_es": "Una terminal propia",
+  "en": "The Terminal is our own, with tabs, split panes, profiles and ligatures, and the emulator itself is written in C.",
+  "es": "La Terminal es propia: pestañas, paneles divididos, perfiles y ligaduras, con el emulador escrito en C.",
+  "actions": [
+   [
+    "key",
+    "{meta_l-spc}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "typela",
+    "Terminal"
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "key",
+    "{ret}"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "typela",
+    "echo Hola desde LordOS\n"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "typela",
+    "echo 'print(\"Hola LordOS\")' > hola.py\n"
+   ],
+   [
+    "wait",
+    0.8
+   ],
+   [
+    "typela",
+    "ls\n"
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "key",
+    "{meta_l-d}"
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "typela",
+    "uname -sr\n"
+   ],
+   [
+    "wait",
+    2
+   ]
+  ],
+  "min": 8
+ },
+ {
+  "chapter": "Buscar",
+  "chapter_es": "Buscar todo con Super + Espacio",
+  "en": "Press Super and Space to search. It finds apps, files, settings and notes, does math and converts units. Here it calculates fifteen percent of twenty four hundred.",
+  "es": "Con Super + Espacio se abre Buscar: encuentra apps, archivos, ajustes y notas, hace cuentas y convierte unidades. Acá calcula el 15 % de 2400.",
+  "actions": [
+   [
+    "key",
+    "{meta_l-spc}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "typela",
+    "15% de 2400"
+   ],
+   [
+    "wait",
+    3
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "It also finds files. Let's open the Python file we just created.",
+  "es": "También encuentra archivos: abrimos el archivo de Python que acabamos de crear.",
+  "actions": [
+   [
+    "key",
+    "{meta_l-spc}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "typela",
+    "hola"
+   ],
+   [
+    "wait",
+    3
+   ],
+   [
+    "key",
+    "{ret}"
+   ],
+   [
+    "wait",
+    3
+   ]
+  ],
+  "min": 5
+ },
+ {
+  "chapter": "Editor de texto",
+  "chapter_es": "Un editor tipo TextMate",
+  "en": "Our text editor is inspired by TextMate: syntax highlighting for fifteen languages, multiple cursors, find and replace with regular expressions, and a project tree.",
+  "es": "El editor de texto se inspira en TextMate: resaltado para 15 lenguajes, varios cursores, buscar y reemplazar con expresiones regulares y árbol de proyecto.",
+  "actions": [
+   [
+    "key",
+    "{ctrl-end}"
+   ],
+   [
+    "typela",
+    "\nfor i in range(3):\n    print(i, 'LordOS')\n"
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "key",
+    "{meta_l-s}"
+   ],
+   [
+    "wait",
+    2
+   ]
+  ],
+  "min": 8
+ },
+ {
+  "chapter": "Portapapeles",
+  "chapter_es": "Todo lo que copiaste, guardado",
+  "en": "The clipboard keeps a history of everything you copy, text, links, colors and images, and it survives a reboot. Passwords are never saved.",
+  "es": "El portapapeles guarda el historial de todo lo que copiás: textos, enlaces, colores e imágenes, y sobrevive al reinicio. Las contraseñas nunca se guardan.",
+  "actions": [
+   [
+    "key",
+    "{meta_l-shift-v}"
+   ],
+   [
+    "wait",
+    4
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "chapter": "Notas",
+  "chapter_es": "Post-its para tu escritorio",
+  "en": "Notes are sticky notes written in Markdown, with images, attachments and emoji, and an automatic table of contents. Everything is saved in your home folder.",
+  "es": "Notas son post-its en Markdown, con imágenes, adjuntos, emojis e índice automático. Todo se guarda solo en tu carpeta personal.",
+  "actions": [
+   [
+    "key",
+    "{f4}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "type",
+    "notas{ret}"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "key",
+    "{meta_l-n}"
+   ],
+   [
+    "wait",
+    1.2
+   ],
+   [
+    "key",
+    "{ctrl-a}"
+   ],
+   [
+    "typela",
+    "# Ideas para LordOS\n\n## Esta semana\n\n* Instalarlo en una VM\n"
+   ],
+   [
+    "typela",
+    "Probarlo en mi PC con **AMD**\n"
+   ],
+   [
+    "typela",
+    "Grabar el video\n"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "click",
+    503,
+    246
+   ],
+   [
+    "wait",
+    3.5
+   ]
+  ],
+  "min": 9
+ },
+ {
+  "chapter": "Ajustes",
+  "chapter_es": "Todo agrupado",
+  "en": "Settings brings everything together: general information, appearance, network and VPN, sound, language, keyboard, updates and themes.",
+  "es": "Ajustes reúne todo: información general, apariencia, red y VPN, sonido, idioma, teclado, actualizaciones y temas.",
+  "actions": [
+   [
+    "key",
+    "{f4}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "type",
+    "ajustes{ret}"
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "click",
+    300,
+    426
+   ],
+   [
+    "wait",
+    2.5
+   ],
+   [
+    "click",
+    300,
+    455
+   ],
+   [
+    "wait",
+    2.5
+   ]
+  ],
+  "min": 8
+ },
+ {
+  "en": "The network and VPN support is our own: WireGuard, OpenVPN, IPsec with IKEv2, PPTP, and optional Cisco AnyConnect and Fortinet clients that install only when you enable them.",
+  "es": "La red y las VPN son propias: WireGuard, OpenVPN, IPsec/IKEv2, PPTP, y los clientes opcionales de Cisco AnyConnect y Fortinet, que se instalan solo si los activás.",
+  "actions": [
+   [
+    "click",
+    300,
+    426
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    703,
+    271
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    1023,
+    313
+   ],
+   [
+    "wait",
+    4
+   ]
+  ],
+  "min": 9
+ },
+ {
+  "chapter": "Dock",
+  "chapter_es": "Clic derecho en todas partes",
+  "en": "Right click an app in the Dock to see all its windows, open a new one, or keep it in the Dock as a favorite.",
+  "es": "Con clic derecho en el Dock ves las ventanas de la app, abrís una nueva o la fijás en el Dock como favorita.",
+  "actions": [
+   [
+    "move",
+    485,
+    757
+   ],
+   [
+    "wait",
+    0.8
+   ],
+   [
+    "rclick",
+    485,
+    757
+   ],
+   [
+    "wait",
+    3.5
+   ],
+   [
+    "key",
+    "{esc}"
+   ]
+  ],
+  "min": 5
+ },
+ {
+  "chapter": "Temas",
+  "chapter_es": "Cambiá todo el escritorio en vivo",
+  "en": "Finally, themes. A theme is a React app, and you can switch it live without closing anything. This is the Lord Classic theme, with a taskbar and a start menu.",
+  "es": "Por último, los temas: un tema es una app de React y se cambia en vivo sin cerrar nada. Este es el tema Lord Classic, con barra de tareas y menú de inicio.",
+  "actions": [
+   [
+    "key",
+    "{f4}"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "type",
+    "ajustes{ret}"
+   ],
+   [
+    "wait",
+    2
+   ],
+   [
+    "click",
+    300,
+    589
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    1042,
+    290
+   ],
+   [
+    "wait",
+    4
+   ],
+   [
+    "click",
+    40,
+    778
+   ],
+   [
+    "wait",
+    3
+   ]
+  ],
+  "min": 9
+ },
+ {
+  "chapter": "LordOS",
+  "chapter_es": "Rápido, liviano y propio",
+  "en": "That's LordOS: its own display server, its own engine and its own apps, built on Debian, and light enough for modest hardware. Thanks for watching.",
+  "es": "Eso es LordOS: servidor gráfico, motor y apps propios, sobre Debian, y liviano para equipos modestos. Gracias por mirar.",
+  "actions": [
+   [
+    "key",
+    "{esc}"
+   ],
+   [
+    "move",
+    1180,
+    600
+   ]
+  ],
+  "min": 5
+ }
+]

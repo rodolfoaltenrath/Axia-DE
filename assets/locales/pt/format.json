@@ -1,0 +1,62 @@
+{
+  "months": [
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro"
+  ],
+  "monthsShort": [
+    "jan",
+    "fev",
+    "mar",
+    "abr",
+    "mai",
+    "jun",
+    "jul",
+    "ago",
+    "set",
+    "out",
+    "nov",
+    "dez"
+  ],
+  "weekdays": [
+    "domingo",
+    "segunda-feira",
+    "terça-feira",
+    "quarta-feira",
+    "quinta-feira",
+    "sexta-feira",
+    "sábado"
+  ],
+  "weekdaysShort": [
+    "dom",
+    "seg",
+    "ter",
+    "qua",
+    "qui",
+    "sex",
+    "sáb"
+  ],
+  "date": {
+    "short": "{wd}, {day} de {mon}",
+    "long": "{weekday}, {day} de {month} de {yyyy}",
+    "dayMonth": "{weekday}, {day} de {month}",
+    "numeric": "{dd}/{mm}/{yyyy}"
+  },
+  "decimal": ",",
+  "group": ".",
+  "hour12": false,
+  "regions": {
+    "pt_PT": {
+      "group": " "
+    }
+  }
+}

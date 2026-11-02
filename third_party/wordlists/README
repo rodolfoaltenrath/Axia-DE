@@ -1,0 +1,15 @@
+Listas de palabras para Contraseñas (docs/PASSWORDS.md). Van embebidas en lord-vault.
+
+eff_large_wordlist.txt
+  EFF Large Wordlist for Passphrases (7776 palabras, solo la columna de palabras).
+  Fuente: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+  Autor: Electronic Frontier Foundation (Joseph Bonneau), 2016.
+  Licencia: Creative Commons Attribution 3.0 United States (CC BY 3.0 US),
+  https://creativecommons.org/licenses/by/3.0/us/ — usada sin cambios salvo quitar los números de dado.
+  Uso: el generador de frases de contraseña (12,9 bits por palabra).
+
+10k-most-common.txt
+  Las 10 000 contraseñas más comunes, de SecLists (Passwords/Common-Credentials/10k-most-common.txt).
+  Fuente: https://github.com/danielmiessler/SecLists
+  Licencia: MIT (LICENSE-SecLists).
+  Uso: el informe de seguridad marca como débil (y «filtrada», sin red) una contraseña de la lista.

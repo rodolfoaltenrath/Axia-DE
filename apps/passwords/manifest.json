@@ -1,0 +1,22 @@
+{
+  "id": "passwords",
+  "version": "0.8.5",
+  "name": "Passwords",
+  "description": "Passwords, 2FA codes, Wi-Fi, cards and secure notes in an encrypted vault; also the session keyring",
+  "size": [
+    1040,
+    660
+  ],
+  "minSize": [
+    820,
+    500
+  ],
+  "dock": true,
+  "category": "Utility",
+  "permissions": [
+    "usb"
+  ],
+  "process": "isolated",
+  "protected": true,
+  "singleWindow": true
+}

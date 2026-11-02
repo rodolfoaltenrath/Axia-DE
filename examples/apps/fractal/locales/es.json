@@ -1,0 +1,7 @@
+{
+  "hint": "Clic: acercar · Clic derecho: alejar · Pellizcar: zoom · Dos dedos: mover",
+  "reset": "Volver al inicio",
+  "stats": "{w}×{h} · {iter} iteraciones · {ms} ms",
+  "engine": "Motor: {engine}",
+  "error": "No se pudo cargar el módulo WebAssembly: {error}"
+}

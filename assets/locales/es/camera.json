@@ -1,0 +1,14 @@
+{
+  "folder": "Cámara",
+  "photoName": "Foto {date}",
+  "videoName": "Video {date}",
+  "photo": "Foto",
+  "video": "Video",
+  "mirror": "Espejo",
+  "none": "No se encontró ninguna cámara",
+  "denied": "Cámara no tiene permiso para usar la cámara. Cambialo en Ajustes → Privacidad.",
+  "error": "No se pudo usar la cámara: {error}",
+  "noneHint": "Conectá una cámara USB: aparece acá sola, sin reiniciar la app.",
+  "deniedTitle": "Sin permiso para la cámara",
+  "errorTitle": "No se pudo abrir la cámara"
+}

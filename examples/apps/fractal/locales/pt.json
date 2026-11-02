@@ -1,0 +1,7 @@
+{
+  "hint": "Clique: aproximar · Clique direito: afastar · Pinçar: zoom · Dois dedos: mover",
+  "reset": "Voltar ao início",
+  "stats": "{w}×{h} · {iter} iterações · {ms} ms",
+  "engine": "Motor: {engine}",
+  "error": "Não foi possível carregar o módulo WebAssembly: {error}"
+}

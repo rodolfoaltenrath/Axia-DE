@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<KeePassFile>
+	<Meta>
+		<Generator>KeePassXC</Generator>
+		<DatabaseName>Prueba LordOS</DatabaseName>
+		<RecycleBinEnabled>True</RecycleBinEnabled>
+		<Binaries>
+			<Binary ID="0" Compressed="False">SG9sYSwgYWRqdW50byBkZSBwcnVlYmEhCg==</Binary>
+		</Binaries>
+	</Meta>
+	<Root>
+		<Group>
+			<UUID>AAAAAAAAAAAAAAAAAAAAAA==</UUID>
+			<Name>Raíz</Name>
+			<Group>
+				<UUID>AQEBAQEBAQEBAQEBAQEBAQ==</UUID>
+				<Name>Internet</Name>
+				<Group>
+					<UUID>AgICAgICAgICAgICAgICAg==</UUID>
+					<Name>Bancos</Name>
+					<Entry>
+						<UUID>AwMDAwMDAwMDAwMDAwMDAw==</UUID>
+						<Tags>finanzas;importante</Tags>
+						<Times>
+							<CreationTime>2024-03-05T10:20:30Z</CreationTime>
+							<LastModificationTime>2025-01-02T03:04:05Z</LastModificationTime>
+						</Times>
+						<String><Key>Title</Key><Value>Banco Ñandú</Value></String>
+						<String><Key>UserName</Key><Value>juan.pérez</Value></String>
+						<String><Key>Password</Key><Value ProtectInMemory="True">s3cr3t&amp;"&lt;€</Value></String>
+						<String><Key>URL</Key><Value>https://banco.example.com/login</Value></String>
+						<String><Key>Notes</Key><Value>línea 1
+línea 2</Value></String>
+						<String><Key>otp</Key><Value ProtectInMemory="True">otpauth://totp/Banco:juan?secret=JBSWY3DPEHPK3PXP&amp;period=30&amp;digits=6&amp;issuer=Banco</Value></String>
+						<String><Key>PIN</Key><Value ProtectInMemory="True">4321</Value></String>
+						<String><Key>Cliente</Key><Value>00012345</Value></String>
+						<Binary><Key>adjunto.txt</Key><Value Ref="0"/></Binary>
+					</Entry>
+				</Group>
+				<Entry>
+					<UUID>BAQEBAQEBAQEBAQEBAQEBA==</UUID>
+					<Tags>web</Tags>
+					<String><Key>Title</Key><Value>Correo</Value></String>
+					<String><Key>UserName</Key><Value>yo@example.org</Value></String>
+					<String><Key>Password</Key><Value ProtectInMemory="True">correo-123</Value></String>
+					<String><Key>URL</Key><Value>https://mail.example.org</Value></String>
+					<String><Key>Notes</Key><Value></Value></String>
+				</Entry>
+			</Group>
+			<Group>
+				<UUID>BQUFBQUFBQUFBQUFBQUFBQ==</UUID>
+				<Name>Servidores</Name>
+				<Entry>
+					<UUID>BgYGBgYGBgYGBgYGBgYGBg==</UUID>
+					<String><Key>Title</Key><Value>vps1</Value></String>
+					<String><Key>UserName</Key><Value>root</Value></String>
+					<String><Key>Password</Key><Value ProtectInMemory="True">ssh-pass</Value></String>
+					<String><Key>URL</Key><Value>ssh://203.0.113.5:22</Value></String>
+				</Entry>
+			</Group>
+			<Entry>
+				<UUID>BwcHBwcHBwcHBwcHBwcHBw==</UUID>
+				<String><Key>Title</Key><Value>Raíz suelta</Value></String>
+				<String><Key>UserName</Key><Value>u</Value></String>
+				<String><Key>Password</Key><Value ProtectInMemory="True">p</Value></String>
+			</Entry>
+		</Group>
+	</Root>
+</KeePassFile>

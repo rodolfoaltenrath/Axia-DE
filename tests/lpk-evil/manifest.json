@@ -1,0 +1,9 @@
+{
+  "id": "evil",
+  "name": { "es": "App maliciosa", "en": "Evil app", "pt": "App maliciosa" },
+  "description": { "es": "Prueba de aislamiento: intenta todo lo prohibido", "en": "Isolation test: tries everything forbidden" },
+  "version": "1.0.0",
+  "icon": "icon.png",
+  "size": [520, 420],
+  "permissions": []
+}

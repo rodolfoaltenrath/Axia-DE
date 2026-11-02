@@ -1,0 +1,22 @@
+{
+  "id": "files",
+  "version": "0.8.5",
+  "name": "Files",
+  "description": "File browser: tabs, views, Trash and Quick Preview",
+  "size": [
+    960,
+    600
+  ],
+  "dock": true,
+  "permissions": [
+    "fs:home:read",
+    "fs:home:write",
+    "fs:media",
+    "apps:open-with"
+  ],
+  "category": "System",
+  "minSize": [
+    640,
+    400
+  ]
+}

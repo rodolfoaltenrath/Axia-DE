@@ -1,0 +1,3 @@
+"url","username","password","httpRealm","formActionOrigin","guid","timeCreated","timeLastUsed","timePasswordChanged"
+"https://www.mozilla.org","fox","r3d""panda","","https://www.mozilla.org","{0b0f8e5e-1b6c-4a3a-9d9d-0123456789ab}","1700000000123","1700000500000","1700000600999"
+"https://accounts.example.com","","only-pass","","https://accounts.example.com","{11111111-2222-3333-4444-555555555555}","1600000000000","1600000000000","1600000000000"

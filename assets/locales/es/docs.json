@@ -1,0 +1,73 @@
+{
+  "archiveName": "Archivo",
+  "archiveSummary": {
+    "one": "{count} archivo, {size}",
+    "other": "{count} archivos, {size}"
+  },
+  "compressOne": "Comprimir «{name}»",
+  "compressMany": {
+    "one": "Comprimir {count} elemento",
+    "other": "Comprimir {count} elementos"
+  },
+  "compressing": "Comprimiendo «{name}»…",
+  "compressProgress": "Comprimiendo «{name}»: {files} archivos",
+  "compressed": {
+    "one": "«{name}» listo ({count} archivo)",
+    "other": "«{name}» listo ({count} archivos)"
+  },
+  "compressError": "No se pudo comprimir «{name}» ({error})",
+  "extractHere": "Extraer aquí",
+  "extractSelected": {
+    "one": "Extraer {count} elemento",
+    "other": "Extraer {count} elementos"
+  },
+  "extracting": "Extrayendo «{name}»…",
+  "extractProgress": "Extrayendo «{name}»: {files} archivos ({pct} %)",
+  "extracted": {
+    "one": "Extraído en «{name}» ({count} archivo)",
+    "other": "Extraído en «{name}» ({count} archivos)"
+  },
+  "extractedSkipped": {
+    "one": "Extraído en «{name}» ({count} archivo); {skipped} se saltearon por seguridad",
+    "other": "Extraído en «{name}» ({count} archivos); {skipped} se saltearon por seguridad"
+  },
+  "extractError": "No se pudo extraer «{name}» ({error})",
+  "opening": "Abriendo «{name}»…",
+  "loading": "Cargando…",
+  "locked": "protegido con contraseña",
+  "pages": {
+    "one": "{count} página",
+    "other": "{count} páginas"
+  },
+  "more": {
+    "one": "y {count} más",
+    "other": "y {count} más"
+  },
+  "err.invalid": "no es un comprimido o está dañado",
+  "err.disk-full": "el disco está lleno",
+  "err.too-big": "es demasiado grande",
+  "err.too-many": "tiene demasiados archivos",
+  "err.corrupt": "está dañado",
+  "err.write": "no se pudo escribir",
+  "err.unavailable": "el ayudante de documentos no está disponible",
+  "err.cancelled": "cancelado",
+  "err.crash": "el ayudante de documentos se cerró de golpe",
+  "err.timeout": "tardó demasiado",
+  "err.protocol": "el ayudante de documentos mandó una respuesta inválida",
+  "err.spawn": "no se pudo iniciar el ayudante de documentos",
+  "err.closed": "el documento se cerró",
+  "err.bad-request": "pedido inválido",
+  "err.bad-field": "campo de formulario inválido",
+  "err.bad-page": "página inválida",
+  "err.busy": "el ayudante de documentos está ocupado",
+  "err.memory": "sin memoria",
+  "err.no-fonts": "no hay tipografías disponibles",
+  "err.not-open": "el documento no está abierto",
+  "err.nothing": "no hay nada para guardar",
+  "err.read-only": "el documento es de solo lectura",
+  "err.save": "no se pudo guardar",
+  "err.unknown-op": "operación desconocida",
+  "err.image": "imagen inválida",
+  "err.blob": "datos inválidos",
+  "err.password": "el documento está protegido con contraseña"
+}

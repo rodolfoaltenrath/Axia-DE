@@ -1,0 +1,260 @@
+[
+ {
+  "chapter": "LordOS",
+  "chapter_es": "Instalación y recorrido completo · versión 0.7",
+  "en": "This is LordOS, a desktop environment built from scratch: its own display server in C, its own React engine, and its own apps, on top of Debian. Let's install it.",
+  "es": "Esto es LordOS, un escritorio hecho desde cero: servidor gráfico propio en C, motor de React propio y apps propias, sobre Debian. Vamos a instalarlo.",
+  "actions": [],
+  "min": 4
+ },
+ {
+  "chapter": "Arranque",
+  "chapter_es": "Desde el ISO, como un pendrive",
+  "en": "We boot a new virtual machine from the LordOS ISO, exactly as you would from a USB stick. In about fifteen seconds you are in a live LordOS desktop, and the installer opens on its own.",
+  "es": "Arrancamos una máquina virtual nueva desde el ISO de LordOS, igual que desde un pendrive. En unos quince segundos estás en LordOS en vivo, y el instalador se abre solo.",
+  "actions": [
+   [
+    "host",
+    "qm stop 120 --skiplock 1; sleep 2; qm set 120 --boot 'order=ide2;scsi0' >/dev/null; qm start 120"
+   ],
+   [
+    "wait",
+    34
+   ]
+  ],
+  "min": 34,
+  "speed": 2.5
+ },
+ {
+  "chapter": "Instalación",
+  "chapter_es": "Un asistente de cinco pasos",
+  "en": "The installer has five steps. First, language, region and time zone.",
+  "es": "El instalador tiene cinco pasos. Primero, idioma, región y zona horaria.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    1.2
+   ],
+   [
+    "click",
+    503,
+    497
+   ],
+   [
+    "wait",
+    0.5
+   ],
+   [
+    "click",
+    868,
+    460
+   ],
+   [
+    "type",
+    "Buenos"
+   ],
+   [
+    "wait",
+    1
+   ],
+   [
+    "click",
+    847,
+    497
+   ],
+   [
+    "wait",
+    1.2
+   ]
+  ],
+  "min": 6
+ },
+ {
+  "en": "Then the keyboard layout. LordOS supports every layout, plus Japanese, Chinese and Korean input methods.",
+  "es": "Después, la distribución del teclado. LordOS trae todas, más métodos de entrada para japonés, chino y coreano.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    2.5
+   ]
+  ],
+  "min": 4
+ },
+ {
+  "en": "Choose the disk. Since everything on it will be erased, you have to confirm twice, by turning on the switch and typing the disk name.",
+  "es": "Elegís el disco. Como se borra entero, hay que confirmarlo dos veces: con el interruptor y escribiendo el nombre del disco.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    3.5
+   ],
+   [
+    "click",
+    734,
+    292
+   ],
+   [
+    "wait",
+    1.2
+   ],
+   [
+    "click",
+    509,
+    436
+   ],
+   [
+    "wait",
+    0.5
+   ],
+   [
+    "click",
+    734,
+    490
+   ],
+   [
+    "type",
+    "sda"
+   ],
+   [
+    "wait",
+    1.2
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "Create your user. You will be an administrator, and your password is stored only as a secure hash.",
+  "es": "Creás tu usuario: vas a ser administrador, y la contraseña se guarda solo como un hash seguro.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    1.5
+   ],
+   [
+    "click",
+    734,
+    285
+   ],
+   [
+    "type",
+    "Ana Garcia"
+   ],
+   [
+    "click",
+    734,
+    343
+   ],
+   [
+    "type",
+    "{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}ana"
+   ],
+   [
+    "click",
+    600,
+    420
+   ],
+   [
+    "type",
+    "lordos2026"
+   ],
+   [
+    "click",
+    868,
+    420
+   ],
+   [
+    "type",
+    "lordos2026"
+   ],
+   [
+    "click",
+    734,
+    480
+   ],
+   [
+    "type",
+    "{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}lordospc"
+   ],
+   [
+    "wait",
+    1
+   ]
+  ],
+  "min": 7
+ },
+ {
+  "en": "Check the summary and press Install.",
+  "es": "Revisás el resumen y apretás Instalar.",
+  "actions": [
+   [
+    "click",
+    960,
+    685
+   ],
+   [
+    "wait",
+    3
+   ]
+  ],
+  "min": 4
+ },
+ {
+  "en": "The installer partitions the disk, copies the system, configures it, and installs the boot loader for both UEFI and BIOS. It takes less than a minute.",
+  "es": "El instalador particiona el disco, copia el sistema, lo configura e instala el arranque para UEFI y BIOS. Tarda menos de un minuto.",
+  "actions": [
+   [
+    "click",
+    967,
+    685
+   ],
+   [
+    "wait",
+    50
+   ],
+   [
+    "assert",
+    "sfdisk -d /dev/pve/vm-120-disk-1 | grep -q 'type='"
+   ]
+  ],
+  "min": 8,
+  "speed": 4
+ },
+ {
+  "chapter": "Primer arranque",
+  "chapter_es": "LordOS instalado en el disco",
+  "en": "We take out the installation media and reboot. LordOS starts from the disk and logs in automatically with the user we just created.",
+  "es": "Sacamos el medio de instalación y reiniciamos. LordOS arranca desde el disco y entra solo con el usuario que creamos.",
+  "actions": [
+   [
+    "host",
+    "qm stop 120 --skiplock 1; sleep 2; qm set 120 --boot 'order=scsi0;ide2' >/dev/null; qm start 120"
+   ],
+   [
+    "wait",
+    40
+   ]
+  ],
+  "min": 30,
+  "speed": 2.5
+ }
+]

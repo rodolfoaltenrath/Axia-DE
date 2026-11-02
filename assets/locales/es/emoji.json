@@ -1,0 +1,21 @@
+{
+  "search": "Buscar emoji",
+  "results": {
+    "one": "{count} resultado",
+    "other": "{count} resultados"
+  },
+  "none": "Nada encontrado",
+  "noRecent": "Los que uses van a aparecer acá",
+  "copied": "{text} copiado: pegalo con Ctrl+V",
+  "more": "Más…",
+  "group.recent": "Recientes",
+  "group.smileys": "Caras y emociones",
+  "group.people": "Personas y cuerpo",
+  "group.animals": "Animales y naturaleza",
+  "group.food": "Comida y bebida",
+  "group.travel": "Viajes y lugares",
+  "group.activities": "Actividades",
+  "group.objects": "Objetos",
+  "group.symbols": "Símbolos",
+  "group.flags": "Banderas"
+}

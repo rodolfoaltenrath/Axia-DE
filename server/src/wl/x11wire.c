@@ -1,0 +1,208 @@
+/* x11wire.c — X11 wire protocol helpers for the window manager (see x11wire.h). */
+#include "x11wire.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+/* ---- output buffer ---- */
+
+static int xo_room(XOut *o, size_t more) {
+    if (o->oom) return 0;
+    if (o->n + more <= o->cap) return 1;
+    size_t cap = o->cap ? o->cap : 4096;
+    while (cap < o->n + more) cap *= 2;
+    if (cap > (64u << 20)) { o->oom = 1; return 0; }        /* a stuck peer: never grow without bound */
+    uint8_t *nb = realloc(o->b, cap);
+    if (!nb) { o->oom = 1; return 0; }
+    o->b = nb;
+    o->cap = cap;
+    return 1;
+}
+
+void xo_u8(XOut *o, uint8_t v) { if (xo_room(o, 1)) o->b[o->n++] = v; }
+void xo_u16(XOut *o, uint16_t v) { if (xo_room(o, 2)) { o->b[o->n++] = (uint8_t)v; o->b[o->n++] = (uint8_t)(v >> 8); } }
+void xo_u32(XOut *o, uint32_t v) {
+    if (!xo_room(o, 4)) return;
+    for (int i = 0; i < 4; i++) o->b[o->n++] = (uint8_t)(v >> (8 * i));
+}
+void xo_pad(XOut *o, size_t n) { if (xo_room(o, n)) { memset(o->b + o->n, 0, n); o->n += n; } }
+void xo_bytes(XOut *o, const void *p, size_t n) {
+    if (!xo_room(o, n + 3)) return;
+    if (n) memcpy(o->b + o->n, p, n);
+    o->n += n;
+    xo_pad(o, (4 - n % 4) % 4);
+}
+
+void xo_begin(XOut *o, uint8_t opcode, uint8_t data) {
+    o->start = o->n;
+    xo_u8(o, opcode);
+    xo_u8(o, data);
+    xo_u16(o, 0);
+}
+
+void xo_end(XOut *o) {
+    if (o->oom) return;
+    size_t len = (o->n - o->start + 3) / 4;
+    o->b[o->start + 2] = (uint8_t)len;
+    o->b[o->start + 3] = (uint8_t)(len >> 8);
+}
+
+void xo_drop(XOut *o, size_t n) {
+    if (n >= o->n) { o->n = 0; return; }
+    memmove(o->b, o->b + n, o->n - n);
+    o->n -= n;
+}
+
+void xo_free(XOut *o) { free(o->b); memset(o, 0, sizeof *o); }
+
+/* ---- connection setup ---- */
+
+void x11_setup_request(uint8_t out[12]) {
+    memset(out, 0, 12);
+    out[0] = 'l';               /* little endian */
+    out[2] = 11;                /* protocol 11.0 */
+}
+
+int x11_parse_setup(const uint8_t *p, size_t n, XSetup *s, size_t *used) {
+    if (n < 8) return 0;
+    size_t total = 8 + 4 * (size_t)x11_get16(p + 6);
+    if (n < total) return 0;
+    *used = total;
+    if (p[0] != 1 || total < 40) return -1;                 /* 0 failed, 2 authenticate */
+    const uint8_t *d = p + 8;
+    memset(s, 0, sizeof *s);
+    s->id_base = x11_get32(d + 4);
+    s->id_mask = x11_get32(d + 8);
+    uint16_t vendor_len = x11_get16(d + 16);
+    s->max_req_bytes = (uint32_t)x11_get16(d + 18) * 4;
+    uint8_t nscreens = d[20], nformats = d[21];
+    s->min_keycode = d[26];
+    s->max_keycode = d[27];
+    size_t off = 32 + ((size_t)vendor_len + 3) / 4 * 4 + (size_t)nformats * 8;
+    if (!nscreens || off + 40 > total - 8 || !s->id_mask) return -1;
+    const uint8_t *scr = d + off;
+    s->root = x11_get32(scr);
+    s->width = x11_get16(scr + 20);
+    s->height = x11_get16(scr + 22);
+    s->root_visual = x11_get32(scr + 32);
+    s->root_depth = scr[38];
+    return s->root ? 1 : -1;
+}
+
+size_t x11_packet_len(const uint8_t *p, size_t n) {
+    if (n < 32) return 0;
+    size_t len = 32;
+    if (p[0] == X_Reply || (p[0] & 0x7f) == X_GenericEvent) len += 4 * (size_t)x11_get32(p + 4);
+    return n >= len ? len : 0;
+}
+
+uint32_t x11_seq_widen(uint32_t last_sent, uint16_t s16) {
+    uint32_t full = (last_sent & ~0xffffu) | s16;
+    if (full > last_sent) full -= 0x10000u;                 /* it can only be one already sent */
+    return full;
+}
+
+/* ---- properties ---- */
+
+static void ascii_copy(const uint8_t *v, size_t n, char *out, size_t size) {
+    size_t o = 0;
+    for (size_t i = 0; i < n && v[i] && o + 1 < size; i++)
+        if (v[i] >= 0x20 && v[i] < 0x7f) out[o++] = (char)v[i];
+    if (size) out[o] = 0;
+}
+
+void x11_wm_class(const uint8_t *v, size_t n, char *inst, size_t ni, char *cls, size_t nc) {
+    if (ni) inst[0] = 0;
+    if (nc) cls[0] = 0;
+    if (!v || !n) return;
+    size_t a = 0;
+    while (a < n && v[a]) a++;
+    ascii_copy(v, a, inst, ni);
+    if (a + 1 < n) {
+        size_t b = a + 1, e = b;
+        while (e < n && v[e]) e++;
+        ascii_copy(v + b, e - b, cls, nc);
+    }
+}
+
+/* Appends one code point as UTF-8 (control characters and surrogates are dropped). */
+static size_t put_utf8(char *out, size_t o, size_t size, uint32_t cp) {
+    if (cp < 0x20 || cp == 0x7f || (cp >= 0x80 && cp < 0xa0) || (cp >= 0xd800 && cp <= 0xdfff) || cp > 0x10ffff) return o;
+    uint8_t b[4];
+    size_t k;
+    if (cp < 0x80) { b[0] = (uint8_t)cp; k = 1; }
+    else if (cp < 0x800) { b[0] = (uint8_t)(0xc0 | cp >> 6); b[1] = (uint8_t)(0x80 | (cp & 0x3f)); k = 2; }
+    else if (cp < 0x10000) { b[0] = (uint8_t)(0xe0 | cp >> 12); b[1] = (uint8_t)(0x80 | ((cp >> 6) & 0x3f)); b[2] = (uint8_t)(0x80 | (cp & 0x3f)); k = 3; }
+    else { b[0] = (uint8_t)(0xf0 | cp >> 18); b[1] = (uint8_t)(0x80 | ((cp >> 12) & 0x3f)); b[2] = (uint8_t)(0x80 | ((cp >> 6) & 0x3f)); b[3] = (uint8_t)(0x80 | (cp & 0x3f)); k = 4; }
+    if (o + k + 1 > size) return o;
+    memcpy(out + o, b, k);
+    return o + k;
+}
+
+void x11_title(const uint8_t *v, size_t n, int latin1, char *out, size_t size) {
+    size_t o = 0;
+    if (!size) return;
+    for (size_t i = 0; v && i < n && o + 1 < size;) {
+        uint32_t cp = v[i];
+        if (!cp) break;
+        if (latin1 || cp < 0x80) { i++; o = put_utf8(out, o, size, cp); continue; }
+        int k = cp >= 0xf0 && cp < 0xf5 ? 4 : cp >= 0xe0 ? 3 : cp >= 0xc2 && cp < 0xe0 ? 2 : 0;
+        if (cp >= 0xf5) k = 0;
+        uint32_t c = k == 2 ? cp & 0x1f : k == 3 ? cp & 0x0f : cp & 0x07;
+        int ok = k > 0 && i + (size_t)k <= n;
+        for (int j = 1; ok && j < k; j++) {
+            if ((v[i + (size_t)j] & 0xc0) != 0x80) ok = 0;
+            else c = c << 6 | (v[i + (size_t)j] & 0x3f);
+        }
+        if (ok && ((k == 3 && c < 0x800) || (k == 4 && (c < 0x10000 || c > 0x10ffff)))) ok = 0;   /* overlong */
+        if (!ok) { i++; o = put_utf8(out, o, size, 0xfffd); continue; }
+        i += (size_t)k;
+        o = put_utf8(out, o, size, c);
+    }
+    out[o] = 0;
+}
+
+int x11_motif_decorated(const uint32_t *v, size_t n) {
+    if (!v || n < 3 || !(v[0] & 2)) return -1;              /* MWM_HINTS_DECORATIONS */
+    return v[2] != 0;
+}
+
+void x11_size_hints(const uint32_t *v, size_t n, XSizeHints *h) {
+    memset(h, 0, sizeof *h);
+    if (!v || n < 9) return;
+    if (v[0] & 16) { h->min_w = (int)v[5]; h->min_h = (int)v[6]; }      /* PMinSize */
+    if (v[0] & 32) { h->max_w = (int)v[7]; h->max_h = (int)v[8]; }      /* PMaxSize */
+    if (h->min_w < 0 || h->min_w > 16384) h->min_w = 0;
+    if (h->min_h < 0 || h->min_h > 16384) h->min_h = 0;
+    if (h->max_w < 0 || h->max_w > 32767) h->max_w = 0;
+    if (h->max_h < 0 || h->max_h > 32767) h->max_h = 0;
+}
+
+int x11_wm_hints_input(const uint32_t *v, size_t n) {
+    if (!v || n < 2 || !(v[0] & 1)) return 1;               /* InputHint absent: it takes focus */
+    return v[1] != 0;
+}
+
+int x11_moveresize_edges(uint32_t d) {
+    static const int edges[8] = { 1 | 4, 1, 1 | 8, 8, 2 | 8, 2, 2 | 4, 4 };
+    if (d < 8) return edges[d];
+    if (d == 8) return -1;                                  /* _NET_WM_MOVERESIZE_MOVE */
+    return 0;                                               /* keyboard variants, cancel */
+}
+
+int x11_text_rank(const char *m) {
+    if (!m) return 0;
+    if (!strcmp(m, "UTF8_STRING")) return 5;
+    if (!strcmp(m, "text/plain;charset=utf-8")) return 4;
+    if (!strcmp(m, "text/plain")) return 2;
+    if (!strcmp(m, "STRING")) return 3;
+    if (!strcmp(m, "TEXT")) return 1;
+    return 0;
+}
+
+int x11_text_target(const char *m) { return x11_text_rank(m) > 0; }
+
+int x11_pick_display(int (*taken)(int n, void *ctx), void *ctx) {
+    for (int n = 0; n < 64; n++) if (!taken(n, ctx)) return n;
+    return -1;
+}

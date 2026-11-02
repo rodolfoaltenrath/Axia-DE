@@ -1,0 +1,73 @@
+{
+  "archiveName": "Archive",
+  "archiveSummary": {
+    "one": "{count} file, {size}",
+    "other": "{count} files, {size}"
+  },
+  "compressOne": "Compress “{name}”",
+  "compressMany": {
+    "one": "Compress {count} item",
+    "other": "Compress {count} items"
+  },
+  "compressing": "Compressing “{name}”…",
+  "compressProgress": "Compressing “{name}”: {files} files",
+  "compressed": {
+    "one": "“{name}” ready ({count} file)",
+    "other": "“{name}” ready ({count} files)"
+  },
+  "compressError": "Could not compress “{name}” ({error})",
+  "extractHere": "Extract here",
+  "extractSelected": {
+    "one": "Extract {count} item",
+    "other": "Extract {count} items"
+  },
+  "extracting": "Extracting “{name}”…",
+  "extractProgress": "Extracting “{name}”: {files} files ({pct}%)",
+  "extracted": {
+    "one": "Extracted to “{name}” ({count} file)",
+    "other": "Extracted to “{name}” ({count} files)"
+  },
+  "extractedSkipped": {
+    "one": "Extracted to “{name}” ({count} file); {skipped} skipped for safety",
+    "other": "Extracted to “{name}” ({count} files); {skipped} skipped for safety"
+  },
+  "extractError": "Could not extract “{name}” ({error})",
+  "opening": "Opening “{name}”…",
+  "loading": "Loading…",
+  "locked": "password protected",
+  "pages": {
+    "one": "{count} page",
+    "other": "{count} pages"
+  },
+  "more": {
+    "one": "and {count} more",
+    "other": "and {count} more"
+  },
+  "err.invalid": "not an archive, or it is damaged",
+  "err.disk-full": "the disk is full",
+  "err.too-big": "it is too large",
+  "err.too-many": "it has too many files",
+  "err.corrupt": "it is damaged",
+  "err.write": "could not write",
+  "err.unavailable": "the document helper is not available",
+  "err.cancelled": "cancelled",
+  "err.crash": "the document helper stopped unexpectedly",
+  "err.timeout": "it took too long",
+  "err.protocol": "the document helper sent an invalid reply",
+  "err.spawn": "could not start the document helper",
+  "err.closed": "the document was closed",
+  "err.bad-request": "invalid request",
+  "err.bad-field": "invalid form field",
+  "err.bad-page": "invalid page",
+  "err.busy": "the document helper is busy",
+  "err.memory": "out of memory",
+  "err.no-fonts": "no fonts available",
+  "err.not-open": "the document is not open",
+  "err.nothing": "there is nothing to save",
+  "err.read-only": "the document is read-only",
+  "err.save": "could not save",
+  "err.unknown-op": "unknown operation",
+  "err.image": "invalid image",
+  "err.blob": "invalid data",
+  "err.password": "the document is protected by a password"
+}

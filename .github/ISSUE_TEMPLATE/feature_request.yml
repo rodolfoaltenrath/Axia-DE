@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest an idea or an improvement for LordOS.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please check the existing issues first, and don't include personal data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would it solve?
+      description: Describe what you are trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: How you imagine it working. Mockups or examples are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Desktop (dock, menu bar, windows)
+        - A native app
+        - Settings
+        - Store and packages
+        - Privacy and security
+        - Hardware support
+        - Languages and accessibility
+        - Installation
+        - Raspberry Pi 5
+        - Website or documentation
+        - Other
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you submit
+      options:
+        - label: This request contains no personal data.
+          required: true

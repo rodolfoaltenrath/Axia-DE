@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "mode": { "type": "string", "enum": ["auto", "always", "never"] },
+    "autoLower": { "type": "boolean" },
+    "hwVp9": { "type": "boolean" },
+    "hwAv1": { "type": "boolean" }
+  }
+}

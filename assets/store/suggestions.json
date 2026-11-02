@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "about": "Store -> Discover, 'Suggested for your computer': which Debian packages to offer for the detected hardware (sdk/suggestengine.js, docs/PACKAGES.md). Texts live in assets/locales/<lang>/store.json under suggest.<id>.*. Every package named here is checked against the package index before it is offered.",
+  "rules": [
+    {
+      "id": "vmwareTools",
+      "when": { "any": [ { "dmi": { "sysVendor": ["VMware, Inc."] } }, { "pci": { "vendor": ["15ad"] } } ] },
+      "packages": ["open-vm-tools"],
+      "free": true,
+      "icon": "vm"
+    },
+    {
+      "id": "qemuAgent",
+      "when": { "virtio": ["org.qemu.guest_agent.0"] },
+      "packages": ["qemu-guest-agent"],
+      "free": true,
+      "icon": "vm"
+    },
+    {
+      "id": "virtualboxGuest",
+      "when": { "any": [ { "dmi": { "productName": ["VirtualBox"] } }, { "pci": { "vendor": ["80ee"], "device": ["cafe"] } } ] },
+      "packages": ["virtualbox-guest-utils"],
+      "free": true,
+      "icon": "vm",
+      "ifUnavailable": "explain"
+    },
+    {
+      "id": "nvidiaDriver",
+      "when": { "all": [ { "arch": ["x86_64"] }, { "pci": { "vendor": ["10de"], "class": ["0300", "0302", "0380"] } } ] },
+      "packages": ["linux-headers-amd64", "nvidia-driver", "firmware-misc-nonfree"],
+      "installedWhen": ["nvidia-driver"],
+      "free": false,
+      "component": "non-free",
+      "notes": ["nonfree", "nouveau", "secureBoot", "older"],
+      "icon": "gpu",
+      "ifUnavailable": "explain"
+    },
+    {
+      "id": "rpi5Tools",
+      "when": { "compatible": ["raspberrypi,5-model-b", "raspberrypi,500", "raspberrypi,5-compute-module"] },
+      "packages": ["rpi-eeprom", "raspi-utils", "gpiod"],
+      "require": "any",
+      "free": true,
+      "icon": "board"
+    }
+  ],
+  "usb": {
+    "about": "USB printers (an interface of class 07) and scanners (udev's libsane rules mark them) by vendor ID. Only drivers Debian ships; vendors not listed get nothing (most printers work driverless with CUPS).",
+    "vendors": {
+      "03f0": { "name": "HP", "printer": ["hplip"], "scanner": ["libsane-hpaio"] },
+      "04b8": { "name": "Epson", "printer": ["printer-driver-escpr"] },
+      "04f9": { "name": "Brother", "printer": ["printer-driver-brlaser"] },
+      "04e8": { "name": "Samsung", "printer": ["printer-driver-splix"] },
+      "04a9": { "name": "Canon", "printer": ["printer-driver-gutenprint"] }
+    },
+    "ippUsb": ["ipp-usb"]
+  },
+  "firmware": {
+    "about": "Firmware files a driver asked for and the kernel didn't find, by path prefix, mapped to the Debian package that ships them (checked against trixie's non-free-firmware Contents). The first matching prefix wins; files no prefix matches get no suggestion.",
+    "component": "non-free-firmware",
+    "map": [
+      { "prefix": "iwlwifi-", "package": "firmware-iwlwifi", "kind": "wifi" },
+      { "prefix": "intel/ibt-", "package": "firmware-iwlwifi", "kind": "bluetooth" },
+      { "prefix": "rtl_bt/", "package": "firmware-realtek", "kind": "bluetooth" },
+      { "prefix": "rtw88/", "package": "firmware-realtek", "kind": "wifi" },
+      { "prefix": "rtw89/", "package": "firmware-realtek", "kind": "wifi" },
+      { "prefix": "rtlwifi/", "package": "firmware-realtek", "kind": "wifi" },
+      { "prefix": "rtl_nic/", "package": "firmware-realtek", "kind": "network" },
+      { "prefix": "ath10k/", "package": "firmware-atheros", "kind": "wifi" },
+      { "prefix": "ath11k/", "package": "firmware-atheros", "kind": "wifi" },
+      { "prefix": "ath12k/", "package": "firmware-atheros", "kind": "wifi" },
+      { "prefix": "htc_", "package": "firmware-atheros", "kind": "wifi" },
+      { "prefix": "ath6k/", "package": "firmware-atheros", "kind": "wifi" },
+      { "prefix": "ar3k/", "package": "firmware-atheros", "kind": "bluetooth" },
+      { "prefix": "qca/", "package": "firmware-atheros", "kind": "bluetooth" },
+      { "prefix": "brcm/brcmfmac", "package": "firmware-brcm80211", "kind": "wifi" },
+      { "prefix": "brcm/BCM-", "package": "firmware-misc-nonfree", "kind": "bluetooth" },
+      { "prefix": "brcm/BCM", "package": "bluez-firmware", "kind": "bluetooth" },
+      { "prefix": "mediatek/", "package": "firmware-mediatek", "kind": "wifi" },
+      { "prefix": "mt76", "package": "firmware-mediatek", "kind": "wifi" },
+      { "prefix": "mrvl/", "package": "firmware-libertas", "kind": "wifi" },
+      { "prefix": "libertas/", "package": "firmware-libertas", "kind": "wifi" },
+      { "prefix": "amdgpu/", "package": "firmware-amd-graphics", "kind": "graphics" },
+      { "prefix": "radeon/", "package": "firmware-amd-graphics", "kind": "graphics" },
+      { "prefix": "i915/", "package": "firmware-intel-graphics", "kind": "graphics" },
+      { "prefix": "xe/", "package": "firmware-intel-graphics", "kind": "graphics" },
+      { "prefix": "nvidia/", "package": "firmware-nvidia-graphics", "kind": "graphics" }
+    ]
+  }
+}

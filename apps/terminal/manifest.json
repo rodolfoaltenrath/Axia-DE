@@ -1,0 +1,16 @@
+{
+  "id": "terminal",
+  "version": "0.8.5",
+  "name": "Terminal",
+  "description": "Native terminal: tabs, panes, profiles, search, images",
+  "size": [
+    860,
+    540
+  ],
+  "dock": true,
+  "transparent": true,
+  "permissions": [
+    "shell"
+  ],
+  "category": "System"
+}

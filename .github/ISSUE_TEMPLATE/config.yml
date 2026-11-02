@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://lordos.org/legal/security/
+    about: Security problems are reported privately, never in a public issue.
+  - name: Contact the team
+    url: https://www.iperfex.com/contacto/?lang=en
+    about: Questions, permissions and anything that isn't a bug or a feature request.
+  - name: Frequently asked questions
+    url: https://lordos.org/faq/
+    about: Answers to the most common questions about LordOS.

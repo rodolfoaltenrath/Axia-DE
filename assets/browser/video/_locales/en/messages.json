@@ -1,0 +1,9 @@
+{
+  "name": { "message": "LordOS video" },
+  "description": { "message": "Smoother video on computers without hardware decoding: video sites send H.264, and you get a notice when a video stutters. Set up in LordOS Settings." },
+  "stutter": { "message": "This video is stuttering. A lower quality may play smoothly." },
+  "lower": { "message": "Lower quality" },
+  "lowered": { "message": "Quality lowered to $Q$ so the video plays smoothly.", "placeholders": { "q": { "content": "$1" } } },
+  "lowerManual": { "message": "Choose a lower quality in the player's settings." },
+  "dismiss": { "message": "Dismiss" }
+}

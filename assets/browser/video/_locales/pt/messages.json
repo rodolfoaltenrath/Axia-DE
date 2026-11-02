@@ -1,0 +1,9 @@
+{
+  "name": { "message": "Vídeo do LordOS" },
+  "description": { "message": "Vídeo mais fluido em computadores sem decodificação por hardware: os sites de vídeo enviam H.264, e um aviso aparece quando um vídeo trava. Configurado nos Ajustes do LordOS." },
+  "stutter": { "message": "Este vídeo está travando. Uma qualidade mais baixa pode rodar sem travar." },
+  "lower": { "message": "Baixar qualidade" },
+  "lowered": { "message": "Qualidade reduzida para $Q$ para o vídeo rodar sem travar.", "placeholders": { "q": { "content": "$1" } } },
+  "lowerManual": { "message": "Escolha uma qualidade mais baixa nas configurações do player." },
+  "dismiss": { "message": "Fechar" }
+}
