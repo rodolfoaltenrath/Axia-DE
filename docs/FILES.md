@@ -34,6 +34,22 @@ External GTK/Qt applications may still provide their own dialogs. This change
 is not an `org.freedesktop.portal.FileChooser` backend, and does not replace
 third-party application code.
 
+## Window design
+
+The browser keeps the theme's existing window frame, rounded corners and traffic
+light controls. Rust supplies the content through the same Axia toolbar, controls,
+fonts and theme colors: a compact toolbar, neutral sidebar selection, folder path
+bar and a tab strip shown only with multiple tabs. Narrow windows use one view
+switcher; all four modes remain available in the View menu. Long tab strips keep
+the active tab visible and provide buttons to reach the remaining tabs.
+
+File choosers use this same content inside a modal sheet; they keep their own
+Open/Save and Cancel actions. Information, previews and confirmations stay within
+the owning window, with scrollable content and actions accessible after resizing.
+Visible file rows, keyboard navigation and scrollbar movement share one Rust
+layout calculation, including gallery previews, search, errors and tab height.
+Ancestor columns are virtualized too, so large folders remain fully reachable.
+
 ## Everyday use
 
 - Home, Downloads, Documents, Desktop, Pictures, Music and Videos follow

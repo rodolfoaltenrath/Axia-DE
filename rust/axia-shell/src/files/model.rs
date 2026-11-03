@@ -95,6 +95,7 @@ pub struct Tab {
     pub offset: f64,
     pub anchor: usize,
     pub columns: Vec<(PathBuf, Vec<Entry>)>,
+    pub column_offsets: HashMap<PathBuf, f64>,
     pub archive: Vec<Value>,
 }
 impl Tab {
@@ -112,6 +113,7 @@ impl Tab {
             offset: 0.,
             anchor: 0,
             columns: Vec::new(),
+            column_offsets: HashMap::new(),
             archive: Vec::new(),
         }
     }
@@ -877,6 +879,10 @@ impl Session {
                 self.tab_mut().columns.clear();
             }
         }
+        let retained: HashSet<_> = self.tab().columns.iter().map(|(p, _)| p.clone()).collect();
+        self.tab_mut()
+            .column_offsets
+            .retain(|p, _| retained.contains(p));
         let columns = self.tab().view == "columns";
         self.apply_view(&to, shared);
         if columns {
@@ -1072,6 +1078,9 @@ impl Session {
                 self.load(shared);
             }
         }
+        if self.dirty {
+            self.clamp_scroll();
+        }
     }
     pub fn jobs(&self) -> &Value {
         &self.last_jobs
@@ -1115,6 +1124,7 @@ impl Session {
                 self.dirty = true;
             } else {
                 if self.mode == Mode::Browser
+                    && self.tabs.len() < 32
                     && shared.preferences["foldersInTabs"]
                         .as_bool()
                         .unwrap_or(false)
@@ -1281,7 +1291,16 @@ impl Session {
             .or(event["action"].as_str())
             .unwrap_or("");
         let arg = &event["action"][1];
-        let index = arg.as_u64().unwrap_or(0) as usize;
+        // JSON travels through JavaScript: usize::MAX is not an exact Number.
+        // An absent index means background, except for closing the active tab.
+        let index = arg
+            .as_u64()
+            .and_then(|i| usize::try_from(i).ok())
+            .unwrap_or_else(|| match name {
+                "closeTab" => self.active,
+                "context" | "drop" | "select" | "activate" | "dragStart" | "tab" => usize::MAX,
+                _ => 0,
+            });
         let value = event["value"].as_str().unwrap_or("");
         let result = (|| -> Result<()> {
             if self.closed {
@@ -1439,6 +1458,20 @@ impl Session {
                     let path = PathBuf::from(arg.as_str().ok_or("sys.badArgument")?);
                     let real = self.policy.read(&path)?;
                     let e = ops::entry(&real).map_err(io_error)?;
+                    if self.mode == Mode::Folder
+                        || (self.mode == Mode::Open
+                            && self.filter.as_ref().is_some_and(|f| !f.is_match(&e.name)))
+                    {
+                        return Ok(());
+                    }
+                    if self.mode == Mode::Open && !e.dir {
+                        if e.raw.to_str().is_none() {
+                            return Err("files.filenameEncoding".into());
+                        }
+                        self.effects.push(json!({"kind":"choose","paths":[e.raw]}));
+                        self.closed = true;
+                        return Ok(());
+                    }
                     self.open_entry(e, shared);
                 }
                 "activate" => {
@@ -1495,6 +1528,26 @@ impl Session {
                     self.tab_mut().query = value.into();
                     self.tab_mut().offset = 0.;
                 }
+                "columnWheel" => {
+                    let path = PathBuf::from(arg.as_str().ok_or("sys.badArgument")?);
+                    if let Some((_, entries)) = self.tab().columns.iter().find(|(p, _)| *p == path)
+                    {
+                        let count = entries
+                            .iter()
+                            .filter(|e| {
+                                (self.hidden || !e.name.starts_with('.'))
+                                    && e.raw.to_str().is_some()
+                            })
+                            .count();
+                        let max =
+                            (count as f64 * 28. - (self.entry_height() - 28.).max(1.)).max(0.);
+                        let old = self.tab().column_offsets.get(&path).copied().unwrap_or(0.);
+                        self.tab_mut().column_offsets.insert(
+                            path,
+                            (old + event["deltaY"].as_f64().unwrap_or(0.)).clamp(0., max),
+                        );
+                    }
+                }
                 "wheel" => {
                     let delta = event["deltaY"].as_f64().unwrap_or(0.);
                     let tab = self.tab_mut();
@@ -1521,7 +1574,11 @@ impl Session {
                 }
                 "closeTab" => {
                     if self.tabs.len() > 1 {
-                        self.tabs.remove(index.min(self.tabs.len() - 1));
+                        let index = index.min(self.tabs.len() - 1);
+                        self.tabs.remove(index);
+                        if index < self.active {
+                            self.active -= 1;
+                        }
                         self.active = self.active.min(self.tabs.len() - 1);
                         self.load(shared);
                     } else {
@@ -1683,7 +1740,36 @@ impl Session {
                         );
                     }
                 }
+                "scrollDrag" => {
+                    if event["button"].as_u64().unwrap_or(0) == 0 {
+                        let cols = if self.tab().view == "icons" {
+                            (self.entry_width() / 112.).floor().max(1.) as usize
+                        } else {
+                            1
+                        };
+                        let row = if self.tab().view == "icons" {
+                            110.
+                        } else {
+                            32.
+                        };
+                        let content = self.filtered().len().div_ceil(cols) as f64 * row;
+                        let area = self.entry_area();
+                        let thumb = (area * area / content.max(1.)).max(24.).min(area);
+                        self.drag = Some(
+                            json!({"kind":"scroll","y":event["y"],"initial":self.tab().offset,"ratio":(content-area).max(0.)/(area-thumb).max(1.)}),
+                        );
+                    }
+                }
                 "pointerMove" => {
+                    if let Some(drag) = self.drag.as_ref().filter(|d| d["kind"] == "scroll") {
+                        let offset = drag["initial"].as_f64().unwrap_or(0.)
+                            + (event["y"].as_f64().unwrap_or(0.)
+                                - drag["y"].as_f64().unwrap_or(0.))
+                                * drag["ratio"].as_f64().unwrap_or(0.);
+                        self.tab_mut().offset = offset;
+                        self.clamp_scroll();
+                        return Ok(());
+                    }
                     if let Some(drag) = &mut self.drag {
                         if drag["kind"] == "sidebar" {
                             self.side_width = (drag["initial"].as_f64().unwrap_or(190.)
@@ -1942,7 +2028,7 @@ impl Session {
     }
     fn clamp_scroll(&mut self) {
         let cols = if self.tab().view == "icons" {
-            ((self.width - self.side_width - 7.) / 112.).floor().max(1.) as usize
+            (self.entry_width() / 112.).floor().max(1.) as usize
         } else {
             1
         };
@@ -1951,18 +2037,7 @@ impl Session {
         } else {
             32.
         };
-        let height = (self.height
-            - if self.mode == Mode::Browser {
-                144.
-            } else {
-                202.
-            })
-        .max(50.);
-        let area = if self.tab().view == "gallery" {
-            height * 0.35
-        } else {
-            height
-        };
+        let area = self.entry_area();
         let max = (self.filtered().len().div_ceil(cols) as f64 * row - area).max(0.);
         self.tab_mut().offset = self.tab().offset.clamp(0., max);
     }
@@ -2345,6 +2420,14 @@ impl Session {
             } else {
                 None
             }
+        } else if modifier && lower == "tab" && self.mode == Mode::Browser {
+            let next = if shift {
+                (self.active + self.tabs.len() - 1) % self.tabs.len()
+            } else {
+                (self.active + 1) % self.tabs.len()
+            };
+            self.event(&json!({"action":["tab",next]}), shared);
+            return Ok(());
         } else if modifier {
             match lower.as_str() {
                 "a" => Some("selectAll"),
@@ -2410,7 +2493,7 @@ impl Session {
                 return Ok(());
             }
             let cols = if self.tab().view == "icons" {
-                ((self.width - self.side_width - 7.) / 112.).floor().max(1.) as usize
+                (self.entry_width() / 112.).floor().max(1.) as usize
             } else {
                 1
             };
@@ -2419,7 +2502,7 @@ impl Session {
             } else {
                 32.
             };
-            let height = (self.height - 202.).max(50.);
+            let height = self.entry_area();
             let at = items.iter().position(|i| self.tab().selected.contains(i));
             let previous = at.unwrap_or(0);
             let page = (height / row).floor().max(1.) as usize * cols;

@@ -35,6 +35,8 @@ fn input(value: &str, action: &str, placeholder: Value) -> Value {
             field["submit"] = json!(["search"]);
         }
         "name" => {
+            field["autoFocus"] = json!(true);
+            field["selectAll"] = json!(true);
             field["submit"] = json!(["choose"]);
             field["cancel"] = json!(["cancel"]);
         }
@@ -78,7 +80,22 @@ pub fn bytes(n: u64) -> String {
 
 // Compositor primitives, independent of emoji fonts and platform icon themes.
 pub fn icon(name: &str, size: f64) -> Value {
-    let folder = name == "folder" || name == "files";
+    if name == "files" {
+        return view(
+            json!({"width":size,"height":size,"borderRadius":size*0.225,"background":"linear-gradient(180deg, #74c7ff, #1f6fe8)","boxShadow":format!("0 {}px {}px rgba(0,0,0,0.35)",size*0.04,size*0.12),"overflow":"hidden"}),
+            vec![
+                view(
+                    json!({"position":"absolute","left":size*0.2,"top":size*0.27,"width":size*0.27,"height":size*0.12,"borderRadius":size*0.03,"backgroundColor":"rgba(255,255,255,0.75)"}),
+                    vec![],
+                ),
+                view(
+                    json!({"position":"absolute","left":size*0.2,"top":size*0.33,"width":size*0.6,"height":size*0.42,"borderRadius":size*0.06,"backgroundColor":"rgba(255,255,255,0.95)"}),
+                    vec![],
+                ),
+            ],
+        );
+    }
+    let folder = name == "folder";
     let base = if folder {
         "#4aaeff"
     } else if name == "trash" {
@@ -111,12 +128,12 @@ fn entry_icon(e: &Entry, size: f64, thumb: bool) -> Value {
 }
 fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &str) -> Value {
     let mut n = view(
-        json!({"height":30,"flexDirection":"row","alignItems":"center","gap":9,"paddingHorizontal":9,"borderRadius":6,"backgroundColor":if selected{color(s,"accent","#1687ff")}else{"transparent".into()}}),
+        json!({"height":28,"flexShrink":0,"flexDirection":"row","alignItems":"center","gap":8,"paddingHorizontal":8,"borderRadius":6,"backgroundColor":if selected{if s.theme["mode"]=="light"{"rgba(0,0,0,0.08)"}else{"rgba(255,255,255,0.12)"}}else{"transparent"}}),
         vec![
             icon(kind, 19.),
             label(
                 text,
-                json!({"fontSize":13,"color":if selected{"#ffffff".to_owned()}else{txt(s)},"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
+                json!({"fontSize":13,"color":txt(s),"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
             ),
         ],
     );
@@ -131,10 +148,17 @@ fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &st
 
 impl Session {
     pub fn title_value(&self) -> Value {
-        match &self.tab().location {
+        self.location_title(&self.tab().location)
+    }
+    fn location_title(&self, location: &Location) -> Value {
+        match location {
             Location::Directory(p) => {
                 if *p == self.policy.home {
                     tr("files.place.home")
+                } else if p == std::path::Path::new("/") {
+                    tr("files.place.computer")
+                } else if let Some(place) = self.places.iter().find(|place| place.path == *p) {
+                    tr(&format!("files.place.{}", place.label))
                 } else {
                     json!(p.file_name().unwrap_or(p.as_os_str()).to_string_lossy())
                 }
@@ -265,97 +289,239 @@ impl Session {
         )
     }
     fn toolbar(&self) -> Value {
+        let control = |glyph: &str, key: &str, command: Value, disabled: bool, active: bool| json!({"type":"tool","icon":glyph,"title":tr(key),"action":command,"disabled":disabled,"active":active});
+        let available = self.width - self.side_width - 5.;
+        let narrow = available < 620.;
         let mut controls = vec![
-            button(json!("‹"), action("back"), self.tab().back.is_empty()),
-            button(json!("›"), action("forward"), self.tab().forward.is_empty()),
-            button(
-                json!("↑"),
-                action("up"),
-                self.tab().location.path().is_none(),
+            control(
+                "‹",
+                "files.menu.back",
+                action("back"),
+                self.tab().back.is_empty(),
+                false,
             ),
-            button(json!("↻"), action("refresh"), self.loading),
+            control(
+                "›",
+                "files.menu.forward",
+                action("forward"),
+                self.tab().forward.is_empty(),
+                false,
+            ),
+            label(
+                self.title_value(),
+                json!({"flex":1,"minWidth":0,"fontSize":15,"fontWeight":600,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden"}),
+            ),
         ];
-        let location = self
-            .tab()
-            .location
-            .path()
-            .map(|p| p.to_string_lossy().into_owned());
-        let mut crumb = label(
-            location.map_or_else(|| self.title_value(), |p| json!(p)),
-            json!({"flex":1,"fontSize":12,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden"}),
-        );
-        crumb["events"] = json!({"onDoubleClick":["goTo"]});
-        controls.push(crumb);
-        let mut search = input(&self.tab().query, "query", tr("files.search"));
-        search["style"]["flex"] = json!(0);
-        search["style"]["width"] = json!((self.width * 0.25).clamp(120., 240.));
-        controls.push(search);
-        controls.push(button(
-            tr(if self.search_home {
-                "files.place.home"
-            } else {
-                "files.settings.scopeHere"
-            }),
-            action("searchScope"),
-            false,
-        ));
-        view(
-            json!({"height":45,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":6,"borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),
-            controls,
-        )
-    }
-    fn tools(&self) -> Value {
-        let mut controls = vec![];
-        for (key, glyph) in [
+        let modes = [
             ("icons", "▦"),
             ("list", "≡"),
             ("columns", "◫"),
             ("gallery", "▣"),
-        ] {
-            let mut b = button(json!(glyph), json!(["view", key]), false);
-            b["primary"] = json!(self.tab().view == key);
-            controls.push(b);
-        }
-        controls.push(view(json!({"flex":1}), vec![]));
-        {
-            controls.push(button(
-                tr("files.menu.newFolder"),
-                action("newFolder"),
-                self.write_dir().is_none(),
+        ];
+        if narrow {
+            let at = modes
+                .iter()
+                .position(|(key, _)| *key == self.tab().view)
+                .unwrap_or(0);
+            controls.push(control(
+                modes[at].1,
+                "files.menu.view",
+                json!(["view", modes[(at + 1) % 4].0]),
+                false,
+                false,
             ));
-            controls.push(button(
-                tr("files.menu.getInfo"),
-                action("info"),
-                self.tab().selected.is_empty(),
+        } else {
+            controls.push(node(
+                "toolGroup",
+                json!({}),
+                modes
+                    .iter()
+                    .map(|(key, glyph)| {
+                        control(
+                            glyph,
+                            &format!("files.view.{key}"),
+                            json!(["view", key]),
+                            false,
+                            self.tab().view == *key,
+                        )
+                    })
+                    .collect(),
+            ));
+            controls.push(control(
+                "↑",
+                "files.menu.up",
+                action("up"),
+                self.tab().location.path().is_none(),
+                false,
+            ));
+            controls.push(control(
+                "↻",
+                "files.rust.refresh",
+                action("refresh"),
+                self.loading,
+                false,
             ));
         }
-        let mut menu = button(json!("⋯"), json!(["context", usize::MAX]), false);
-        menu["events"] = json!({"onClick":["context",usize::MAX]});
-        controls.push(menu);
-        view(
-            json!({"height":38,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":6,"backgroundColor":color(self,"windowBg","#202025")}),
-            controls,
-        )
+        controls.push(control(
+            "⋯",
+            "files.actions",
+            json!(["context", null]),
+            false,
+            false,
+        ));
+        let mut search = input(&self.tab().query, "query", tr("files.search"));
+        search["style"] = json!({"width":if available<330.{90}else if narrow{120}else{180},"height":28,"flexShrink":0});
+        controls.push(search);
+        node("toolbar", json!({"flexShrink":0}), controls)
+    }
+    fn search_height(&self) -> f64 {
+        if self.tab().query.trim().is_empty() {
+            0.
+        } else {
+            32.
+        }
+    }
+    fn tabs_height(&self) -> f64 {
+        if self.mode == Mode::Browser && self.tabs.len() > 1 {
+            28.
+        } else {
+            0.
+        }
+    }
+    pub(super) fn entry_width(&self) -> f64 {
+        let past = self.past_columns();
+        (self.width - self.side_width - 5. - past as f64 * 190.).max(1.)
+    }
+    fn past_columns(&self) -> usize {
+        if self.tab().view == "columns" {
+            self.tab().columns.len().min(if self.width > 1000. {
+                2
+            } else if self.width - self.side_width > 390. {
+                1
+            } else {
+                0
+            })
+        } else {
+            0
+        }
+    }
+    pub(super) fn entry_height(&self) -> f64 {
+        (self.height
+            - 44.
+            - 26.
+            - 27.
+            - self.tabs_height()
+            - self.search_height()
+            - if self.mode == Mode::Browser { 0. } else { 92. }
+            - if self.error.is_some() { 44. } else { 0. }
+            - self.job_errors.len() as f64 * 32.
+            - if self.tab().location == Location::Network {
+                if self.discovered.is_empty() {
+                    60.
+                } else {
+                    32.
+                }
+            } else {
+                0.
+            })
+        .max(1.)
+    }
+    pub(super) fn entry_area(&self) -> f64 {
+        let h = self.entry_height();
+        h - self.gallery_height()
+    }
+    fn gallery_height(&self) -> f64 {
+        if self.tab().view == "gallery" {
+            (self.entry_height() * 0.65).min((self.entry_height() - 32.).max(0.))
+        } else {
+            0.
+        }
     }
     fn tabs_view(&self) -> Value {
+        let capacity =
+            (((self.width - self.side_width - 5. - 80.) / 110.).floor() as usize).clamp(1, 32);
+        let start = self
+            .active
+            .saturating_sub(capacity / 2)
+            .min(self.tabs.len().saturating_sub(capacity));
+        let end = (start + capacity).min(self.tabs.len());
         let mut tabs = Vec::new();
-        for (i, tab) in self.tabs.iter().enumerate() {
-            let title = tab
-                .location
-                .path()
-                .and_then(|p| p.file_name())
-                .map(|n| json!(n.to_string_lossy()))
-                .unwrap_or_else(|| tr("files.place.home"));
-            let mut b = button(title, json!(["tab", i]), false);
-            b["primary"] = json!(i == self.active);
-            tabs.push(b);
-            tabs.push(button(json!("×"), json!(["closeTab", i]), false));
+        if start > 0 {
+            tabs.push(button(json!("‹"), json!(["tab", start - 1]), false));
         }
-        tabs.push(button(json!("+"), action("newTab"), false));
+        for i in start..end {
+            let title = self.location_title(&self.tabs[i].location);
+            let mut close = view(
+                json!({"width":18,"height":18,"alignItems":"center","justifyContent":"center","flexShrink":0}),
+                vec![label(json!("×"), json!({"fontSize":12,"color":dim(self)}))],
+            );
+            close["events"] = json!({"onClick":["closeTab",i]});
+            let mut tab = view(
+                json!({"flex":1,"minWidth":0,"height":28,"flexDirection":"row","alignItems":"center","paddingHorizontal":6,"gap":4,"backgroundColor":if i==self.active{color(self,"windowBg","#202025")}else{"transparent".into()},"borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),
+                vec![
+                    close,
+                    label(
+                        title,
+                        json!({"flex":1,"fontSize":12,"fontWeight":if i==self.active{600}else{400},"color":if i==self.active{txt(self)}else{dim(self)},"whiteSpace":"nowrap","overflow":"hidden","textAlign":"center"}),
+                    ),
+                ],
+            );
+            tab["events"] = json!({"onClick":["tab",i]});
+            tabs.push(tab);
+        }
+        if end < self.tabs.len() {
+            tabs.push(button(json!("›"), json!(["tab", end]), false));
+        }
+        tabs.push(button(json!("+"), action("newTab"), self.tabs.len() >= 32));
         view(
-            json!({"height":34,"flexDirection":"row","alignItems":"center","gap":4,"paddingHorizontal":8,"borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            json!({"height":28,"flexShrink":0,"flexDirection":"row","alignItems":"center","backgroundColor":color(self,"sidebarBg","#25252b"),"borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),
             tabs,
         )
+    }
+    fn path_bar(&self) -> Value {
+        let mut children = Vec::new();
+        if let Some(path) = self.tab().location.path() {
+            let mut ancestors: Vec<_> = path.ancestors().collect();
+            ancestors.reverse();
+            if path.starts_with(&self.policy.home) {
+                ancestors.retain(|p| p.starts_with(&self.policy.home));
+            }
+            // Keep the current folder and its nearest parents visible in small windows.
+            let capacity = (((self.width - self.side_width - 5.) / 130.).floor() as usize).max(1);
+            for p in ancestors
+                .iter()
+                .skip(ancestors.len().saturating_sub(capacity))
+            {
+                if !children.is_empty() {
+                    children.push(label(json!("›"), json!({"fontSize":12,"color":dim(self)})));
+                }
+                let mut crumb = view(
+                    json!({"flexDirection":"row","alignItems":"center","gap":4,"flexShrink":1,"minWidth":0}),
+                    vec![
+                        icon("folder", 13.),
+                        label(
+                            self.location_title(&Location::Directory(p.to_path_buf())),
+                            json!({"fontSize":11,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden"}),
+                        ),
+                    ],
+                );
+                if let Some(path) = p.to_str() {
+                    crumb["events"] = json!({"onClick":["navigate",path]});
+                }
+                children.push(crumb);
+            }
+        } else {
+            children.push(label(
+                self.title_value(),
+                json!({"fontSize":11,"color":dim(self)}),
+            ));
+        }
+        let mut bar = view(
+            json!({"height":26,"flexShrink":0,"flexDirection":"row","alignItems":"center","gap":5,"paddingHorizontal":10,"overflow":"hidden","borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            children,
+        );
+        bar["events"] = json!({"onDoubleClick":["goTo"]});
+        bar
     }
     fn file_cell(
         &self,
@@ -446,32 +612,13 @@ impl Session {
     }
     fn entries_view(&self, shared: &Shared) -> Value {
         let items = self.filtered();
-        let past = if self.tab().view == "columns" {
-            self.tab()
-                .columns
-                .len()
-                .min(if self.width > 1000. { 2 } else { 1 })
-        } else {
-            0
-        };
-        let width = (self.width - self.side_width - 7. - past as f64 * 190.).max(160.);
-        let height = (self.height
-            - if self.mode == Mode::Browser {
-                144.
-            } else {
-                202.
-            }
-            - if self.error.is_some() { 44. } else { 0. }
-            - self.job_errors.len() as f64 * 32.)
-            .max(50.);
+        let past = self.past_columns();
+        let width = self.entry_width();
+        let height = self.entry_height();
         let icons = self.tab().view == "icons";
         let gallery = self.tab().view == "gallery";
         let columns = self.tab().view == "columns";
-        let preview_height = if gallery {
-            (height * 0.65).max(100.)
-        } else {
-            0.
-        };
+        let preview_height = self.gallery_height();
         let cell_width = if icons { 112. } else { width };
         let row_height = if icons { 110. } else { 32. };
         let count = if icons {
@@ -481,14 +628,14 @@ impl Session {
         };
         let rows = items.len().div_ceil(count);
         let content_h = rows as f64 * row_height;
-        let area_h = (height - preview_height).max(70.);
+        let area_h = self.entry_area();
         let offset = self.tab().offset.min((content_h - area_h).max(0.));
         let start = (offset / row_height).floor() as usize;
         let visible = (area_h / row_height).ceil() as usize + 2;
         let mut cells = Vec::new();
         if gallery {
             if let Some(e) = self.selected().first() {
-                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(e,(preview_height-40.).min(240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
+                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(e,(preview_height-40.).clamp(1.,240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
             }
         }
         for row in start..(start + visible).min(rows) {
@@ -512,33 +659,48 @@ impl Session {
             cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":height,"alignItems":"center","justifyContent":"center"}),vec![label(if self.loading{tr("files.rust.loading")}else{tr("files.empty")},json!({"fontSize":13,"color":dim(self)}))]));
         }
         if content_h > area_h {
-            let thumb = (area_h * area_h / content_h).max(24.);
+            let thumb = (area_h * area_h / content_h).max(24.).min(area_h);
             let y = preview_height + offset / (content_h - area_h) * (area_h - thumb);
-            cells.push(view(json!({"position":"absolute","right":2,"top":y,"width":6,"height":thumb,"borderRadius":3,"backgroundColor":"rgba(150,150,165,0.55)"}),vec![]));
+            let mut handle = view(
+                json!({"position":"absolute","right":1,"top":y,"width":10,"height":thumb,"borderRadius":4,"backgroundColor":"rgba(150,150,165,0.55)"}),
+                vec![],
+            );
+            handle["events"] = json!({"onMouseDown":["scrollDrag"],"onClick":["noop"]});
+            cells.push(handle);
         }
         let mut list = view(
             json!({"flex":1,"overflow":"hidden","backgroundColor":color(self,"windowBg","#202025")}),
             cells,
         );
         list["events"] =
-            json!({"onWheel":["wheel"],"onContextMenu":["context",usize::MAX],"onClick":["clear"]});
+            json!({"onWheel":["wheel"],"onContextMenu":["context",null],"onClick":["clear"]});
         if self.mode == Mode::Browser {
-            list["events"]["onMouseUp"] = json!(["drop", usize::MAX]);
+            list["events"]["onMouseUp"] = json!(["drop", null]);
         }
         if columns && !self.tab().columns.is_empty() {
             let mut cols = Vec::new();
             for (path, entries) in self.tab().columns.iter().rev().take(past).rev() {
                 let mut children = vec![label(
                     json!(path.file_name().unwrap_or_default().to_string_lossy()),
-                    json!({"fontSize":11,"color":dim(self),"padding":8}),
+                    json!({"position":"absolute","left":0,"top":0,"width":189,"height":28,"fontSize":11,"color":dim(self),"padding":8,"backgroundColor":color(self,"windowBg","#202025"),"zIndex":1}),
                 )];
-                for e in entries
+                let entries: Vec<_> = entries
                     .iter()
                     .filter(|e| {
                         (self.hidden || !e.name.starts_with('.')) && e.raw.to_str().is_some()
                     })
-                    .take(150)
-                {
+                    .collect();
+                let area = (height - 28.).max(1.);
+                let offset = self
+                    .tab()
+                    .column_offsets
+                    .get(path)
+                    .copied()
+                    .unwrap_or(0.)
+                    .min((entries.len() as f64 * 28. - area).max(0.));
+                let start = (offset / 28.).floor() as usize;
+                let count = (area / 28.).ceil() as usize + 1;
+                for (i, e) in entries.iter().enumerate().skip(start).take(count) {
                     let mut item = side_item(
                         self,
                         json!(e.name),
@@ -546,12 +708,20 @@ impl Session {
                         false,
                         if e.dir { "folder" } else { "file" },
                     );
+                    item["style"]["position"] = json!("absolute");
+                    item["style"]["top"] = json!(28. + i as f64 * 28. - offset);
+                    item["style"]["width"] = json!(189);
                     if !e.dir {
                         item["events"] = json!({"onDoubleClick":["openRaw",e.raw]});
                     }
                     children.push(item);
                 }
-                cols.push(node("scroll",json!({"width":190,"flex":0,"flexShrink":0,"borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),children));
+                let mut col = view(
+                    json!({"width":190,"flexShrink":0,"overflow":"hidden","borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),
+                    children,
+                );
+                col["events"] = json!({"onWheel":["columnWheel",path]});
+                cols.push(col);
             }
             cols.push(list);
             view(
@@ -611,7 +781,7 @@ impl Session {
             }
         }
         view(
-            json!({"height":27,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":10,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            json!({"height":27,"flexShrink":0,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":10,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
             children,
         )
     }
@@ -630,10 +800,10 @@ impl Session {
                 _ => "files.menu.open",
             }),
             action("choose"),
-            self.mode == Mode::Open && self.selected().iter().all(|e| e.dir),
+            self.mode == Mode::Open && self.selected().is_empty(),
         ));
         view(
-            json!({"height":50,"paddingHorizontal":12,"flexDirection":"row","alignItems":"center","gap":8,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            json!({"height":50,"flexShrink":0,"paddingHorizontal":12,"flexDirection":"row","alignItems":"center","gap":8,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
             children,
         )
     }
@@ -778,7 +948,7 @@ impl Session {
         );
         panel["events"] = json!({"onMouseDown":["noop"]});
         let mut overlay = view(
-            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height}),
+            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height,"zIndex":100}),
             vec![panel],
         );
         overlay["events"] = json!({"onClick":["closeContext"],"onContextMenu":["closeContext"]});
@@ -794,6 +964,8 @@ impl Session {
             false,
         )];
         let mut wide = false;
+        let preview_width = (self.width - 100.).min(610.).max(1.);
+        let preview_height = (self.height - 180.).clamp(32., 300.);
         match dialog {
             Dialog::Text {
                 title: t,
@@ -917,14 +1089,14 @@ impl Session {
                 title = json!(entry.name);
                 if let Some(id) = media {
                     content.push(
-                        json!({"type":"media","media":id,"style":{"height":300,"width":600}}),
+                        json!({"type":"media","media":id,"style":{"height":preview_height,"width":preview_width}}),
                     );
                 } else if let Some(image) = image {
-                    content.push(json!({"type":"documentImage","image":image,"style":{"height":300,"width":600}}));
+                    content.push(json!({"type":"documentImage","image":image,"style":{"height":preview_height,"width":preview_width}}));
                 } else if kind(&entry.name) == "image" {
-                    content.push(view(json!({"height":320,"width":600,"alignItems":"center","justifyContent":"center"}),vec![entry_icon(entry,300.,true)]));
+                    content.push(view(json!({"height":preview_height,"width":preview_width,"alignItems":"center","justifyContent":"center"}),vec![entry_icon(entry,preview_height.min(preview_width),true)]));
                 } else if let Some(text) = text {
-                    content.push(node("scroll",json!({"height":300,"width":600}),vec![label(json!(text),json!({"fontSize":12,"color":txt(self),"fontFamily":"monospace","lineHeight":1.4}))]));
+                    content.push(node("scroll",json!({"height":preview_height,"width":preview_width}),vec![label(json!(text),json!({"fontSize":12,"color":txt(self),"fontFamily":"monospace","lineHeight":1.4}))]));
                 } else {
                     content.push(entry_icon(entry, 96., false));
                     content.push(label(
@@ -1010,9 +1182,9 @@ impl Session {
         }
         let mut body = vec![label(
             title,
-            json!({"fontSize":17,"fontWeight":600,"color":txt(self)}),
+            json!({"fontSize":17,"fontWeight":600,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden","flexShrink":0}),
         )];
-        body.extend(content);
+        body.push(node("scroll",json!({"height":if matches!(dialog, Dialog::Preview {..}) {preview_height} else {(content.len() as f64 * 46.).min((self.height-160.).max(32.))},"flexShrink":1}),content));
         body.push(view(
             json!({"flexDirection":"row","justifyContent":"flex-end","gap":8,"marginTop":8}),
             buttons,
@@ -1023,12 +1195,15 @@ impl Session {
         );
         panel["events"] = json!({"onMouseDown":["noop"],"onClick":["noop"]});
         Some(view(
-            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height,"backgroundColor":"rgba(0,0,0,0.35)","alignItems":"center","justifyContent":"center"}),
+            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height,"backgroundColor":"rgba(0,0,0,0.35)","zIndex":200,"alignItems":"center","justifyContent":"center"}),
             vec![panel],
         ))
     }
     pub fn render(&self, shared: &Shared) -> Value {
-        let mut main = vec![self.toolbar(), self.tools()];
+        let mut main = vec![self.toolbar()];
+        if self.search_height() > 0. {
+            main.push(view(json!({"height":32,"flexShrink":0,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":8}),vec![label(tr("files.searchIn"),json!({"fontSize":12,"color":dim(self)})),button(tr(if self.search_home {"files.place.home"} else {"files.settings.scopeHere"}),action("searchScope"),false)]));
+        }
         if self.tab().location == Location::Network {
             let status = match self.network_status["state"].as_str().unwrap_or("") {
                 "no-lan" => "files.net.noLan",
@@ -1040,28 +1215,32 @@ impl Session {
             if self.discovered.is_empty() {
                 main.push(label(
                     tr(status),
-                    json!({"fontSize":12,"color":dim(self),"padding":8}),
+                    json!({"fontSize":12,"color":dim(self),"paddingHorizontal":8,"height":28,"flexShrink":0}),
                 ));
             }
-            main.push(button(
-                tr("files.menu.connect"),
-                action("connect"),
-                self.busy,
+            main.push(view(
+                json!({"height":32,"flexShrink":0}),
+                vec![button(
+                    tr("files.menu.connect"),
+                    action("connect"),
+                    self.busy,
+                )],
             ));
         }
-        if self.mode == Mode::Browser {
+        if self.tabs_height() > 0. {
             main.push(self.tabs_view());
         }
         if let Some(error) = &self.error {
             main.push(label(
                 json!({"error":error}),
-                json!({"fontSize":12,"color":"#ff8278","padding":8,"lineHeight":1.3}),
+                json!({"fontSize":12,"color":"#ff8278","height":44,"flexShrink":0,"padding":8,"lineHeight":1.3,"overflow":"hidden"}),
             ));
         }
         for error in &self.job_errors {
-            main.push(view(json!({"height":32,"paddingHorizontal":8,"flexDirection":"row","alignItems":"center","gap":8}),vec![label(json!({"error":error}),json!({"flex":1,"fontSize":12,"color":"#ff8278"})),button(tr("files.rust.dismiss"),json!(["jobForget",0]),false)]));
+            main.push(view(json!({"height":32,"flexShrink":0,"paddingHorizontal":8,"flexDirection":"row","alignItems":"center","gap":8}),vec![label(json!({"error":error}),json!({"flex":1,"fontSize":12,"color":"#ff8278"})),button(tr("files.rust.dismiss"),json!(["jobForget",0]),false)]));
         }
         main.push(self.entries_view(shared));
+        main.push(self.path_bar());
         main.push(self.footer());
         if self.mode != Mode::Browser {
             main.push(self.selection_footer());
@@ -1080,7 +1259,7 @@ impl Session {
         );
         let mut all = Vec::new();
         if self.mode != Mode::Browser {
-            all.push(view(json!({"height":42,"paddingHorizontal":14,"justifyContent":"center","borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),vec![label(if self.title.is_empty(){tr(match self.mode{Mode::Save=>"files.rust.save",Mode::Folder=>"files.rust.chooseFolder",_=>"files.menu.open"})}else{json!(self.title)},json!({"fontSize":14,"fontWeight":600,"color":txt(self)}))]));
+            all.push(view(json!({"height":42,"flexShrink":0,"paddingHorizontal":14,"justifyContent":"center","borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),vec![label(if self.title.is_empty(){tr(match self.mode{Mode::Save=>"files.rust.save",Mode::Folder=>"files.rust.chooseFolder",_=>"files.menu.open"})}else{json!(self.title)},json!({"fontSize":14,"fontWeight":600,"color":txt(self)}))]));
         }
         all.push(body);
         if let Some(drag) = self.drag.as_ref().filter(|d| d["active"] == true) {
