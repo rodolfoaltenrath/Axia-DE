@@ -663,3 +663,256 @@ fn chooser_widgets_do_not_bind_browser_drag_actions() {
     }
     check(&s.render(&shared));
 }
+
+#[test]
+fn closing_a_tab_to_the_left_preserves_the_active_folder() {
+    let h = Home::new();
+    let one = h.dir("one");
+    let two = h.dir("two");
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "newTab", Value::Null);
+    event(&mut s, &mut shared, "navigate", json!(one));
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "newTab", Value::Null);
+    event(&mut s, &mut shared, "navigate", json!(two));
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "tab", json!(1));
+    event(&mut s, &mut shared, "closeTab", json!(0));
+    ready(&mut s, &shared);
+    assert_eq!(s.active, 0);
+    assert_eq!(s.tab().location, Location::Directory(one));
+}
+
+#[test]
+fn parent_column_chooser_returns_the_clicked_file_not_the_current_selection() {
+    let h = Home::new();
+    let target = h.file("parent.txt", "parent");
+    let folder = h.dir("child");
+    h.file("child/other.txt", "other");
+    let (mut s, mut shared) = h.session(json!({"mode":"open","start":folder,"filter":"\\.txt$"}));
+    select(&mut s, &mut shared, "other.txt");
+    let count = s.tab().entries.len();
+    event(&mut s, &mut shared, "openRaw", json!(target));
+    let choice = s.effects.iter().find(|e| e["kind"] == "choose").unwrap();
+    assert_eq!(choice["paths"], json!([target]));
+    assert_eq!(s.tab().entries.len(), count);
+}
+
+#[test]
+fn scroll_keyboard_and_render_share_geometry_after_resizing() {
+    let h = Home::new();
+    for n in 0..200 {
+        h.file(&format!("item-{n:03}.txt"), "");
+    }
+    for mode in ["browser", "open"] {
+        let (mut s, mut shared) = h.session(json!({"mode":mode}));
+        for view in ["icons", "list", "gallery"] {
+            event(&mut s, &mut shared, "view", json!(view));
+            for (w, h) in [(640, 360), (960, 600), (1366, 768)] {
+                s.poll(&json!({"width":w,"height":h}), &shared);
+                s.error = Some("fs.copyStartFailed".into());
+                s.job_errors = vec!["fs.copyStartFailed".into()];
+                s.event(&json!({"action":["key"],"key":"End"}), &mut shared);
+                let index = *s.tab().selected.first().unwrap();
+                assert_eq!(s.tab().entries[index].name, "item-199.txt");
+                let cols = if view == "icons" {
+                    (s.entry_width() / 112.).floor().max(1.) as usize
+                } else {
+                    1
+                };
+                let row = if view == "icons" { 110. } else { 32. };
+                let bottom = (199 / cols + 1) as f64 * row;
+                assert!((bottom - s.tab().offset - s.entry_area()).abs() < 0.01);
+                event(&mut s, &mut shared, "scroll", json!(1e9));
+                assert!((bottom - s.tab().offset - s.entry_area()).abs() < 0.01);
+                s.poll(&json!({"height":h+100}), &shared);
+                assert!(s.tab().offset <= (bottom - s.entry_area()).max(0.) + 0.01);
+            }
+        }
+    }
+}
+
+#[test]
+fn ancestor_columns_reach_the_last_file_without_materializing_the_folder() {
+    let h = Home::new();
+    for n in 0..350 {
+        h.file(&format!("parent-{n:03}.txt"), "");
+    }
+    let child = h.dir("child");
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "view", json!("columns"));
+    event(&mut s, &mut shared, "navigate", json!(child));
+    ready(&mut s, &shared);
+    let before = s.render(&shared).to_string();
+    assert!(!before.contains("parent-349.txt"));
+    s.event(
+        &json!({"action":["columnWheel",h.root],"deltaY":1e6}),
+        &mut shared,
+    );
+    let after = s.render(&shared).to_string();
+    assert!(after.contains("parent-349.txt"));
+    assert!(after.len() < 50000, "ancestor folder lost virtualization");
+    assert!(!after.contains("parent-000.txt"));
+}
+
+#[test]
+fn many_tabs_keep_the_active_tab_visible_and_titles_match_the_location() {
+    let h = Home::new();
+    let (mut s, mut shared) = h.session(json!({}));
+    for _ in 1..32 {
+        event(&mut s, &mut shared, "newTab", Value::Null);
+    }
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "place", json!("trash"));
+    ready(&mut s, &shared);
+    s.poll(&json!({"width":640,"height":360}), &shared);
+    let tree = s.render(&shared).to_string();
+    assert!(tree.contains("files.place.trash"));
+    assert!(tree.contains("[\"tab\",31]"));
+    assert!(!tree.contains("[\"tab\",0]"));
+    shared.preferences["foldersInTabs"] = json!(true);
+    let folder = h.dir("next");
+    event(&mut s, &mut shared, "place", json!("home"));
+    ready(&mut s, &shared);
+    let index = s
+        .tab()
+        .entries
+        .iter()
+        .position(|e| e.raw == folder)
+        .unwrap();
+    event(&mut s, &mut shared, "activate", json!(index));
+    ready(&mut s, &shared);
+    assert_eq!(s.tabs.len(), 32);
+    assert_eq!(s.tab().location, Location::Directory(folder));
+}
+
+#[test]
+fn small_window_previews_fit_inside_the_dialog() {
+    let h = Home::new();
+    h.file("note.txt", "preview");
+    let (mut s, mut shared) = h.session(json!({}));
+    s.poll(&json!({"width":640,"height":360}), &shared);
+    select(&mut s, &mut shared, "note.txt");
+    event(&mut s, &mut shared, "preview", Value::Null);
+    if let Some(Dialog::Preview { text, .. }) = &mut s.dialog {
+        *text = Some("example".into());
+    }
+    fn check(node: &Value) {
+        if let Some(w) = node["style"]["width"].as_f64() {
+            assert!(w <= 640.);
+        }
+        if node["type"] == "scroll" && node["style"]["width"].is_number() {
+            assert!(node["style"]["width"].as_f64().unwrap() <= 540.);
+        }
+        for child in node["children"].as_array().into_iter().flatten() {
+            check(child);
+        }
+    }
+    check(&s.render(&shared));
+}
+
+#[test]
+fn dragging_the_scrollbar_clamps_and_preserves_selection() {
+    let h = Home::new();
+    for n in 0..100 {
+        h.file(&format!("file-{n:03}.txt"), "");
+    }
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "view", json!("list"));
+    select(&mut s, &mut shared, "file-000.txt");
+    s.event(
+        &json!({"action":["scrollDrag"],"y":100,"button":0}),
+        &mut shared,
+    );
+    s.event(&json!({"action":["pointerMove"],"y":1e6}), &mut shared);
+    assert!((s.tab().offset - (3200. - s.entry_area())).abs() < 0.01);
+    assert_eq!(s.selected()[0].name, "file-000.txt");
+    s.event(&json!({"action":["pointerMove"],"y":-1e6}), &mut shared);
+    assert_eq!(s.tab().offset, 0.);
+    event(&mut s, &mut shared, "dragEnd", Value::Null);
+    assert!(s.drag.is_none());
+    assert!(shared.dragging.is_none());
+}
+
+#[test]
+fn keyboard_cycles_tabs_in_both_directions() {
+    let h = Home::new();
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "newTab", Value::Null);
+    event(&mut s, &mut shared, "newTab", Value::Null);
+    s.event(
+        &json!({"action":["key"],"key":"Tab","ctrl":true}),
+        &mut shared,
+    );
+    assert_eq!(s.active, 0);
+    s.event(
+        &json!({"action":["key"],"key":"Tab","ctrl":true,"shift":true}),
+        &mut shared,
+    );
+    assert_eq!(s.active, 2);
+}
+
+#[test]
+fn background_menu_never_selects_the_first_file() {
+    let h = Home::new();
+    h.file("first.txt", "keep");
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "context", Value::Null);
+    assert!(s.selected().is_empty());
+    assert!(s.context.is_some());
+    // Also tolerate old UI messages whose out-of-range Number was rounded.
+    event(
+        &mut s,
+        &mut shared,
+        "context",
+        json!(18446744073709552000_f64),
+    );
+    assert!(s.selected().is_empty());
+    select(&mut s, &mut shared, "first.txt");
+    event(&mut s, &mut shared, "context", Value::Null);
+    assert_eq!(s.selected()[0].name, "first.txt");
+}
+
+#[test]
+fn background_drop_targets_the_current_folder_not_the_first_subfolder() {
+    let h = Home::new();
+    h.dir("aaa");
+    let from = h.file("origin/note.txt", "move me");
+    let (mut s, mut shared) = h.session(json!({}));
+    shared.dragging = Some((s.id, vec![from.clone()], true));
+    event(&mut s, &mut shared, "drop", Value::Null);
+    let until = Instant::now() + Duration::from_secs(3);
+    while !h.path("note.txt").is_file() {
+        assert!(
+            Instant::now() < until,
+            "background drop went to another folder"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(!h.path("aaa/note.txt").exists());
+    assert!(!from.exists());
+    assert_eq!(fs::read_to_string(h.path("note.txt")).unwrap(), "move me");
+}
+
+#[test]
+fn close_tab_shortcut_closes_the_active_tab() {
+    let h = Home::new();
+    let one = h.dir("one");
+    let two = h.dir("two");
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "newTab", Value::Null);
+    event(&mut s, &mut shared, "navigate", json!(one));
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "newTab", Value::Null);
+    event(&mut s, &mut shared, "navigate", json!(two));
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "tab", json!(1));
+    s.event(
+        &json!({"action":["key"],"ctrl":true,"key":"w"}),
+        &mut shared,
+    );
+    ready(&mut s, &shared);
+    assert_eq!(s.tabs.len(), 2);
+    assert_eq!(s.tabs[0].location, Location::Directory(h.root.clone()));
+    assert_eq!(s.tabs[1].location, Location::Directory(two));
+}

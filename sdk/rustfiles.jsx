@@ -4,6 +4,7 @@ import { createElement as h, useEffect, useRef, useState } from 'react';
 import { View, Text, Image, MediaView, mainBox, addListener } from '@lordos/runtime';
 import { Button, TextInput, ScrollView, useAppWindow, useKeyboard, hasTextFocus } from './components.jsx';
 import { useTheme } from './theme.js';
+import { Toolbar, ToolbarButton, ToolbarGroup } from './controls.jsx';
 import { t, locale, formatDate, formatTime } from './i18n.js';
 import { settings } from './settings.js';
 import { errorText } from './errors.js';
@@ -32,12 +33,27 @@ const caption = (value) => {
 };
 const EVENT_NAMES = ['onClick', 'onDoubleClick', 'onContextMenu', 'onMouseDown', 'onMouseUp', 'onMouseMove', 'onWheel'];
 
+// Shared toolbar buttons use a parameterless callback. Anchor Rust menus to
+// the rendered control without changing that API for the other desktop apps.
+function ToolWidget({ node, send }) {
+  const ref = useRef(null);
+  const press = () => {
+    const [x, y, width, height] = lord.getLayout(ref.current.id);
+    send(node.action, { type: 'click', x: x + width / 2, y: y + height });
+  };
+  return h(View, { ref, style: { flexShrink: 0 } }, h(ToolbarButton, { small: true, icon: node.icon,
+    title: caption(node.title), active: node.active, disabled: node.disabled, onClick: press }));
+}
+
 function Widget({ node, send, path = 'root' }) {
   if (!node) return null;
   const props = { style: node.style };
   for (const event of EVENT_NAMES) if (node.events?.[event]) props[event] = (e) => send(node.events[event], e);
   const children = (node.children || []).map((child, i) => h(Widget, { key: child.key || i, node: child, send, path: `${path}/${i}` }));
   switch (node.type) {
+    case 'toolbar': return h(Toolbar, props, ...children);
+    case 'toolGroup': return h(ToolbarGroup, props, ...children);
+    case 'tool': return h(ToolWidget, { node, send });
     case 'text': return h(Text, props, caption(node.text));
     case 'button': return h(Button, { ...props, primary: node.primary, disabled: node.disabled, small: true, label: caption(node.label), onClick: node.disabled ? undefined : (e) => send(node.action, e) });
     case 'input': return h(TextInput, { ...props, value: node.value, placeholder: caption(node.placeholder), autoFocus: node.autoFocus, secure: node.secure,
