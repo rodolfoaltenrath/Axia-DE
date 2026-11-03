@@ -1,7 +1,10 @@
 //! Rust services embedded in the existing C compositor.
 //! Window-system objects and the React UI retain their existing interfaces.
 mod glass;
+mod glass_render;
 mod wallpaper;
+mod motion;
+mod motion_store;
 use std::ffi::{c_char, CStr};
 
 const LIMIT: usize = 512;

@@ -1,10 +1,10 @@
 // motionmodel.js — the decisions behind moving wallpapers, with no screen (docs/WALLPAPERS.md; tests:
-// server/tests/motion_model_test.mjs). Hardware only: a moving wallpaper needs the GPU composing the session and
-// hardware decoding of the file's format. There is no software mode: anything else shows the still poster.
+// server/tests/motion_model_test.mjs). Native Rust profiles enforce playback budgets.
+// CPU composition uses a conservative H.264 fallback; decoding acceleration is optional.
 
 // Which formats this machine can play. hw is lord.media.hwDecode(); composition lord.media.composition().
 export function motionCodecs(hw, composition) {
-  if (composition !== 'gpu' || !hw || hw.virtualGpu) return [];
+  if (composition !== 'gpu' || !hw || hw.virtualGpu || (!hw.hevc && !hw.h264)) return ['h264'];
   const out = [];
   if (hw.hevc) out.push('hevc');
   if (hw.h264) out.push('h264');
@@ -12,7 +12,7 @@ export function motionCodecs(hw, composition) {
 }
 
 // The variant to play on a screen: HEVC before H.264, then the smallest that covers the screen. Screens above the
-// file's size use its largest. A format this machine doesn't decode in hardware is never chosen.
+// file's size use its largest. Only formats allowed by the playback profile are chosen.
 export function pickVariant(item, codecs, width, height) {
   for (const c of codecs) {
     const list = (item.variants || []).filter((v) => v.codec === c).sort((a, b) => a.w - b.w);
@@ -39,12 +39,16 @@ export function displayCovered(display, rects) {
   return rects.some((r) => r.x <= display.x && r.y <= display.y && r.x + r.w >= display.x + display.w && r.y + r.h >= display.y + display.h);
 }
 
-// An added video: a duration up to 10 s in a format this machine plays in hardware.
+// An added video: up to 10 seconds in a format allowed by the playback profile.
 export const MAX_SECONDS = 10;
 export function userVideoProblem(info, codecs) {
   if (!info || !info.duration) return 'unreadable';
-  if (info.duration > MAX_SECONDS + 0.05) return 'tooLong';
-  const c = String(info.codec || '').toLowerCase();
+  const video = info.streams ? info.streams.find((s) => s.type === 'video' && !s.cover) : info;
+  if (!video) return 'unreadable';
+  const seconds = info.streams ? info.duration / 1000 : info.duration;
+  if (seconds > MAX_SECONDS + 0.05) return 'tooLong';
+  if (video.width > 1920 || video.height > 1080 || video.fps > 30.1) return 'tooLarge';
+  const c = String(video.codec || '').toLowerCase();
   const fmt = c === 'hevc' || c === 'h265' ? 'hevc' : c === 'h264' ? 'h264' : '';
   return codecs.includes(fmt) ? null : 'format';
 }

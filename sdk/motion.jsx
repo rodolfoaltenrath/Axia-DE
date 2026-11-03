@@ -1,12 +1,13 @@
 // motion.jsx — moving wallpapers (docs/WALLPAPERS.md). The still wallpaper stays drawn under the video, so a failure,
-// a missing file or a machine without the hardware just shows it. Decisions are in motionmodel.js.
+// a missing or unsupported file just leaves the still image visible. Decisions are in motionmodel.js.
 //
-// One video per file, whatever the number of displays showing it. Files live in /var/lib/lordos/wallpapers, fetched by
-// the closed action wallpaper-get from the catalog in the package (axia-server only keeps a file with the catalog's hash).
+// One player per file/profile, shared by its displays. Axia uses Rust-managed user downloads
+// and bounded software playback. The original distro action remains a compatibility path only.
 import { createElement as h, useEffect, useRef, useState } from 'react';
 import { Image, MediaView, addListener } from '@lordos/runtime';
 import catalog from '../assets/wallpapers/motion.json';
 import { media } from './media.js';
+import { standaloneDesktop } from './platform.js';
 import { settings, useSettings } from './settings.js';
 import { createStore, useStore } from './store.js';
 import { admin } from './admin.js';
@@ -22,15 +23,22 @@ export const motionThumb = (it) => `asset:wallpapers/motion/${it.id}.thumb.jpg`;
 export const motionPoster = (it) => `asset:wallpapers/motion/${it.id}.poster.jpg`;
 export const motionDownloads = createStore({});     // id → percent while downloading
 
-// What this machine can play: empty until axia-media answers, and empty for good without the hardware.
+// Native Rust policy allows economical playback while acceleration is being detected.
+export function motionProfile() {
+  try {
+    const hw = lord.media.hwDecode() || {};
+    return lord.settings.motionProfile(lord.media.composition() === 'gpu' && !hw.virtualGpu, !!hw.h264, !!hw.hevc);
+  } catch (e) { return { codecs: [], width: 1280, height: 720, fps: 15, rate: 50, threads: 2, hardware: false }; }
+}
 export function currentCodecs() {
+  if (standaloneDesktop) return motionProfile().codecs;
   try { return motionCodecs(lord.media.hwDecode(), lord.media.composition()); } catch (e) { return []; }
 }
 export function useCodecs() {
   const [c, set] = useState(currentCodecs);
   useEffect(() => {
     let n = 0;
-    const id = setInterval(() => { const x = currentCodecs(); if (x.length || ++n > 40) { set(x); clearInterval(id); } }, 250);
+    const id = setInterval(() => { const x = currentCodecs(); set((old) => old.join() === x.join() ? old : x); if (++n >= 40) clearInterval(id); }, 250);
     return () => clearInterval(id);
   }, []);
   return c;
@@ -43,6 +51,20 @@ export function downloadMotion(it, variant) {
   const arg = `${it.id} ${variant.name}`;
   motionDownloads.set((d) => ({ ...d, [it.id]: 0 }));
   const done = () => motionDownloads.set((d) => { const x = { ...d }; delete x[it.id]; return x; });
+  if (standaloneDesktop) return new Promise((resolve, reject) => {
+    const job = lord.settings.downloadMotion(arg);
+    if (!job) { done(); reject(new Error('media.noHelper')); return; }
+    const timer = setInterval(() => {
+      const result = lord.settings.pollMotion(job);
+      motionDownloads.set((d) => ({ ...d, [it.id]: result.percent }));
+      if (!result.status) return;
+      clearInterval(timer); done();
+      if (result.status < 0) { reject(new Error('media.unavailable')); return; }
+      settings.set({ motionFiles: { ...(settings.get().motionFiles || {}), [it.id]: variant.name },
+        motionPaths: { ...(settings.get().motionPaths || {}), [it.id]: result.path } });
+      resolve();
+    }, 250);
+  });
   return admin.run('wallpaper-get', arg, (line) => {
     const m = /^PROGRESS (\d+)/.exec(line);
     if (m) motionDownloads.set((d) => ({ ...d, [it.id]: Number(m[1]) }));
@@ -55,11 +77,15 @@ export function downloadMotion(it, variant) {
 export async function removeMotion(it) {
   const s = settings.get();
   const name = (s.motionFiles || {})[it.id];
-  if (name) await admin.run('wallpaper-remove', `${it.id} ${name}`, null, { quiet: true });
+  if (name) {
+    if (standaloneDesktop) { if (!lord.settings.removeMotion(`${it.id} ${name}`)) throw new Error('media.unavailable'); }
+    else await admin.run('wallpaper-remove', `${it.id} ${name}`, null, { quiet: true });
+  }
   const files = { ...(s.motionFiles || {}) };
   delete files[it.id];
   const motion = Object.fromEntries(Object.entries(s.motion || {}).filter(([, v]) => v !== it.id));
-  settings.set({ motionFiles: files, motion });
+  const paths = { ...(s.motionPaths || {}) }; delete paths[it.id];
+  settings.set({ motionFiles: files, motionPaths: paths, motion });
 }
 
 export const setLoginStill = (id) => admin.run('wallpaper-login', `still ${id}`, null, { quiet: true });
@@ -78,8 +104,8 @@ function resolve(s, choice, w, h_, codecs) {
   const it = catalog.items.find((x) => x.id === id);
   if (!it || !on[id]) return null;
   const v = it.variants.find((x) => x.name === on[id]);
-  // only a format this machine decodes in hardware, however it was downloaded
-  return v && codecs.includes(v.codec) ? pathOf(v) : null;
+  // Only a format allowed by this session's playback profile.
+  return v && codecs.includes(v.codec) ? ((s.motionPaths || {})[id] || pathOf(v)) : null;
 }
 let lastRandom = null, randomPick = null;
 function randomFor(ids) {
@@ -93,6 +119,7 @@ const players = new Map();                // path → { id, refs, views, paused 
 let lastInput = Date.now(), cpu = null, busy = 0, ticking = 0;
 
 function evaluate() {
+  if (!players.size) return;
   const s = settings.get();
   const ws = windows.get();
   const live = ws.filter((w) => !w.minimized);
@@ -122,34 +149,40 @@ function startTicking() {
   addListener('pointermove', seen);
 }
 
-// A new player can start while the last one still holds the decoder, and a moving wallpaper never falls back to software:
-// its helper stops. So a stop that nobody asked for is tried again, a few times, before the still image stays.
+// A decoder can still be closing while the next starts. Retry briefly, then keep
+// the still wallpaper and expose a friendly playback error in Settings.
+export const motionError = createStore(false);
 export const motionBusy = createStore(false);       // a chosen wallpaper is starting
 const RETRIES = 4, RETRY_MS = 500;
 
 function acquire(file, rate, key, display, onLost) {
-  const tag = `${file}|${rate}`;
+  const profile = motionProfile();
+  rate = Math.min(rate, profile.rate);
+  const tag = `${file}|${rate}|${profile.width}|${profile.fps}`;
   let p = players.get(tag);
   if (!p) {
     let id = 0;
-    motionBusy.set(true);
-    try { id = media.play('wallpaper', file, { loop: true, audio: 0, hwOnly: 1, rate, appName: 'Axia DE' }); } catch (e) { motionBusy.set(false); return null; }
-    if (!id) { motionBusy.set(false); return null; }
-    p = { id, tag, views: new Map(), paused: false, playing: createStore(false) };
+    motionBusy.set(true); motionError.set(false);
+    try { id = media.play('wallpaper', file, { loop: true, audio: 0, hwOnly: 0, hw: profile.hardware, rate, wallpaper: 1,
+      maxFps: profile.fps, maxWidth: profile.width, maxHeight: profile.height, decoderThreads: profile.threads, appName: 'Axia DE' }); } catch (e) { motionBusy.set(false); motionError.set(true); return null; }
+    if (!id) { motionBusy.set(false); motionError.set(true); return null; }
+    media.view(id, { fit: 'cover', background: 0 });
+    p = { id, tag, views: new Map(), paused: false, playing: createStore(false), lost: new Map() };
     media.on(id, (type, d) => {
       if (type === 'state' && d.state === 'playing') { p.playing.set(true); motionBusy.set(false); }
-      else if (type === 'error' || type === 'closed') { p.playing.set(false); if (players.get(tag) === p) { players.delete(tag); p.onLost?.(); } }
+      else if (type === 'error' || type === 'closed') { p.playing.set(false); if (players.get(tag) === p) { motionError.set(true); players.delete(tag); for (const lost of p.lost.values()) lost(); } }
     });
     players.set(tag, p);
     startTicking();
   }
-  p.onLost = onLost;
+  p.lost.set(key, onLost);
   p.views.set(key, display);
+  evaluate();
   return p;
 }
 function release(p, key) {
-  p.views.delete(key);
-  if (!p.views.size && players.get(p.tag) === p) { players.delete(p.tag); media.close(p.id); }
+  p.views.delete(key); p.lost.delete(key);
+  if (!p.views.size) { if (players.get(p.tag) === p) players.delete(p.tag); media.close(p.id); }
 }
 
 function Layer({ path, rate, display, style }) {
@@ -173,7 +206,7 @@ function Layer({ path, rate, display, style }) {
 }
 const idle = createStore(false);
 
-// Over a display's still wallpaper. Nothing at all when there's no hardware or nothing chosen.
+// Over a display's still wallpaper. No player when no supported file is selected.
 export function MotionWallpaper({ display }) {
   const [s] = useSettings();
   const codecs = useCodecs();
@@ -188,4 +221,5 @@ export function MotionWallpaper({ display }) {
   return h(Layer, { path, rate: MOTION_RATES.includes(s.motionRate) ? s.motionRate : 100, display, style: { position: 'absolute', left: display.x, top: display.y, width: display.w, height: display.h } });
 }
 
-export const variantFor = (it, codecs, display) => pickVariant(it, codecs, display.w, display.h);
+export const variantFor = (it, codecs, display) => pickVariant({ ...it, variants: (it.variants || []).filter((v) =>
+  v.w <= 1920 && v.h <= 1080 && (!v.fps || v.fps <= 30.1)) }, codecs, display.w, display.h);

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import struct
 import zlib
+import sys
 
 from install import install, REPO, DESKTOP_BINARIES
 
@@ -114,6 +115,20 @@ def main():
                       'huge image.png': png(8192, 8192, b'')}
             for name, data in inputs.items():
                 (home / name).write_bytes(data)
+            # Offline catalog fixture: exercise Rust's asynchronous store and the real
+            # SHA-256 callback, without depending on GitHub/network availability in CI.
+            video = (REPO / 'server/tests/fixtures/motion-h264.mp4').read_bytes()
+            sha = hashlib.sha256(video).hexdigest()
+            cached = home / '.local/share/axia/motion' / f'{sha}.mp4'
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(video)
+            cached.chmod(0o600)
+            if os.geteuid() == 0:
+                for path in [home / '.local', home / '.local/share', home / '.local/share/axia', cached.parent, cached]:
+                    os.chown(path, 65534, 65534)
+            catalog = {'format': 1, 'base': 'https://raw.githubusercontent.com/lordbasex/LordOS-wallpapers/main', 'items': [{'id': 'testclip', 'variants': [
+                {'name': '1080.h264', 'file': 'testclip/1080.h264.mp4', 'sha256': sha, 'size': len(video)}]}]}
+            (staged / 'assets/wallpapers/motion.json').write_text(json.dumps(catalog))
             # Exercise the real Rust -> C -> QuickJS -> SDK path, not a JS mock.
             fixture = (REPO / 'tests/switcher-smoke.bundle.js').read_bytes()
             target = staged / 'themes/default/theme.bundle.js'
@@ -131,6 +146,7 @@ def main():
             log = (home / '.cache/axia/session.log').read_text()
             assert 'switcher integration: passed' in log, log
             assert 'wallpaper integration: passed' in log, log
+            assert 'motion storage integration: passed' in log, log
             selected = json.loads(prefs.read_text())
             image = selected['wallpaperUser'][0]
             assert selected['wallpaper'] == image['id']
@@ -144,6 +160,8 @@ def main():
             assert Path(image['src']).is_file()
             for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)', 'switcher smoke:']:
                 assert error not in log, log
+    if (REPO / 'server/build/axia-media').is_file():
+        print(run(sys.executable, str(REPO / 'server/tests/motion_playback_test.py')), end='')
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')
 
 

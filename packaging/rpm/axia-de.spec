@@ -42,6 +42,7 @@ Requires:       libX11-common
 Requires:       tzdata
 Requires:       dnf5
 Requires:       xdg-user-dirs
+Requires:       curl
 Recommends:     pipewire-pulseaudio
 Recommends:     xorg-x11-server-Xwayland
 Recommends:     polkit

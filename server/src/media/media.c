@@ -253,6 +253,8 @@ int media_render_fd(void) {
 
 /* ---- paths ---- */
 
+/* Rust validates only this user's canonical, hash-named motion cache. */
+extern int axia_motion_path_allowed(const char *, const char *, const char *);
 int media_open_input(const char *path, char *real, size_t n) {
     char full[PATH_MAX * 2], r[PATH_MAX];
     if (!path || !*path || strlen(path) >= PATH_MAX) return -1;
@@ -260,7 +262,7 @@ int media_open_input(const char *path, char *real, size_t n) {
     else snprintf(full, sizeof full, "%s/%s", media_home(), path);
     if (!realpath(full, r)) return -1;
     /* the system's moving wallpapers are readable by anyone, the login screen too (docs/WALLPAPERS.md) */
-    if (strncmp(r, "/var/lib/lordos/wallpapers/", 27) && strncmp(r, "/usr/share/backgrounds/lordos/motion/", 37) && !fsops_allowed(r)) return -1;
+    if (strncmp(r, "/var/lib/lordos/wallpapers/", 27) && strncmp(r, "/usr/share/backgrounds/lordos/motion/", 37) && !fsops_allowed(r) && !axia_motion_path_allowed(r, media_home(), getenv("XDG_DATA_HOME"))) return -1;
     int fd = open(r, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     struct stat st;
     if (fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode)) { if (fd >= 0) close(fd); return -1; }

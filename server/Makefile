@@ -116,7 +116,8 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+	./build/glass-renderer-test
 	./build/wallpaper-image-test
 	./build/seat-test
 	./build/platform-admin-test
@@ -125,6 +126,8 @@ test-platform: build/wallpaper-image-test build/seat-test build/platform-admin-t
 	./build/wl-input-region-test
 	./build/cpu-cursor-test
 	./build/kms-cursor-test
+build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_golden.h src/canvas.c src/canvas.h src/glass_ffi.h src/par.c $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) -ldl -lpthread -lm
 build/wallpaper-image-test: tests/wallpaper_image_test.c src/ui/image.c src/canvas.c src/glass_ffi.h build/obj/ui/stb.o $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lpthread -lm
 build/cpu-cursor-test: tests/cpu_cursor_test.c src/main.c src/outputs.c $(HDR)

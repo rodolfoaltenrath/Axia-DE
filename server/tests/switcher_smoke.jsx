@@ -16,6 +16,25 @@ function Harness() {
 render(h(Harness));
 function runTests() {
   check(!!lord.switcher, 'Rust bridge exists');
+  const profile = lord.settings.motionProfile(false, false, false);
+  check(profile.codecs.join() === 'h264' && profile.width === 1280 && profile.height === 720 && profile.fps === 15 && profile.threads === 2,
+    'CPU laptop gets a bounded native playback profile');
+  check(!lord.settings.downloadMotion('../invalid catalog entry'), 'invalid catalog selection rejected');
+  const motionJob = lord.settings.downloadMotion('testclip 1080.h264');
+  check(motionJob > 0, 'native catalog download starts without the LordOS admin helper');
+  let polls = 0;
+  const downloadTimer = setInterval(() => {
+    const result = lord.settings.pollMotion(motionJob);
+    check(++polls < 30, 'cached catalog job completed promptly');
+    if (!result.status) return;
+    clearInterval(downloadTimer);
+    check(result.status === 1 && result.path.endsWith('.mp4') && result.percent === 100, 'verified catalog cache reused');
+    check(lord.settings.removeMotion('testclip 1080.h264'), 'catalog file removal stays user scoped');
+    let removed = false;
+    try { removed = !lord.fs.stat(result.path); } catch { removed = true; }
+    check(removed, 'managed catalog file removed');
+    console.log('motion storage integration: passed');
+  }, 50);
   const source = lord.fs.home() + '/wallpaper input.png';
   const image = lord.settings.importWallpaper(source);
   check(image && image.src !== source && image.thumb !== image.src, 'wallpaper has a managed copy and thumbnail');

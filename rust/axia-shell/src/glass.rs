@@ -1,5 +1,5 @@
-//! Reusable blur storage and an exact, bounded backdrop cache. The C rasterizer keeps
-//! its parallel pixel kernels; Rust owns allocation, cache validity and material policy.
+//! Reusable blur storage, an exact bounded backdrop cache and material policy.
+//! glass_render.rs owns all pixel kernels; C supplies the canvas and synchronous pool.
 use std::{cell::RefCell, ptr};
 const MAX_WORK: usize = 32 * 1024 * 1024;
 const CACHE_BYTES: usize = 2 * 1024 * 1024;
@@ -7,11 +7,11 @@ const CACHE_SLOTS: usize = 4;
 
 #[repr(C)]
 pub struct GlassBuffers {
-    pixels: *mut u32,
-    source: *mut u32,
-    sums: *mut i32,
-    columns: *mut i32,
-    division: *mut u8,
+    pub(crate) pixels: *mut u32,
+    pub(crate) source: *mut u32,
+    pub(crate) sums: *mut i32,
+    pub(crate) columns: *mut i32,
+    pub(crate) division: *mut u8,
 }
 #[derive(Default)]
 struct Entry {
@@ -108,7 +108,7 @@ impl Glass {
         false
     }
 }
-// FFI contract: one prepare -> C writes pixels -> reuse -> optional C kernels + commit.
+// Storage contract: one prepare -> Rust samples pixels -> reuse -> optional kernels + commit.
 // Buffers belong to the calling thread, valid until its next prepare. C must join all
 // pixel workers before another entrypoint and must never recursively prepare on that thread.
 // Scratch is separate TLS storage: valid until that thread's next scratch call.
@@ -258,4 +258,12 @@ mod tests {
         assert_eq!(axia_glass_tint(true, false) >> 24, 255);
         assert_eq!(axia_glass_tint(false, false) >> 24, 255);
     }
+}
+
+/// Release the calling renderer's retained storage. No prepared job or worker may
+/// still reference its buffers. Used by renderer parity/lifetime checks.
+#[no_mangle]
+pub extern "C" fn axia_glass_reset() {
+    STATE.with(|s| *s.borrow_mut() = Glass::default());
+    SCRATCH.with(|s| *s.borrow_mut() = Vec::new());
 }

@@ -146,9 +146,11 @@ static JSValue f_play(JSContext *c, JSValueConst t, int argc, JSValueConst *argv
     if (s->audio) maudio_volume(s->audio, opt_num(c, o, "volume", 1));
     int hw = opt_int(c, o, "hw", 1, 0, 1);
     if (hw) render = media_render_fd();
-    char params[256];
-    snprintf(params, sizeof params, "native=%d\nloop=%d\nautoplay=%d\naudio=%d\nhw=%d\nhwonly=%d\nrate=%d\nhwaccel=%s\n", opt_int(c, o, "native", 0, 0, 1),
-             opt_int(c, o, "loop", 0, 0, 1), opt_int(c, o, "autoplay", 1, 0, 1), s->audio ? 1 : 0, hw && render >= 0, opt_int(c, o, "hwOnly", 0, 0, 1), opt_int(c, o, "rate", 100, 10, 100), media_hwaccel());
+    char params[512];
+    snprintf(params, sizeof params, "native=%d\nloop=%d\nautoplay=%d\naudio=%d\nhw=%d\nhwonly=%d\nrate=%d\nhwaccel=%s\nwallpaper=%d\nmaxfps=%d\nmaxwidth=%d\nmaxheight=%d\nthreads=%d\n", opt_int(c, o, "native", 0, 0, 1),
+             opt_int(c, o, "loop", 0, 0, 1), opt_int(c, o, "autoplay", 1, 0, 1), s->audio ? 1 : 0, hw && render >= 0, opt_int(c, o, "hwOnly", 0, 0, 1), opt_int(c, o, "rate", 100, 10, 100), media_hwaccel(), opt_int(c, o, "wallpaper", 0, 0, 1),
+             opt_int(c, o, "maxFps", 15, 5, 30), opt_int(c, o, "maxWidth", 1280, 320, 1920),
+             opt_int(c, o, "maxHeight", 720, 180, 1080), opt_int(c, o, "decoderThreads", 2, 1, 2));
     int fds[3] = { in, ring, render };
     s->sock = media_spawn(MK_PLAY, params, fds, 3, &s->pid);
     close(in);

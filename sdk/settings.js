@@ -11,6 +11,7 @@ const DEFAULTS = {
   browserFramePending: false,    // that switch is still waiting for Chromium to quit
   scrollBars: 'auto',    // 0.8.3, Settings → Appearance → Show scroll bars: 'auto' | 'scrolling' | 'always'
   motion: {},            // moving wallpaper per display: { '*': id, <display id>: id } (sdk/motion.jsx)
+  motionPaths: {},       // catalog videos downloaded into the user profile by Rust
   motionFiles: {},       // id → the variant on disk
   motionUser: [],        // added videos: [{ id: 'user:…', name, path }]
   wallpaperUser: [],     // managed still images imported by the Rust wallpaper service

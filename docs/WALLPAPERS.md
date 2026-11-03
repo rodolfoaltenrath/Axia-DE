@@ -1,5 +1,45 @@
 # Moving wallpapers
 
+## Axia standalone on Fedora
+
+The standalone session does not require GPU composition or hardware video decoding.
+Its default economical profile is selected in Rust: H.264, at most 1280×720 output,
+15 displayed frames/second, two decoding threads, no audio, and at most half-speed
+playback. Hardware decoding is used when reported available. The GPU-composited
+profile with compatible decoding can use supported H.264/HEVC up to 1920×1080 and
+30 frames/second. Ordinary video apps are not subject to wallpaper limits.
+
+Inputs are limited to ten seconds, 1920×1080 and 30 frames/second in both Settings
+and the media helper. Larger/faster catalog variants remain unavailable. The local
+video picker reads the actual native probe's millisecond duration and stream list.
+The still wallpaper remains behind the animation as a fallback. Existing low-battery,
+covered-desktop, fullscreen, reduced-motion, idle and high-load pauses are retained.
+
+The catalog downloader is a Rust worker using Fedora's curl for HTTPS and the
+existing SHA-256 primitive for verification. Only catalog entries are accepted by
+the C bridge. Files are downloaded privately into `$XDG_DATA_HOME/axia/motion`
+(default `~/.local/share/axia/motion`), with expected-size and SHA-256 checks followed
+by atomic rename. There are at most two active downloads and eight unconsumed jobs,
+with connection/transfer timeouts and a 100 MiB file limit. Downloads use normal user
+permissions; the old privileged `wallpaper-get`/`wallpaper-remove` actions are not
+used by Axia. The curl child resets the compositor's blocked signal mask and exits
+if the owning session exits. No new daemon is installed.
+
+`motionPaths` persists managed paths alongside existing `motionFiles` preferences.
+The Settings panel explains the economical mode in everyday language, reports
+playback/download problems, and hides empty catalog categories. Videos remain
+opt-in. Choosing a still picture clears animation overrides.
+
+`motion_playback_test.py` decodes a generated H.264 fixture with hardware disabled,
+checks bounded wallpaper output and playback controls, then verifies an ordinary
+video still plays at full resolution/rate. It requires no display or network.
+
+## Original distro implementation (historical reference)
+
+The following describes the original LordOS integration. Its privileged download
+and hardware-only requirements do not apply to the Axia standalone path above.
+
+
 Short loops behind the desktop and the login screen, chosen in Settings → Wallpaper. They exist only with the hardware for
 them: there is no software mode.
 

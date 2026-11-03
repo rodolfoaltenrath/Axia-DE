@@ -432,7 +432,7 @@
   "wallpaperCategory.earth": "Earth",
   "motion.title": "Moving wallpapers",
   "motion.hint": "Downloaded when you choose one. They pause when the desktop is hidden, in full screen, when you step away, and on low battery.",
-  "motion.needsGpu": "Moving wallpapers need a compatible GPU.",
+  "motion.needsGpu": "Animated backgrounds could not start. You can still use a picture.",
   "motion.display": "Display",
   "motion.allDisplays": "All displays",
   "motion.none": "Back to still wallpaper",
@@ -443,7 +443,7 @@
   "motion.remove": "Delete download",
   "motion.credits": "Credits",
   "motion.problem.tooLong": "The video lasts more than 10 seconds.",
-  "motion.problem.format": "This GPU can't decode that video format.",
+  "motion.problem.format": "This video is not supported. Try another MP4 file.",
   "motion.problem.unreadable": "That file can't be read as a video.",
   "motion.item.earth-night-lights": "Night lights",
   "motion.item.earth-spin": "Blue marble",
@@ -478,5 +478,9 @@
   "wallpaper.chooseImage": "Choose an image…",
   "wallpaper.imageHint": "PNG or JPEG, up to 32 MiB and 16 megapixels. A copy is kept for your desktop.",
   "wallpaper.importFailed": "Could not import this image. Choose a valid PNG or JPEG up to 32 MiB and 16 megapixels.",
-  "wallpaperCategory.personal": "My pictures"
+  "wallpaperCategory.personal": "My pictures",
+  "motion.efficientHint": "Power-saving mode uses lighter, slower animations to keep your computer responsive. They pause when other programs need more processing power.",
+  "motion.playbackFailed": "We could not play this background. Try another video or choose a picture.",
+  "motion.downloadFailed": "We could not download this background. Check your connection and try again.",
+  "motion.problem.tooLarge": "This video is too demanding for a background. Choose a smaller video, up to 10 seconds long."
 }

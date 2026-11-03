@@ -10,10 +10,10 @@ const eq = (name, a, b) => {
 eq('gpu and hevc', motionCodecs({ hevc: true, h264: false }, 'gpu'), ['hevc']);
 eq('gpu and both, hevc first', motionCodecs({ hevc: true, h264: true }, 'gpu'), ['hevc', 'h264']);
 eq('h264 only when in hardware', motionCodecs({ hevc: false, h264: true }, 'gpu'), ['h264']);
-eq('no decoder: nothing', motionCodecs({ hevc: false, h264: false }, 'gpu'), []);
-eq('no gpu composition: nothing', motionCodecs({ hevc: true, h264: true }, 'gpu-off'), []);
-eq('a virtual gpu: nothing', motionCodecs({ hevc: true, virtualGpu: true }, 'gpu'), []);
-eq('unknown yet: nothing', motionCodecs(null, 'gpu'), []);
+eq('no hardware decoder: economical H.264', motionCodecs({ hevc: false, h264: false }, 'gpu'), ['h264']);
+eq('CPU composition: economical H.264', motionCodecs({ hevc: true, h264: true }, 'gpu-off'), ['h264']);
+eq('virtual GPU: economical H.264', motionCodecs({ hevc: true, virtualGpu: true }, 'gpu'), ['h264']);
+eq('unknown hardware: economical H.264', motionCodecs(null, 'gpu'), ['h264']);
 
 const item = { variants: [{ name: '2160.hevc', codec: 'hevc', w: 3840, h: 2160 }, { name: '1080.hevc', codec: 'hevc', w: 1920, h: 1080 }, { name: '1080.h264', codec: 'h264', w: 1920, h: 1080 }] };
 eq('1080 screen', pickVariant(item, ['hevc', 'h264'], 1920, 1080).name, '1080.hevc');
@@ -46,6 +46,12 @@ eq('long', userVideoProblem({ duration: 11, codec: 'hevc' }, ['hevc']), 'tooLong
 eq('10 s', userVideoProblem({ duration: 10, codec: 'hevc' }, ['hevc']), null);
 eq('vp9', userVideoProblem({ duration: 8, codec: 'vp9' }, ['hevc']), 'format');
 eq('unreadable', userVideoProblem(null, ['hevc']), 'unreadable');
+
+eq('native probe uses milliseconds and streams', userVideoProblem({ duration: 8000, streams: [{ type: 'video', codec: 'h264', width: 1280, height: 720, fps: 30 }] }, ['h264']), null);
+eq('native long video', userVideoProblem({ duration: 11000, streams: [{ type: 'video', codec: 'h264' }] }, ['h264']), 'tooLong');
+eq('large video', userVideoProblem({ duration: 8000, streams: [{ type: 'video', codec: 'h264', width: 3840, height: 2160 }] }, ['h264']), 'tooLarge');
+eq('high frame rate', userVideoProblem({ duration: 8000, streams: [{ type: 'video', codec: 'h264', width: 1280, height: 720, fps: 60 }] }, ['h264']), 'tooLarge');
+eq('audio is not wallpaper', userVideoProblem({ duration: 8000, streams: [{ type: 'audio', codec: 'aac' }] }, ['h264']), 'unreadable');
 
 eq('random skips the last', nextRandom(['a', 'b'], 'a', () => 0), 'b');
 eq('random with one', nextRandom(['a'], 'a'), 'a');

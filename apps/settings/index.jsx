@@ -5,10 +5,10 @@
 import {
   shortcutProfile, standaloneDesktop, View, Text, Image, useTheme, useSettings, shortcutList, shortcutsRev, themes, session, keyboard, admin, languages, setLanguage, useLocale,
   reloadCatalogs, tOptional, statusText, fs, useStore, SidebarItem, Toggle, Button, TextInput, ScrollView, SearchField, Hairline, useSystemInfo, useAppWindow, useTrackpads,
-  spacing, typeScale, registerDockActions, hasTouchpad, findWallpaper, wallpaperThumb, WALLPAPER_CATEGORIES, GREETER_WALLPAPER, setLoginStill, MOTION_SECTIONS, MOTION_RATES, motionBusy, motionItems, motionThumb, motionDownloads, useCodecs, downloadMotion, removeMotion, setLoginMotion, variantFor, userVideoProblem, media, FilePicker, Layer, addListener, mainBox, screenDisplays, errorText, wm, Segmented, osk,
+  spacing, typeScale, registerDockActions, hasTouchpad, findWallpaper, wallpaperThumb, WALLPAPER_CATEGORIES, GREETER_WALLPAPER, setLoginStill, MOTION_SECTIONS, MOTION_RATES, motionBusy, motionError, motionProfile, motionItems, motionThumb, motionDownloads, useCodecs, downloadMotion, removeMotion, setLoginMotion, variantFor, userVideoProblem, media, FilePicker, Layer, addListener, mainBox, screenDisplays, errorText, wm, Segmented, osk,
   restoreMode, setRestoreMode, restoreBrowsers, setRestoreBrowsers,
 } from '@lordos/sdk';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { SoundSettings } from './Sound.jsx';
 import { SharingSettings } from './Sharing.jsx';
 import { UsersSettings } from './Users.jsx';
@@ -242,12 +242,18 @@ function MotionWallpapers({ login }) {
   const { t: tr } = useLocale();
   const [s, set] = useSettings();
   const codecs = useCodecs();
+  const profile = motionProfile();
+  const failed = useStore(motionError);
   const downloads = useStore(motionDownloads);
   const busy = useStore(motionBusy);
   const [scope, setScope] = useState('*');
   const [msg, setMsg] = useState('');
   const [pick, setPick] = useState(false);
   const [credits, setCredits] = useState(false);
+  const selection = useRef(0);
+  useEffect(() => () => { selection.current++; }, []);
+  useEffect(() => { selection.current++; }, [s.wallpaper]);
+  useEffect(() => pick ? addListener('keydown', (e) => { if (e.key === 'Escape') setPick(false); }) : undefined, [pick]);
   const can = codecs.length > 0;
   const displays = screenDisplays() || [];
   const main = displays[0] || { w: 1920, h: 1080 };
@@ -255,12 +261,13 @@ function MotionWallpapers({ login }) {
   const cur = motion[scope] || null;
   const choose = (id) => { const m = { ...motion }; if (id) m[scope] = id; else delete m[scope]; set({ motion: m }); };
   const select = (it) => {
+    const ticket = ++selection.current;
     setMsg('');
     const apply = () => (login ? setLoginMotion(it).then(() => { set({ loginWallpaper: it.id }); setMsg(tr('settings.motion.loginDone')); }, (e) => setMsg(errorText(e))) : choose(it.id));
     if ((s.motionFiles || {})[it.id]) { apply(); return; }
     const v = variantFor(it, codecs, main);
     if (!v) return;
-    downloadMotion(it, v).then(apply, (e) => setMsg(errorText(e)));
+    downloadMotion(it, v).then(() => { if (selection.current === ticket) apply(); }, () => { if (selection.current === ticket) setMsg(tr('settings.motion.downloadFailed')); });
   };
   const curItem = motionItems.find((x) => x.id === cur);
   const addFile = (path) => {
@@ -275,8 +282,9 @@ function MotionWallpapers({ login }) {
   };
   return (
     <>
-      <Section title={tr('settings.motion.title')} footer={can ? tr('settings.motion.hint') : undefined}>
+      <Section title={tr('settings.motion.title')} footer={can ? tr(profile.rate < 100 ? 'settings.motion.efficientHint' : 'settings.motion.hint') : undefined}>
         {!can ? <Note>{tr('settings.motion.needsGpu')}</Note> : null}
+        {failed ? <Note tone="warn">{tr('settings.motion.playbackFailed')}</Note> : null}
         {msg ? <Note tone="warn">{msg}</Note> : null}
         {can && displays.length > 1 ? (
           <SettingRow label={tr('settings.motion.display')}>
@@ -286,7 +294,7 @@ function MotionWallpapers({ login }) {
         {can ? (
           <>
             {login ? null : <><SettingRow label={tr('settings.motion.speed')}>
-              <Segmented small options={MOTION_RATES.map((r) => [r, `${r / 100}×`])} value={MOTION_RATES.includes(s.motionRate) ? s.motionRate : 100} onChange={(v) => set({ motionRate: v })} />
+              <Segmented small options={MOTION_RATES.filter((r) => r <= profile.rate).map((r) => [r, `${r / 100}×`])} value={Math.min(MOTION_RATES.includes(s.motionRate) ? s.motionRate : 100, profile.rate)} onChange={(v) => set({ motionRate: v })} />
             </SettingRow></>}
             {!login && cur ? (
               <SettingRow label={curItem ? (tOptional(`settings.motion.item.${curItem.id}`) || curItem.name) : tr('settings.motion.random')}>
@@ -305,11 +313,11 @@ function MotionWallpapers({ login }) {
           </>
         ) : null}
       </Section>
-      {MOTION_SECTIONS.map((sec) => (
+      {MOTION_SECTIONS.filter((sec) => motionItems.some((it) => it.section === sec)).map((sec) => (
         <Section key={sec} title={tr(`settings.wallpaperCategory.${sec}`)}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: spacing.m }}>
             {motionItems.filter((it) => it.section === sec).map((it) => (
-              <MotionTile key={it.id} it={it} avail={can} on={(login ? s.loginWallpaper : cur) === it.id} percent={downloads[it.id]} busy={!login && busy && cur === it.id} onClick={() => select(it)} />
+              <MotionTile key={it.id} it={it} avail={can && !!variantFor(it, codecs, main)} on={(login ? s.loginWallpaper : cur) === it.id} percent={downloads[it.id]} busy={!login && busy && cur === it.id} onClick={() => select(it)} />
             ))}
           </View>
         </Section>
@@ -323,7 +331,9 @@ function MotionWallpapers({ login }) {
           </View>
         </Section>
       ) : null}
-      {pick ? <FilePicker onPick={(p) => addFile(Array.isArray(p) ? p[0] : p)} onClose={() => setPick(false)} /> : null}
+      {pick && <Layer name="modal"><View style={{ position: 'absolute', ...mainBox(), backgroundColor: 'rgba(0,0,0,0.25)' }}>
+        <FilePicker filter={/\.(mp4|m4v|mov)$/i} onPick={(p) => addFile(Array.isArray(p) ? p[0] : p)} onClose={() => setPick(false)} />
+      </View></Layer>}
     </>
   );
 }

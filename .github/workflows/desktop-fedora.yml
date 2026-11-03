@@ -27,6 +27,7 @@ jobs:
         run: |
           node server/tests/files_model_test.mjs
           node server/tests/shortcut_profile_test.mjs
+          node server/tests/motion_model_test.mjs
       - run: make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
       - name: Touchpad regression tests
         run: |
