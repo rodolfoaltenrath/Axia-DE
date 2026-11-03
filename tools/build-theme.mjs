@@ -128,6 +128,14 @@ const all = fs.readdirSync(path.join(root, 'themes'))
 for (const name of (names.length ? names : all).filter((n) => n !== 'app-host' && n !== 'sysapps')) await buildTheme(name);
 if (!names.length || names.includes('app-host')) await buildAppHost();
 if (!names.length || names.includes('sysapps')) await buildSysApps();
+// Prebundle the integration fixture so RPM checks run offline without Node.js.
+if (!names.length) await build({
+  entryPoints: [path.join(root, 'server/tests/switcher_smoke.jsx')],
+  outfile: path.join(root, 'tests/switcher-smoke.bundle.js'),
+  bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
+  alias: { '@lordos/runtime': path.join(root, 'runtime/index.js'), '@lordos/sdk': path.join(root, 'sdk/index.js') },
+  define: defines, logLevel: 'warning',
+});
 // the verified-code manifest of what was just built (unsigned: a development build until
 // tools/release/sign-code.sh signs it on the maintainer's machine)
 const cm = writeManifest(root);

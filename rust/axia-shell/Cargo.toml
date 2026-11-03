@@ -1,0 +1,9 @@
+[package]
+name = "axia-shell"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Axia desktop policies, embedded in the C compositor"
+
+[lib]
+crate-type = ["staticlib", "rlib"]

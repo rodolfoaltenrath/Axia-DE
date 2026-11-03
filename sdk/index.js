@@ -15,6 +15,8 @@ export { keyboard } from './keyboard.js';
 export { useShortcuts, addShortcuts, runShortcut, shortcutList, shortcutsRev, shortcutTaken } from './shortcuts.js';
 import { resetShortcuts } from './shortcuts.js';
 export { AppSwitcher, openSwitcher, cycleAppWindows } from './appswitcher.jsx';
+export { dockGlass } from './glass.js';
+export { shortcutProfile } from './shortcutprofile.js';
 export { RemoteDeskApp } from './remotedesk.jsx';
 export { osk, oskState, startOsk } from './osk.js';
 export { OskPanel, OskIcon, OskStatus, oskLift } from './osk.jsx';

@@ -88,6 +88,10 @@ A separação remove a necessidade dos serviços específicos do LordOS, mas nã
 
 ## Evolução
 
+A migração gradual para Rust começou pelo modelo do alternador de aplicativos,
+ligado ao compositor C no mesmo processo: [RUST.md](RUST.md). Os perfis de atalhos
+macOS e Linux / Windows são independentes da aparência: [SHORTCUTS.md](SHORTCUTS.md).
+
 Atualizações e distribuição de snapshots: [COPR-UPDATES.md](COPR-UPDATES.md).
 Migração para o repositório independente: [REPOSITORY.md](REPOSITORY.md).
 Origem e atribuição: [ORIGIN.md](../ORIGIN.md).

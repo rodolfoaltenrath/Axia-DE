@@ -98,6 +98,24 @@ def main():
                     assert error not in log, log
                 for app in ['store', 'settings', 'files']:
                     assert f'timing: {app} window committed' in log, log
+            # Exercise the real Rust -> C -> QuickJS -> SDK path, not a JS mock.
+            fixture = (REPO / 'tests/switcher-smoke.bundle.js').read_bytes()
+            target = staged / 'themes/default/theme.bundle.js'
+            target.write_bytes(fixture)
+            staged_manifest = json.loads((staged / 'code-manifest.json').read_text())
+            for entry in staged_manifest['files']:
+                if entry['path'] == 'themes/default/theme.bundle.js':
+                    entry['size'] = len(fixture)
+                    entry['sha256'] = hashlib.sha256(fixture).hexdigest()
+            (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
+            prefs.write_text(json.dumps({'schema': 1, 'shortcutProfile': 'macos'}))
+            run(str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '5',
+                '--theme', '../themes/default/theme.bundle.js',
+                cwd=staged / 'bin', env=env, timeout=25, **opts)
+            log = (home / '.cache/axia/session.log').read_text()
+            assert 'switcher integration: passed' in log, log
+            for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)', 'switcher smoke:']:
+                assert error not in log, log
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')
 
 

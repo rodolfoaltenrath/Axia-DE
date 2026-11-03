@@ -5,6 +5,37 @@ decides whether a focused Wayland app gets it, then to one dispatcher in the ses
 (`sdk/shortcuts.js`), which runs before every listener. A key it takes reaches nobody else, so one key
 never fires twice.
 
+## Axia keyboard profiles
+
+Settings → Keyboard offers **macOS** and **Linux / Windows**, independently of
+the visual theme. The choice is stored in `shortcutProfile` and applied live.
+Without an explicit choice, existing users keep their theme's convention:
+macOS for the default theme, Linux / Windows for Classic.
+
+| Action | macOS | Linux / Windows |
+|---|---|---|
+| Switch apps | Super+Tab, Super+Shift+Tab | Alt+Tab, Alt+Shift+Tab |
+| Cycle this app's windows | Super+grave, Super+Shift+grave | Alt+grave, Alt+Shift+grave |
+| Minimize | Super+M | Super+H |
+| Close a window | Handled by the app | Alt+F4 |
+| Show desktop | Super+F11 | Super+D |
+| Files / Settings | Launcher | Super+E / Super+I |
+| System Monitor | Launcher | Ctrl+Shift+Esc |
+| Area screenshot | Super+Shift+4 | Super+Shift+S |
+
+Super is the Windows/Command key. Ctrl shortcuts continue to belong to the
+applications. In the macOS profile, Super editing shortcuts for Linux apps are
+translated into Ctrl as before; this translation is disabled for Linux / Windows.
+Native apps retain their own Ctrl aliases. This setting configures desktop
+bindings; it cannot rewrite the shortcut settings of external applications.
+
+`sdk/shortcutprofile.js` defines the bindings and `sdk/shortcuts.js`
+composes them with the theme and optional modules. Desktop navigation uses the
+matching profile as well. The C-side fixed grab tables accept `macos`,
+`macos-desktops` and `linux`; legacy theme names remain supported.
+Changing profiles cancels an open app selector to avoid committing with a
+different modifier.
+
 ## The dispatcher
 
 `runtime/events.js` calls the filter set with `setKeyFilter` before any `addListener('keydown')`, and only
@@ -80,6 +111,12 @@ A key pressed with no Linux app in front and released with one (the key that swi
 release delivered to that app, and the dispatcher never sees it: a new press of a key still marked counts as a press.
 
 ## The app switcher
+
+Axia's selection model is implemented in Rust and embedded in axia-server;
+see [RUST.md](RUST.md) for ownership, build and test details. The SDK provides
+window metadata and renders the overlay with the shared Dock glass material.
+The older theme-specific table descriptions below describe the legacy aliases;
+the explicit keyboard profile overrides their system bindings.
 
 `sdk/appswitcher.jsx`, mounted by each theme inside its `ThemeProvider`, in the overlay layer. Apps are
 grouped as the Dock groups them (`runningApps`), most recently used first. It opens on the previous app, and

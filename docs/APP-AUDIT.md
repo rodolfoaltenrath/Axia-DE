@@ -51,6 +51,14 @@ Arquivos oferece abas, quatro visualizações, lixeira, prévia e operações lo
 também dependem de integração administrativa. Não foi encontrada uma entrada
 do Nautilus no inventário de `.desktop` do sistema usado nesta análise.
 
+Vale manter e melhorar essa base, priorizando navegação e operações comuns.
+Na sessão Fedora avaliada, faltava a configuração XDG das pastas pessoais, e
+Documentos e outras pastas padrão ainda não existiam. A primeira melhoria local
+prioriza Home e pastas pessoais na barra lateral, corrige caminhos XDG absolutos
+e aninhados e inicializa contas sem configuração com a ferramenta do Fedora,
+preservando os diretórios existentes. Isso melhora a navegação sem encerrar a
+avaliação de montagem de volumes, arquivos externos e demais operações.
+
 Notas e Lembretes têm funções próprias; não há motivo para ocultar um app de
 outra categoria por ter aparência parecida. Backups, Gravador e Capturas de Tela
 precisam de testes de restauração, gravação/exportação e captura, respectivamente.
@@ -102,6 +110,20 @@ commit inicial de janela é evidência de inicialização, não de equivalência
 funcional. A sessão física e a instalação RPM não foram reiniciadas ou alteradas.
 
 ## Próximos critérios para escolher os padrões
+
+### Validação após a primeira atualização pelo Copr
+
+Na sessão iniciada com `0.8.7-3.20261103013626190773.git2784bdcf5ff3.fc44`,
+o usuário confirmou que pressionar o canto inferior direito do touchpad voltou
+a abrir menus de contexto, incluindo em aplicativos externos. Isso complementa
+os testes simulados com uma verificação no dispositivo físico.
+
+O compositor e os helpers de cofre e Mail estavam em execução, sem unidades de
+usuário com falha. O timer `axia-update.timer` estava habilitado e ativo. Essas
+verificações confirmam o início da sessão e a ativação das atualizações; não
+validam as tarefas de cada aplicativo nem as integrações administrativas abaixo.
+
+### Avaliação funcional pendente
 
 Testar primeiro Editor, Relógio, Fontes e Emoji/Símbolos com tarefas reais. Depois,
 Terminal, PDF e Arquivos. Para cada candidato: abrir dados representativos,

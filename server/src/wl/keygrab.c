@@ -66,13 +66,20 @@ static const Grab classic[] = {
 static const Grab *table;
 static size_t count;
 static int remaps;
+static int linux_profile;
 
 int keygrab_set(const char *profile) {
     if (!profile) return 0;
-    if (!profile[0]) { table = NULL; count = 0; remaps = 0; return 1; }
-    if (!strcmp(profile, "flow")) { table = flow; count = sizeof flow / sizeof flow[0]; remaps = 1; return 1; }
-    if (!strcmp(profile, "flow-desktops")) { table = flow_desktops; count = sizeof flow_desktops / sizeof flow_desktops[0]; remaps = 1; return 1; }
-    if (!strcmp(profile, "classic")) { table = classic; count = sizeof classic / sizeof classic[0]; remaps = 0; return 1; }
+    if (!strcmp(profile, "macos")) profile = "flow";
+    else if (!strcmp(profile, "macos-desktops")) profile = "flow-desktops";
+    else if (!strcmp(profile, "linux")) {
+        table = classic; count = sizeof classic / sizeof classic[0];
+        remaps = 0; linux_profile = 1; return 1;
+    }
+    if (!profile[0]) { table = NULL; count = 0; remaps = 0; linux_profile = 0; return 1; }
+    if (!strcmp(profile, "flow")) { table = flow; count = sizeof flow / sizeof flow[0]; remaps = 1; linux_profile = 0; return 1; }
+    if (!strcmp(profile, "flow-desktops")) { table = flow_desktops; count = sizeof flow_desktops / sizeof flow_desktops[0]; remaps = 1; linux_profile = 0; return 1; }
+    if (!strcmp(profile, "classic")) { table = classic; count = sizeof classic / sizeof classic[0]; remaps = 0; linux_profile = 0; return 1; }
     return 0;
 }
 
@@ -93,6 +100,10 @@ char keygrab_letter(int code, const char *base) {
 }
 
 int keygrab_match(int code, char letter, unsigned mods) {
+    if (linux_profile) {
+        if (code == KEY_GRAVE && !letter && (mods == KG_ALT || mods == (KG_ALT | KG_SHIFT))) return KG_TAKE;
+        if (letter == 'h' && mods == KG_META) return KG_TAKE;
+    }
     for (size_t i = 0; i < count; i++) {
         const Grab *g = &table[i];
         if (g->mods != mods) continue;

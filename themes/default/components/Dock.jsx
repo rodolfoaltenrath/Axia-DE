@@ -1,3 +1,4 @@
+import { dockGlass } from '@lordos/sdk';
 // Dock with magnification by mouse position, tooltip and open-app dot. It can go at the bottom,
 // on the left or on the right (Settings → Desktop & Dock), auto-hide and show recent
 // apps. Left and right are physical sides of the screen, also in Arabic or Hebrew (as
@@ -387,7 +388,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
       <View onMouseMove={(e) => setM(vert ? e.y : e.x)} onMouseLeave={() => setM(null)}
         style={{ position: 'absolute', ...box, direction: 'ltr' }}>
         <View style={{ position: 'absolute', ...back, borderRadius: 20,
-          backgroundColor: t.dockBg, backdropFilter: `blur(${t.blur}px)`, border: `1px solid ${t.dockBorder}` }} />
+          ...dockGlass(t) }} />
         {sepLines.map((c, i) => (
           <View key={`sep${i}`} style={vert ? { position: 'absolute', top: c, height: 1, width: BASE * 0.7, [position]: PAD + BASE * 0.15, backgroundColor: t.dockBorder }
             : { position: 'absolute', left: c, width: 1, height: BASE * 0.7, bottom: PAD + BASE * 0.15, backgroundColor: t.dockBorder }} />

@@ -6,6 +6,8 @@ License:        MIT AND BSD-2-Clause AND CC0-1.0 AND OFL-1.1 AND CC-BY-4.0 AND C
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  gcc
+BuildRequires:  cargo
+BuildRequires:  rust
 BuildRequires:  make
 BuildRequires:  python3
 BuildRequires:  xz
@@ -39,6 +41,7 @@ Requires:       xkeyboard-config
 Requires:       libX11-common
 Requires:       tzdata
 Requires:       dnf5
+Requires:       xdg-user-dirs
 Recommends:     pipewire-pulseaudio
 Recommends:     xorg-x11-server-Xwayland
 Recommends:     polkit

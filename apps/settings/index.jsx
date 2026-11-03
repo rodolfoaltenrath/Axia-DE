@@ -3,7 +3,7 @@
 // keyboard, themes and session pages. The other pages are in their own files; all of them are built
 // from ./ui.jsx (docs/DESIGN.md, "Settings").
 import {
-  standaloneDesktop, View, Text, Image, useTheme, useSettings, shortcutList, shortcutsRev, themes, session, keyboard, admin, languages, setLanguage, useLocale,
+  shortcutProfile, standaloneDesktop, View, Text, Image, useTheme, useSettings, shortcutList, shortcutsRev, themes, session, keyboard, admin, languages, setLanguage, useLocale,
   reloadCatalogs, tOptional, statusText, fs, useStore, SidebarItem, Toggle, Button, TextInput, ScrollView, SearchField, Hairline, useSystemInfo, useAppWindow, useTrackpads,
   spacing, typeScale, registerDockActions, hasTouchpad, findWallpaper, wallpaperThumb, WALLPAPER_CATEGORIES, GREETER_WALLPAPER, setLoginStill, MOTION_SECTIONS, MOTION_RATES, motionBusy, motionItems, motionThumb, motionDownloads, useCodecs, downloadMotion, removeMotion, setLoginMotion, variantFor, userVideoProblem, media, FilePicker, screenDisplays, errorText, wm, Segmented, osk,
   restoreMode, setRestoreMode, restoreBrowsers, setRestoreBrowsers,
@@ -549,6 +549,7 @@ function ShortcutsList() {
 function Keyboard() {
   const { t: tr } = useLocale();
   const [s, set] = useSettings();
+  const profile = shortcutProfile(s.shortcutProfile, themes.current());
   const [sample, setSample] = useState('');
   const [adding, setAdding] = useState(false);
   const all = keyboard.list();
@@ -572,6 +573,12 @@ function Keyboard() {
   const active = s.keyboardIndex || 0;
   return (
     <Stack>
+      <Section title={tr('settings.kb.profile.title')} footer={tr('settings.kb.profile.hint')}>
+        <SettingRow label={tr('settings.kb.profile.label')}>
+          <Segmented value={profile} onChange={(value) => set({ shortcutProfile: value })}
+            options={[['macos', 'macOS'], ['linux', 'Linux / Windows']]} />
+        </SettingRow>
+      </Section>
       <Section title={tr('settings.kb.layouts')} footer={tr('settings.kb.hint')}>
         {mine.map((k, i) => (
           <SettingRow key={`${k.layout}${k.variant}${k.ime || ''}`} icon={<KeyCap label={keyboard.label(k)} active={i === active} />} label={nameOf(k)}>
@@ -603,7 +610,7 @@ function Keyboard() {
           <TextInput value={sample} onChange={setSample} placeholder={tr('settings.kb.placeholder')} onCancel={() => setSample('')} />
         </View>
       </Section>
-      {themes.current() === 'default' && (
+      {profile === 'macos' && (
         <Section title={tr('settings.kb.desktopArrows.title')} footer={tr('settings.kb.desktopArrows.hint')}>
           <SettingRow label={tr('settings.kb.desktopArrows.label')}>
             <Toggle value={s.desktopArrows !== false} onChange={(v) => set({ desktopArrows: v })} />

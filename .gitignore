@@ -1,4 +1,5 @@
 build/
+target/
 __pycache__/
 *.pyc
 *.wasm
@@ -6,6 +7,7 @@ __pycache__/
 node_modules/
 themes/*/theme.bundle.js
 assets/app-host.bundle.js
+tests/switcher-smoke.bundle.js
 *.iso
 *.img
 *.img.xz
