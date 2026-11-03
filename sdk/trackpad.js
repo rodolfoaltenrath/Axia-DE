@@ -17,7 +17,7 @@ export const TRACKPAD_DEFAULTS = {
   tap: true,                // tap to click
   tapDrag: true,            // tap and drag
   natural: true,            // natural scrolling
-  secondary: 'two-fingers', // secondary click: 'two-fingers' | 'bottom-right' | 'bottom-left'
+  secondary: 'bottom-right', // physical lower-right click; two-finger taps also produce a right click
   threeDrag: false,         // three-finger drag (swiping moves to 4 fingers)
   dwt: true,                // ignore while typing
   scroll: true,             // two-finger scrolling

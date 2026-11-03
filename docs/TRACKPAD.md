@@ -188,7 +188,7 @@ Each row has a small drawing of the gesture that animates on mouse hover.
 | Point & Click | Pointer speed (`speed`, 0..1) | 0.5 |
 | | Tap to click (`tap`) | yes |
 | | Tap and drag (`tapDrag`) | yes |
-| | Secondary click (`secondary`: `two-fingers`, `bottom-right`, `bottom-left`) | two fingers |
+| | Secondary click (`secondary`: `two-fingers`, `bottom-right`, `bottom-left`) | bottom-right corner |
 | | Three-finger drag (`threeDrag`) | no |
 | | Disable while typing (`dwt`) | yes |
 | Scroll & Zoom | Natural scrolling (`natural`) | yes |

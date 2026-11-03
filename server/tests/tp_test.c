@@ -218,6 +218,17 @@ static void t_clicks(void) {
     area.secondary = TP_CLICK_BOTTOM_RIGHT;
     s = go("click2", &area);
     CHECK(!strcmp(s.btns, "Ll"), "corner mode: 2 fingers up = left (%s)", s.btns);
+    s = go("click-bottom-right", &area);
+    CHECK(!strcmp(s.btns, "Rr"), "lower-right corner = right press and release (%s)", s.btns);
+    s = go("click-bottom-left", &area);
+    CHECK(!strcmp(s.btns, "Ll"), "lower-left corner stays left (%s)", s.btns);
+    s = go("tap2", &area);
+    CHECK(!strcmp(s.btns, "Rr"), "corner mode keeps two-finger tap = right (%s)", s.btns);
+    area.secondary = TP_CLICK_BOTTOM_LEFT;
+    s = go("click-bottom-left", &area);
+    CHECK(!strcmp(s.btns, "Rr"), "left-handed corner mode = right (%s)", s.btns);
+    s = go("click-bottom-right", &area);
+    CHECK(!strcmp(s.btns, "Ll"), "left-handed mode keeps the opposite corner left (%s)", s.btns);
 }
 
 static void t_scroll(void) {
@@ -367,6 +378,7 @@ int main(int argc, char **argv) {
     tp_set_sink(&sink, NULL);
     tp_set_screen(1280, 800);
     if (argc == 3 && !strcmp(argv[1], "--replay")) return replay(argv[2]);
+    CHECK(tp_config()->secondary == TP_CLICK_BOTTOM_RIGHT, "default physical secondary click is the lower-right corner");
     t_pointer();
     t_taps();
     t_clicks();
