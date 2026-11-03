@@ -1192,7 +1192,7 @@ fn resizing_all_views_keeps_the_last_selected_file_visible() {
                 let index = *s.tab().selected.first().unwrap();
                 let tree = s.render(&shared);
                 let cell = cell(&tree, index).unwrap();
-                let top = cell["style"]["top"].as_f64().unwrap();
+                let top = cell["style"]["top"].as_f64().unwrap() - tree_scroll(&tree);
                 let height = cell["style"]["height"].as_f64().unwrap();
                 assert!(
                     top >= -0.01 && top + height <= s.entry_height() + 0.01,
@@ -1358,5 +1358,267 @@ fn icon_grid_uses_available_width_and_keeps_scrollbar_clear() {
             s.event(&json!({"action":["key"],"key":"ArrowDown"}), &mut shared);
             assert_eq!(s.tab().cursor, Some(s.filtered()[first_row.len()]));
         }
+    }
+}
+
+#[test]
+#[ignore = "manual performance probe; reports timings rather than machine-specific limits"]
+fn large_folder_interaction_profile() {
+    let h = Home::new();
+    h.file("template.txt", "");
+    let (mut s, mut shared) = h.session(json!({}));
+    let template = s
+        .tab()
+        .entries
+        .iter()
+        .find(|e| e.name == "template.txt")
+        .unwrap()
+        .clone();
+    s.tab_mut().entries = (0..20_000)
+        .map(|n| {
+            let mut e = template.clone();
+            e.name = format!("document-{n:05}.txt");
+            e.raw = h.path(&e.name);
+            e.path = e.raw.to_string_lossy().into_owned();
+            e
+        })
+        .collect();
+    s.poll(&json!({"width":900,"height":540}), &shared);
+    for query in ["", "document-1"] {
+        s.event(&json!({"action":["query"],"value":query}), &mut shared);
+        let mut samples = Vec::new();
+        let mut phases = [0u128; 4];
+        let mut max_bytes = 0;
+        for _ in 0..100 {
+            let start = Instant::now();
+            s.event(&json!({"action":["wheel"],"deltaY":20}), &mut shared);
+            let event_done = start.elapsed().as_micros();
+            s.poll(&json!({}), &shared);
+            let poll_done = start.elapsed().as_micros();
+            let tree = s.render(&shared);
+            let _ = s.menus(&shared);
+            let render_done = start.elapsed().as_micros();
+            max_bytes = max_bytes.max(serde_json::to_vec(&tree).unwrap().len());
+            let total = start.elapsed().as_micros();
+            phases[0] += event_done;
+            phases[1] += poll_done - event_done;
+            phases[2] += render_done - poll_done;
+            phases[3] += total - render_done;
+            samples.push(total);
+        }
+        samples.sort();
+        println!(
+            "FILES PERF 20000 query={query:?}: median={}us p95={}us max_tree={}bytes; mean event={}us poll={}us render={}us serialize={}us",
+            samples[50], samples[95], max_bytes, phases[0] / 100, phases[1] / 100, phases[2] / 100, phases[3] / 100
+        );
+        assert!(max_bytes < 200_000, "listing must remain virtualized");
+    }
+}
+
+#[test]
+#[ignore = "manual performance probe; reports timings rather than machine-specific limits"]
+fn large_folder_sort_profile() {
+    let h = Home::new();
+    let template = ops::entry(&h.file("template.txt", "")).unwrap();
+    let mut entries: Vec<_> = (0..20_000)
+        .map(|n| {
+            let mut e = template.clone();
+            e.name = format!("Document-{:05}.txt", (n * 7919) % 20_000);
+            e
+        })
+        .collect();
+    let start = Instant::now();
+    super::model::sort_entries(&mut entries, "name", false, true);
+    println!("FILES PERF sort 20000: {}us", start.elapsed().as_micros());
+    assert_eq!(entries[0].name, "Document-00000.txt");
+}
+
+#[test]
+fn filtered_listing_tracks_search_hidden_sort_and_equal_sized_reloads() {
+    let h = Home::new();
+    let first = h.file("apple.txt", "");
+    h.file("banana.txt", "");
+    h.file(".secret", "");
+    let (mut s, mut shared) = h.session(json!({}));
+    let names = |s: &Session| {
+        s.filtered()
+            .iter()
+            .map(|i| s.tab().entries[*i].name.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&s), vec!["apple.txt", "banana.txt"]);
+    s.event(&json!({"action":["query"],"value":"APPLE"}), &mut shared);
+    assert_eq!(names(&s), vec!["apple.txt"]);
+    for _ in 0..10 {
+        s.event(&json!({"action":["wheel"],"deltaY":20}), &mut shared);
+    }
+    assert_eq!(names(&s), vec!["apple.txt"]);
+    fs::rename(first, h.path("apricot.txt")).unwrap();
+    event(&mut s, &mut shared, "refresh", Value::Null);
+    ready(&mut s, &shared);
+    assert!(names(&s).is_empty());
+    s.event(&json!({"action":["query"],"value":""}), &mut shared);
+    assert_eq!(names(&s), vec!["apricot.txt", "banana.txt"]);
+    event(&mut s, &mut shared, "hidden", Value::Null);
+    assert!(names(&s).contains(&".secret".into()));
+    event(&mut s, &mut shared, "sort", json!("name"));
+    assert_eq!(names(&s).last().unwrap(), ".secret");
+}
+
+#[test]
+fn unchanged_undersized_layout_does_not_keep_redrawing() {
+    let h = Home::new();
+    let (mut s, shared) = h.session(json!({}));
+    s.poll(&json!({"width":200,"height":100}), &shared);
+    s.dirty = false;
+    s.poll(&json!({"width":200,"height":100}), &shared);
+    assert!(!s.dirty);
+    assert_eq!((s.width, s.height), (320., 240.));
+}
+
+// How far the listing's moving container is scrolled, from the tree itself.
+fn tree_scroll(node: &Value) -> f64 {
+    let children = node["children"].as_array();
+    if children
+        .into_iter()
+        .flatten()
+        .any(|c| c["events"]["onClick"][0] == "select")
+    {
+        return -node["style"]["top"].as_f64().unwrap();
+    }
+    children
+        .into_iter()
+        .flatten()
+        .map(tree_scroll)
+        .fold(0., f64::max)
+}
+
+#[test]
+fn scrolling_only_changes_the_moving_container() {
+    let h = Home::new();
+    for n in 0..200 {
+        h.file(&format!("item-{n:03}.txt"), "");
+    }
+    let (mut s, mut shared) = h.session(json!({}));
+    s.poll(&json!({"width":900,"height":540}), &shared);
+    fn cells(v: &Value, out: &mut Vec<Value>) {
+        if v["events"]["onClick"][0] == "select" {
+            out.push(v.clone());
+        }
+        for c in v["children"].as_array().into_iter().flatten() {
+            cells(c, out);
+        }
+    }
+    let (mut before, mut after) = (Vec::new(), Vec::new());
+    cells(&s.render(&shared), &mut before);
+    s.event(&json!({"action":["wheel"],"deltaY":10}), &mut shared);
+    let tree = s.render(&shared);
+    cells(&tree, &mut after);
+    assert_eq!(
+        before, after,
+        "a scroll inside a row leaves every cell identical"
+    );
+    assert_eq!(tree_scroll(&tree), 10.);
+    assert!(before[0]["key"].as_str().unwrap().starts_with("entry:"));
+}
+
+#[test]
+fn wheel_at_the_end_of_the_list_needs_no_redraw() {
+    let h = Home::new();
+    h.file("only.txt", "");
+    let (mut s, mut shared) = h.session(json!({}));
+    s.poll(&json!({"width":900,"height":540}), &shared);
+    s.dirty = false;
+    s.event(&json!({"action":["wheel"],"deltaY":48}), &mut shared);
+    assert!(!s.dirty);
+    s.error = Some("fs.notFile".into());
+    s.event(&json!({"action":["wheel"],"deltaY":48}), &mut shared);
+    assert!(s.dirty, "clearing a visible error still draws");
+}
+
+#[test]
+fn watcher_refresh_without_changes_does_not_redraw() {
+    let h = Home::new();
+    let (mut s, shared) = h.session(json!({}));
+    h.file("new.txt", "");
+    for _ in 0..200 {
+        s.dirty = false;
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        s.poll(&json!({}), &shared);
+        if s.tab().entries.iter().any(|e| e.name == "new.txt") {
+            break;
+        }
+        assert!(
+            !s.visibly_loading(),
+            "a background refresh keeps the listing"
+        );
+    }
+    assert!(s.tab().entries.iter().any(|e| e.name == "new.txt"));
+    assert!(s.dirty, "a different listing draws");
+    // Same permissions: the watcher wakes (IN_ATTRIB), but the listing is unchanged.
+    while s.loading {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        s.poll(&json!({}), &shared);
+    }
+    let file = h.path("new.txt");
+    let generation = s.generation.load(std::sync::atomic::Ordering::Relaxed);
+    fs::set_permissions(&file, fs::metadata(&file).unwrap().permissions()).unwrap();
+    s.dirty = false;
+    for _ in 0..200 {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        s.poll(&json!({}), &shared);
+        assert!(!s.dirty, "an identical listing draws nothing");
+    }
+    assert!(s.generation.load(std::sync::atomic::Ordering::Relaxed) > generation);
+    assert!(!s.loading);
+}
+
+#[test]
+fn sorting_keeps_folders_first_and_reverses_only_within_each_group() {
+    let h = Home::new();
+    let template = ops::entry(&h.file("template.txt", "")).unwrap();
+    let e = |name: &str, dir, size| {
+        let mut e = template.clone();
+        e.name = name.into();
+        e.dir = dir;
+        e.size = size;
+        e
+    };
+    let mut entries = vec![
+        e("b", false, 1),
+        e("a", true, 9),
+        e("c10", false, 1),
+        e("c2", false, 2),
+        e("z", true, 1),
+    ];
+    let names = |v: &[ops::Entry]| v.iter().map(|e| e.name.clone()).collect::<Vec<_>>();
+    super::model::sort_entries(&mut entries, "name", false, true);
+    assert_eq!(names(&entries), ["a", "z", "b", "c2", "c10"]);
+    super::model::sort_entries(&mut entries, "name", true, true);
+    assert_eq!(names(&entries), ["z", "a", "c10", "c2", "b"]);
+    super::model::sort_entries(&mut entries, "size", false, false);
+    assert_eq!(names(&entries), ["b", "c10", "z", "c2", "a"]);
+    super::model::sort_entries(&mut entries, "size", true, false);
+    assert_eq!(names(&entries), ["a", "c2", "z", "c10", "b"]);
+}
+
+#[test]
+fn natural_order_matches_people_and_ignores_case_and_leading_zeros() {
+    use std::cmp::Ordering::*;
+    for (a, b, order) in [
+        ("file2", "file10", Less),
+        ("file10", "file2", Greater),
+        ("file010", "file10", Equal),
+        ("File", "file", Equal),
+        ("a", "ab", Less),
+        ("a1b", "a1", Greater),
+        ("9", "10", Less),
+        ("123", "124", Less),
+        ("1234", "124", Greater),
+        ("007x", "7y", Less),
+        ("", "", Equal),
+        ("Água", "água", Equal),
+    ] {
+        assert_eq!(super::model::natural_cmp(a, b), order, "{a} vs {b}");
     }
 }

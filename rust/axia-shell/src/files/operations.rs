@@ -502,7 +502,7 @@ pub fn walk(
     (out, complete)
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize)]
 pub struct Entry {
     pub name: String,
     pub path: String,
