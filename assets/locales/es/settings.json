@@ -470,5 +470,8 @@
   "motion.loginDone": "La pantalla de inicio de sesión va a usar este video.",
   "motion.loginReset": "La pantalla de inicio de sesión volvió a su video predeterminado.",
   "wallpaperFor.desktop": "Escritorio",
-  "wallpaperFor.login": "Pantalla de inicio de sesión"
+  "wallpaperFor.login": "Pantalla de inicio de sesión",
+  "kb.profile.title": "Perfil de atajos",
+  "kb.profile.label": "Atajos del teclado",
+  "kb.profile.hint": "Elige macOS (Super/Command + Tab) o Linux / Windows (Alt + Tab), independientemente del tema visual. Se aplica de inmediato."
 }

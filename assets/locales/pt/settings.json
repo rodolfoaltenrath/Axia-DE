@@ -470,5 +470,8 @@
   "motion.loginDone": "A tela de login vai usar este vídeo.",
   "motion.loginReset": "A tela de login voltou ao vídeo padrão.",
   "wallpaperFor.desktop": "Área de trabalho",
-  "wallpaperFor.login": "Tela de login"
+  "wallpaperFor.login": "Tela de login",
+  "kb.profile.title": "Perfil de atalhos",
+  "kb.profile.label": "Atalhos do teclado",
+  "kb.profile.hint": "Escolha macOS (Super/Command + Tab) ou Linux / Windows (Alt + Tab), independentemente do tema visual. A alteração é imediata."
 }

@@ -17,6 +17,7 @@ const DEFAULTS = {
   keyboard: 'latam',     // before M5; now keyboards (see keyboard.js)
   keyboards: null,       // [{ layout, variant }] from xkb-data
   keyboardIndex: 0,
+  shortcutProfile: null, // 'macos' | 'linux'; unset preserves the theme's previous convention
   language: null,        // interface language ('es', 'en', 'pt'…); null = the region's
   region: '',            // formats region ('es_AR'…); '' = the language's
   theme: null,           // id of the chosen theme (folder in themes/)

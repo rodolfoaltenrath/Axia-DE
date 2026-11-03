@@ -6,7 +6,7 @@ import { SIDE_DEFAULT } from './viewprefs.js';
 
 export { clampSide, viewFor, viewKey, folderViewsWith } from './viewprefs.js';
 
-export const SIDEBAR_ITEMS = ['recent', 'apps', 'desktop', 'documents', 'downloads', 'pictures', 'music', 'videos', 'home', 'computer', 'network', 'volumes', 'trash', 'tags'];
+export const SIDEBAR_ITEMS = ['home', 'downloads', 'documents', 'desktop', 'pictures', 'music', 'videos', 'recent', 'apps', 'computer', 'network', 'volumes', 'trash', 'tags'];
 const DEFAULTS = {
   newWindow: 'home',          // 'home' | 'recent' | 'computer' | a user folder's name
   foldersInTabs: false,       // a double click opens a folder in a new tab

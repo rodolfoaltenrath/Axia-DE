@@ -5,7 +5,8 @@
 enum { KG_SHIFT = 1, KG_CTRL = 2, KG_ALT = 4, KG_META = 8 };
 enum { KG_PASS = 0, KG_TAKE = 1, KG_HOLD = 2 };
 
-/* The shell picks one of the fixed tables: "" (none), "flow" or "classic". 1 ok; 0 for any other
+/* Fixed profiles: "macos", "macos-desktops", "linux"; legacy theme names remain
+ * valid. Empty disables grabs. 1 ok; 0 for any other
  * text, and the table in use does not change. */
 int keygrab_set(const char *profile);
 

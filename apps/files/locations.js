@@ -5,6 +5,7 @@ import { fs } from '@lordos/sdk';
 import { kindOf } from './kinds.js';
 import { tagStore, tagsOf, commentOf } from './ops.js';
 import { archiveEntries } from './archive.js';
+import { resolveUserDirs } from './userdirs.js';
 
 export const sameLoc = (a, b) => a && b && a.type === b.type && a.path === b.path && a.color === b.color && a.query === b.query && a.root === b.root && (a.inner || '') === (b.inner || '');
 
@@ -80,20 +81,11 @@ export function groupEntries(list, group, t) {
 }
 
 // User folders (xdg-user-dirs already provides the names translated by the system).
-const XDG = [['DESKTOP', 'desktop', ['Escritorio', 'Desktop', 'Área de Trabalho']], ['DOCUMENTS', 'documents', ['Documentos', 'Documents']],
-  ['DOWNLOAD', 'downloads', ['Descargas', 'Downloads', 'Transferências']], ['PICTURES', 'pictures', ['Imágenes', 'Pictures', 'Imagens']],
-  ['MUSIC', 'music', ['Música', 'Music']], ['VIDEOS', 'videos', ['Videos', 'Videos', 'Vídeos']]];
 export function userDirs() {
   const home = fs.home();
   let conf = '';
   try { conf = fs.read('.config/user-dirs.dirs'); } catch (e) { /* no xdg-user-dirs */ }
-  let existing;
-  try { existing = new Set(lord.fs.list(home).filter((e) => e.dir).map((e) => e.name)); } catch (e) { existing = new Set(); }
-  const out = [];
-  for (const [key, label, names] of XDG) {
-    const m = new RegExp(`^XDG_${key}_DIR="\\$HOME/([^"]+)"`, 'm').exec(conf);
-    const dir = m ? m[1] : names.find((n) => existing.has(n));
-    if (dir && existing.has(dir)) out.push({ label, path: `${home}/${dir}` });
-  }
-  return out;
+  return resolveUserDirs(home, conf, (path) => {
+    try { return fs.stat(path).dir; } catch (e) { return false; }
+  });
 }

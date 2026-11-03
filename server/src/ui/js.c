@@ -27,6 +27,7 @@
 #include "js_net.h"
 #include "js_media.h"
 #include "js_wm.h"
+#include "js_switcher.h"
 #include "js_disk.h"
 #include "js_imager.h"
 #include "js_logs.h"
@@ -419,6 +420,7 @@ static void session_context(void) {
     js_vault_register(ctx, lord);      /* lord.vault: Passwords and the keyring through the axia-vault helper */
     js_mail_register(ctx, lord);       /* lord.mail: Mail, Calendar, Contacts, Reminders via axia-maild (docs/MAIL.md) */
     js_wm_register(ctx, lord);         /* lord.wm: moving and resizing windows in C (grab.c) */
+    js_switcher_register(ctx, lord);   /* session-owned Rust app selector */
     js_input_register(ctx, lord);      /* lord.input: touchpads and touchscreens (tp/) */
     js_fw_register(ctx, lord);         /* lord.fw: per-app network permissions (axia-netperm, docs/FIREWALL.md) */
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */

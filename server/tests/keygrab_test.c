@@ -80,6 +80,24 @@ int main(void) {
     CHECK(keygrab_set("classic"));
     CHECK(keygrab_match(KEY_COMMA, 'w', KG_META) == KG_PASS);
 
+    /* Keyboard conventions can change without switching the visual theme. */
+    CHECK(keygrab_set("linux"));
+    CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_HOLD);
+    CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_PASS);
+    CHECK(keygrab_match(KEY_TAB, 0, KG_CTRL) == KG_PASS);
+    CHECK(keygrab_match(KEY_GRAVE, 0, KG_ALT) == KG_TAKE);
+    CHECK(keygrab_match(KEY_H, 'h', KG_META) == KG_TAKE);
+    CHECK(keygrab_match(KEY_F4, 0, KG_ALT) == KG_TAKE);
+    CHECK(!keygrab_is_remap('c', KG_META));
+    CHECK(keygrab_set("macos"));
+    CHECK(keygrab_match(KEY_TAB, 0, KG_META | KG_SHIFT) == KG_HOLD);
+    CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_PASS);
+    CHECK(keygrab_match(KEY_H, 'h', KG_META) == KG_TAKE);
+    CHECK(keygrab_is_remap('c', KG_META));
+    CHECK(keygrab_match(KEY_LEFT, 0, KG_CTRL) == KG_PASS);
+    CHECK(keygrab_set("macos-desktops"));
+    CHECK(keygrab_match(KEY_LEFT, 0, KG_CTRL) == KG_TAKE);
+
     CHECK(keygrab_set(""));
     CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_PASS);
     printf(fails ? "keygrab: %d failed\n" : "keygrab: ok\n", fails);

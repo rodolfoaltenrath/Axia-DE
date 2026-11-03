@@ -18,6 +18,7 @@ import { desktopSuffix } from './desktops.js';
 import { dockIdOfWindow } from './dock.js';
 import { runningApps } from './appcontrol.js';
 import { windowIcon } from './apps.js';
+import { dockGlass } from './glass.js';
 
 // { items: [{ key, name, Icon, win }], index, hold } while it is open
 export const switcherState = createStore(null);
@@ -25,14 +26,21 @@ export const switcherOpen = () => !!switcherState.get();
 
 // Most recently used apps, newest first. A window that comes to the front moves its app up; a
 // theme switch starts a new list, ordered by the windows' stacking.
-let recent = [];
 const keyOf = (w) => dockIdOfWindow(w);
 function trackRecent() {
   const top = wm.focused();
   const w = top && wm.get(top);
-  if (!w) return;
-  const k = keyOf(w);
-  if (recent[0] !== k) recent = [k, ...recent.filter((x) => x !== k)];
+  if (w) lord.switcher?.focus(keyOf(w));
+  const s = switcherState.get();
+  if (!s) return;
+  if (s.items.every((it) => wm.get(it.win))) return;
+  const live = new Map(listApps().map((it) => [it.key, it]));
+  const items = s.items.map((it) => wm.get(it.win) ? it : live.get(it.key)).filter(Boolean);
+  const removed = s.items.filter((it) => !live.has(it.key));
+  let index = s.index;
+  for (const it of removed) index = lord.switcher.remove(it.key);
+  if (!items.length) cancelSwitcher();
+  else switcherState.set({ ...s, items, index });
 }
 windows.subscribe(trackRecent);
 
@@ -43,12 +51,18 @@ function windowOf(group) {
 }
 
 function listApps() {
-  const stacked = windows.get().map((w) => keyOf(w)).reverse();
-  const rank = (k) => { const i = recent.indexOf(k); return i >= 0 ? i : recent.length + Math.max(0, stacked.indexOf(k)); };
-  return runningApps().map((g) => {
+  const groups = new Map(runningApps().map((g) => {
     const win = windowOf(g);
-    return { key: keyOf(win), name: `${g.name}${desktopSuffix(win)}`, win: win.id, Icon: windowIcon(win, getApp) };
-  }).sort((a, b) => rank(a.key) - rank(b.key));
+    return [keyOf(win), { key: keyOf(win), name: g.name + desktopSuffix(win), win: win.id, Icon: windowIcon(win, getApp) }];
+  }));
+  // Initial input order is the compositor's stack. Rust owns MRU ranking,
+  // deduplication and selection, including wrapping and removal.
+  const items = [];
+  for (const w of [...windows.get()].reverse()) {
+    const key = keyOf(w), item = groups.get(key);
+    if (item) { items.push(item); groups.delete(key); }
+  }
+  return items.slice(0, 512);
 }
 
 export function openSwitcher(hold, back = false) {
@@ -56,20 +70,24 @@ export function openSwitcher(hold, back = false) {
   const items = listApps();
   if (!items.length) return;
   const top = wm.get(wm.focused());
-  const first = top && items[0].key === keyOf(top) ? 1 : 0;      // the app in front is not where a switch goes
-  const index = (back ? items.length - 1 : first) % items.length;
-  switcherState.set({ items, index, hold });
+  const state = lord.switcher.begin(items.map((it) => it.key), top ? keyOf(top) : '', back);
+  switcherState.set({ items: state.order.map((i) => items[i]), index: state.index, hold });
 }
 
-const close = () => switcherState.set(null);
+export function cancelSwitcher() {
+  lord.switcher?.finish(false);
+  switcherState.set(null);
+}
 function commit() {
   const s = switcherState.get();
-  close();
-  const it = s?.items[s.index];
+  const index = lord.switcher.finish(true);
+  switcherState.set(null);
+  const it = s?.items[index];
   if (it && wm.get(it.win)) wm.focus(it.win);
 }
 function move(step) {
-  switcherState.set((s) => (s ? { ...s, index: (s.index + step + s.items.length) % s.items.length } : s));
+  const index = lord.switcher.step(step);
+  switcherState.set((s) => (s ? { ...s, index } : s));
 }
 
 // Every key goes here while the switcher is open. True: taken. A key that arrives with the modifier
@@ -81,7 +99,7 @@ export function switcherKey(e) {
   if (e.key === 'Tab' || e.key === 'ArrowRight') move(e.shift && e.key === 'Tab' ? -1 : 1);
   else if (e.key === 'ArrowLeft') move(-1);
   else if (e.key === 'Enter') commit();
-  else if (e.key === 'Escape') close();
+  else if (e.key === 'Escape') cancelSwitcher();
   return true;
 }
 
@@ -110,11 +128,11 @@ export function AppSwitcher() {
   return h(Layer, { name: 'overlay' },
     h(View, { style: { position: 'absolute', left: a.x, top: a.y, width: a.w, height: a.h, alignItems: 'center', justifyContent: 'center', pointerEvents: 'box-none' } },
       h(View, { style: { alignItems: 'center', padding: 16, borderRadius: th.groupRadius ? th.groupRadius + 10 : 20, maxWidth: a.w - 48,
-        backgroundColor: th.mode === 'dark' ? 'rgba(30,30,34,0.92)' : 'rgba(245,245,247,0.94)', border: `1px solid ${th.separator}`,
+        ...dockGlass(th),
         boxShadow: '0 18px 48px rgba(0,0,0,0.45)' } },
       h(View, { style: { flexDirection: 'row', direction: 'ltr' } }, shown.map((it) => {
         const on = it === s.items[s.index];
-        return h(View, { key: it.key, onClick: () => { switcherState.set((x) => (x ? { ...x, index: x.items.indexOf(it) } : x)); commit(); },
+        return h(View, { key: it.key, onClick: () => { lord.switcher.select(s.items.indexOf(it)); commit(); },
           style: { width: CELL, height: CELL, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? `${th.accent}55` : 'transparent' } },
         h(it.Icon, { size: ICON }));
       })),

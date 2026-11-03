@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { shortcutProfile, profileEntry } from '../../sdk/shortcutprofile.js';
+import { dockGlass } from '../../sdk/glass.js';
+const keys = (id, profile, original = []) => profileEntry({ id, keys: original }, profile).keys;
+assert.equal(shortcutProfile(null, 'default'), 'macos');
+assert.equal(shortcutProfile(null, 'classic'), 'linux');
+assert.equal(shortcutProfile('linux', 'default'), 'linux');
+assert.equal(shortcutProfile('macos', 'classic'), 'macos');
+assert.equal(shortcutProfile('invalid', 'classic'), 'linux');
+assert.deepEqual(keys('switchApps', 'macos'), ['Meta+Tab', 'Meta+Shift+Tab']);
+assert.deepEqual(keys('switchApps', 'linux'), ['Alt+Tab', 'Alt+Shift+Tab']);
+assert.deepEqual(keys('closeWindow', 'linux'), ['Alt+F4']);
+assert.deepEqual(keys('closeWindow', 'macos', ['Alt+F4']), []);
+assert.deepEqual(keys('files', 'linux'), ['Meta+E']);
+assert.deepEqual(keys('lock', 'macos'), ['Meta+Ctrl+Q']);
+assert.deepEqual(keys('lock', 'linux'), ['Meta+L']);
+assert.deepEqual(keys('quit', 'linux', ['Meta+Q']), []);
+assert.deepEqual(keys('searchCtrl', 'linux', ['Ctrl+Space']), []);
+assert.deepEqual(keys('quick', 'macos', ['Meta+A']), []); // leaves select-all available
+assert.deepEqual(keys('capture.area', 'linux'), ['Meta+Shift+S']);
+assert.deepEqual(keys('terminalDropdown', 'linux', ['F12']), ['F12']);
+assert.equal(profileEntry({ id: 'switchApps', keys: [], show: ['old'] }, 'linux').show, undefined);
+const glass = { mode: 'dark', effects: true, dockBg: 'rgba(46,46,56,0.42)', dockBorder: '#aaa', blur: 24 };
+assert.equal(dockGlass(glass).backdropFilter, 'blur(24px)');
+assert.equal(dockGlass(glass).backgroundColor, glass.dockBg);
+assert.equal(dockGlass({ ...glass, effects: false }).backdropFilter, 'blur(0px)');
+assert.equal(dockGlass({ ...glass, effects: false }).backgroundColor, '#2a2a30');
+console.log('shortcut profiles and shared glass: passed');

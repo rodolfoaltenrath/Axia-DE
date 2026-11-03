@@ -40,8 +40,12 @@ drop, color tags and search. Disk operations belong to the server (`server/src/f
 - **Tabs** inside the window and **new windows** (`wm.open('files', { new: true, args:
   { path } })`). A file can be dropped onto a folder's tab.
 - **Sidebar:**
-  - Favorites: Recents, Applications and the user's folders (xdg-user-dirs);
-  - Locations: Home, **This Computer** (0.8.5: `/`, read-only, named after the machine; folders
+  - Favorites: Home, Downloads, Documents, Desktop, Pictures, Music and Videos,
+    custom favorite folders, Recents and Applications. Personal folders respect
+    xdg-user-dirs, including absolute and nested paths; an explicit HOME disables
+    a shortcut. Without configuration, existing English, Portuguese and Spanish
+    folder names are detected. User-hidden sidebar items stay hidden;
+  - Locations: **This Computer** (0.8.5: `/`, read-only, named after the machine; folders
     the user can't open, and `/proc`, `/sys`, `/dev` and `/run`, show a lock; opening one says
     "Permission denied", or that Files doesn't show the system's internal folders), the disks and USB sticks mounted in `/media/$USER` or
     `/run/media/$USER` (checked every 4 s; ⏏ on hover ejects a removable disk with `disk-eject` and
@@ -103,6 +107,14 @@ drop, color tags and search. Disk operations belong to the server (`server/src/f
   context menu leave out or disable the actions that would change it.
 
 ## Settings (0.8.7)
+
+The Fedora session initializes missing XDG user-directory configuration with
+the host's xdg-user-dirs-update before starting the desktop. Existing common
+folders are registered first to preserve their names and contents across locales.
+Accounts with a user-dirs.dirs file keep their choices unchanged. The RPM requires
+xdg-user-dirs. This replaces the user-folder initialization formerly supplied by
+the LordOS account setup; the file manager itself does not create folders while
+rendering the sidebar.
 
 **Files → Settings** (❖,), kept in `settings.json` under `files` (`apps/files/prefs.js`). General: what a new window shows, and a double click opening a folder in a new tab. Tags: a name for each color and which show in the sidebar. Sidebar: each item. Advanced: show extensions (the name shown only; renaming still works on the real one), warn before changing an extension or emptying the Trash, remove items over 30 days old from the Trash when Files opens (there is no background job), folders first, and where a search looks. What the reference has and LordOS doesn't (desktop icons, cloud sync) isn't offered.
 

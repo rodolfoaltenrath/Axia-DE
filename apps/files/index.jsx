@@ -243,7 +243,7 @@ export default function Files() {
   const press = useRef(null);
   const typed = useRef({ text: '', at: 0 });
 
-  const dirs = useMemo(() => userDirs(), []);
+  const dirs = useMemo(() => userDirs(), [version]);
   const baseLoc = tab.loc;
   const loc = debounced ? { type: 'search', root: scope === 'home' || baseLoc.type !== 'dir' ? fs.home() : baseLoc.path, query: debounced } : baseLoc;
   const [netState, searchLan] = useLan(baseLoc.type === 'network', (m) => setMsg(m));
@@ -776,10 +776,10 @@ export default function Files() {
     <ScrollView style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 10, paddingBottom: 12 }}>
         <SideTitle t={t} first>{tr('files.favorites')}</SideTitle>
-        {side('recent') && <SideItem t={t} label={tr('files.place.recent')} icon={<Glyph ch="◷" t={t} />} selected={sideSel({ type: 'recent' })} onClick={() => navigate({ type: 'recent' })} />}
-        {side('apps') && <SideItem t={t} label={tr('files.place.apps')} icon={<Glyph ch="⌘" t={t} />} selected={sideSel({ type: 'apps' })} onClick={() => navigate({ type: 'apps' })} />}
+        {side('home') && <SideItem t={t} label={tr('files.place.home')} icon={<Glyph ch="⌂" t={t} />} selected={sideSel(homeLoc())} onClick={() => navigate(homeLoc())}
+          drop={{ dropPath: fs.home() }} hot={dropTarget === fs.home()} />}
         {dirs.filter((d) => side(d.label)).map((d) => (
-          <SideItem key={d.path} t={t} label={tr(`files.place.${d.label}`)} icon={<FolderGlyph size={16} />} selected={sideSel(dirLoc(d.path))}
+          <SideItem key={d.label} t={t} label={tr(`files.place.${d.label}`)} icon={<FolderGlyph size={16} />} selected={sideSel(dirLoc(d.path))}
             onClick={() => navigate(dirLoc(d.path))} drop={{ dropPath: d.path }} hot={dropTarget === d.path} />
         ))}
         {prefs.favoriteFolders.map((f) => (
@@ -787,10 +787,10 @@ export default function Files() {
             drop={offline(f) ? undefined : { dropPath: f.path }} hot={dropTarget === f.path}
             onContext={(ev) => { ev.stopPropagation?.(); const at = local(ev); setMenu({ x: at.x, y: at.y, items: [{ label: tr('files.fav.remove'), onClick: () => removeFavoriteFolder(f.path) }] }); }} />
         ))}
+        {side('recent') && <SideItem t={t} label={tr('files.place.recent')} icon={<Glyph ch="◷" t={t} />} selected={sideSel({ type: 'recent' })} onClick={() => navigate({ type: 'recent' })} />}
+        {side('apps') && <SideItem t={t} label={tr('files.place.apps')} icon={<Glyph ch="⌘" t={t} />} selected={sideSel({ type: 'apps' })} onClick={() => navigate({ type: 'apps' })} />}
         {drag && (drag.favOnly || dragEntry?.dir) ? <SideItem t={t} dim label={tr('files.fav.add')} icon={<Glyph ch="+" t={t} />} drop={{ dropPath: 'fav:' }} hot={dropTarget === 'fav:'} /> : null}
         <SideTitle t={t}>{tr('files.locations')}</SideTitle>
-        {side('home') && <SideItem t={t} label={tr('files.place.home')} icon={<Glyph ch="⌂" t={t} />} selected={sideSel(homeLoc())} onClick={() => navigate(homeLoc())}
-          drop={{ dropPath: fs.home() }} hot={dropTarget === fs.home()} />}
         {side('computer') && <SideItem t={t} label={computerName()} icon={<DriveGlyph color={t.accent} />} selected={sideSel(computerLoc())} onClick={() => navigate(computerLoc())} />}
         {lan.available() && side('network') && <SideItem t={t} label={tr('files.place.network')} icon={<NetGlyph color={t.accent} />} selected={sideSel({ type: 'network' })} onClick={() => navigate({ type: 'network' })} />}
         {side('volumes') && volumes.map((v) => {

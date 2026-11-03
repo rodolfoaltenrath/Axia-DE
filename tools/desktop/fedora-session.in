@@ -5,6 +5,7 @@ from pathlib import Path
 import signal
 import stat
 import subprocess
+import sys
 import time
 
 
@@ -29,6 +30,36 @@ def x_display(pid):
     return ''
 
 
+def initialize_user_dirs(env):
+    # The Fedora session does not run GNOME's autostart entries. Initialize the
+    # standard folders once, using the host's locale and defaults. Existing XDG
+    # choices (including deliberately disabled folders) are left untouched.
+    home = Path(env.get('HOME') or Path.home())
+    config = Path(env.get('XDG_CONFIG_HOME') or home / '.config')
+    if (config / 'user-dirs.dirs').exists():
+        return
+    try:
+        # Keep folders already populated by other desktops instead of creating
+        # empty translated counterparts (e.g. Music beside Músicas).
+        existing = {
+            'DESKTOP': ['Área de trabalho', 'Área de Trabalho', 'Desktop', 'Escritorio'],
+            'DOWNLOAD': ['Downloads', 'Descargas', 'Transferências'],
+            'DOCUMENTS': ['Documentos', 'Documents'],
+            'PICTURES': ['Imagens', 'Pictures', 'Imágenes'],
+            'MUSIC': ['Músicas', 'Música', 'Music'],
+            'VIDEOS': ['Vídeos', 'Videos'],
+        }
+        config.mkdir(parents=True, exist_ok=True)
+        for key, names in existing.items():
+            path = next((home / name for name in names if (home / name).is_dir()), None)
+            if path:
+                subprocess.run(['xdg-user-dirs-update', '--set', key, str(path)],
+                               env=env, check=True, timeout=10)
+        subprocess.run(['xdg-user-dirs-update'], env=env, check=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as error:
+        print(f'Axia: could not initialize standard user folders: {error}', file=sys.stderr)
+
+
 def main():
     if os.geteuid() == 0:
         raise SystemExit('Start Axia DE as a regular user.')
@@ -39,6 +70,7 @@ def main():
     env = dict(os.environ, XDG_CURRENT_DESKTOP='Axia', XDG_SESSION_DESKTOP='axia',
                XDG_SESSION_TYPE='wayland', GDK_BACKEND='wayland', MOZ_ENABLE_WAYLAND='1',
                DISPLAY='')
+    initialize_user_dirs(env)
     server = subprocess.Popen(['@BINDIR@/axia-session'], env=env)
     helpers = []
 

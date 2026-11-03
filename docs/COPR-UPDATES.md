@@ -92,7 +92,7 @@ sudo systemctl disable --now axia-update.timer
 
 ## Build local e método alternativo do Copr
 
-Em uma máquina de desenvolvimento Fedora com Node, npm, git e rpm-build:
+Em uma máquina de desenvolvimento Fedora com Node, npm, git, rpm-build, Cargo e rustc:
 
 ```sh
 python3 tools/desktop/srpm.py --outdir "$PWD/build/srpm"

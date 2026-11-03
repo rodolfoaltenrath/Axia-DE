@@ -1,6 +1,10 @@
 # axia-server — libc + kernel headers + libxkbcommon + libwayland-server + vendored QuickJS and stb.
 # No libdrm, libinput, X11 or WebKit; the Wayland compositor (src/wl) and the terminal (src/term) are our own.
 CC      ?= cc
+CARGO   ?= cargo
+RUST_MANIFEST := ../rust/Cargo.toml
+RUST_LIB := build/rust/release/libaxia_shell.a
+RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
 CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)
@@ -87,7 +91,7 @@ SRC += $(TP_SRC)
 # cursor-shape-v1 needs the tablet-v2 interfaces (they're only linked, not advertised).
 # GTK/GNOME/Qt apps: our own org.freedesktop.portal.Settings (src/ui/portal.c) with the D-Bus client from
 # Passwords (src/vault/dbus.c, docs/PASSWORDS.md).
-WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/portal.c src/vault/dbus.c
+WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/js_switcher.c src/ui/portal.c src/vault/dbus.c
 SRC += $(WM_SRC)
 # Clock and Help (docs/SYSTEM.md): time zones with our own TZif reader, and the help articles
 CLOCK_SRC := src/ui/tzif.c src/ui/js_help.c
@@ -111,10 +115,18 @@ SRC += src/platform/seat.c
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
-.PHONY: all clean test test-full test-platform drag-golden
-test-platform: build/seat-test build/platform-admin-test
+.PHONY: all clean test test-full test-platform test-rust drag-golden
+test-platform: build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test test-rust
 	./build/seat-test
 	./build/platform-admin-test
+	./build/switcher-ffi-test
+	./build/keygrab-test
+test-rust:
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --locked --offline
+$(RUST_LIB): $(RUST_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
+build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
+	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) -ldl -lpthread -lm
 build/seat-test: tests/seat_test.c src/platform/seat.c src/platform/seat.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -D_GNU_SOURCE -DLORD_LIBSEAT $(shell pkg-config --cflags libseat) -Isrc -o $@ tests/seat_test.c src/platform/seat.c
@@ -541,7 +553,7 @@ $(foreach p,$(WL_MORE),$(eval $(call wl_proto,$(p))))
 build/gen/%.o: build/gen/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
 
-build/axia-server: $(OBJ) build/obj/ui/stb.o $(QJS_OBJ) $(WL_OBJ)
+build/axia-server: $(OBJ) build/obj/ui/stb.o $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # Root over SSH (advanced, src/remote/ssh_root.c): public key lines and fingerprints.

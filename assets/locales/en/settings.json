@@ -470,5 +470,8 @@
   "motion.loginDone": "The login screen will use this video.",
   "motion.loginReset": "The login screen is back to its default video.",
   "wallpaperFor.desktop": "Desktop",
-  "wallpaperFor.login": "Login screen"
+  "wallpaperFor.login": "Login screen",
+  "kb.profile.title": "Shortcut profile",
+  "kb.profile.label": "Keyboard shortcuts",
+  "kb.profile.hint": "Choose macOS (Super/Command + Tab) or Linux / Windows (Alt + Tab), independently of the visual theme. Applies immediately."
 }

@@ -20,9 +20,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build dependencies
         run: |
-          dnf install -y dnf5-plugins nodejs npm mesa-libgbm-devel mesa-libEGL-devel mesa-libGLES-devel
+          dnf install -y dnf5-plugins nodejs npm xdg-user-dirs mesa-libgbm-devel mesa-libEGL-devel mesa-libGLES-devel
           dnf builddep -y packaging/rpm/axia-de.spec
       - run: npm ci
+      - name: Desktop model regression tests
+        run: |
+          node server/tests/files_model_test.mjs
+          node server/tests/shortcut_profile_test.mjs
       - run: make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
       - name: Touchpad regression tests
         run: |

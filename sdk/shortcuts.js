@@ -30,7 +30,11 @@ import { toggleEmojiPanel } from './emoji.jsx';
 import { quitFrontApp } from './dock.js';
 import { hasNowPlaying, mediaToggle, mediaNext, mediaPrev, mediaStop } from './media.js';
 import { wm } from './windows.js';
-import { switcherOpen, switcherKey } from './appswitcher.jsx';
+import { switcherOpen, switcherKey, openSwitcher, cycleAppWindows, cancelSwitcher } from './appswitcher.jsx';
+import { useSettings } from './settings.js';
+import { shortcutProfile, profileEntry } from './shortcutprofile.js';
+import { flowDesktopKeys, classicDesktopKeys } from './desktops.js';
+import { hideApp, hideOthers, toggleShowDesktop, appSettingsItem } from './appcontrol.js';
 
 const MOD_BITS = { Shift: 1, Alt: 2, Ctrl: 4, Meta: 8 };
 const NAMED = {
@@ -75,6 +79,7 @@ const notInTerminal = () => spotlightOpen.get() || String(wm.focused() || '').sp
 // With `appsPaste` (Lord Flow) ❖V is paste in a LordOS app inside the session, as it is in a Linux app:
 // the key goes to the app, and ❖⇧V is the clipboard. An isolated app never receives ❖V (wl.c).
 let appsPaste = false;
+let currentProfile = 'macos';
 const clipboardKeyIsOurs = () => {
   const id = String(wm.focused() || '');
   return !appsPaste || !id || id.startsWith('linux#') || !!clipboardPanel.get();
@@ -95,6 +100,33 @@ export const BASE = [
   { id: 'mediaStop', keys: ['MediaStop'], run: mediaStop, when: hasNowPlaying },
 ];
 
+const front = (fn) => () => { const id = wm.focused(); if (id) fn(id); };
+const SNAP_CODES = { 103: 'up', 105: 'left', 106: 'right', 108: 'down' };
+const COMMON = [
+  { id: 'switchApps', run: (e) => openSwitcher(currentProfile === 'macos' ? 8 : 2, e.shift) },
+  { id: 'cycleWindows', run: (e) => cycleAppWindows(e.shift) },
+  { id: 'minimize', run: front(wm.minimize) },
+  { id: 'hide', run: front(hideApp) },
+  { id: 'hideOthers', run: front(hideOthers) },
+  { id: 'closeWindow', run: front(wm.close) },
+  { id: 'showDesktop', run: toggleShowDesktop },
+  { id: 'files', run: () => wm.open('files'), group: 'apps' },
+  { id: 'settings', run: () => wm.open('settings'), group: 'apps' },
+  { id: 'monitor', run: () => wm.open('monitor'), group: 'apps' },
+  { id: 'snap', run: (e) => { const id = wm.focused(); if (id) wm.snapKey(id, SNAP_CODES[e.code]); }, repeat: true },
+  { id: 'appSettings', run: () => appSettingsItem(wm.focused())?.onClick(), when: () => !!appSettingsItem(wm.focused()), keys: ['Meta+,'], group: 'apps' },
+].map((entry) => ({ keys: [], group: 'windows', label: 'shell.shortcuts.' + entry.id, ...entry }));
+const COMMON_IDS = new Set(COMMON.map((e) => e.id));
+
+function activeEntries() {
+  const desktopKeys = currentProfile === 'macos' ? flowDesktopKeys : classicDesktopKeys;
+  return [
+    ...added, ...COMMON,
+    ...themeTable.filter((e) => !COMMON_IDS.has(e.id) && e.group !== 'desktops'),
+    ...desktopKeys, ...BASE,
+  ].map((e) => profileEntry(e, currentProfile));
+}
+
 // ---- the dispatcher ----
 
 let themeTable = [];
@@ -107,7 +139,7 @@ export const shortcutsRev = createStore(0);
 function changed() { lookup = null; shortcutsRev.set((v) => v + 1); }
 function index() {
   const map = new Map();
-  for (const entry of [...added, ...themeTable, ...BASE]) {
+  for (const entry of activeEntries()) {
     for (const combo of entry.keys) {
       const k = parseCombo(combo);
       if (!map.has(k)) map.set(k, []);
@@ -152,6 +184,7 @@ function filter(e) {
 
 // startShell: the base only, and no keys kept from apps, until the theme says otherwise.
 export function resetShortcuts() {
+  cancelSwitcher();
   themeTable = [];
   onSuperTap = null;
   appsPaste = false;
@@ -163,18 +196,27 @@ function setGrabs(name) { if (typeof lord.wayland !== 'undefined') lord.wayland.
 
 // A theme's shortcuts. The table is read once: `run` should be stable or go through a ref.
 export function useShortcuts({ grabs = '', table = [], onSuperTap: tap = null, appsPaste: paste = false }) {
+  const [prefs] = useSettings();
+  const profile = shortcutProfile(prefs.shortcutProfile, grabs.startsWith('classic') ? 'classic' : 'default');
   const tapRef = useRef(tap);
   tapRef.current = tap;
   useEffect(() => {
     themeTable = table;
-    appsPaste = paste;
+    appsPaste = profile === 'macos';
     onSuperTap = () => tapRef.current?.();
-    setGrabs(grabs);
     changed();
     return () => { themeTable = []; onSuperTap = null; changed(); };
   }, []);
   // a setting can change the table of keys while the theme runs (Lord Flow's ⌃ arrows)
-  useEffect(() => { setGrabs(grabs); changed(); }, [grabs]);
+  useEffect(() => {
+    cancelSwitcher();
+    superAlone = false;
+    currentProfile = profile;
+    appsPaste = profile === 'macos';
+    const name = profile === 'macos' && prefs.desktopArrows !== false ? 'macos-desktops' : profile;
+    setGrabs(name);
+    changed();
+  }, [grabs, profile, prefs.desktopArrows]);
 }
 
 // Runs a module's entry by its id (Lord Classic's ❖⇧S is Screenshots' area capture).
@@ -194,14 +236,17 @@ function comboLabel(combo) {
   const parts = combo.split('+');
   const key = parts.pop();
   const name = key === 'Space' ? t('shell.shortcuts.space') : key === 'PrintScreen' ? t('shell.shortcuts.printScreen') : KEY_LABELS[key] || key;
-  return parts.map((m) => SYMBOLS[m]).join('') + name;
+  return currentProfile === 'linux'
+    ? [...parts.map((m) => m === 'Meta' ? 'Super' : m), name].join('+')
+    : parts.map((m) => SYMBOLS[m]).join('') + name;
 }
 
 // [{ group, items: [{ id, label, keys: '❖Space · ⌃Space' }] }], groups in a fixed order. Entries with
 // the same label become one row.
 export function shortcutList() {
   const groups = new Map([['system', []], ['windows', []], ['desktops', []], ['apps', []]]);
-  for (const entry of [...added, ...themeTable, ...BASE]) {
+  for (const entry of activeEntries()) {
+    if (!entry.keys.length && !entry.show) continue;
     if (!entry.label || (entry.listed && !entry.listed())) continue;
     const keys = entry.show || entry.keys.map(comboLabel);
     const list = groups.get(entry.group) || groups.get('system');
