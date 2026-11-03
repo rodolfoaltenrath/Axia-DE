@@ -24,11 +24,11 @@ def select(info):
     return info
 
 with tarfile.open(out, 'w:gz') as archive:
-    for path in ['server', 'rust', 'runtime', 'sdk', 'apps', 'themes', 'assets', 'third_party',
+    for path in ['.cargo', 'server', 'rust', 'runtime', 'sdk', 'apps', 'themes', 'assets', 'third_party',
                  'tests', 'tools/desktop', 'tools/build-theme.mjs', 'tools/code-manifest.mjs', 'packaging/desktop',
                  'packaging/rpm', 'packaging/systemd', 'Makefile', 'package.json', 'package-lock.json',
                  'code-manifest.json', 'LICENSE', 'THIRD_PARTY.md', 'ORIGIN.md', 'README.md',
-                 'docs/STANDALONE.md', 'docs/COPR-UPDATES.md', 'docs/REPOSITORY.md', 'docs/RUST.md', 'docs/SHORTCUTS.md']:
+                 'docs/STANDALONE.md', 'docs/COPR-UPDATES.md', 'docs/REPOSITORY.md', 'docs/RUST.md', 'docs/SHORTCUTS.md', 'docs/FILES.md']:
         archive.add(root / path, arcname=f'{name}/{path}', filter=select)
 print(out)
 PY

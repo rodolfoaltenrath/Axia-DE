@@ -6,7 +6,7 @@
  * axia-netperm (the root service that applies them in the kernel) with a single message without data,
  * "read again" (netperm/npproto.h); axia-netperm reads the file itself. Back come the
  * state, new connections and counters. No call takes paths: the file's path is
- * fixed by the server, and firewall.json is on lord.fs's deny list (fsops.c).
+ * fixed by the server, and firewall.json is on lord.fs's deny list (Rust files core).
  *
  *   status()                     { daemon, bpf, dns, error }
  *   state()                      { mode, trusted: [app], restricted: { app: [restriction] } }

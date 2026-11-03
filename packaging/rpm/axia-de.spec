@@ -2,7 +2,7 @@ Name:           axia-de
 Version:        0.8.7
 Release:        3%{?dist}
 Summary:        Wayland desktop based on LordOS
-License:        MIT AND BSD-2-Clause AND CC0-1.0 AND OFL-1.1 AND CC-BY-4.0 AND CC-BY-3.0-US AND GPL-2.0-or-later
+License:        MIT AND BSD-3-Clause AND Unicode-3.0 AND Zlib AND BSD-2-Clause AND CC0-1.0 AND OFL-1.1 AND CC-BY-4.0 AND CC-BY-3.0-US AND GPL-2.0-or-later
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  gcc
@@ -29,6 +29,7 @@ BuildRequires:  pkgconfig(libswscale)
 BuildRequires:  pkgconfig(libswresample)
 BuildRequires:  pkgconfig(libva)
 BuildRequires:  pkgconfig(libva-drm)
+BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(poppler-glib)
 BuildRequires:  pkgconfig(libarchive)
 BuildRequires:  pkgconfig(cairo-pdf)
@@ -41,6 +42,10 @@ Requires:       xkeyboard-config
 Requires:       libX11-common
 Requires:       tzdata
 Requires:       dnf5
+Requires:       gvfs
+Requires:       gvfs-fuse
+Recommends:     gvfs-smb
+Recommends:     gvfs-nfs
 Requires:       xdg-user-dirs
 Requires:       curl
 Recommends:     pipewire-pulseaudio

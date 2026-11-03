@@ -1,7 +1,7 @@
 // ui.jsx — small pieces of Passwords: category and item icons, sheets (dialogs), the strength
 // bar, a QR code image, a multi-line field, a file picker and pop-up menus. Spacing, type and
 // controls follow docs/DESIGN.md; icons are drawn (glyphs.jsx), never color emoji.
-import { View, Text, Image, useTheme, useStore, createStore, Button, ScrollView, TextInput, ToolbarButton, takeTextFocus, releaseTextFocus, fs, t, Overlay } from '@lordos/sdk';
+import { View, Text, Image, useTheme, useStore, createStore, Button, ScrollView, TextInput, ToolbarButton, takeTextFocus, releaseTextFocus, fs, t, Overlay, FilePicker as SystemFilePicker } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 import { builtinById } from './templates.js';
 import { appMode } from './api.js';
@@ -229,66 +229,16 @@ export function TextArea({ value, onChange, placeholder, minHeight = 90, mono, s
 
 // ---- pick a file (home folder and the user's disks: USB sticks) ----
 
-export function FilePicker({ title, save, suggest = '', onPick, onClose, filter, inline }) {
-  const th = useTheme();
-  const [dir, setDir] = useState(null);            // null = places
-  const [name, setName] = useState(suggest);
-  const [sel, setSel] = useState(null);
-  // app process: the system's own dialog (powerbox) picks the file and hands over only its fd
+export function FilePicker({ title, save, suggest = '', onPick, onClose, filter }) {
+  // Isolated apps retain the descriptor broker: they never receive the desktop
+  // filesystem API. The broker presents the same Rust dialog in the shell.
   useEffect(() => {
     if (!appMode) return;
-    let r = null;
-    try { r = lord.broker.pick(save ? 1 : 0, suggest || ''); } catch (e) { r = null; }
-    if (r && r.fd >= 0) onPick({ fd: r.fd, name: r.name }); else onClose();
+    let result = null;
+    try { result = lord.broker.pick(save ? 1 : 0, suggest); } catch (e) { /* cancelled or denied */ }
+    if (result && result.fd >= 0) onPick({ fd: result.fd, name: result.name }); else onClose();
   }, []);
-  if (appMode) return null;
-  let entries = [];
-  let places = [];
-  if (dir === null) {
-    places = [{ name: t('passwords.picker.home'), path: fs.home(), icon: 'folder' }];
-    try { for (const v of fs.volumes()) places.push({ name: v.name || v.path, path: v.path, icon: 'drive' }); } catch (e) { /* no disks */ }
-  } else {
-    try { entries = fs.list(dir).filter((e) => e.dir || !filter || filter(e.name)); } catch (e) { entries = []; }
-  }
-  const up = () => { const h = fs.home(); if (dir === h || dir === null || !dir.includes('/')) setDir(null); else setDir(fs.parent(dir) || null); setSel(null); };
-  const choose = () => {
-    if (save) { if (dir && name) onPick(fs.join(dir, name)); return; }
-    if (sel) onPick(fs.join(dir, sel));
-  };
-  return (
-    <Sheet title={title} onClose={onClose} width={520} inline={inline} footer={[
-      <Button key="c" label={t('passwords.cancel')} onClick={onClose} />,
-      <Button key="o" primary label={save ? t('passwords.picker.save') : t('passwords.picker.open')} onClick={choose} />]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <ToolbarButton icon="‹" title={t('passwords.picker.up')} onClick={up} />
-        <Text style={{ flex: 1, minWidth: 0, fontSize: 12, color: th.textDim, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{dir === null ? t('passwords.picker.places') : dir}</Text>
-      </View>
-      <View style={{ height: inline ? 190 : 260, borderRadius: 8, border: `1px solid ${th.separator}`, overflow: 'hidden' }}>
-        <ScrollView style={{ flex: 1 }}>
-          {dir === null ? places.map((p) => (
-            <Row key={p.path} icon={p.icon} label={p.name} onClick={() => setDir(p.path)} />
-          )) : entries.map((e) => (
-            <Row key={e.name} icon={e.dir ? 'folder' : 'note'} label={e.name} selected={sel === e.name}
-              onClick={() => (e.dir ? (setDir(fs.join(dir, e.name)), setSel(null)) : (setSel(e.name), save && setName(e.name)))}
-              onDoubleClick={() => !e.dir && onPick(fs.join(dir, e.name))} />
-          ))}
-          {dir !== null && !entries.length && <Text style={{ fontSize: 12, color: th.textDim, margin: 10 }}>{t('passwords.picker.empty')}</Text>}
-        </ScrollView>
-      </View>
-      {save && <TextInput value={name} onChange={setName} placeholder={t('passwords.picker.name')} onSubmit={choose} />}
-    </Sheet>
-  );
-}
-
-function Row({ icon, label, onClick, onDoubleClick, selected }) {
-  const th = useTheme();
-  return (
-    <View onClick={onClick} onDoubleClick={onDoubleClick} style={{ height: 28, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10,
-      marginHorizontal: 4, borderRadius: 6, backgroundColor: selected ? th.accent : 'transparent' }}>
-      <Glyph kind={icon} size={15} color={selected ? '#fff' : th.accent} />
-      <Text style={{ flex: 1, minWidth: 0, fontSize: 13, color: selected ? '#fff' : th.text, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{label}</Text>
-    </View>
-  );
+  return appMode ? null : <SystemFilePicker title={title} save={save} name={suggest} filter={filter} onPick={onPick} onClose={onClose} />;
 }
 
 // ---- small pop-up menu ----

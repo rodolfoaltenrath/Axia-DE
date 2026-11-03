@@ -1,4 +1,4 @@
-/* fsops_test.c — test of fsops.c on a temporary home folder: roots and protected
+/* fsops_test.c — test of Rust files core on a temporary home folder: roots and protected
  * folders, copy (recursive, links, permissions), move, Trash (put, list, restore,
  * delete, empty), size, search and recents. */
 #include "fsops.h"

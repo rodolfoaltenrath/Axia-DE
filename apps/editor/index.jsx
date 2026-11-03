@@ -3,7 +3,7 @@
 // project file (❖T), our own syntax highlighting and input methods.
 // See docs/EDITOR.md.
 import {
-  View, Text, TextInput, Button, ScrollView, ToolbarButton, direction, useTheme, useLocale, useAppWindow, useKeyboard, wm, fs, formatBytes, addListener, hasTextFocus, print,
+  View, Text, TextInput, Button, ScrollView, FilePicker, ToolbarButton, direction, useTheme, useLocale, useAppWindow, useKeyboard, wm, fs, formatBytes, addListener, hasTextFocus, print,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Doc, cursorAt, hasSel, selStart, selEnd } from './buffer.js';
@@ -101,46 +101,9 @@ function Tree({ t, root, open, expanded, onToggle, active }) {
 
 // ---- file dialog (open, open folder, save as) ----
 
-function FileDialog({ t, tr, mode, start, initialName, onPick, onCancel }) {
-  const [dir, setDir] = useState(start || '');
-  const [name, setName] = useState(initialName || '');
-  let entries = [];
-  let error = null;
-  try { entries = fs.list(dir || '.'); } catch (e) { error = e.message; }
-  const title = tr(`editor.dialog.${mode}`);
-  const pickDir = mode === 'folder';
-  return (
-    <View onClick={onCancel} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center' }}>
-      <View onClick={(e) => e.stopPropagation()} style={{ marginTop: 40, width: 480, height: 400, padding: 20, gap: 12, borderRadius: 12,
-        backgroundColor: t.windowBg, border: `1px solid ${t.separator}`, boxShadow: '0 16px 40px rgba(0,0,0,0.45)' }}>
-        <Text style={{ fontSize: 15, fontWeight: 600, color: t.text }}>{title}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <ToolbarButton icon={direction() === 'rtl' ? '›' : '‹'} iconSize={18} onClick={() => setDir(dirOf(dir))} />
-          <Text style={{ flex: 1, fontSize: 12, color: t.textDim, whiteSpace: 'nowrap', overflow: 'hidden' }}>{`~/${dir}`}</Text>
-        </View>
-        <View style={{ flex: 1, borderRadius: 8, border: `1px solid ${t.separator}` }}>
-          <ScrollView style={{ padding: 4 }}>
-            {error && <Text style={{ fontSize: 12, color: '#ff453a', margin: 6 }}>{error}</Text>}
-            {entries.map((e) => (
-              <View key={e.name} onClick={() => { if (e.dir) setDir(dir ? `${dir}/${e.name}` : e.name); else if (mode === 'save') setName(e.name); else if (!pickDir) onPick(`${fs.home()}/${dir ? `${dir}/` : ''}${e.name}`); }}
-                style={{ height: 26, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 8, borderRadius: 6 }}>
-                <Text style={{ width: 14, fontSize: 11, color: t.textDim }}>{e.dir ? '▸' : ''}</Text>
-                <Text style={{ flex: 1, fontSize: 13, color: e.dir || !pickDir ? t.text : t.textDim, whiteSpace: 'nowrap', overflow: 'hidden' }}>{e.name}</Text>
-                {!e.dir && <Text style={{ fontSize: 11, color: t.textDim }}>{formatBytes(e.size)}</Text>}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-        {mode === 'save' && <TextInput value={name} onChange={setName} placeholder={tr('editor.dialog.name')} autoFocus
-          onSubmit={() => name && onPick(`${fs.home()}/${dir ? `${dir}/` : ''}${name}`)} onCancel={onCancel} />}
-        <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
-          <Button label={tr('editor.cancel')} onClick={onCancel} />
-          {mode === 'save' && <Button primary label={tr('editor.save')} onClick={() => name && onPick(`${fs.home()}/${dir ? `${dir}/` : ''}${name}`)} />}
-          {pickDir && <Button primary label={tr('editor.dialog.useFolder')} onClick={() => onPick(dir)} />}
-        </View>
-      </View>
-    </View>
-  );
+function FileDialog({ tr, mode, start, initialName, onPick, onCancel }) {
+  return <FilePicker mode={mode} title={tr(`editor.dialog.${mode}`)} start={start} name={initialName || ''}
+    onClose={onCancel} onPick={(path) => onPick(mode === 'folder' ? relOf(path) : path)} />;
 }
 
 // List with search (go to file, choose language).

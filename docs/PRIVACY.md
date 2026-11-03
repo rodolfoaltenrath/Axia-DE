@@ -358,7 +358,7 @@ development) the apps run without a scope, with a warning.
   arrives through the broker and the session draws the prompt (`sdk/privacy.js`, `__lordBroker` →
   `PermissionPrompt` → `lord.broker.resolve`).
 - **Where they are stored:** per user, in `~/.config/axia/permisos.json`, a file the app **can't
-  write**: it is on the `lord.fs` deny list (`js_sys.c` `resolve_target` and `fsops.c`
+  write**: it is on the `lord.fs` deny list (`js_sys.c` `resolve_target` and `Rust files core`
   `fsops_protected`), like `settings.json`, and outside what Landlock lets the app process see.
   The state is handled by `server/src/sec/perms.c`; the lookup is O(1).
 - **Manifest:** an app declares `permissions`. The installer and the Store show them, and an app

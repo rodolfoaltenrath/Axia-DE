@@ -209,7 +209,7 @@ export function ImportSheet({ onClose }) {
         </View>
       )}
       {picking && <FilePicker title={picking === 'file' ? t('passwords.imp.choose') : t('passwords.imp.chooseKey')} onClose={() => setPicking(null)}
-        filter={picking === 'file' ? (n) => /\.(csv|json|kdbx|lvault)$/i.test(n) : null}
+        filter={picking === 'file' ? /\.(csv|json|kdbx|lvault)$/i : null}
         onPick={(p) => { if (picking === 'file') setFile(p); else setKey(p); setPicking(null); }} />}
     </Sheet>
   );
