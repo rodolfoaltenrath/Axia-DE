@@ -9,9 +9,15 @@ use std::collections::HashMap;
 use std::ffi::{c_char, CStr, CString};
 use std::path::Path;
 
+// What a window's host already has, for delta() and for skipping empty replies.
+struct Sent {
+    tree: Value,
+    state: Value,
+}
 #[derive(Default)]
 struct App {
     sessions: HashMap<u64, Session>,
+    sent: HashMap<u64, Sent>,
     shared: Shared,
     sequence: u64,
     delivery: u64,
@@ -96,6 +102,7 @@ impl App {
             return json!({"error":"sys.badArgument"});
         };
         if op == "close" {
+            self.sent.remove(&id);
             session
                 .generation
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -103,8 +110,22 @@ impl App {
         }
         if op == "event" {
             session.event(args, &mut self.shared);
-            for s in self.sessions.values_mut() {
-                s.dirty = true;
+            // These only touch their own window; the others need not rebuild.
+            let local = [
+                "wheel",
+                "columnWheel",
+                "scroll",
+                "pointerMove",
+                "noop",
+                "select",
+                "clear",
+                "query",
+            ]
+            .contains(&args["action"][0].as_str().unwrap_or(""));
+            if !local {
+                for s in self.sessions.values_mut() {
+                    s.dirty = true;
+                }
             }
         }
         session.poll(args, &self.shared);
@@ -117,13 +138,67 @@ impl App {
         reply
     }
     fn snapshot(&mut self, s: &mut Session) -> Value {
-        self.delivery += 1;
         let tree = s.render(&self.shared);
-        let menus = s.menus(&self.shared);
-        let title = s.title_value();
+        let state = json!({"menus":s.menus(&self.shared),"title":s.title_value(),"loading":s.visibly_loading(),"capture":s.drag.is_some(),"closed":s.closed});
         s.dirty = false;
-        json!({"id":s.id,"serial":self.delivery,"tree":tree,"menus":menus,"title":title,"effects":std::mem::take(&mut s.effects),"loading":s.loading,"capture":s.drag.is_some(),"closed":s.closed})
+        let sent = self.sent.get(&s.id);
+        if s.effects.is_empty() && sent.is_some_and(|p| p.tree == tree && p.state == state) {
+            return Value::Null;
+        }
+        self.delivery += 1;
+        let mut reply = state.clone();
+        reply["id"] = json!(s.id);
+        reply["serial"] = json!(self.delivery);
+        reply["effects"] = json!(std::mem::take(&mut s.effects));
+        reply["tree"] = delta(sent.map(|p| &p.tree), &tree);
+        // Absent means unchanged; the host keeps the array it already has.
+        if sent.is_some_and(|p| p.state["menus"] == state["menus"]) {
+            reply.as_object_mut().unwrap().remove("menus");
+        }
+        self.sent.insert(s.id, Sent { tree, state });
+        reply
     }
+}
+
+// The widget tree with every unchanged subtree replaced by {"$":1}. A child is
+// compared with the previous child of the same key, or at the same position.
+// Parsing the full description in QuickJS costs more than building it.
+fn delta(prev: Option<&Value>, next: &Value) -> Value {
+    if prev == Some(next) {
+        return match next.get("key") {
+            Some(key) => json!({"$":1,"key":key}),
+            None => json!({"$":1}),
+        };
+    }
+    let Some(children) = next["children"].as_array().filter(|c| !c.is_empty()) else {
+        return next.clone();
+    };
+    let before: &[Value] = prev
+        .and_then(|p| p["children"].as_array())
+        .map_or(&[], Vec::as_slice);
+    let keyed: HashMap<&str, &Value> = before
+        .iter()
+        .filter_map(|c| Some((c.get("key")?.as_str()?, c)))
+        .collect();
+    let mut out = serde_json::Map::new();
+    for (name, value) in next.as_object().into_iter().flatten() {
+        if name != "children" {
+            out.insert(name.clone(), value.clone());
+        }
+    }
+    let children = children
+        .iter()
+        .enumerate()
+        .map(|(i, child)| {
+            let old = match child.get("key").and_then(Value::as_str) {
+                Some(key) if !keyed.is_empty() => keyed.get(key).copied(),
+                _ => before.get(i),
+            };
+            delta(old, child)
+        })
+        .collect();
+    out.insert("children".into(), Value::Array(children));
+    Value::Object(out)
 }
 
 fn fs_json(args: &Value) -> Value {
@@ -189,6 +264,98 @@ pub unsafe extern "C" fn axia_files_free(value: *mut c_char) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The host's half of the protocol: sdk/rustfiles.jsx expand().
+    fn expand(prev: Option<&Value>, node: &Value) -> Value {
+        if node.get("$").is_some() {
+            return prev.unwrap().clone();
+        }
+        let mut out = node.clone();
+        if let Some(children) = node["children"].as_array() {
+            let before = prev
+                .and_then(|p| p["children"].as_array())
+                .map_or(&[][..], Vec::as_slice);
+            let keyed: HashMap<_, _> = before
+                .iter()
+                .filter_map(|c| Some((c.get("key")?.as_str()?, c)))
+                .collect();
+            out["children"] = children
+                .iter()
+                .enumerate()
+                .map(|(i, child)| {
+                    let old = match child.get("key").and_then(Value::as_str) {
+                        Some(key) if !keyed.is_empty() => keyed.get(key).copied(),
+                        _ => before.get(i),
+                    };
+                    expand(old, child)
+                })
+                .collect();
+        }
+        out
+    }
+    #[test]
+    fn delta_rebuilds_the_same_tree_across_moved_added_and_removed_children() {
+        let a = |key: &str, text: &str| json!({"key":key,"type":"text","text":text});
+        let first = json!({"type":"view","style":{"top":0},"children":[
+            a("x","1"),a("y","2"),a("z","3"),{"type":"text","text":"plain"},
+            {"type":"view","children":[{"type":"text","text":"deep"}]}]});
+        for second in [
+            first.clone(),
+            json!({"type":"view","style":{"top":-9},"children":[a("y","2"),a("z","3"),a("w","4")]}),
+            json!({"type":"view","children":[a("z","changed"),a("x","1"),{"type":"text","text":"new"}]}),
+            json!({"type":"view","children":[{"type":"text","text":"plain"},{"type":"view","children":[]}]}),
+            json!({"type":"view"}),
+        ] {
+            let wire = delta(Some(&first), &second);
+            assert_eq!(expand(Some(&first), &wire), second);
+        }
+        assert_eq!(delta(Some(&first), &first), json!({"$":1}));
+        assert_eq!(delta(None, &first), first);
+    }
+    #[test]
+    fn replies_carry_only_changes_and_nothing_when_nothing_changed() {
+        let home = std::env::temp_dir().join(format!("axia-delta-{}", std::process::id()));
+        let dir = home.join("many");
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in 0..200 {
+            std::fs::write(dir.join(format!("item-{n:03}.txt")), "").unwrap();
+        }
+        let mut app = App::default();
+        let args = json!({"op":"create","mode":"browser","args":{"path":dir},"width":900,"height":540,"preferences":{},"apps":[]});
+        let first = app.request(&args);
+        let id = first["id"].as_u64().unwrap();
+        let mut host = first["tree"].clone();
+        for _ in 0..500 {
+            let r = app.request(&json!({"op":"poll","id":id,"width":900,"height":540}));
+            if !r.is_null() {
+                host = expand(Some(&host), &r["tree"]);
+            }
+            if r["loading"] == false && host.to_string().contains("item-000") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let full = host.to_string().len();
+        assert!(host.to_string().contains("item-000"));
+        let wheel = json!({"op":"event","id":id,"action":["wheel"],"deltaY":10});
+        let reply = app.request(&wheel);
+        assert!(
+            reply["tree"].to_string().len() < full / 4,
+            "a small scroll does not resend the file cells"
+        );
+        assert_eq!(
+            expand(Some(&host), &reply["tree"]),
+            app.sent[&id].tree,
+            "the host ends up with the tree Rust described"
+        );
+        // Selecting the same file twice: the second reply has nothing to say.
+        let select = json!({"op":"event","id":id,"action":["select",0]});
+        assert!(!app.request(&select).is_null());
+        assert!(app.request(&select).is_null());
+        assert!(app.request(&json!({"op":"poll","id":id})).is_null());
+        app.request(&json!({"op":"close","id":id}));
+        assert!(app.sent.is_empty());
+        std::fs::remove_dir_all(home).unwrap();
+    }
     #[test]
     fn invalid_handles_and_inputs_do_not_create_sessions() {
         let mut app = App::default();

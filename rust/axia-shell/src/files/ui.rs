@@ -6,6 +6,7 @@ use super::{
     thumbnails,
 };
 use serde_json::{json, Value};
+use std::collections::HashSet;
 
 fn node(kind: &str, style: Value, children: Vec<Value>) -> Value {
     json!({"type":kind,"style":style,"children":children})
@@ -78,6 +79,10 @@ pub fn bytes(n: u64) -> String {
     format!("{number:.1} {unit}")
 }
 
+// A named icon in the widget tree; the host asks once for its geometry.
+fn icon_ref(name: &str, size: f64) -> Value {
+    json!({"type":"icon","name":name,"size":size})
+}
 // Compositor primitives, independent of emoji fonts and platform icon themes.
 pub fn icon(name: &str, size: f64) -> Value {
     if name == "files" {
@@ -132,13 +137,13 @@ fn entry_icon(s: &Session, e: &Entry, size: f64, thumb: bool) -> Value {
             return json!({"type":"image","src":path,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":4}});
         }
     }
-    icon(if e.dir { "folder" } else { "file" }, size)
+    icon_ref(if e.dir { "folder" } else { "file" }, size)
 }
 fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &str) -> Value {
     let mut n = view(
         json!({"height":28,"flexShrink":0,"flexDirection":"row","alignItems":"center","gap":8,"paddingHorizontal":8,"borderRadius":6,"backgroundColor":if selected{if s.theme["mode"]=="light"{"rgba(0,0,0,0.08)"}else{"rgba(255,255,255,0.12)"}}else{"transparent"}}),
         vec![
-            icon(kind, 19.),
+            icon_ref(kind, 19.),
             label(
                 text,
                 json!({"fontSize":13,"color":txt(s),"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
@@ -407,7 +412,7 @@ impl Session {
                 "↻",
                 "files.rust.refresh",
                 action("refresh"),
-                self.loading,
+                self.visibly_loading(),
                 false,
             ));
         }
@@ -559,7 +564,7 @@ impl Session {
                 let mut crumb = view(
                     json!({"flexDirection":"row","alignItems":"center","gap":4,"flexShrink":1,"minWidth":0}),
                     vec![
-                        icon("folder", 13.),
+                        icon_ref("folder", 13.),
                         label(
                             self.location_title(&Location::Directory(p.to_path_buf())),
                             json!({"fontSize":11,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden"}),
@@ -664,6 +669,7 @@ impl Session {
             json!({"position":"absolute","left":x,"top":y,"width":width,"height":height,"paddingHorizontal":7,"gap":if icons{5}else{8},"flexDirection":if icons{"column"}else{"row"},"alignItems":"center","justifyContent":if icons{"center"}else{"flex-start"},"borderRadius":6,"backgroundColor":if selected{color(self,"accent","#1485f8")}else{"transparent".into()}}),
             content,
         );
+        cell["key"] = json!(format!("entry:{}", e.path));
         cell["events"] = json!({"onClick":["select",i],"onDoubleClick":["activate",i],"onContextMenu":["context",i]});
         if self.mode == Mode::Browser {
             cell["events"]["onMouseDown"] = json!(["dragStart", i]);
@@ -689,29 +695,42 @@ impl Session {
         let visible = (area_h / row_height).ceil() as usize + 2;
         let mut cells = Vec::new();
         if gallery {
-            if let Some(e) = self.selected().first() {
+            if let Some(e) = self.selected_entries().next() {
                 cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(self, e,(preview_height-40.).clamp(1.,240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
             }
         }
+        // Cells stay at fixed positions inside one moving container, so scrolling
+        // changes a single offset and only the rows entering the view are new.
+        let mut visible_cells = Vec::new();
+        let mut keys = HashSet::new();
         for row in start..(start + visible).min(rows) {
             for column in 0..count {
                 if let Some(index) = items.get(row * count + column) {
                     let e = &self.tab().entries[*index];
-                    cells.push(self.file_cell(
+                    let mut cell = self.file_cell(
                         e,
                         *index,
                         column as f64 * cell_width,
-                        row as f64 * row_height - offset + preview_height,
+                        row as f64 * row_height + preview_height,
                         cell_width,
                         row_height,
                         icons,
                         shared,
-                    ));
+                    );
+                    // A virtual location can repeat a path; React keys cannot repeat.
+                    if !keys.insert(e.path.as_str()) {
+                        cell.as_object_mut().unwrap().remove("key");
+                    }
+                    visible_cells.push(cell);
                 }
             }
         }
+        cells.push(view(
+            json!({"position":"absolute","left":0,"top":-offset,"width":width,"height":content_h+preview_height}),
+            visible_cells,
+        ));
         if items.is_empty() {
-            cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":height,"alignItems":"center","justifyContent":"center"}),vec![label(if self.loading{tr("files.rust.loading")}else{tr("files.empty")},json!({"fontSize":13,"color":dim(self)}))]));
+            cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":height,"alignItems":"center","justifyContent":"center"}),vec![label(if self.visibly_loading(){tr("files.rust.loading")}else{tr("files.empty")},json!({"fontSize":13,"color":dim(self)}))]));
         }
         if content_h > area_h {
             let thumb = (area_h * area_h / content_h).max(24.).min(area_h);
@@ -789,7 +808,7 @@ impl Session {
     }
     fn footer(&self) -> Value {
         let shown = self.filtered().len();
-        let selected = self.selected().len();
+        let selected = self.tab().selected.len();
         let mut children = vec![label(
             json!({"key":"files.info.items","params":{"count":shown}}),
             json!({"fontSize":11,"color":dim(self)}),
@@ -801,7 +820,7 @@ impl Session {
             ));
         }
         children.push(view(json!({"flex":1}), vec![]));
-        if self.loading || self.busy {
+        if self.visibly_loading() || self.busy {
             children.push(label(
                 tr("files.rust.loading"),
                 json!({"fontSize":11,"color":dim(self)}),
@@ -855,7 +874,7 @@ impl Session {
                 _ => "files.menu.open",
             }),
             action("choose"),
-            self.mode == Mode::Open && self.selected().is_empty(),
+            self.mode == Mode::Open && self.tab().selected.is_empty(),
         ));
         view(
             json!({"height":50,"flexShrink":0,"paddingHorizontal":12,"flexDirection":"row","alignItems":"center","gap":8,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
@@ -879,42 +898,30 @@ impl Session {
                 item("files.menu.emptyTrash", "emptyTrash", false);
             } else {
                 item("files.menu.copy", "copy", !selected);
-                item(
-                    "files.menu.cut",
-                    "cut",
-                    !selected || self.write_dir().is_none(),
-                );
+                item("files.menu.cut", "cut", !selected || !self.can_write);
                 item(
                     "files.menu.paste",
                     "paste",
-                    shared.clipboard.is_empty() || self.write_dir().is_none(),
+                    shared.clipboard.is_empty() || !self.can_write,
                 );
                 item(
                     "files.menu.rename",
                     "rename",
-                    self.selected().len() != 1 || self.write_dir().is_none(),
+                    self.tab().selected.len() != 1 || !self.can_write,
                 );
                 item(
                     "files.menu.duplicate",
                     "duplicate",
-                    !selected || self.write_dir().is_none(),
+                    !selected || !self.can_write,
                 );
-                item(
-                    "files.menu.trash",
-                    "trash",
-                    !selected || self.write_dir().is_none(),
-                );
-                item(
-                    "files.menu.newFolder",
-                    "newFolder",
-                    self.write_dir().is_none(),
-                );
+                item("files.menu.trash", "trash", !selected || !self.can_write);
+                item("files.menu.newFolder", "newFolder", !self.can_write);
                 item(
                     "files.rust.compress",
                     "compress",
-                    !selected || self.write_dir().is_none(),
+                    !selected || !self.can_write,
                 );
-                if self.selected().iter().any(|e| archive(&e.name)) {
+                if self.selected_entries().any(|e| archive(&e.name)) {
                     item("files.rust.extract", "extract", false);
                 }
             }
@@ -941,7 +948,7 @@ impl Session {
                 tr("files.menu.openWith"),
                 json!({"fontSize":11,"color":dim(self),"padding":6}),
             ));
-            let file = self.selected().first().cloned();
+            let file = self.selected_entries().next().cloned();
             let mime = file
                 .as_ref()
                 .map(|e| match kind(&e.name) {
@@ -1323,7 +1330,7 @@ impl Session {
         }
         all.push(body);
         if let Some(drag) = self.drag.as_ref().filter(|d| d["active"] == true) {
-            all.push(view(json!({"position":"absolute","left":drag["atX"].as_f64().unwrap_or(0.)-20.,"top":drag["atY"].as_f64().unwrap_or(0.)-20.,"width":48,"height":48,"pointerEvents":"none","opacity":0.8}),vec![icon("files",42.)]));
+            all.push(view(json!({"position":"absolute","left":drag["atX"].as_f64().unwrap_or(0.)-20.,"top":drag["atY"].as_f64().unwrap_or(0.)-20.,"width":48,"height":48,"pointerEvents":"none","opacity":0.8}),vec![icon_ref("files",42.)]));
         }
         if let Some(menu) = self.context_menu(shared) {
             all.push(menu);
@@ -1338,10 +1345,10 @@ impl Session {
     }
     pub fn menus(&self, shared: &Shared) -> Value {
         let selected = !self.tab().selected.is_empty();
-        let writable = self.write_dir().is_some();
+        let writable = self.can_write;
         let item = |key: &str, act: &str, disabled: bool| json!({"label":{"key":key},"action":[act],"disabled":disabled});
         json!([
-            {"label":{"key":"files.menu.file"},"items":[item("files.menu.newWindow","newWindow",false),item("files.menu.newTab","newTab",false),item("files.menu.newFolder","newFolder",!writable),"-",item("files.menu.open","open",!selected),item("files.menu.getInfo","info",!selected),item("files.menu.rename","rename",!writable||self.selected().len()!=1),item("files.menu.duplicate","duplicate",!writable||!selected),item("files.menu.trash","trash",!writable||!selected)]},
+            {"label":{"key":"files.menu.file"},"items":[item("files.menu.newWindow","newWindow",false),item("files.menu.newTab","newTab",false),item("files.menu.newFolder","newFolder",!writable),"-",item("files.menu.open","open",!selected),item("files.menu.getInfo","info",!selected),item("files.menu.rename","rename",!writable||self.tab().selected.len()!=1),item("files.menu.duplicate","duplicate",!writable||!selected),item("files.menu.trash","trash",!writable||!selected)]},
             {"label":{"key":"files.menu.edit"},"items":[item("files.menu.copy","copy",!selected),item("files.menu.cut","cut",!selected||!writable),item("files.menu.paste","paste",!writable||shared.clipboard.is_empty()),item("files.menu.selectAll","selectAll",false)]},
             {"label":{"key":"files.menu.view"},"items":[{"label":{"key":"files.view.icons"},"action":["view","icons"],"checked":self.tab().view=="icons"},{"label":{"key":"files.view.list"},"action":["view","list"],"checked":self.tab().view=="list"},{"label":{"key":"files.view.columns"},"action":["view","columns"],"checked":self.tab().view=="columns"},{"label":{"key":"files.view.gallery"},"action":["view","gallery"],"checked":self.tab().view=="gallery"},"-",item("files.menu.showHidden","hidden",false),{"label":{"key":"files.rust.sortName"},"action":["sort","name"]},{"label":{"key":"files.rust.sortSize"},"action":["sort","size"]},{"label":{"key":"files.rust.sortDate"},"action":["sort","date"]}]},
             {"label":{"key":"files.menu.go"},"items":[item("files.menu.back","back",self.tab().back.is_empty()),item("files.menu.forward","forward",self.tab().forward.is_empty()),item("files.menu.up","up",self.tab().location.path().is_none()),item("files.menu.goToFolder","goTo",false),item("files.menu.connect","connect",false)]},

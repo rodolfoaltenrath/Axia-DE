@@ -1,6 +1,6 @@
 // Generic host adapter for Rust-owned widget trees and effects. There is no
 // filesystem/navigation state here: browser and every picker use lord.files.
-import { createElement as h, useEffect, useRef, useState } from 'react';
+import { createElement as h, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, MediaView, mainBox, addListener } from '@lordos/runtime';
 import { Button, TextInput, ScrollView, useAppWindow, useKeyboard, hasTextFocus } from './components.jsx';
 import { useTheme } from './theme.js';
@@ -29,7 +29,11 @@ const caption = (value) => {
   if (value == null) return '';
   if (typeof value !== 'object') return String(value);
   if (value.error) return errorText(value.error);
-  if (value.format === 'date') return value.value ? `${formatDate(value.value)} ${formatTime(value.value)}` : '';
+  if (value.format === 'date') {
+    if (!value.value) return '';
+    const date = new Date(value.value);
+    return `${formatDate(date)} ${formatTime(date)}`;
+  }
   return (value.prefix || '') + t(value.key, value.params);
 };
 const EVENT_NAMES = ['onClick', 'onDoubleClick', 'onContextMenu', 'onMouseDown', 'onMouseUp', 'onMouseMove', 'onWheel'];
@@ -46,11 +50,47 @@ function ToolWidget({ node, send }) {
     title: caption(node.title), active: node.active, disabled: node.disabled, onClick: press }));
 }
 
-function Widget({ node, send, path = 'root' }) {
+// A file cell repeats the same few vector icons, so the tree only names them.
+const iconTrees = new Map();
+function iconTree(name, size) {
+  const id = `${name}:${size}`;
+  let tree = iconTrees.get(id);
+  if (!tree) {
+    if (iconTrees.size >= 64) iconTrees.clear();
+    tree = filesRequest({ op: 'icon', name, size });
+    iconTrees.set(id, tree);
+  }
+  return tree;
+}
+
+// Rust sends only what changed: {$: 1} stands for the previous node at that
+// place (same key, or same position), so memo() below skips it. Matches delta()
+// in rust/axia-shell/src/files/ffi.rs. Every reply must pass through here, in order.
+function expand(prev, node) {
+  if (node.$) return prev;
+  const children = node.children;
+  if (children?.length) {
+    const before = prev?.children || [];
+    let keyed = null;
+    for (const child of before) if (child.key) (keyed ||= new Map()).set(child.key, child);
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      children[i] = expand(child.key && keyed ? keyed.get(child.key) : before[i], child);
+    }
+  }
+  return node;
+}
+// Captions are resolved here, so anything that formats them differently must
+// render every node again even though Rust's description did not change.
+const FORMAT_SAMPLE = new Date(2001, 11, 31, 23, 59);
+const captionFormat = () => `${locale.get()}|${formatDate(FORMAT_SAMPLE)}|${formatTime(FORMAT_SAMPLE)}`;
+
+const Widget = memo(function WidgetNode({ node, send }) {
   if (!node) return null;
+  if (node.type === 'icon') return h(Widget, { node: iconTree(node.name, node.size), send });
   const props = { style: node.style };
   for (const event of EVENT_NAMES) if (node.events?.[event]) props[event] = (e) => send(node.events[event], e);
-  const children = (node.children || []).map((child, i) => h(Widget, { key: child.key || i, node: child, send, path: `${path}/${i}` }));
+  const children = (node.children || []).map((child, i) => h(Widget, { key: child.key || i, node: child, send }));
   switch (node.type) {
     case 'toolbar': return h(Toolbar, props, ...children);
     case 'toolGroup': return h(ToolbarGroup, props, ...children);
@@ -65,7 +105,7 @@ function Widget({ node, send, path = 'root' }) {
     case 'scroll': return h(ScrollView, { ...props, horizontal: node.horizontal }, ...children);
     default: return h(View, props, ...children);
   }
-}
+});
 
 function eventData(e, root) {
   if (!e) return {};
@@ -133,19 +173,37 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
   // every accepted response, including intermediate snapshots that never paint.
   const received = useRef(snapshot.serial), effectQueue = useRef(null);
   if (effectQueue.current === null) effectQueue.current = [...(snapshot.effects || [])];
+  const shown = useRef({ tree: snapshot.tree, menus: snapshot.menus, format: captionFormat() }), pace = useRef({ timer: 0, loading: !!snapshot.loading, poll: null });
+  // Finished listings are collected promptly; an idle window stays at 10 Hz.
+  const armPoll = () => {
+    const state = pace.current;
+    clearTimeout(state.timer);
+    state.timer = setTimeout(state.poll, state.loading ? 16 : 100);
+  };
   const accept = (result) => {
     if (result && live.current) {
       if (result.serial > received.current) { received.current = result.serial; effectQueue.current.push(...(result.effects || [])); }
-      capture.current = !!result.capture; setSnapshot(result);
+      capture.current = !!result.capture;
+      const format = captionFormat();
+      result.tree = expand(shown.current.tree, result.tree);
+      // New objects render every node again, with the new captions.
+      if (format !== shown.current.format) result.tree = JSON.parse(JSON.stringify(result.tree));
+      result.menus ??= shown.current.menus;
+      shown.current = { tree: result.tree, menus: result.menus, format };
+      const loading = !!result.loading;
+      if (loading && !pace.current.loading && pace.current.poll) { pace.current.loading = true; armPoll(); }
+      pace.current.loading = loading;
+      setSnapshot(result);
     }
   };
-  const send = (action, e, extra = {}) => {
+  // Stable identity: memo() compares it, and everything it uses is a ref.
+  const send = useRef((action, e, extra = {}) => {
     if (!live.current || !action) return;
     accept(filesRequest({ op: 'event', id: handle, action, ...eventData(e, root), ...extra }));
-  };
+  }).current;
   latest.current = { theme, send, onPick, onClose, win };
   useEffect(() => { send(['disks'], null, { disks: volumes }); }, [volumes]);
-  const metadata = JSON.stringify(appMetadata(apps));
+  const metadata = useMemo(() => JSON.stringify(appMetadata(apps)), [apps]);
   useEffect(() => { send(['apps'], null, { apps: JSON.parse(metadata) }); }, [metadata]);
   useKeyboard((e) => { if (mode === 'browser' && !modalHandles.size) send(['key'], e); });
 
@@ -159,18 +217,22 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     };
     const move = addListener('pointermove', (e) => { if (capture.current) latest.current.send(['pointerMove'], e); });
     const up = addListener('pointerup', () => { if (capture.current) setTimeout(() => { if (live.current) latest.current.send(['dragEnd']); }, 0); });
-    const timer = setInterval(poll, 100);
-    poll();
+    pace.current.poll = () => { try { poll(); } finally { if (live.current) armPoll(); } };
+    pace.current.poll();
     const keys = mode !== 'browser' ? addListener('keydown', (e) => { if (!hasTextFocus() && [...modalHandles].at(-1) === handle) latest.current.send(['key'], e); }) : null;
-    return () => { live.current = false; clearInterval(timer); keys?.(); move(); up(); for (const id of resources.current.media) media.close(id); for (const id of resources.current.images) releaseImage(id); modalHandles.delete(handle); filesRequest({ op: 'close', id: handle }); };
+    return () => { live.current = false; clearTimeout(pace.current.timer); pace.current.poll = null; keys?.(); move(); up(); for (const id of resources.current.media) media.close(id); for (const id of resources.current.images) releaseImage(id); modalHandles.delete(handle); filesRequest({ op: 'close', id: handle }); };
   }, [handle]);
 
+  const menuLocale = locale.get();
+  const windowTitle = caption(snapshot.title);
   useEffect(() => {
     if (mode !== 'browser' || !win?.id) return;
     wm.setMenus(win.id, (snapshot.menus || []).map((menu) => ({ label: caption(menu.label), items: menu.items.map((item) =>
       typeof item === 'string' ? item : { ...item, label: caption(item.label), onClick: () => latest.current.send(item.action) }) })));
-    wm.setTitle(win.id, caption(snapshot.title));
-  }, [snapshot, win?.id, mode]);
+  }, [snapshot.menus, menuLocale, win?.id, mode]);
+  useEffect(() => {
+    if (mode === 'browser' && win?.id) wm.setTitle(win.id, windowTitle);
+  }, [windowTitle, win?.id, mode]);
 
   useEffect(() => {
     for (const effect of effectQueue.current.splice(0)) {
@@ -212,6 +274,5 @@ export function RustFileDialog(props) {
 }
 
 export function RustFileIcon({ size = 32 }) {
-  const tree = filesRequest({ op: 'icon', name: 'files', size });
-  return h(Widget, { node: tree, send: () => {} });
+  return h(Widget, { node: iconTree('files', size), send: () => {} });
 }

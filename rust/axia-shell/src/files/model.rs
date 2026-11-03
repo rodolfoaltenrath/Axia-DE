@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::os::fd::{AsRawFd, FromRawFd};
+use std::{cell::RefCell, rc::Rc};
 
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -82,11 +83,22 @@ pub struct Place {
     pub path: PathBuf,
 }
 #[derive(Clone)]
+struct Filtered {
+    version: u64,
+    len: usize,
+    query: String,
+    hidden: bool,
+    folder: bool,
+    items: Rc<Vec<usize>>,
+}
+#[derive(Clone)]
 pub struct Tab {
     pub location: Location,
     pub back: Vec<Location>,
     pub forward: Vec<Location>,
     pub entries: Vec<Entry>,
+    entries_version: u64,
+    filtered: RefCell<Option<Filtered>>,
     pub selected: BTreeSet<usize>,
     pub view: String,
     pub sort: String,
@@ -100,12 +112,18 @@ pub struct Tab {
     pub archive: Vec<Value>,
 }
 impl Tab {
+    fn replace_entries(&mut self, entries: Vec<Entry>) {
+        self.entries_version = self.entries_version.wrapping_add(1);
+        self.entries = entries;
+    }
     fn new(location: Location) -> Self {
         Self {
             location,
             back: Vec::new(),
             forward: Vec::new(),
             entries: Vec::new(),
+            entries_version: 0,
+            filtered: RefCell::new(None),
             selected: BTreeSet::new(),
             view: "icons".into(),
             sort: "name".into(),
@@ -150,6 +168,7 @@ pub enum Dialog {
 }
 enum Notice {
     Scan(u64, Result<Vec<Entry>>),
+    Writable(u64, bool),
     Text(u64, Result<String>),
     Size(u64, u64),
     NetworkPrompt(u64, super::network::Prompt),
@@ -199,6 +218,10 @@ pub struct Session {
     rx: mpsc::Receiver<Notice>,
     watch: Option<File>,
     last_load: Instant,
+    last_scan: Duration,
+    silent_load: bool,
+    // Asked on the listing's worker: the question can block on a network mount.
+    pub(super) can_write: bool,
 
     last_jobs: Value,
     owned_jobs: HashSet<i32>,
@@ -505,6 +528,9 @@ impl Session {
             rx,
             watch: None,
             last_load: Instant::now(),
+            last_scan: Duration::ZERO,
+            silent_load: false,
+            can_write: false,
 
             last_jobs: Value::Null,
             owned_jobs: HashSet::new(),
@@ -585,41 +611,54 @@ impl Session {
     pub fn tab_mut(&mut self) -> &mut Tab {
         &mut self.tabs[self.active]
     }
-    pub fn selected(&self) -> Vec<Entry> {
+    pub fn selected_entries(&self) -> impl Iterator<Item = &Entry> {
         self.tab()
             .selected
             .iter()
-            .filter_map(|i| self.tab().entries.get(*i).cloned())
-            .collect()
+            .filter_map(|i| self.tab().entries.get(*i))
+    }
+    pub fn selected(&self) -> Vec<Entry> {
+        self.selected_entries().cloned().collect()
     }
     pub fn write_dir(&self) -> Option<PathBuf> {
-        let path = self.tab().location.path()?;
-        let p = self
-            .policy
-            .target(&path.join(".axia-permission-check"), false)
-            .ok()?;
-        let parent = p.parent()?;
-        let c = policy::c_name(parent.as_os_str()).ok()?;
-        if unsafe { libc::access(c.as_ptr(), libc::W_OK) } == 0 {
-            Some(parent.into())
-        } else {
-            None
-        }
+        writable_dir(&self.policy, self.tab().location.path()?)
     }
-    pub fn filtered(&self) -> Vec<usize> {
+    pub fn filtered(&self) -> Rc<Vec<usize>> {
         let tab = self.tab();
+        let folder = self.mode == Mode::Folder;
+        if let Some(cached) = tab.filtered.borrow().as_ref().filter(|c| {
+            c.version == tab.entries_version
+                && c.len == tab.entries.len()
+                && c.query == tab.query
+                && c.hidden == self.hidden
+                && c.folder == folder
+        }) {
+            return Rc::clone(&cached.items);
+        }
+
         let query = tab.query.to_lowercase();
-        tab.entries
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| {
-                (self.hidden || !e.name.starts_with('.'))
-                    && (self.mode != Mode::Folder || e.dir)
-                    && (e.dir || self.filter.as_ref().is_none_or(|r| r.is_match(&e.name)))
-                    && (tab.query.is_empty() || e.name.to_lowercase().contains(&query))
-            })
-            .map(|(i, _)| i)
-            .collect()
+        let items = Rc::new(
+            tab.entries
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| {
+                    (self.hidden || !e.name.starts_with('.'))
+                        && (self.mode != Mode::Folder || e.dir)
+                        && (e.dir || self.filter.as_ref().is_none_or(|r| r.is_match(&e.name)))
+                        && (tab.query.is_empty() || e.name.to_lowercase().contains(&query))
+                })
+                .map(|(i, _)| i)
+                .collect(),
+        );
+        *tab.filtered.borrow_mut() = Some(Filtered {
+            version: tab.entries_version,
+            len: tab.entries.len(),
+            query: tab.query.clone(),
+            hidden: self.hidden,
+            folder,
+            items: Rc::clone(&items),
+        });
+        items
     }
     fn reset_watch(&mut self) {
         self.watch = None;
@@ -649,8 +688,14 @@ impl Session {
             }
         }
     }
+    // A folder watcher's refresh keeps the current listing on screen until (and
+    // unless) the new listing is actually different.
+    pub(super) fn visibly_loading(&self) -> bool {
+        self.loading && !self.silent_load
+    }
     pub fn load(&mut self, shared: &Shared) {
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
+        self.silent_load = false;
         let location = self.tab().location.clone();
         self.error = None;
         self.searching = false;
@@ -658,6 +703,9 @@ impl Session {
         self.last_load = Instant::now();
         self.reset_watch();
         self.dirty = true;
+        if location.path().is_none() {
+            self.can_write = false;
+        }
         if let Location::Archive { file, .. } = &location {
             if self.tab().archive.is_empty() {
                 self.effects
@@ -690,6 +738,8 @@ impl Session {
             let result = (|| -> Result<Vec<Entry>> {
                 match location {
                     Location::Directory(path) => {
+                        let writable = writable_dir(&p, &path).is_some();
+                        let _ = tx.send(Notice::Writable(generation, writable));
                         let real = p.read(&path)?;
                         if picker && !p.allowed(&real) {
                             return Err("fs.outsideHome".into());
@@ -832,7 +882,8 @@ impl Session {
                     stamp: 0,
                 });
         }
-        self.tab_mut().entries = entries.into_values().collect();
+        self.tab_mut()
+            .replace_entries(entries.into_values().collect());
         self.sort();
     }
     fn sort(&mut self) {
@@ -850,20 +901,25 @@ impl Session {
         let tab = self.tab_mut();
         let key = tab.sort.clone();
         let desc = tab.descending;
+        tab.entries_version = tab.entries_version.wrapping_add(1);
         sort_entries(&mut tab.entries, &key, desc, folders_first);
+        let any_selected = !selected.is_empty();
         tab.cursor = cursor.and_then(|(raw, path)| {
             tab.entries
                 .iter()
                 .position(|e| e.raw == raw && e.path == path)
         });
         tab.anchor = tab.cursor.unwrap_or(0);
-        tab.selected = tab
-            .entries
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| selected.contains(&(e.raw.clone(), e.path.clone())))
-            .map(|(i, _)| i)
-            .collect();
+        tab.selected = if any_selected {
+            tab.entries
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| selected.contains(&(e.raw.clone(), e.path.clone())))
+                .map(|(i, _)| i)
+                .collect()
+        } else {
+            BTreeSet::new()
+        };
     }
     pub fn navigate(&mut self, to: Location, shared: &Shared, history: bool) {
         if self.mode != Mode::Browser {
@@ -969,14 +1025,16 @@ impl Session {
             self.dirty = true;
         }
         if let Some(w) = context["width"].as_f64() {
+            let w = w.clamp(320., 16384.);
             if (self.width - w).abs() > 0.5 {
-                self.width = w.clamp(320., 16384.);
+                self.width = w;
                 self.dirty = true;
             }
         }
         if let Some(h) = context["height"].as_f64() {
+            let h = h.clamp(240., 16384.);
             if (self.height - h).abs() > 0.5 {
-                self.height = h.clamp(240., 16384.);
+                self.height = h;
                 self.dirty = true;
             }
         }
@@ -996,6 +1054,11 @@ impl Session {
                     if generation == self.generation.load(Ordering::Relaxed) =>
                 {
                     self.loading = false;
+                    self.last_scan = self.last_load.elapsed();
+                    let silent = std::mem::take(&mut self.silent_load);
+                    if silent && result.as_ref().is_ok_and(|e| *e == self.tab().entries) {
+                        continue;
+                    }
                     match result {
                         Ok(entries) => {
                             let selected: HashSet<_> = self
@@ -1008,7 +1071,7 @@ impl Session {
                                 .cursor
                                 .and_then(|i| self.tab().entries.get(i))
                                 .map(|e| (e.raw.clone(), e.path.clone()));
-                            self.tab_mut().entries = entries;
+                            self.tab_mut().replace_entries(entries);
                             self.tab_mut().cursor = cursor.and_then(|(raw, path)| {
                                 self.tab()
                                     .entries
@@ -1021,16 +1084,19 @@ impl Session {
                                 self.tab_mut().entries.extend(discovered);
                                 self.sort();
                             }
-                            self.tab_mut().selected = self
-                                .tab()
-                                .entries
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, e)| {
-                                    selected.contains(&(e.raw.clone(), e.path.clone()))
-                                })
-                                .map(|(i, _)| i)
-                                .collect();
+                            self.tab_mut().selected = if selected.is_empty() {
+                                BTreeSet::new()
+                            } else {
+                                self.tab()
+                                    .entries
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, e)| {
+                                        selected.contains(&(e.raw.clone(), e.path.clone()))
+                                    })
+                                    .map(|(i, _)| i)
+                                    .collect()
+                            };
                         }
                         Err(e) => {
                             self.error = Some(e);
@@ -1038,6 +1104,14 @@ impl Session {
                         }
                     }
                     self.dirty = true;
+                }
+                Notice::Writable(generation, writable)
+                    if generation == self.generation.load(Ordering::Relaxed) =>
+                {
+                    if self.can_write != writable {
+                        self.can_write = writable;
+                        self.dirty = true;
+                    }
                 }
                 Notice::Text(generation, result) if generation == self.dialog_epoch => {
                     if let Some(Dialog::Preview { text, .. }) = &mut self.dialog {
@@ -1086,7 +1160,7 @@ impl Session {
                     self.loading = false;
                     match result {
                         Ok(entries) => {
-                            self.tab_mut().entries = entries;
+                            self.tab_mut().replace_entries(entries);
                             if self.tab().location == Location::Network {
                                 let discovered = self.discovered.clone();
                                 self.tab_mut().entries.extend(discovered);
@@ -1101,7 +1175,9 @@ impl Session {
                 _ => (),
             }
         }
-        if !self.loading && self.last_load.elapsed() > Duration::from_millis(250) {
+        // A folder that keeps changing must not spend most of its time being rescanned.
+        let settle = (self.last_scan * 4).clamp(Duration::from_millis(250), Duration::from_secs(5));
+        if !self.loading && self.last_load.elapsed() > settle {
             let mut changed = false;
             if let Some(fd) = &self.watch {
                 let mut buf = [0u8; 8192];
@@ -1119,13 +1195,20 @@ impl Session {
                 changed = true;
             }
             if changed && !self.searching {
+                let quiet = !self.dirty && self.error.is_none();
                 self.load(shared);
+                self.silent_load = self.loading;
+                self.dirty = !quiet || self.error.is_some();
             }
         }
-        let current_jobs = json!(ops::jobs()
-            .into_iter()
-            .filter(|j| self.owned_jobs.contains(&j.id))
-            .collect::<Vec<_>>());
+        let current_jobs = if self.owned_jobs.is_empty() {
+            json!([])
+        } else {
+            json!(ops::jobs()
+                .into_iter()
+                .filter(|j| self.owned_jobs.contains(&j.id))
+                .collect::<Vec<_>>())
+        };
         if current_jobs != self.last_jobs {
             let was_active = self
                 .last_jobs
@@ -1167,7 +1250,8 @@ impl Session {
                 let count = ((self.entry_area() / row).ceil() as usize + 2) * cols;
                 let entries: Vec<_> = self
                     .filtered()
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .skip(start)
                     .take(count.min(128))
                     .map(|i| self.tab().entries[i].clone())
@@ -1382,6 +1466,7 @@ impl Session {
         }
     }
     pub fn event(&mut self, event: &Value, shared: &mut Shared) {
+        let quiet = !self.dirty && self.error.is_none();
         self.dirty = true;
         self.error = None;
         let name = event["action"][0]
@@ -1631,11 +1716,13 @@ impl Session {
                     }
                 }
                 "selectAll" => {
-                    let mut items = self.filtered();
-                    if self.mode != Mode::Browser && !self.multiple {
-                        items.truncate(1);
-                    }
-                    self.tab_mut().selected = items.into_iter().collect();
+                    let items = self.filtered();
+                    let limit = if self.mode != Mode::Browser && !self.multiple {
+                        1
+                    } else {
+                        items.len()
+                    };
+                    self.tab_mut().selected = items.iter().copied().take(limit).collect();
                 }
                 "clear" => {
                     self.tab_mut().selected.clear();
@@ -1694,9 +1781,11 @@ impl Session {
                 }
                 "wheel" => {
                     let delta = event["deltaY"].as_f64().unwrap_or(0.);
+                    let before = self.tab().offset;
                     let tab = self.tab_mut();
                     tab.offset = (tab.offset + delta).max(0.);
                     self.clamp_scroll();
+                    self.dirty = !quiet || self.tab().offset != before;
                 }
                 "scroll" => {
                     self.tab_mut().offset = arg.as_f64().unwrap_or(0.).max(0.);
@@ -1901,8 +1990,10 @@ impl Session {
                             + (event["y"].as_f64().unwrap_or(0.)
                                 - drag["y"].as_f64().unwrap_or(0.))
                                 * drag["ratio"].as_f64().unwrap_or(0.);
+                        let before = self.tab().offset;
                         self.tab_mut().offset = offset;
                         self.clamp_scroll();
+                        self.dirty = !quiet || self.tab().offset != before;
                         return Ok(());
                     }
                     if let Some(drag) = &mut self.drag {
@@ -2751,59 +2842,101 @@ pub fn free_name(parent: &Path, name: &str) -> PathBuf {
     }
     parent.join(format!("{stem}-{}{ext}", std::process::id()))
 }
+fn writable_dir(policy: &Policy, path: &Path) -> Option<PathBuf> {
+    let p = policy
+        .target(&path.join(".axia-permission-check"), false)
+        .ok()?;
+    let parent = p.parent()?;
+    let c = policy::c_name(parent.as_os_str()).ok()?;
+    (unsafe { libc::access(c.as_ptr(), libc::W_OK) } == 0).then(|| parent.into())
+}
 pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    let a = a.to_lowercase();
-    let b = b.to_lowercase();
-    let mut a = a.chars().peekable();
-    let mut b = b.chars().peekable();
+    natural_lowercase(a.to_lowercase().as_bytes(), b.to_lowercase().as_bytes())
+}
+// Both already lowercase. UTF-8 sorts bytewise in character order, and no byte
+// of a multi-byte character is an ASCII digit.
+fn natural_lowercase(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let run = |s: &[u8]| s.iter().take_while(|c| c.is_ascii_digit()).count();
+    let (mut a, mut b) = (a, b);
     loop {
-        match (a.peek(), b.peek()) {
+        match (a.first(), b.first()) {
             (Some(x), Some(y)) if x.is_ascii_digit() && y.is_ascii_digit() => {
-                let mut an = String::new();
-                let mut bn = String::new();
-                while a.peek().is_some_and(|c| c.is_ascii_digit()) {
-                    an.push(a.next().unwrap());
+                let (x, rest_a) = a.split_at(run(a));
+                let (y, rest_b) = b.split_at(run(b));
+                let strip = |s: &'_ [u8]| s.iter().take_while(|c| **c == b'0').count();
+                let (x, y) = (&x[strip(x)..], &y[strip(y)..]);
+                let order = x.len().cmp(&y.len()).then_with(|| x.cmp(y));
+                if order != Ordering::Equal {
+                    return order;
                 }
-                while b.peek().is_some_and(|c| c.is_ascii_digit()) {
-                    bn.push(b.next().unwrap());
-                }
-                let x = an.trim_start_matches('0');
-                let y = bn.trim_start_matches('0');
-                let cmp = x.len().cmp(&y.len()).then_with(|| x.cmp(y));
-                if cmp != std::cmp::Ordering::Equal {
-                    return cmp;
-                }
+                (a, b) = (rest_a, rest_b);
             }
-            (Some(_), Some(_)) => {
-                let cmp = a.next().cmp(&b.next());
-                if cmp != std::cmp::Ordering::Equal {
-                    return cmp;
+            (Some(x), Some(y)) => {
+                if x != y {
+                    return x.cmp(y);
                 }
+                (a, b) = (&a[1..], &b[1..]);
             }
-            (None, None) => return std::cmp::Ordering::Equal,
-            (None, _) => return std::cmp::Ordering::Less,
-            (_, None) => return std::cmp::Ordering::Greater,
+            (None, None) => return Ordering::Equal,
+            (None, _) => return Ordering::Less,
+            (_, None) => return Ordering::Greater,
         }
     }
 }
 
-fn sort_entries(entries: &mut [Entry], key: &str, descending: bool, folders_first: bool) {
-    entries.sort_by(|a, b| {
-        if folders_first && a.dir != b.dir {
-            return b.dir.cmp(&a.dir);
-        }
-        let order = match key {
-            "size" => a.size.cmp(&b.size),
-            "date" => a.mtime.cmp(&b.mtime),
-            "kind" => kind(&a.name).cmp(kind(&b.name)),
-            _ => natural_cmp(&a.name, &b.name),
-        }
-        .then_with(|| natural_cmp(&a.name, &b.name));
-        if descending {
-            order.reverse()
-        } else {
-            order
-        }
+// Lowercased once per file: a sort compares each name about 15 times.
+struct SortKey {
+    not_folder: bool,
+    number: i128,
+    kind: &'static str,
+    name: String,
+    descending: bool,
+}
+impl Ord for SortKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let order = self
+            .number
+            .cmp(&other.number)
+            .then_with(|| self.kind.cmp(other.kind))
+            .then_with(|| natural_lowercase(self.name.as_bytes(), other.name.as_bytes()));
+        self.not_folder
+            .cmp(&other.not_folder)
+            .then(if self.descending {
+                order.reverse()
+            } else {
+                order
+            })
+    }
+}
+impl PartialOrd for SortKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for SortKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+impl Eq for SortKey {}
+
+pub(super) fn sort_entries(
+    entries: &mut [Entry],
+    key: &str,
+    descending: bool,
+    folders_first: bool,
+) {
+    entries.sort_by_cached_key(|e| SortKey {
+        not_folder: folders_first && !e.dir,
+        number: match key {
+            "size" => e.size as i128,
+            "date" => e.mtime as i128,
+            _ => 0,
+        },
+        kind: if key == "kind" { kind(&e.name) } else { "" },
+        name: e.name.to_lowercase(),
+        descending,
     });
 }
 

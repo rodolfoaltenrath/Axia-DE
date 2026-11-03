@@ -173,3 +173,25 @@ device. Physical FAT/exFAT/NTFS disks and an additional internal disk still need
 separate hardware checks; simulated facts cover those sidebar/control paths.
 Real pointer/keyboard probes also exercised PDF tiles, rename collision feedback,
 maximizing/restoring and manual resizing between 640×400 and larger windows.
+
+## Interface performance
+
+A large folder must cost about the same per frame as a small one. The tree that
+reaches QuickJS is the expensive part, not building it in Rust, so:
+
+- Only visible cells exist. They keep fixed positions inside one moving
+  container, so a scroll changes one offset, and each has a stable `key`.
+- `ffi.rs` compares each new tree with the last one sent. An unchanged subtree
+  travels as `{"$":1}` and `expand()` in `sdk/rustfiles.jsx` restores the previous
+  object, which `memo` then skips. A reply with no change is `null`. Every reply
+  must pass through `expand()`, in order. File icons travel by name (`icon`).
+- The filtered list is cached per tab until entries, search, or hidden files change.
+- Window polling is 10 Hz, and 60 Hz only while a listing is loading.
+- A watcher refresh is silent: an identical listing draws nothing, and rescans
+  back off to four times the last scan's duration (up to 5 s).
+- File-system questions stay off the interface thread: `can_write` is answered by
+  the listing worker, because a stalled network mount would freeze the compositor.
+  Actions still check with `write_dir()` when they run.
+
+`cargo test --release --manifest-path rust/Cargo.toml large_folder -- --ignored
+--nocapture` reports the Rust side for 20,000 files.
