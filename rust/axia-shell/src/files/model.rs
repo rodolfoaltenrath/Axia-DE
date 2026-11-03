@@ -1162,16 +1162,7 @@ impl Session {
         if self.dirty {
             self.clamp_scroll();
             if self.tab().view == "icons" || self.tab().view == "gallery" {
-                let cols = if self.tab().view == "icons" {
-                    (self.entry_width() / 112.).floor().max(1.) as usize
-                } else {
-                    1
-                };
-                let row = if self.tab().view == "icons" {
-                    110.
-                } else {
-                    32.
-                };
+                let (cols, _, row) = self.entry_grid();
                 let start = (self.tab().offset / row).floor() as usize * cols;
                 let count = ((self.entry_area() / row).ceil() as usize + 2) * cols;
                 let entries: Vec<_> = self
@@ -1895,16 +1886,7 @@ impl Session {
                 }
                 "scrollDrag" => {
                     if event["button"].as_u64().unwrap_or(0) == 0 {
-                        let cols = if self.tab().view == "icons" {
-                            (self.entry_width() / 112.).floor().max(1.) as usize
-                        } else {
-                            1
-                        };
-                        let row = if self.tab().view == "icons" {
-                            110.
-                        } else {
-                            32.
-                        };
+                        let (cols, _, row) = self.entry_grid();
                         let content = self.filtered().len().div_ceil(cols) as f64 * row;
                         let area = self.entry_area();
                         let thumb = (area * area / content.max(1.)).max(24.).min(area);
@@ -2180,16 +2162,7 @@ impl Session {
         }
     }
     fn clamp_scroll(&mut self) {
-        let cols = if self.tab().view == "icons" {
-            (self.entry_width() / 112.).floor().max(1.) as usize
-        } else {
-            1
-        };
-        let row = if self.tab().view == "icons" {
-            110.
-        } else {
-            32.
-        };
+        let (cols, _, row) = self.entry_grid();
         let area = self.entry_area();
         let max = (self.filtered().len().div_ceil(cols) as f64 * row - area).max(0.);
         self.tab_mut().offset = self.tab().offset.clamp(0., max);
@@ -2682,16 +2655,7 @@ impl Session {
             if items.is_empty() {
                 return Ok(());
             }
-            let cols = if self.tab().view == "icons" {
-                (self.entry_width() / 112.).floor().max(1.) as usize
-            } else {
-                1
-            };
-            let row = if self.tab().view == "icons" {
-                110.
-            } else {
-                32.
-            };
+            let (cols, _, row) = self.entry_grid();
             let height = self.entry_area();
             let at = if self.tab().selected.is_empty() {
                 None

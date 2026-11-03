@@ -715,12 +715,7 @@ fn scroll_keyboard_and_render_share_geometry_after_resizing() {
                 s.event(&json!({"action":["key"],"key":"End"}), &mut shared);
                 let index = *s.tab().selected.first().unwrap();
                 assert_eq!(s.tab().entries[index].name, "item-199.txt");
-                let cols = if view == "icons" {
-                    (s.entry_width() / 112.).floor().max(1.) as usize
-                } else {
-                    1
-                };
-                let row = if view == "icons" { 110. } else { 32. };
+                let (cols, _, row) = s.entry_grid();
                 let bottom = (199 / cols + 1) as f64 * row;
                 assert!((bottom - s.tab().offset - s.entry_area()).abs() < 0.01);
                 event(&mut s, &mut shared, "scroll", json!(1e9));
@@ -1324,4 +1319,44 @@ fn closing_the_browser_does_not_abort_copies_or_leak_job_slots() {
         fs::read(destination.join("source.txt")).unwrap(),
         fs::read(from).unwrap()
     );
+}
+
+#[test]
+fn icon_grid_uses_available_width_and_keeps_scrollbar_clear() {
+    let h = Home::new();
+    for n in 0..80 {
+        h.file(&format!("item-{n:03}.txt"), "");
+    }
+    for mode in ["browser", "open"] {
+        let (mut s, mut shared) = h.session(json!({"mode":mode}));
+        event(&mut s, &mut shared, "view", json!("icons"));
+        for width in [480, 640, 701, 900, 1366] {
+            s.poll(&json!({"width":width,"height":400}), &shared);
+            let tree = s.render(&shared);
+            fn cells<'a>(v: &'a Value, out: &mut Vec<&'a Value>) {
+                if v["events"]["onClick"][0] == "select" {
+                    out.push(v);
+                }
+                for c in v["children"].as_array().into_iter().flatten() {
+                    cells(c, out);
+                }
+            }
+            let mut visible = Vec::new();
+            cells(&tree, &mut visible);
+            let top = visible[0]["style"]["top"].as_f64().unwrap();
+            let first_row: Vec<_> = visible
+                .iter()
+                .filter(|c| c["style"]["top"].as_f64() == Some(top))
+                .collect();
+            let last = first_row.last().unwrap();
+            let right =
+                last["style"]["left"].as_f64().unwrap() + last["style"]["width"].as_f64().unwrap();
+            assert!((right - (s.entry_width() - 12.).max(1.)).abs() < 0.01);
+            assert_eq!(visible[0]["style"]["height"], 100.);
+            // Vertical keyboard movement must land directly below the first cell.
+            s.event(&json!({"action":["key"],"key":"Home"}), &mut shared);
+            s.event(&json!({"action":["key"],"key":"ArrowDown"}), &mut shared);
+            assert_eq!(s.tab().cursor, Some(s.filtered()[first_row.len()]));
+        }
+    }
 }
