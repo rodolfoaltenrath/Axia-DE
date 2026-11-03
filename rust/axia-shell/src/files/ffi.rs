@@ -45,6 +45,52 @@ impl App {
                 Err(e) => json!({"error":e}),
             };
         }
+        if op == "volumeStart" {
+            let device = args["device"].as_str().unwrap_or("");
+            let volume = self
+                .shared
+                .volumes
+                .iter()
+                .find(|v| v.id == device || v.disk == device);
+            let Some(volume) = volume else {
+                return json!({"error":"files.deviceUnavailable"});
+            };
+            let plan = if args["action"] == "mount" {
+                if !volume.mountable {
+                    return json!({"error":"files.deviceUnsupported"});
+                }
+                super::udisks::Plan::Mount(volume.id.clone())
+            } else if args["action"] == "release" {
+                let parts = self
+                    .shared
+                    .volumes
+                    .iter()
+                    .filter(|v| {
+                        v.path.is_some()
+                            && if volume.removable {
+                                v.disk == volume.disk
+                            } else {
+                                v.id == volume.id
+                            }
+                    })
+                    .map(|v| v.id.clone())
+                    .collect();
+                super::udisks::Plan::Release {
+                    disk: volume.disk.clone(),
+                    parts,
+                    removable: volume.removable,
+                }
+            } else {
+                return json!({"error":"sys.badArgument"});
+            };
+            return match super::udisks::start(plan) {
+                Ok(job) => json!({"job":job}),
+                Err(error) => json!({"error":error}),
+            };
+        }
+        if op == "volumePoll" {
+            return super::udisks::poll(args["job"].as_u64().unwrap_or(0));
+        }
         let id = args["id"].as_u64().unwrap_or(0);
         let Some(mut session) = self.sessions.remove(&id) else {
             return json!({"error":"sys.badArgument"});

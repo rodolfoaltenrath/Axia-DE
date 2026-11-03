@@ -32,6 +32,7 @@ pub struct Job {
 pub struct Task {
     pub progress: Mutex<Job>,
     pub cancelled: AtomicBool,
+    detached: AtomicBool,
 }
 fn tasks() -> &'static Mutex<Vec<Arc<Task>>> {
     static TASKS: OnceLock<Mutex<Vec<Arc<Task>>>> = OnceLock::new();
@@ -56,6 +57,19 @@ pub fn forget(id: i32) {
     tasks().lock().unwrap().retain(|t| {
         let j = t.progress.lock().unwrap();
         j.id != id || !j.done
+    });
+}
+
+// A closed browser stops observing its jobs; the copy continues and its result
+// is reclaimed only after completion. C callers retain their explicit lifetime.
+pub fn detach(id: i32) {
+    tasks().lock().unwrap().retain(|t| {
+        let j = t.progress.lock().unwrap();
+        if j.id != id {
+            return true;
+        }
+        t.detached.store(true, Ordering::Relaxed);
+        !j.done
     });
 }
 
@@ -397,6 +411,7 @@ pub fn start_batch(items: Vec<(PathBuf, PathBuf, bool)>) -> Result<i32> {
             ..Job::default()
         }),
         cancelled: AtomicBool::new(false),
+        detached: AtomicBool::new(false),
     });
     all.push(task.clone());
     drop(all);
@@ -420,6 +435,10 @@ pub fn start_batch(items: Vec<(PathBuf, PathBuf, bool)>) -> Result<i32> {
             let mut j = worker.progress.lock().unwrap();
             j.cancel = worker.cancelled.load(Ordering::Relaxed);
             j.done = true;
+            drop(j);
+            if worker.detached.load(Ordering::Relaxed) {
+                forget(id);
+            }
         });
     if spawned.is_err() {
         tasks()

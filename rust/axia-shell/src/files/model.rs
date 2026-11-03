@@ -94,6 +94,7 @@ pub struct Tab {
     pub query: String,
     pub offset: f64,
     pub anchor: usize,
+    pub cursor: Option<usize>,
     pub columns: Vec<(PathBuf, Vec<Entry>)>,
     pub column_offsets: HashMap<PathBuf, f64>,
     pub archive: Vec<Value>,
@@ -112,6 +113,7 @@ impl Tab {
             query: String::new(),
             offset: 0.,
             anchor: 0,
+            cursor: None,
             columns: Vec::new(),
             column_offsets: HashMap::new(),
             archive: Vec::new(),
@@ -164,6 +166,8 @@ pub struct Shared {
     pub comments: HashMap<String, String>,
     pub apps: Vec<Value>,
     pub loaded: bool,
+    pub volumes: Vec<super::volumes::Volume>,
+    pub extra_mounts: Vec<(PathBuf, String)>,
     pub dragging: Option<(u64, Vec<PathBuf>, bool)>,
 }
 pub struct Session {
@@ -197,7 +201,11 @@ pub struct Session {
     last_load: Instant,
 
     last_jobs: Value,
+    owned_jobs: HashSet<i32>,
     thumbnail_revision: u64,
+    pub pdf_thumbnails: super::pdf_thumbnails::Cache,
+    pub volume_busy: Option<String>,
+    volume_paths: Vec<PathBuf>,
     pub side_width: f64,
     pub drag: Option<Value>,
     pub job_errors: Vec<String>,
@@ -499,7 +507,11 @@ impl Session {
             last_load: Instant::now(),
 
             last_jobs: Value::Null,
+            owned_jobs: HashSet::new(),
             thumbnail_revision: 0,
+            pdf_thumbnails: super::pdf_thumbnails::Cache::default(),
+            volume_busy: None,
+            volume_paths: Vec::new(),
             side_width: shared.preferences["sideWidth"]
                 .as_f64()
                 .unwrap_or(190.)
@@ -829,11 +841,22 @@ impl Session {
             .into_iter()
             .map(|e| (e.raw, e.path))
             .collect();
+        let cursor = self
+            .tab()
+            .cursor
+            .and_then(|i| self.tab().entries.get(i))
+            .map(|e| (e.raw.clone(), e.path.clone()));
         let folders_first = self.folders_first;
         let tab = self.tab_mut();
         let key = tab.sort.clone();
         let desc = tab.descending;
         sort_entries(&mut tab.entries, &key, desc, folders_first);
+        tab.cursor = cursor.and_then(|(raw, path)| {
+            tab.entries
+                .iter()
+                .position(|e| e.raw == raw && e.path == path)
+        });
+        tab.anchor = tab.cursor.unwrap_or(0);
         tab.selected = tab
             .entries
             .iter()
@@ -898,6 +921,48 @@ impl Session {
         self.load(shared);
     }
     pub fn poll(&mut self, context: &Value, shared: &Shared) {
+        let paths: Vec<_> = shared
+            .volumes
+            .iter()
+            .filter_map(|v| v.path.clone())
+            .collect();
+        if paths != self.volume_paths {
+            let removed: Vec<_> = self
+                .volume_paths
+                .iter()
+                .filter(|p| !paths.contains(p))
+                .cloned()
+                .collect();
+            self.volume_paths = paths;
+            self.dirty = true;
+            let affected = |loc: &Location| {
+                loc.path()
+                    .is_some_and(|q| removed.iter().any(|p| q.starts_with(p)))
+            };
+            let mut reload = false;
+            for (i, tab) in self.tabs.iter_mut().enumerate() {
+                tab.back.retain(|loc| !affected(loc));
+                tab.forward.retain(|loc| !affected(loc));
+                if affected(&tab.location) {
+                    tab.location = Location::Directory(self.policy.home.clone());
+                    tab.entries.clear();
+                    tab.selected.clear();
+                    tab.columns.clear();
+                    tab.column_offsets.clear();
+                    tab.offset = 0.;
+                    tab.cursor = None;
+                    reload |= i == self.active;
+                }
+            }
+            if reload {
+                self.load(shared);
+            }
+        }
+        let current = policy::current();
+        if current.home == self.policy.home && current.roots != self.policy.roots {
+            self.policy = current;
+            self.dirty = true;
+        }
         let thumbs = super::thumbnails::revision();
         if thumbs != self.thumbnail_revision {
             self.thumbnail_revision = thumbs;
@@ -938,7 +1003,19 @@ impl Session {
                                 .into_iter()
                                 .map(|e| (e.raw, e.path))
                                 .collect();
+                            let cursor = self
+                                .tab()
+                                .cursor
+                                .and_then(|i| self.tab().entries.get(i))
+                                .map(|e| (e.raw.clone(), e.path.clone()));
                             self.tab_mut().entries = entries;
+                            self.tab_mut().cursor = cursor.and_then(|(raw, path)| {
+                                self.tab()
+                                    .entries
+                                    .iter()
+                                    .position(|e| e.raw == raw && e.path == path)
+                            });
+                            self.tab_mut().anchor = self.tab().cursor.unwrap_or(0);
                             if self.tab().location == Location::Network {
                                 let discovered = self.discovered.clone();
                                 self.tab_mut().entries.extend(discovered);
@@ -1045,7 +1122,10 @@ impl Session {
                 self.load(shared);
             }
         }
-        let current_jobs = json!(ops::jobs());
+        let current_jobs = json!(ops::jobs()
+            .into_iter()
+            .filter(|j| self.owned_jobs.contains(&j.id))
+            .collect::<Vec<_>>());
         if current_jobs != self.last_jobs {
             let was_active = self
                 .last_jobs
@@ -1070,6 +1150,7 @@ impl Session {
             {
                 if let Some(id) = job["id"].as_i64() {
                     ops::forget(id as i32);
+                    self.owned_jobs.remove(&(id as i32));
                 }
             }
             self.last_jobs = current_jobs;
@@ -1080,6 +1161,28 @@ impl Session {
         }
         if self.dirty {
             self.clamp_scroll();
+            if self.tab().view == "icons" || self.tab().view == "gallery" {
+                let cols = if self.tab().view == "icons" {
+                    (self.entry_width() / 112.).floor().max(1.) as usize
+                } else {
+                    1
+                };
+                let row = if self.tab().view == "icons" {
+                    110.
+                } else {
+                    32.
+                };
+                let start = (self.tab().offset / row).floor() as usize * cols;
+                let count = ((self.entry_area() / row).ceil() as usize + 2) * cols;
+                let entries: Vec<_> = self
+                    .filtered()
+                    .into_iter()
+                    .skip(start)
+                    .take(count.min(128))
+                    .map(|i| self.tab().entries[i].clone())
+                    .collect();
+                self.pdf_thumbnails.queue(&entries, &mut self.effects);
+            }
         }
     }
     pub fn jobs(&self) -> &Value {
@@ -1093,6 +1196,10 @@ impl Session {
                 e.raw.to_string_lossy().into_owned(),
                 vec![],
             );
+            return;
+        }
+        if e.link && e.mode & libc::S_IFMT == libc::S_IFLNK {
+            self.error = Some("files.brokenLink".into());
             return;
         }
         if e.raw.to_str().is_none() {
@@ -1340,6 +1447,39 @@ impl Session {
                 return Err("fs.outsideHome".into());
             }
             match name {
+                "disks" => {
+                    let volumes = super::volumes::parse(&event["disks"]);
+                    self.policy =
+                        policy::mount_roots(volumes.iter().filter_map(|v| v.path.clone()));
+                    shared.volumes = volumes;
+                    shared.extra_mounts = ops::mounts();
+                }
+                "volumeOpen" | "volumeRelease" => {
+                    if self.volume_busy.is_some() {
+                        return Ok(());
+                    }
+                    let volume = shared
+                        .volumes
+                        .iter()
+                        .find(|v| v.id == arg.as_str().unwrap_or(""))
+                        .cloned()
+                        .ok_or("sys.badArgument")?;
+                    if name == "volumeOpen" {
+                        if let Some(path) = volume.path {
+                            self.navigate(Location::Directory(path), shared, true);
+                        } else if !volume.mountable {
+                            self.effects
+                                .push(json!({"kind":"manageDisk","disk":volume.disk}));
+                        } else {
+                            self.volume_busy = Some(volume.id.clone());
+                            self.effects
+                                .push(json!({"kind":"diskMount","device":volume.id}));
+                        }
+                    } else if volume.path.is_some() {
+                        self.volume_busy = Some(volume.id.clone());
+                        self.effects.push(json!({"kind":"diskRelease","device":if volume.removable{volume.disk}else{volume.id},"action":if volume.removable{"disk-eject"}else{"disk-unmount"}}));
+                    }
+                }
                 "apps" => {
                     if let Some(apps) = event["apps"].as_array() {
                         shared.apps = apps.iter().take(512).cloned().collect();
@@ -1435,11 +1575,21 @@ impl Session {
                             || event["meta"].as_bool().unwrap_or(false);
                         let shift = event["shift"].as_bool().unwrap_or(false);
                         let multi = self.mode == Mode::Browser || self.multiple;
+                        let items = self.filtered();
+                        if !items.contains(&index) {
+                            return Ok(());
+                        }
                         let tab = self.tab_mut();
                         if shift && multi {
-                            let a = tab.anchor.min(index);
-                            let b = tab.anchor.max(index);
-                            tab.selected = (a..=b).collect();
+                            let a =
+                                items
+                                    .iter()
+                                    .position(|i| *i == tab.anchor)
+                                    .unwrap_or_else(|| {
+                                        items.iter().position(|i| *i == index).unwrap_or(0)
+                                    });
+                            let b = items.iter().position(|i| *i == index).unwrap_or(a);
+                            tab.selected = items[a.min(b)..=a.max(b)].iter().copied().collect();
                         } else if ctrl && multi {
                             if !tab.selected.remove(&index) {
                                 tab.selected.insert(index);
@@ -1448,7 +1598,10 @@ impl Session {
                             tab.selected.clear();
                             tab.selected.insert(index);
                         }
-                        tab.anchor = index;
+                        if !shift {
+                            tab.anchor = index;
+                        }
+                        tab.cursor = Some(index);
                         if self.mode == Mode::Save {
                             self.name = self.tab().entries[index].name.clone();
                         }
@@ -1615,7 +1768,7 @@ impl Session {
                         items.push((from.clone(), dst, shared.cut));
                     }
                     if !items.is_empty() {
-                        ops::start_batch(items)?;
+                        self.owned_jobs.insert(ops::start_batch(items)?);
                     }
                     if shared.cut {
                         shared.clipboard.clear();
@@ -1629,7 +1782,7 @@ impl Session {
                         items.push((e.raw.clone(), free_name(parent, &e.name), false));
                     }
                     if !items.is_empty() {
-                        ops::start_batch(items)?;
+                        self.owned_jobs.insert(ops::start_batch(items)?);
                     }
                     self.context = None;
                 }
@@ -1815,7 +1968,7 @@ impl Session {
                                 }
                             }
                             if !items.is_empty() {
-                                ops::start_batch(items)?;
+                                self.owned_jobs.insert(ops::start_batch(items)?);
                             }
                         }
                         self.context = None;
@@ -2159,13 +2312,17 @@ impl Session {
                 self.load(shared);
             }
             "goto" => {
-                let expanded = if value == "~" {
-                    self.policy.home.clone()
-                } else if let Some(v) = value.strip_prefix("~/") {
-                    self.policy.home.join(v)
-                } else {
-                    self.policy.absolute(Path::new(&value))
-                };
+                if value.contains("://") && !value.starts_with("file://") {
+                    self.dialog = Some(Dialog::Text {
+                        action: "connect".into(),
+                        title: "files.menu.connect".into(),
+                        value,
+                        paths: vec![],
+                    });
+                    return self.submit(shared);
+                }
+                let base = self.tab().location.path().unwrap_or(&self.policy.home);
+                let expanded = super::address::folder(&value, base, &self.policy.home)?;
                 let real = self.policy.read(&expanded)?;
                 if !real.is_dir() {
                     return Err("fs.notFile".into());
@@ -2311,6 +2468,30 @@ impl Session {
     }
     fn service(&mut self, event: &Value, shared: &Shared) -> Result<()> {
         let kind = event["kind"].as_str().unwrap_or("");
+        if kind == "pdfThumbnail" {
+            self.pdf_thumbnails.complete(event, &mut self.effects);
+            return Ok(());
+        }
+        if kind == "diskMount" || kind == "diskRelease" {
+            self.volume_busy = None;
+            self.policy = policy::mount_roots(shared.volumes.iter().filter_map(|v| v.path.clone()));
+            if event["error"].is_string() {
+                return Err(event["error"].as_str().unwrap().into());
+            }
+            if kind == "diskMount" {
+                let path = PathBuf::from(event["result"].as_str().ok_or("sys.badArgument")?.trim());
+                let mut paths: Vec<_> = shared
+                    .volumes
+                    .iter()
+                    .filter_map(|v| v.path.clone())
+                    .collect();
+                paths.push(path.clone());
+                self.policy = policy::mount_roots(paths.into_iter());
+                let real = self.policy.read(&path)?;
+                self.navigate(Location::Directory(real), shared, true);
+            }
+            return Ok(());
+        }
         if ["documentPreview", "mediaPreview", "archivePreview"].contains(&kind)
             && event["generation"].as_u64() != Some(self.dialog_epoch)
         {
@@ -2420,6 +2601,15 @@ impl Session {
             } else {
                 None
             }
+        } else if modifier && ["1", "2", "3", "4"].contains(&lower.as_str()) {
+            let mode = match lower.as_str() {
+                "2" => "list",
+                "3" => "columns",
+                "4" => "gallery",
+                _ => "icons",
+            };
+            self.event(&json!({"action":["view",mode]}), shared);
+            return Ok(());
         } else if modifier && lower == "tab" && self.mode == Mode::Browser {
             let next = if shift {
                 (self.active + self.tabs.len() - 1) % self.tabs.len()
@@ -2503,7 +2693,14 @@ impl Session {
                 32.
             };
             let height = self.entry_area();
-            let at = items.iter().position(|i| self.tab().selected.contains(i));
+            let at = if self.tab().selected.is_empty() {
+                None
+            } else {
+                self.tab()
+                    .cursor
+                    .and_then(|c| items.iter().position(|i| *i == c))
+                    .or_else(|| items.iter().position(|i| self.tab().selected.contains(i)))
+            };
             let previous = at.unwrap_or(0);
             let page = (height / row).floor().max(1.) as usize * cols;
             let next = if key == "End" {
@@ -2539,6 +2736,14 @@ impl Session {
         Ok(())
     }
 }
+impl Drop for Session {
+    fn drop(&mut self) {
+        for id in &self.owned_jobs {
+            ops::detach(*id);
+        }
+    }
+}
+
 pub fn kind(name: &str) -> &'static str {
     let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {

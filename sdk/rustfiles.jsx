@@ -17,6 +17,7 @@ import { archive } from './archive.js';
 import { DocImage, pdfThumb, fontSample, releaseImage } from './doc.js';
 import { media } from './media.js';
 import { lan } from './lan.js';
+import { useDisks, disks } from './disks.js';
 const modalHandles = new Set();
 
 export function filesRequest(value) {
@@ -60,7 +61,7 @@ function Widget({ node, send, path = 'root' }) {
       selectAll: node.selectAll, onChange: (value) => send(node.action, null, { value }), onSubmit: node.submit ? () => send(node.submit) : undefined, onCancel: node.cancel ? () => send(node.cancel) : undefined });
     case 'image': return h(Image, { ...props, src: node.src });
     case 'media': return h(MediaView, { ...props, media: media.view(node.media, { fit: 'contain' }) });
-    case 'documentImage': return h(DocImage, { ...props, image: node.image });
+    case 'documentImage': return h(DocImage, { ...props, image: node.image?.id || 0 });
     case 'scroll': return h(ScrollView, { ...props, horizontal: node.horizontal }, ...children);
     default: return h(View, props, ...children);
   }
@@ -78,6 +79,18 @@ function eventData(e, root) {
 // All requests/results go back through the owning Rust window handle.
 async function hostEffect(effect) {
   switch (effect.kind) {
+    case 'diskMount':
+    case 'diskRelease': {
+      const { job } = filesRequest({ op: 'volumeStart', action: effect.kind === 'diskMount' ? 'mount' : 'release', device: effect.device });
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const result = filesRequest({ op: 'volumePoll', job });
+        if (!result.done) continue;
+        if (result.failure) throw new Error(errorText(result.failure));
+        return { result: result.result, disks: disks.list() };
+      }
+    }
+    case 'pdfThumbnail': { const result = await pdfThumb(effect.path, { width: 128, height: 176 }); return { result: { id: result.image, w: result.w, h: result.h } }; }
     case 'networkScan': {
       if (!lan.available()) return { result: { state: 'no-connector', hosts: [] } };
       lan.start();
@@ -96,7 +109,7 @@ async function hostEffect(effect) {
       await archive.extract(effect.path, destination, { only: [effect.entry] });
       return { path: `${destination}/${effect.entry}` };
     }
-    case 'documentPreview': return { result: effect.format === 'pdf' ? await pdfThumb(effect.path, { width: 600, height: 500 }) : await fontSample(effect.path, { width: 600, lines: ['Axia', 'Aa Bb Cc 0123456789'] }) };
+    case 'documentPreview': { const result = effect.format === 'pdf' ? await pdfThumb(effect.path, { width: 600, height: 500 }) : await fontSample(effect.path, { width: 600, lines: ['Axia', 'Aa Bb Cc 0123456789'] }); return { result: { id: result.image, w: result.w, h: result.h } }; }
     case 'mediaPreview': return { result: media.play('files', effect.path, { audio: 1 }) };
     default: return null;
   }
@@ -110,17 +123,28 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
   const theme = useTheme();
   const win = useAppWindow();
   const apps = useLauncherApps();
-  const root = useRef(null), live = useRef(true), pending = useRef(new Set()), resources = useRef({ media: new Set(), images: new Set() }), capture = useRef(false), delivered = useRef(0), latest = useRef(null);
+  const [volumes] = useDisks();
+  const root = useRef(null), live = useRef(true), pending = useRef(new Set()), resources = useRef({ media: new Set(), images: new Set() }), capture = useRef(false), latest = useRef(null);
   const [snapshot, setSnapshot] = useState(() => filesRequest({ op: 'create', mode, args, title, start, name, multiple,
     filter: filter?.source || '', ignoreCase: !!filter?.ignoreCase, preferences: settings.get().files,
     apps: appMetadata(apps) }));
   const handle = useRef(snapshot.id).current;
-  const accept = (result) => { if (result && live.current) { capture.current = !!result.capture; setSnapshot(result); } };
+  // React may batch several snapshots into one render. Preserve the effects of
+  // every accepted response, including intermediate snapshots that never paint.
+  const received = useRef(snapshot.serial), effectQueue = useRef(null);
+  if (effectQueue.current === null) effectQueue.current = [...(snapshot.effects || [])];
+  const accept = (result) => {
+    if (result && live.current) {
+      if (result.serial > received.current) { received.current = result.serial; effectQueue.current.push(...(result.effects || [])); }
+      capture.current = !!result.capture; setSnapshot(result);
+    }
+  };
   const send = (action, e, extra = {}) => {
     if (!live.current || !action) return;
     accept(filesRequest({ op: 'event', id: handle, action, ...eventData(e, root), ...extra }));
   };
   latest.current = { theme, send, onPick, onClose, win };
+  useEffect(() => { send(['disks'], null, { disks: volumes }); }, [volumes]);
   const metadata = JSON.stringify(appMetadata(apps));
   useEffect(() => { send(['apps'], null, { apps: JSON.parse(metadata) }); }, [metadata]);
   useKeyboard((e) => { if (mode === 'browser' && !modalHandles.size) send(['key'], e); });
@@ -149,13 +173,12 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
   }, [snapshot, win?.id, mode]);
 
   useEffect(() => {
-    if (delivered.current === snapshot.serial) return;
-    delivered.current = snapshot.serial;
-    for (const effect of snapshot.effects || []) {
+    for (const effect of effectQueue.current.splice(0)) {
       if (effect.kind === 'choose') { latest.current.onPick?.(multiple ? effect.paths : effect.paths[0]); continue; }
       if (effect.kind === 'cancel' || effect.kind === 'close') { if (mode === 'browser') wm.close(latest.current.win.id); else latest.current.onClose?.(); continue; }
       if (effect.kind === 'newWindow') { wm.open('files', { new: true, args: { path: effect.path } }); continue; }
       if (effect.kind === 'launchApp') { launchApp(effect.id); continue; }
+      if (effect.kind === 'manageDisk') { wm.open('disks', { args: { disk: effect.disk } }); continue; }
       if (effect.kind === 'terminal') { wm.open('terminal', { new: true, args: { cwd: effect.path } }); continue; }
       if (effect.kind === 'clipboardText') { clipboard.set(effect.text); continue; }
       if (effect.kind === 'closePreview') { if (effect.media) { media.close(effect.media); resources.current.media.delete(effect.media); } if (effect.image?.id) { releaseImage(effect.image.id); resources.current.images.delete(effect.image.id); } continue; }
@@ -170,9 +193,9 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
       if (effect.kind === 'openUri') { lord.apps.launchUri(effect.app || '', effect.uri); continue; }
       if (effect.kind === 'remoteDesktop') { wm.open('remote-desk', { new: true, args: effect.args }); continue; }
       const task = hostEffect(effect).then((result) => {
-        if (live.current && result) { if (effect.kind === 'mediaPreview' && result.result) resources.current.media.add(result.result); if (effect.kind === 'documentPreview' && result.result?.id) resources.current.images.add(result.result.id); accept(filesRequest({ op: 'event', id: handle, action: ['service'], kind: effect.kind, generation: effect.generation, ...result })); }
+        if (live.current && result) { if (effect.kind === 'mediaPreview' && result.result) resources.current.media.add(result.result); if (['documentPreview', 'pdfThumbnail'].includes(effect.kind) && result.result?.id) resources.current.images.add(result.result.id); if (result.disks) latest.current.send(['disks'], null, { disks: result.disks }); accept(filesRequest({ op: 'event', id: handle, action: ['service'], kind: effect.kind, generation: effect.generation, ...result })); }
         else if (effect.kind === 'mediaPreview' && result?.result) media.close(result.result);
-        else if (effect.kind === 'documentPreview' && result?.result?.id) releaseImage(result.result.id);
+        else if (['documentPreview', 'pdfThumbnail'].includes(effect.kind) && result?.result?.id) releaseImage(result.result.id);
       }).catch((error) => { if (live.current) accept(filesRequest({ op: 'event', id: handle, action: ['service'], kind: effect.kind, generation: effect.generation, error: error.message || String(error) })); });
       pending.current.add(task); task.finally(() => pending.current.delete(task));
     }

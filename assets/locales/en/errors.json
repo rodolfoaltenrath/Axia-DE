@@ -1,4 +1,10 @@
 {
+  "files.deviceDenied": "Access to the drive was not authorized. Try again and approve the system request.",
+  "files.deviceBusy": "The drive is still in use. Close its open files and try again.",
+  "files.deviceUnsupported": "This drive format is not supported by the system.",
+  "files.deviceUnavailable": "The drive is no longer available. Check its connection.",
+  "files.deviceFailed": "Could not complete the drive operation. Check its connection and try again.",
+  "files.brokenLink": "This link points to a file or folder that is no longer available.",
   "admin.actionFailed": "The action finished with an error",
   "admin.forkFailed": "Could not start the action",
   "admin.invalidArgument": "Invalid argument",

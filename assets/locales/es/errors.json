@@ -1,4 +1,10 @@
 {
+  "files.deviceDenied": "No se autorizó el acceso a la unidad. Inténtalo de nuevo y confirma la solicitud del sistema.",
+  "files.deviceBusy": "La unidad sigue en uso. Cierra sus archivos abiertos e inténtalo de nuevo.",
+  "files.deviceUnsupported": "El sistema no admite este formato de unidad.",
+  "files.deviceUnavailable": "La unidad ya no está disponible. Comprueba la conexión.",
+  "files.deviceFailed": "No se pudo completar la operación. Comprueba la conexión e inténtalo de nuevo.",
+  "files.brokenLink": "Este enlace apunta a un archivo o carpeta que ya no está disponible.",
   "admin.actionFailed": "La acción terminó con un error",
   "admin.forkFailed": "No se pudo iniciar la acción",
   "admin.invalidArgument": "Argumento inválido",

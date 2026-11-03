@@ -916,3 +916,412 @@ fn close_tab_shortcut_closes_the_active_tab() {
     assert_eq!(s.tabs[0].location, Location::Directory(h.root.clone()));
     assert_eq!(s.tabs[1].location, Location::Directory(two));
 }
+
+fn enter_text(s: &mut Session, shared: &mut Shared, text: &str) {
+    s.event(&json!({"action":["dialogText"],"value":text}), shared);
+    event(s, shared, "submit", Value::Null);
+    ready(s, shared);
+}
+#[test]
+fn create_rename_and_collisions_preserve_existing_files() {
+    let h = Home::new();
+    let (mut s, mut shared) = h.session(json!({}));
+    event(&mut s, &mut shared, "newFolder", Value::Null);
+    enter_text(&mut s, &mut shared, "Pasta com espaços");
+    assert!(h.path("Pasta com espaços").is_dir());
+    select(&mut s, &mut shared, "Pasta com espaços");
+    event(&mut s, &mut shared, "rename", Value::Null);
+    enter_text(&mut s, &mut shared, "Renomeada");
+    assert!(h.path("Renomeada").is_dir());
+    assert!(!h.path("Pasta com espaços").exists());
+    h.file("existente.txt", "original");
+    h.file("outro.txt", "outro");
+    event(&mut s, &mut shared, "refresh", Value::Null);
+    ready(&mut s, &shared);
+    select(&mut s, &mut shared, "outro.txt");
+    event(&mut s, &mut shared, "rename", Value::Null);
+    enter_text(&mut s, &mut shared, "existente.txt");
+    assert!(s.error.is_some());
+    let tree = s.render(&shared);
+    let modal = tree["children"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["style"]["zIndex"] == 200)
+        .expect("rename dialog stays open after a collision");
+    assert!(
+        modal.to_string().contains(s.error.as_ref().unwrap()),
+        "rename failure must be shown inside the dialog"
+    );
+    assert_eq!(
+        fs::read_to_string(h.path("existente.txt")).unwrap(),
+        "original"
+    );
+    assert_eq!(fs::read_to_string(h.path("outro.txt")).unwrap(), "outro");
+}
+#[test]
+fn back_forward_up_and_breadcrumb_navigation_keep_history_consistent() {
+    let h = Home::new();
+    let one = h.dir("one");
+    let two = h.dir("one/two");
+    let other = h.dir("other");
+    let (mut s, mut shared) = h.session(json!({}));
+    for path in [&one, &two] {
+        event(&mut s, &mut shared, "navigate", json!(path));
+        ready(&mut s, &shared);
+    }
+    event(&mut s, &mut shared, "back", Value::Null);
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().location, Location::Directory(one.clone()));
+    event(&mut s, &mut shared, "forward", Value::Null);
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().location, Location::Directory(two));
+    event(&mut s, &mut shared, "up", Value::Null);
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().location, Location::Directory(one));
+    event(&mut s, &mut shared, "back", Value::Null);
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "navigate", json!(other.clone()));
+    ready(&mut s, &shared);
+    assert!(s.tab().forward.is_empty());
+    event(&mut s, &mut shared, "forward", Value::Null);
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().location, Location::Directory(other));
+}
+#[test]
+fn folder_links_file_urls_relative_addresses_and_failed_paths_are_recoverable() {
+    let h = Home::new();
+    let dest = h.dir("Folder with spaces");
+    h.file("Folder with spaces/inside.txt", "data");
+    symlink(&dest, h.path("shortcut")).unwrap();
+    let (mut s, mut shared) = h.session(json!({}));
+    let index = s
+        .tab()
+        .entries
+        .iter()
+        .position(|e| e.name == "shortcut")
+        .unwrap();
+    event(&mut s, &mut shared, "activate", json!(index));
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().entries[0].name, "inside.txt");
+    event(&mut s, &mut shared, "back", Value::Null);
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "goTo", Value::Null);
+    enter_text(
+        &mut s,
+        &mut shared,
+        &format!("file://{}/Folder%20with%20spaces", h.root.display()),
+    );
+    assert_eq!(s.tab().location, Location::Directory(dest.clone()));
+    event(&mut s, &mut shared, "goTo", Value::Null);
+    enter_text(&mut s, &mut shared, "..");
+    assert_eq!(s.tab().location, Location::Directory(h.root.clone()));
+    event(&mut s, &mut shared, "goTo", Value::Null);
+    enter_text(&mut s, &mut shared, "Folder with spaces");
+    assert_eq!(s.tab().location, Location::Directory(dest.clone()));
+    event(&mut s, &mut shared, "goTo", Value::Null);
+    enter_text(&mut s, &mut shared, "does-not-exist");
+    assert!(s.error.is_some());
+    assert_eq!(s.tab().location, Location::Directory(dest));
+}
+#[test]
+fn shift_selection_excludes_hidden_filtered_files_and_extends_from_cursor() {
+    let h = Home::new();
+    for name in ["a.txt", "b.txt", "c.txt", "hidden.log"] {
+        h.file(name, "");
+    }
+    let (mut s, mut shared) = h.session(json!({}));
+    s.event(&json!({"action":["query"],"value":".txt"}), &mut shared);
+    select(&mut s, &mut shared, "a.txt");
+    event(&mut s, &mut shared, "view", json!("list"));
+    for _ in 0..2 {
+        s.event(
+            &json!({"action":["key"],"key":"ArrowDown","shift":true}),
+            &mut shared,
+        );
+    }
+    assert_eq!(
+        s.selected()
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["a.txt", "b.txt", "c.txt"]
+    );
+    s.event(
+        &json!({"action":["key"],"key":"ArrowUp","shift":true}),
+        &mut shared,
+    );
+    assert_eq!(s.selected().len(), 2);
+    // Arrange an excluded entry between two visible entries in the backing list.
+    let hidden = ops::entry(&h.path("hidden.log")).unwrap();
+    s.tab_mut().entries.insert(1, hidden);
+    select(&mut s, &mut shared, "a.txt");
+    let end = s
+        .tab()
+        .entries
+        .iter()
+        .position(|e| e.name == "c.txt")
+        .unwrap();
+    s.event(&json!({"action":["select",end],"shift":true}), &mut shared);
+    assert!(s.selected().iter().all(|e| e.name.ends_with(".txt")));
+}
+fn disks_fact(path: Option<&Path>) -> Value {
+    json!([{"name":"sdb","transport":"usb","removable":true,"system":false,"partitions":[{"name":"sdb1","fstype":"exfat","label":"USB de teste","mountpoint":path.map(|p|p.to_string_lossy()).unwrap_or_default()}]}])
+}
+#[test]
+fn hotplug_mount_and_eject_use_native_actions_and_update_the_sidebar() {
+    let h = Home::new();
+    let mount = h.dir("USB de teste");
+    h.file("USB de teste/note.txt", "usb");
+    let (mut s, mut shared) = h.session(json!({}));
+    s.event(
+        &json!({"action":["disks"],"disks":disks_fact(None)}),
+        &mut shared,
+    );
+    assert!(s.render(&shared).to_string().contains("USB de teste"));
+    event(&mut s, &mut shared, "volumeOpen", json!("sdb1"));
+    assert!(s
+        .effects
+        .iter()
+        .any(|e| e["kind"] == "diskMount" && e["device"] == "sdb1"));
+    s.event(
+        &json!({"action":["disks"],"disks":disks_fact(Some(&mount))}),
+        &mut shared,
+    );
+    s.event(
+        &json!({"action":["service"],"kind":"diskMount","result":mount.to_str()}),
+        &mut shared,
+    );
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().location, Location::Directory(mount.clone()));
+    assert_eq!(s.tab().entries[0].name, "note.txt");
+    event(&mut s, &mut shared, "volumeRelease", json!("sdb1"));
+    assert!(s.effects.iter().any(|e| e["kind"] == "diskRelease"
+        && e["device"] == "sdb"
+        && e["action"] == "disk-eject"));
+    s.event(&json!({"action":["disks"],"disks":[]}), &mut shared);
+    ready(&mut s, &shared);
+    assert_eq!(s.tab().location, Location::Directory(h.root.clone()));
+    assert!(!s.render(&shared).to_string().contains("volumeOpen"));
+}
+#[test]
+fn internal_ssd_is_listed_unmounted_and_failures_leave_files_untouched() {
+    let h = Home::new();
+    let (mut s, mut shared) = h.session(json!({}));
+    s.event(&json!({"action":["disks"],"disks":[{"name":"nvme1n1","transport":"nvme","partitions":[{"name":"nvme1n1p1","fstype":"ext4","label":"SSD","mountpoint":""}]}]}),&mut shared);
+    assert_eq!(shared.volumes.len(), 1);
+    assert!(!shared.volumes[0].removable);
+    event(&mut s, &mut shared, "volumeOpen", json!("nvme1n1p1"));
+    s.event(
+        &json!({"action":["service"],"kind":"diskMount","error":"disk.internalNeedsAdmin"}),
+        &mut shared,
+    );
+    assert!(s.volume_busy.is_none());
+    assert_eq!(s.error.as_deref(), Some("disk.internalNeedsAdmin"));
+    assert_eq!(s.tab().location, Location::Directory(h.root.clone()));
+}
+#[test]
+fn unplugging_a_volume_removes_stale_locations_from_every_tab_and_window() {
+    let h = Home::new();
+    let mount = h.dir("USB");
+    let sub = h.dir("USB/sub");
+    let (mut a, mut shared) = h.session(json!({}));
+    let mut b = Session::new(2, &json!({}), &mut shared).unwrap();
+    ready(&mut b, &shared);
+    a.event(
+        &json!({"action":["disks"],"disks":disks_fact(Some(&mount))}),
+        &mut shared,
+    );
+    a.poll(&json!({}), &shared);
+    b.poll(&json!({}), &shared);
+    for s in [&mut a, &mut b] {
+        event(s, &mut shared, "navigate", json!(sub));
+        ready(s, &shared);
+        event(s, &mut shared, "newTab", Value::Null);
+        ready(s, &shared);
+    }
+    a.event(&json!({"action":["disks"],"disks":[]}), &mut shared);
+    a.poll(&json!({}), &shared);
+    b.poll(&json!({}), &shared);
+    for s in [&a, &b] {
+        for tab in &s.tabs {
+            assert_eq!(tab.location, Location::Directory(h.root.clone()));
+            assert!(!tab
+                .back
+                .iter()
+                .any(|l| l.path().is_some_and(|p| p.starts_with(&mount))));
+        }
+    }
+}
+#[test]
+fn mounted_secondary_disks_extend_and_revoke_writable_roots() {
+    let h = Home::new();
+    let outside = h.root.with_extension("disk");
+    fs::create_dir(&outside).unwrap();
+    let (mut s, mut shared) = h.session(json!({}));
+    assert!(!s.policy.allowed(&outside));
+    s.event(
+        &json!({"action":["disks"],"disks":disks_fact(Some(&outside))}),
+        &mut shared,
+    );
+    assert!(s.policy.allowed(&outside));
+    ops::mkdir(&outside.join("new")).unwrap();
+    s.event(&json!({"action":["disks"],"disks":[]}), &mut shared);
+    assert!(!s.policy.allowed(&outside));
+    assert!(ops::mkdir(&outside.join("denied")).is_err());
+    fs::remove_dir_all(outside).unwrap();
+}
+#[test]
+fn resizing_all_views_keeps_the_last_selected_file_visible() {
+    let h = Home::new();
+    for n in 0..200 {
+        h.file(&format!("file-{n:03}.txt"), "");
+    }
+    let (mut s, mut shared) = h.session(json!({}));
+    fn cell<'a>(node: &'a Value, index: usize) -> Option<&'a Value> {
+        if node["events"]["onClick"] == json!(["select", index]) {
+            return Some(node);
+        }
+        node["children"]
+            .as_array()?
+            .iter()
+            .find_map(|c| cell(c, index))
+    }
+    for mode in ["icons", "list", "columns", "gallery"] {
+        event(&mut s, &mut shared, "view", json!(mode));
+        for (w, h) in [(1920, 1080), (640, 359), (1366, 727), (700, 420)] {
+            for side in [150., 340.] {
+                s.side_width = side;
+                s.poll(&json!({"width":w,"height":h}), &shared);
+                s.event(&json!({"action":["key"],"key":"End"}), &mut shared);
+                let index = *s.tab().selected.first().unwrap();
+                let tree = s.render(&shared);
+                let cell = cell(&tree, index).unwrap();
+                let top = cell["style"]["top"].as_f64().unwrap();
+                let height = cell["style"]["height"].as_f64().unwrap();
+                assert!(
+                    top >= -0.01 && top + height <= s.entry_height() + 0.01,
+                    "{mode} {w} {h} {side}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn broken_links_report_an_error_and_view_shortcuts_match_the_toolbar() {
+    let h = Home::new();
+    symlink("missing", h.path("broken")).unwrap();
+    let (mut s, mut shared) = h.session(json!({}));
+    select(&mut s, &mut shared, "broken");
+    event(&mut s, &mut shared, "open", Value::Null);
+    assert_eq!(s.error.as_deref(), Some("files.brokenLink"));
+    assert!(!s.effects.iter().any(|e| e["kind"] == "openPath"));
+    for (key, mode) in [
+        ("1", "icons"),
+        ("2", "list"),
+        ("3", "columns"),
+        ("4", "gallery"),
+    ] {
+        s.event(
+            &json!({"action":["key"],"key":key,"ctrl":true}),
+            &mut shared,
+        );
+        assert_eq!(s.tab().view, mode);
+    }
+}
+
+#[test]
+fn unformatted_disks_open_management_without_mounting_or_formatting() {
+    let h = Home::new();
+    let (mut s, mut shared) = h.session(json!({}));
+    s.event(&json!({"action":["disks"],"disks":[{"name":"nvme1n1","transport":"nvme","fstype":"","partitions":[]}]}),&mut shared);
+    assert_eq!(shared.volumes.len(), 1);
+    assert!(!shared.volumes[0].mountable);
+    event(&mut s, &mut shared, "volumeOpen", json!("nvme1n1"));
+    assert!(s
+        .effects
+        .iter()
+        .any(|e| e["kind"] == "manageDisk" && e["disk"] == "nvme1n1"));
+    assert!(!s.effects.iter().any(|e| e["kind"] == "diskMount"));
+}
+
+#[test]
+fn browser_polling_never_consumes_a_c_callers_copy_result() {
+    let h = Home::new();
+    let from = h.file("source.txt", "C consumer data");
+    let to = h.path("target.txt");
+    let (mut s, shared) = h.session(json!({}));
+    let id = ops::start(&from, &to, false).unwrap();
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        s.poll(&json!({}), &shared);
+        let jobs = ops::jobs();
+        let job = jobs
+            .iter()
+            .find(|j| j.id == id)
+            .expect("Files must not forget another caller's result");
+        if job.done {
+            assert!(!job.failed);
+            break;
+        }
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    s.poll(&json!({}), &shared);
+    assert!(ops::jobs().iter().any(|j| j.id == id));
+    assert_eq!(fs::read_to_string(to).unwrap(), "C consumer data");
+    ops::forget(id);
+}
+#[test]
+fn copy_failures_belong_to_the_initiating_window() {
+    let h = Home::new();
+    let from = h.path("source.pipe");
+    let path = std::ffi::CString::new(from.as_os_str().as_encoded_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+    let destination = h.dir("destination");
+    let (mut owner, mut shared) = h.session(json!({}));
+    let mut other = Session::new(2, &json!({}), &mut shared).unwrap();
+    ready(&mut other, &shared);
+    select(&mut owner, &mut shared, "source.pipe");
+    event(&mut owner, &mut shared, "copy", Value::Null);
+    event(&mut owner, &mut shared, "navigate", json!(destination));
+    ready(&mut owner, &shared);
+    event(&mut owner, &mut shared, "paste", Value::Null);
+    let id = ops::jobs()[0].id;
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        other.poll(&json!({}), &shared);
+        if ops::jobs().iter().any(|j| j.id == id && j.done) {
+            break;
+        }
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(other.job_errors.is_empty());
+    owner.poll(&json!({}), &shared);
+    assert!(!owner.job_errors.is_empty());
+    assert!(!ops::jobs().iter().any(|j| j.id == id));
+}
+#[test]
+fn closing_the_browser_does_not_abort_copies_or_leak_job_slots() {
+    let h = Home::new();
+    let from = h.file("source.txt", "keep copying after close");
+    let destination = h.dir("destination");
+    let (mut s, mut shared) = h.session(json!({}));
+    select(&mut s, &mut shared, "source.txt");
+    event(&mut s, &mut shared, "copy", Value::Null);
+    event(&mut s, &mut shared, "navigate", json!(destination.clone()));
+    ready(&mut s, &shared);
+    event(&mut s, &mut shared, "paste", Value::Null);
+    drop(s);
+    let until = Instant::now() + Duration::from_secs(3);
+    while !ops::jobs().is_empty() {
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        fs::read(destination.join("source.txt")).unwrap(),
+        fs::read(from).unwrap()
+    );
+}

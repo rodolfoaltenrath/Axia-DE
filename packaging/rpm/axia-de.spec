@@ -42,6 +42,7 @@ Requires:       xkeyboard-config
 Requires:       libX11-common
 Requires:       tzdata
 Requires:       dnf5
+Requires:       udisks2
 Requires:       gvfs
 Requires:       gvfs-fuse
 Recommends:     gvfs-smb

@@ -47,6 +47,21 @@ pub fn current() -> Policy {
     state().read().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
+// Only mount points reported by the native disk service reach this function.
+// Kernel ownership/mode checks still apply to every operation.
+pub fn mount_roots(paths: impl Iterator<Item = PathBuf>) -> Policy {
+    let mut p = state().write().unwrap_or_else(|e| e.into_inner());
+    p.roots.truncate(4);
+    for path in paths {
+        if let Ok(real) = fs::canonicalize(&path) {
+            if super::volumes::safe_mount(&real) && !p.roots.contains(&real) {
+                p.roots.push(real);
+            }
+        }
+    }
+    p.clone()
+}
+
 impl Policy {
     pub fn new(home: &Path, user: &str) -> Self {
         let home = fs::canonicalize(home).unwrap_or_else(|_| home.to_owned());
