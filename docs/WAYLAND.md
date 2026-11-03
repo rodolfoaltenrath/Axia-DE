@@ -25,7 +25,7 @@ Apps that only speak X11 open through Xwayland, started on demand, with our own 
 
 | Protocol | Version | What it does |
 |---|---|---|
-| `wl_compositor`, `wl_region` | 6 | surfaces; the buffer is copied on commit and released right away |
+| `wl_compositor`, `wl_region` | 6 | surfaces; the buffer is copied on commit and released right away; input regions support rectangle union/subtraction and commit-time snapshots |
 | `wl_shm` | (libwayland) | ARGB8888/XRGB8888 shared memory |
 | `wl_subcompositor` | 1 | subsurfaces (composited on top of their parent) |
 | `wl_output` | 4 | one per display: logical position, physical mode, scale rounded up, name and description (`DISPLAYS.md`) |
@@ -467,13 +467,26 @@ display.
   frame, close, the Dock icons, Xwayland stopping 10 s after the last app and starting again, the
   firewall restriction on XTerm, and the protected-window checks in `PRIVACY.md`.
 
+## Input regions: Firefox and LibreWolf
+
+Firefox ESR's ignored clicks were already reported upstream on VM 119 (October 19).
+Reproduced on Fedora with LibreWolf 159: keyboard input worked, but the compositor sent mouse
+events to a drawing subsurface whose input region was explicitly empty. Gecko expects input on
+its GTK parent surface. `wl_surface.set_input_region` and `wl_region` operations were no-ops.
+
+The compositor now honors empty, finite and default infinite regions. It copies regions when
+requested, applies them on surface commit, and tests children independently of their parent's
+input region, as required by the [Wayland protocol](https://wayland.freedesktop.org/docs/html/apa.html#protocol-spec-wl_surface-request-set_input_region).
+The drawing subsurface is skipped and the GTK surface receives the mouse.
+
+`make -C server build/wl-input-region-test && server/build/wl-input-region-test` checks rectangle
+operations, copy lifetime, pending/current state, NULL reset and child-to-parent input routing.
+It also runs in `test-platform` and the RPM checks. A real LibreWolf instance with a temporary
+profile in an isolated headless desktop failed to activate a page button before this fix and
+activated it after the fix. Firefox itself was not installed for this verification.
+
 ## Pending
 
-- **Firefox ESR 153 ignored mouse clicks on VM 119** (October 19, QEMU's USB tablet through QMP):
-  the pointer reaches it (`enter`, `motion`, `button` on its content subsurface, checked with
-  `WAYLAND_DEBUG`) and the keyboard works, but buttons, menus and pages don't react; the same with
-  the build installed before (October 18) and with the LordOS frame, so it isn't the frame. To
-  investigate (two `wl_seat` bindings from the same client get the events twice).
 - SVG app icons (most modern GTK/Qt apps only ship SVG).
 - Terminal apps (`Terminal=true`: neither listed nor launched). (Opening files with a Linux app,
   `%f`/`%u`, and `.desktop` actions: done, see "The launcher" above; actions since 0.8.1.)

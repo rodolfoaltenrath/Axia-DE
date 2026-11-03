@@ -76,6 +76,44 @@ typedef struct Dmabuf {
 } Dmabuf;
 
 typedef struct Surf Surf;
+/* wl_region uses surface-local coordinates. Keep copies: clients may destroy or
+ * mutate a region immediately after set_input_region, before surface.commit. */
+typedef struct { int64_t x1, y1, x2, y2; } InputRect;
+typedef struct { InputRect *rects; size_t len, cap; } InputRegion;
+
+static void input_region_free(InputRegion *r) {
+    if (r) { free(r->rects); free(r); }
+}
+static int input_region_append(InputRegion *r, InputRect rect) {
+    if (r->len == r->cap) {
+        size_t cap = r->cap ? r->cap * 2 : 8;
+        if (cap < r->cap || cap > SIZE_MAX / sizeof *r->rects) return 0;
+        InputRect *p = realloc(r->rects, cap * sizeof *p);
+        if (!p) return 0;
+        r->rects = p; r->cap = cap;
+    }
+    r->rects[r->len++] = rect;
+    return 1;
+}
+static InputRegion *input_region_copy(const InputRegion *r) {
+    InputRegion *copy = calloc(1, sizeof *copy);
+    if (!copy) return NULL;
+    if (r->len) {
+        copy->rects = malloc(r->len * sizeof *r->rects);
+        if (!copy->rects) { free(copy); return NULL; }
+        memcpy(copy->rects, r->rects, r->len * sizeof *r->rects);
+        copy->len = copy->cap = r->len;
+    }
+    return copy;
+}
+static int input_region_contains(const InputRegion *r, float x, float y) {
+    if (!r) return 1;            /* NULL is the default infinite input region */
+    for (size_t i = 0; i < r->len; i++) {
+        InputRect b = r->rects[i];
+        if ((double)x >= b.x1 && (double)y >= b.y1 && (double)x < b.x2 && (double)y < b.y2) return 1;
+    }
+    return 0;
+}
 struct Surf {
     struct wl_resource *res;
     struct wl_client *client;
@@ -84,6 +122,8 @@ struct Surf {
     struct wl_resource *p_buf;
     struct wl_listener p_buf_destroy;
     int p_attached, p_gx, p_gy, p_gw, p_gh, p_geom;
+    InputRegion *input, *p_input;     /* NULL infinite; allocated empty region rejects input */
+    int p_input_set;
     struct wl_list p_frames, frames;
     /* current */
     uint32_t *px;
@@ -543,10 +583,28 @@ static void srf_region(struct wl_client *c, struct wl_resource *r, struct wl_res
     (void)c; (void)r; (void)region;
 }
 
+static void srf_input_region(struct wl_client *c, struct wl_resource *r, struct wl_resource *region) {
+    Surf *s = wl_resource_get_user_data(r);
+    InputRegion *copy = region ? input_region_copy(wl_resource_get_user_data(region)) : NULL;
+    if (region && !copy) { wl_client_post_no_memory(c); return; }
+    input_region_free(s->p_input);
+    s->p_input = copy;
+    s->p_input_set = 1;
+}
+
+static void commit_input_region(Surf *s) {
+    if (!s->p_input_set) return;
+    input_region_free(s->input);
+    s->input = s->p_input;
+    s->p_input = NULL;
+    s->p_input_set = 0;
+}
+
 static void srf_commit(struct wl_client *c, struct wl_resource *r) {
     (void)c;
     Surf *s = wl_resource_get_user_data(r);
     if (keylag_enabled && key_focus && c == key_focus->client) keylag_commit();
+    commit_input_region(s);
     if (s->p_attached) {
         take_buffer(s, s->p_buf);
         if (s->p_buf) { wl_list_remove(&s->p_buf_destroy.link); wl_list_init(&s->p_buf_destroy.link); }
@@ -585,7 +643,7 @@ static void srf_offset(struct wl_client *c, struct wl_resource *r, int32_t x, in
 
 static const struct wl_surface_interface surface_impl = {
     .destroy = srf_destroy, .attach = srf_attach, .damage = srf_damage, .frame = srf_frame,
-    .set_opaque_region = srf_region, .set_input_region = srf_region, .commit = srf_commit,
+    .set_opaque_region = srf_region, .set_input_region = srf_input_region, .commit = srf_commit,
     .set_buffer_transform = srf_transform, .set_buffer_scale = srf_scale, .damage_buffer = srf_damage,
     .offset = srf_offset,
 };
@@ -635,6 +693,8 @@ static void surface_gone(struct wl_resource *r) {
     constraint_update();                /* s may have been the window with the keyboard */
     if (s->dmabuf) queue_release(s->dmabuf);
     gpu_tex_free(s->tex);
+    input_region_free(s->input);
+    input_region_free(s->p_input);
     free(s->px);
     free(s);
 }
@@ -642,10 +702,37 @@ static void surface_gone(struct wl_resource *r) {
 /* ---- wl_compositor / wl_region ---- */
 
 static void rgn_destroy(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
-static void rgn_op(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t w, int32_t h) {
-    (void)c; (void)r; (void)x; (void)y; (void)w; (void)h;
+static void rgn_add(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t w, int32_t h) {
+    if (w <= 0 || h <= 0) return;
+    InputRect b = { x, y, (int64_t)x + w, (int64_t)y + h };
+    if (!input_region_append(wl_resource_get_user_data(r), b)) wl_client_post_no_memory(c);
 }
-static const struct wl_region_interface region_impl = { .destroy = rgn_destroy, .add = rgn_op, .subtract = rgn_op };
+static void rgn_subtract(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t w, int32_t h) {
+    if (w <= 0 || h <= 0) return;
+    InputRegion *region = wl_resource_get_user_data(r), next = {0};
+    InputRect cut = { x, y, (int64_t)x + w, (int64_t)y + h };
+    for (size_t i = 0; i < region->len; i++) {
+        InputRect b = region->rects[i];
+        int64_t x1 = b.x1 > cut.x1 ? b.x1 : cut.x1, y1 = b.y1 > cut.y1 ? b.y1 : cut.y1;
+        int64_t x2 = b.x2 < cut.x2 ? b.x2 : cut.x2, y2 = b.y2 < cut.y2 ? b.y2 : cut.y2;
+        if (x1 >= x2 || y1 >= y2) {
+            if (!input_region_append(&next, b)) goto oom;
+            continue;
+        }
+        if (b.y1 < y1 && !input_region_append(&next, (InputRect){b.x1, b.y1, b.x2, y1})) goto oom;
+        if (y2 < b.y2 && !input_region_append(&next, (InputRect){b.x1, y2, b.x2, b.y2})) goto oom;
+        if (b.x1 < x1 && !input_region_append(&next, (InputRect){b.x1, y1, x1, y2})) goto oom;
+        if (x2 < b.x2 && !input_region_append(&next, (InputRect){x2, y1, b.x2, y2})) goto oom;
+    }
+    free(region->rects);
+    *region = next;
+    return;
+oom:
+    free(next.rects);
+    wl_client_post_no_memory(c);
+}
+static void rgn_gone(struct wl_resource *r) { input_region_free(wl_resource_get_user_data(r)); }
+static const struct wl_region_interface region_impl = { .destroy = rgn_destroy, .add = rgn_add, .subtract = rgn_subtract };
 
 static void comp_create_surface(struct wl_client *c, struct wl_resource *r, uint32_t id) {
     int slot = -1;
@@ -670,9 +757,11 @@ static void comp_create_surface(struct wl_client *c, struct wl_resource *r, uint
 }
 
 static void comp_create_region(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    InputRegion *region = calloc(1, sizeof *region);
+    if (!region) { wl_client_post_no_memory(c); return; }
     struct wl_resource *res = wl_resource_create(c, &wl_region_interface, wl_resource_get_version(r), id);
-    if (!res) { wl_client_post_no_memory(c); return; }
-    wl_resource_set_implementation(res, &region_impl, NULL, NULL);
+    if (!res) { free(region); wl_client_post_no_memory(c); return; }
+    wl_resource_set_implementation(res, &region_impl, region, rgn_gone);
 }
 
 static const struct wl_compositor_interface compositor_impl = {
@@ -2455,7 +2544,9 @@ static Surf *surface_at(Surf *s, float lx, float ly, float *ox, float *oy) {
         Surf *hit = surface_at(k, lx - k->sx, ly - k->sy, ox, oy);
         if (hit) return hit;
     }
-    if (s->content && lx >= 0 && ly >= 0 && lx < s->lw && ly < s->lh) { *ox = lx; *oy = ly; return s; }
+    if (s->content && lx >= 0 && ly >= 0 && lx < s->lw && ly < s->lh && input_region_contains(s->input, lx, ly)) {
+        *ox = lx; *oy = ly; return s;
+    }
     return NULL;
 }
 
