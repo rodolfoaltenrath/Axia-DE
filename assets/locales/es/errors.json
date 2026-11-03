@@ -657,5 +657,12 @@
   "share.notResponding": "La computadora que comparte esto no responde",
   "wallpaper.downloadFailed": "No se pudo descargar el fondo",
   "wallpaper.removeFailed": "No se pudo cambiar el fondo",
-  "wallpaper.notDownloaded": "Ese fondo no está descargado"
+  "wallpaper.notDownloaded": "Ese fondo no está descargado",
+  "files.invalidAddress": "Esta dirección no es válida. Prueba smb://servidor/carpeta.",
+  "files.networkAuth": "No se pudo iniciar sesión en el servidor. Comprueba el usuario y la contraseña.",
+  "files.networkCancelled": "Conexión cancelada.",
+  "files.networkFailed": "No se pudo conectar. Comprueba la dirección y la conexión de red.",
+  "files.networkUnavailable": "Este servidor no proporcionó una carpeta. Comprueba que el soporte de carpetas de red de Fedora esté instalado.",
+  "files.filenameEncoding": "Este nombre usa una codificación antigua. Cambia el nombre del archivo antes de abrirlo.",
+  "files.openFailed": "No se pudo abrir el archivo. Comprueba que haya una aplicación instalada para este tipo de archivo."
 }

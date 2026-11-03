@@ -4,14 +4,14 @@
 import {
   View, Text, useTheme, useLocale, useAppWindow, useStore, useKeyboard, Button, TextInput, ScrollView, ThemeProvider, Segmented,
   Toolbar, ToolbarButton, ToolbarSpacer, MenuButton, SearchField, EmptyState, textDirection,
-  Markdown, markdownHeadings, toggleTask, wm, fs, formatBytes, addListener, screen, t, print,
+  FilePicker as SystemFilePicker, Markdown, markdownHeadings, toggleTask, wm, fs, addListener, screen, t, print,
 } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 import { NoteEditor } from './NoteEditor.jsx';
 import { CATEGORIES, EMOJIS, emojiFor, searchEmoji } from './emoji.js';
 import {
   notesStore, loadNotes, updateNote, createNote, duplicateNote, deleteNote, flushAll, attachFile, pasteClipboardImage,
-  absFolder, folder, COLORS, setupWidgets, isImage,
+  absFolder, folder, COLORS, setupWidgets,
 } from './store.js';
 
 // ---- sticky-note colors (light in both modes, with dark text) ----
@@ -86,33 +86,7 @@ function EmojiPicker({ onPick, onClose, x = 0, y = 0 }) {
 // ---- pick a file from the home folder (attach, insert image) ----
 
 function FilePicker({ onPick, onClose, images }) {
-  const th = useTheme();
-  const { t: tr } = useLocale();
-  const [dir, setDir] = useState('');
-  let entries = [];
-  try { entries = fs.list(dir || '.').filter((e) => !e.name.startsWith('.') && (e.dir || !images || isImage(e.name))); } catch (e) { entries = []; }
-  entries.sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
-  return (
-    <View onMouseDown={(e) => e.stopPropagation?.()} style={{ position: 'absolute', left: 32, top: 52, right: 32, bottom: 32, padding: 16, gap: 10, borderRadius: 12,
-      backgroundColor: th.windowBg, border: `1px solid ${th.separator}`, boxShadow: '0 14px 36px rgba(0,0,0,0.4)' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <ToolbarButton icon="‹" iconSize={18} onClick={() => setDir(dir.split('/').slice(0, -1).join('/'))} />
-        <Text style={{ flex: 1, fontSize: 13, fontWeight: 600, color: th.text, whiteSpace: 'nowrap', overflow: 'hidden' }}>{`~/${dir}`}</Text>
-        <Button label={tr('notes.close')} onClick={onClose} />
-      </View>
-      <ScrollView style={{ flex: 1 }}>
-        {entries.map((e) => (
-          <View key={e.name} onClick={() => (e.dir ? setDir(dir ? `${dir}/${e.name}` : e.name) : onPick(`${fs.home()}/${dir ? `${dir}/` : ''}${e.name}`))}
-            style={{ height: 28, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, borderRadius: 6 }}>
-            <Text style={{ fontSize: 15 }}>{e.dir ? '📁' : isImage(e.name) ? '🖼️' : '📄'}</Text>
-            <Text style={{ flex: 1, fontSize: 13, color: th.text, whiteSpace: 'nowrap', overflow: 'hidden' }}>{e.name}</Text>
-            {!e.dir && <Text style={{ fontSize: 11, color: th.textDim }}>{formatBytes(e.size)}</Text>}
-          </View>
-        ))}
-        {!entries.length && <Text style={{ fontSize: 12, color: th.textDim, margin: 8 }}>{tr('notes.picker.empty')}</Text>}
-      </ScrollView>
-    </View>
-  );
+  return <SystemFilePicker onPick={onPick} onClose={onClose} filter={images ? /\.(png|jpe?g|gif|bmp|webp)$/i : null} />;
 }
 
 // ---- open a note's links and attachments ----

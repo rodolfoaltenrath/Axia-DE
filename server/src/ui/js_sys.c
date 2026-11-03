@@ -5,7 +5,7 @@
  * lord.fs reads the whole tree as the user except /proc, /sys, /dev and /run (fsops_readable;
  * listing, reading up to 8 MB, stat, du, free, search), and changes things only inside the home
  * folder and the user's mounted disks (/media/$USER, /run/media/$USER; fsops_allowed): it writes (up to
- * 32 MB), creates folders, renames, copies and moves (in a thread, fsops.c), and sends to the freedesktop
+ * 32 MB), creates folders, renames, copies and moves (in a thread, Rust files core), and sends to the freedesktop
  * Trash; real deletion is only possible inside the Trash. Writing is atomic (temporary + rename),
  * doesn't follow symbolic links in the final file and can NOT touch ~/.local/share/applications,
  * ~/.config/autostart, ~/.local/share/axia/apps or ~/.config/axia/settings.json: from JS it is
@@ -14,6 +14,7 @@
  * lord.themes only accepts simple names. */
 #include "../hw/hw_admin.h"
 #include "js_sys.h"
+#include "js_files.h"
 #include "wallpaper_ffi.h"
 #include "../hw/wallpaper_find.h"
 #include "../pkg/crypto.h"
@@ -1220,7 +1221,7 @@ static JSValue f_fs_rename(JSContext *c, JSValueConst this_val, int argc, JSValu
     return JS_TRUE;
 }
 
-/* ---- lord.fs: copy, move, Trash, info and searches (fsops.c) ---- */
+/* ---- lord.fs: copy, move, Trash, info and searches (Rust files core) ---- */
 
 /* lord.fs.copy(from, to, move) → job id (in a thread; progress with lord.fs.jobs()). */
 static JSValue f_fs_copy(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -2296,6 +2297,7 @@ void js_sys_register_app(JSContext *c, JSValue lord) {
 }
 
 void js_sys_register(JSContext *c, JSValue lord) {
+    js_files_register(c, lord);
     add_object(c, lord, "fs", fs_funcs, sizeof fs_funcs / sizeof fs_funcs[0]);
     add_object(c, lord, "system", system_funcs, sizeof system_funcs / sizeof system_funcs[0]);
     add_object(c, lord, "settings", settings_funcs, sizeof settings_funcs / sizeof settings_funcs[0]);

@@ -511,7 +511,7 @@ export function EntryEditor({ v, entry, catId, onDone, onCancel }) {
         <Button primary label={busy ? t('passwords.saving') : t('passwords.save')} onClick={save} />
       </View>
       {gen != null && <GeneratorSheet onClose={() => setGen(null)} onUse={(p) => setField(gen, { ...fields[gen], v: p, keep: false })} />}
-      {qrFor != null && <FilePicker title={t('passwords.totp.fromQr')} filter={(n) => /\.(png|jpe?g)$/i.test(n)} onClose={() => setQrFor(null)}
+      {qrFor != null && <FilePicker title={t('passwords.totp.fromQr')} filter={/\.(png|jpe?g)$/i} onClose={() => setQrFor(null)}
         onPick={async (p) => {
           const i = qrFor; setQrFor(null);
           try {

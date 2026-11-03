@@ -86,11 +86,15 @@ def install(prefix, libexecdir, destdir):
     copy(REPO / 'docs/COPR-UPDATES.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/COPR-UPDATES.md')
     copy(REPO / 'docs/REPOSITORY.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/REPOSITORY.md')
     copy(REPO / 'docs/RUST.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/RUST.md')
+    copy(REPO / 'docs/FILES.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/FILES.md')
     copy(REPO / 'docs/SHORTCUTS.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/SHORTCUTS.md')
     copy(REPO / 'server/src/bench/fonts/OFL.txt', stage / prefix.relative_to('/') / 'share/licenses/axia-de/OFL-Noto.txt')
     for file in ['LICENSE', 'LICENCE.md', 'LICENSE-SecLists']:
         for src in (REPO / 'third_party').rglob(file):
             copy(src, stage / prefix.relative_to('/') / 'share/licenses/axia-de/third_party' / src.relative_to(REPO / 'third_party'))
+    for src in (REPO / 'rust/vendor').rglob('*'):
+        if src.is_file() and src.name.upper().startswith(('LICENSE', 'LICENCE', 'COPYING', 'COPYRIGHT', 'NOTICE')):
+            copy(src, stage / prefix.relative_to('/') / 'share/licenses/axia-de/rust' / src.relative_to(REPO / 'rust/vendor'))
     print(f'Installed desktop in {target}')
 
 

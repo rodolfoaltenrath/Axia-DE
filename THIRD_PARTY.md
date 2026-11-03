@@ -72,3 +72,18 @@ These come with `lordos` for Files and the remote apps (0.8.7): **FreeRDP** (`li
 | Tool | Used for | License |
 |---|---|---|
 | Kokoro-82M (model and voices, run with kokoro-onnx) | the English narration of the LordOS Imager guide video on lordos.org/imager (voice `am_michael`) | Apache-2.0 |
+
+## Rust dependencies for Arquivos
+
+The source archive includes the exact crates in `rust/Cargo.lock`, under
+`rust/vendor`, so Fedora/Copr builds run with Cargo's `--locked --offline`.
+Every crate retains its upstream manifest, checksums and license files. The
+installer also includes their license/notice files under
+`share/licenses/axia-de/rust/`.
+
+Dependencies include libc, serde/serde_json, regex and image, plus the versions
+of their transitive dependencies listed in the lockfile. MIT is selected where
+an MIT alternative is offered; moxcms and pxfm use BSD-3-Clause, zlib-rs uses
+Zlib, and unicode-ident additionally requires Unicode-3.0. All upstream
+attribution is retained. GIO/GLib are dynamically linked system libraries;
+GVfs and its protocol backends are provided by Fedora.

@@ -1,0 +1,1112 @@
+//! Native widget descriptions. Layout, menus and dialogs are authored in Rust;
+//! the SDK adapter only binds these nodes to the existing Axia renderer.
+use super::{
+    model::{archive, kind, Dialog, Location, Mode, Session, Shared},
+    operations::Entry,
+    thumbnails,
+};
+use serde_json::{json, Value};
+
+fn node(kind: &str, style: Value, children: Vec<Value>) -> Value {
+    json!({"type":kind,"style":style,"children":children})
+}
+fn view(style: Value, children: Vec<Value>) -> Value {
+    node("view", style, children)
+}
+fn label(text: Value, style: Value) -> Value {
+    json!({"type":"text","text":text,"style":style})
+}
+pub fn tr(key: &str) -> Value {
+    json!({"key":key})
+}
+fn button(text: Value, action: Value, disabled: bool) -> Value {
+    json!({"type":"button","label":text,"action":action,"disabled":disabled})
+}
+fn input(value: &str, action: &str, placeholder: Value) -> Value {
+    let mut field = json!({"type":"input","value":value,"action":[action],"placeholder":placeholder,"style":{"flex":1,"height":30}});
+    match action {
+        "dialogText" => {
+            field["submit"] = json!(["submit"]);
+            field["cancel"] = json!(["cancelDialog"]);
+            field["autoFocus"] = json!(true);
+            field["selectAll"] = json!(true);
+        }
+        "query" => {
+            field["submit"] = json!(["search"]);
+        }
+        "name" => {
+            field["submit"] = json!(["choose"]);
+            field["cancel"] = json!(["cancel"]);
+        }
+        "comment" => {
+            field["cancel"] = json!(["cancelDialog"]);
+        }
+        _ => (),
+    }
+    field
+}
+fn color(s: &Session, key: &str, default: &str) -> String {
+    s.theme[key].as_str().unwrap_or(default).into()
+}
+fn txt(s: &Session) -> String {
+    color(s, "text", "#ececf2")
+}
+fn dim(s: &Session) -> String {
+    color(s, "textDim", "#a4a4af")
+}
+fn row() -> Value {
+    json!({"flexDirection":"row","alignItems":"center","gap":8})
+}
+fn action(name: &str) -> Value {
+    json!([name])
+}
+pub fn bytes(n: u64) -> String {
+    if n < 1024 {
+        return format!("{n} B");
+    }
+    let mut number = n as f64;
+    let mut unit = "B";
+    for u in ["KB", "MB", "GB", "TB"] {
+        number /= 1024.;
+        unit = u;
+        if number < 1024. {
+            break;
+        }
+    }
+    format!("{number:.1} {unit}")
+}
+
+// Compositor primitives, independent of emoji fonts and platform icon themes.
+pub fn icon(name: &str, size: f64) -> Value {
+    let folder = name == "folder" || name == "files";
+    let base = if folder {
+        "#4aaeff"
+    } else if name == "trash" {
+        "#939aaa"
+    } else {
+        "#d0d8e8"
+    };
+    let mut children = Vec::new();
+    if folder {
+        children.push(view(json!({"position":"absolute","left":size*0.1,"top":size*0.13,"width":size*0.38,"height":size*0.25,"borderRadius":size*0.06,"backgroundColor":"#85ceff"}),vec![]));
+        children.push(view(json!({"position":"absolute","left":size*0.08,"top":size*0.29,"width":size*0.84,"height":size*0.59,"borderRadius":size*0.07,"backgroundColor":base}),vec![]));
+    } else if name == "trash" {
+        children.push(view(json!({"position":"absolute","left":size*0.25,"top":size*0.27,"width":size*0.5,"height":size*0.6,"borderRadius":size*0.06,"border":format!("{}px solid {base}",(size*0.065).max(1.))}),vec![]));
+        children.push(view(json!({"position":"absolute","left":size*0.17,"top":size*0.18,"width":size*0.66,"height":(size*0.08).max(1.),"backgroundColor":base}),vec![]));
+    } else {
+        children.push(view(json!({"position":"absolute","left":size*0.22,"top":size*0.08,"width":size*0.57,"height":size*0.82,"borderRadius":size*0.06,"backgroundColor":base}),vec![]));
+        for y in [0.42, 0.55, 0.68] {
+            children.push(view(json!({"position":"absolute","left":size*0.33,"top":size*y,"width":size*0.34,"height":(size*0.04).max(1.),"backgroundColor":"#75859c"}),vec![]));
+        }
+    }
+    view(json!({"width":size,"height":size,"flexShrink":0}), children)
+}
+fn entry_icon(e: &Entry, size: f64, thumb: bool) -> Value {
+    if thumb && !e.dir && kind(&e.name) == "image" {
+        if let Some(path) = thumbnails::get(e) {
+            return json!({"type":"image","src":path,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":4}});
+        }
+    }
+    icon(if e.dir { "folder" } else { "file" }, size)
+}
+fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &str) -> Value {
+    let mut n = view(
+        json!({"height":30,"flexDirection":"row","alignItems":"center","gap":9,"paddingHorizontal":9,"borderRadius":6,"backgroundColor":if selected{color(s,"accent","#1687ff")}else{"transparent".into()}}),
+        vec![
+            icon(kind, 19.),
+            label(
+                text,
+                json!({"fontSize":13,"color":if selected{"#ffffff".to_owned()}else{txt(s)},"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
+            ),
+        ],
+    );
+    n["events"] = json!({"onClick":command});
+    if s.mode == Mode::Browser && command[0] == "navigate" {
+        n["events"]["onMouseUp"] = json!(["drop", command[1]]);
+    } else if s.mode == Mode::Browser && command[0] == "place" && command[1] == "trash" {
+        n["events"]["onMouseUp"] = json!(["drop", "trash"]);
+    }
+    n
+}
+
+impl Session {
+    pub fn title_value(&self) -> Value {
+        match &self.tab().location {
+            Location::Directory(p) => {
+                if *p == self.policy.home {
+                    tr("files.place.home")
+                } else {
+                    json!(p.file_name().unwrap_or(p.as_os_str()).to_string_lossy())
+                }
+            }
+            Location::Trash => tr("files.place.trash"),
+            Location::Recent => tr("files.place.recent"),
+            Location::Apps => tr("files.place.apps"),
+            Location::Network => tr("files.place.network"),
+            Location::Tag(c) => json!(c),
+            Location::Archive { file, inner } => json!(if inner.is_empty() {
+                file.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            } else {
+                inner.clone()
+            }),
+        }
+    }
+    fn sidebar(&self, shared: &Shared) -> Value {
+        let mut items = vec![label(
+            tr("files.rust.favorites"),
+            json!({"color":dim(self),"fontSize":11,"padding":8}),
+        )];
+        items.push(side_item(
+            self,
+            tr("files.place.home"),
+            json!(["place", "home"]),
+            self.tab().location == Location::Directory(self.policy.home.clone()),
+            "folder",
+        ));
+        let hidden = shared.preferences["hiddenSide"].as_array();
+        for place in &self.places {
+            if hidden.is_some_and(|v| v.iter().any(|i| i.as_str() == Some(&place.label))) {
+                continue;
+            }
+            items.push(side_item(
+                self,
+                tr(&format!("files.place.{}", place.label)),
+                json!(["navigate", place.path]),
+                self.tab().location == Location::Directory(place.path.clone()),
+                "folder",
+            ));
+        }
+        for favorite in shared.preferences["favoriteFolders"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            if let Some(path) = favorite["path"].as_str() {
+                items.push(side_item(
+                    self,
+                    json!(favorite["name"].as_str().unwrap_or(path)),
+                    json!(["navigate", path]),
+                    self.tab().location == Location::Directory(path.into()),
+                    "folder",
+                ));
+            }
+        }
+        if self.mode == Mode::Browser {
+            items.push(label(
+                tr("files.rust.locations"),
+                json!({"color":dim(self),"fontSize":11,"padding":8,"marginTop":8}),
+            ));
+            for (key, location, ico) in [
+                ("recent", Location::Recent, "file"),
+                ("computer", Location::Directory("/".into()), "file"),
+                ("apps", Location::Apps, "file"),
+                ("network", Location::Network, "folder"),
+                ("trash", Location::Trash, "trash"),
+            ] {
+                items.push(side_item(
+                    self,
+                    tr(&format!("files.place.{key}")),
+                    json!(["place", key]),
+                    self.tab().location == location,
+                    ico,
+                ));
+            }
+        }
+        for (path, _) in super::operations::mounts() {
+            items.push(side_item(
+                self,
+                json!(path.file_name().unwrap_or_default().to_string_lossy()),
+                json!(["navigate", path]),
+                self.tab().location == Location::Directory(path.clone()),
+                "folder",
+            ));
+        }
+        if self.mode == Mode::Browser {
+            items.push(label(
+                tr("files.menu.tags"),
+                json!({"color":dim(self),"fontSize":11,"padding":8,"marginTop":8}),
+            ));
+            for (color, hex) in [
+                ("red", "#ff6257"),
+                ("orange", "#ff9d33"),
+                ("yellow", "#e0c947"),
+                ("green", "#53bf70"),
+                ("blue", "#479eff"),
+                ("purple", "#af7bf4"),
+                ("gray", "#9999aa"),
+            ] {
+                let mut n = view(
+                    json!({"height":27,"flexDirection":"row","alignItems":"center","gap":10,"paddingHorizontal":10}),
+                    vec![
+                        view(
+                            json!({"width":9,"height":9,"borderRadius":5,"backgroundColor":hex}),
+                            vec![],
+                        ),
+                        label(
+                            shared.preferences["tagNames"][color]
+                                .as_str()
+                                .map(|v| json!(v))
+                                .unwrap_or_else(|| tr(&format!("files.tag.{color}"))),
+                            json!({"fontSize":12,"color":txt(self)}),
+                        ),
+                    ],
+                );
+                n["events"] = json!({"onClick":["tagPlace",color]});
+                items.push(n);
+            }
+        }
+        node(
+            "scroll",
+            json!({"width":self.side_width,"flex":0,"flexShrink":0,"backgroundColor":color(self,"sidebarBg","#25252b"),"padding":8,"borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            items,
+        )
+    }
+    fn toolbar(&self) -> Value {
+        let mut controls = vec![
+            button(json!("‹"), action("back"), self.tab().back.is_empty()),
+            button(json!("›"), action("forward"), self.tab().forward.is_empty()),
+            button(
+                json!("↑"),
+                action("up"),
+                self.tab().location.path().is_none(),
+            ),
+            button(json!("↻"), action("refresh"), self.loading),
+        ];
+        let location = self
+            .tab()
+            .location
+            .path()
+            .map(|p| p.to_string_lossy().into_owned());
+        let mut crumb = label(
+            location.map_or_else(|| self.title_value(), |p| json!(p)),
+            json!({"flex":1,"fontSize":12,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden"}),
+        );
+        crumb["events"] = json!({"onDoubleClick":["goTo"]});
+        controls.push(crumb);
+        let mut search = input(&self.tab().query, "query", tr("files.search"));
+        search["style"]["flex"] = json!(0);
+        search["style"]["width"] = json!((self.width * 0.25).clamp(120., 240.));
+        controls.push(search);
+        controls.push(button(
+            tr(if self.search_home {
+                "files.place.home"
+            } else {
+                "files.settings.scopeHere"
+            }),
+            action("searchScope"),
+            false,
+        ));
+        view(
+            json!({"height":45,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":6,"borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            controls,
+        )
+    }
+    fn tools(&self) -> Value {
+        let mut controls = vec![];
+        for (key, glyph) in [
+            ("icons", "▦"),
+            ("list", "≡"),
+            ("columns", "◫"),
+            ("gallery", "▣"),
+        ] {
+            let mut b = button(json!(glyph), json!(["view", key]), false);
+            b["primary"] = json!(self.tab().view == key);
+            controls.push(b);
+        }
+        controls.push(view(json!({"flex":1}), vec![]));
+        {
+            controls.push(button(
+                tr("files.menu.newFolder"),
+                action("newFolder"),
+                self.write_dir().is_none(),
+            ));
+            controls.push(button(
+                tr("files.menu.getInfo"),
+                action("info"),
+                self.tab().selected.is_empty(),
+            ));
+        }
+        let mut menu = button(json!("⋯"), json!(["context", usize::MAX]), false);
+        menu["events"] = json!({"onClick":["context",usize::MAX]});
+        controls.push(menu);
+        view(
+            json!({"height":38,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":6,"backgroundColor":color(self,"windowBg","#202025")}),
+            controls,
+        )
+    }
+    fn tabs_view(&self) -> Value {
+        let mut tabs = Vec::new();
+        for (i, tab) in self.tabs.iter().enumerate() {
+            let title = tab
+                .location
+                .path()
+                .and_then(|p| p.file_name())
+                .map(|n| json!(n.to_string_lossy()))
+                .unwrap_or_else(|| tr("files.place.home"));
+            let mut b = button(title, json!(["tab", i]), false);
+            b["primary"] = json!(i == self.active);
+            tabs.push(b);
+            tabs.push(button(json!("×"), json!(["closeTab", i]), false));
+        }
+        tabs.push(button(json!("+"), action("newTab"), false));
+        view(
+            json!({"height":34,"flexDirection":"row","alignItems":"center","gap":4,"paddingHorizontal":8,"borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            tabs,
+        )
+    }
+    fn file_cell(
+        &self,
+        e: &Entry,
+        i: usize,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        icons: bool,
+        shared: &Shared,
+    ) -> Value {
+        let shown_name = if !e.dir
+            && !shared.preferences["showExtensions"]
+                .as_bool()
+                .unwrap_or(true)
+        {
+            std::path::Path::new(&e.name)
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        } else {
+            e.name.clone()
+        };
+        let selected = self.tab().selected.contains(&i);
+        let fg = if selected {
+            "#ffffff".to_owned()
+        } else {
+            txt(self)
+        };
+        let content = if icons {
+            vec![
+                entry_icon(e, 56., true),
+                label(
+                    json!(shown_name),
+                    json!({"fontSize":12,"color":fg,"textAlign":"center","width":width-8.,"height":34,"overflow":"hidden"}),
+                ),
+            ]
+        } else {
+            let mut c = vec![
+                entry_icon(e, 22., false),
+                label(
+                    json!(shown_name),
+                    json!({"fontSize":13,"color":fg,"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
+                ),
+            ];
+            if width > 400. {
+                c.push(label(
+                    json!(if e.dir { String::new() } else { bytes(e.size) }),
+                    json!({"fontSize":12,"color":dim(self),"width":82,"textAlign":"right"}),
+                ));
+            }
+            if width > 560. {
+                c.push(label(
+                    json!({"format":"date","value":e.mtime}),
+                    json!({"fontSize":11,"color":dim(self),"width":135}),
+                ));
+            }
+            if let Some(tags) = shared.tags.get(&e.path) {
+                for tag in tags.iter().take(3) {
+                    let hex = match tag.as_str() {
+                        "red" => "#ff6257",
+                        "orange" => "#ff9d33",
+                        "yellow" => "#e0c947",
+                        "green" => "#53bf70",
+                        "purple" => "#af7bf4",
+                        _ => "#479eff",
+                    };
+                    c.push(view(
+                        json!({"width":7,"height":7,"borderRadius":4,"backgroundColor":hex}),
+                        vec![],
+                    ));
+                }
+            }
+            c
+        };
+        let mut cell = view(
+            json!({"position":"absolute","left":x,"top":y,"width":width,"height":height,"paddingHorizontal":7,"gap":if icons{5}else{8},"flexDirection":if icons{"column"}else{"row"},"alignItems":"center","justifyContent":if icons{"center"}else{"flex-start"},"borderRadius":6,"backgroundColor":if selected{color(self,"accent","#1485f8")}else{"transparent".into()}}),
+            content,
+        );
+        cell["events"] = json!({"onClick":["select",i],"onDoubleClick":["activate",i],"onContextMenu":["context",i]});
+        if self.mode == Mode::Browser {
+            cell["events"]["onMouseDown"] = json!(["dragStart", i]);
+            cell["events"]["onMouseUp"] = json!(["drop", i]);
+        }
+        cell
+    }
+    fn entries_view(&self, shared: &Shared) -> Value {
+        let items = self.filtered();
+        let past = if self.tab().view == "columns" {
+            self.tab()
+                .columns
+                .len()
+                .min(if self.width > 1000. { 2 } else { 1 })
+        } else {
+            0
+        };
+        let width = (self.width - self.side_width - 7. - past as f64 * 190.).max(160.);
+        let height = (self.height
+            - if self.mode == Mode::Browser {
+                144.
+            } else {
+                202.
+            }
+            - if self.error.is_some() { 44. } else { 0. }
+            - self.job_errors.len() as f64 * 32.)
+            .max(50.);
+        let icons = self.tab().view == "icons";
+        let gallery = self.tab().view == "gallery";
+        let columns = self.tab().view == "columns";
+        let preview_height = if gallery {
+            (height * 0.65).max(100.)
+        } else {
+            0.
+        };
+        let cell_width = if icons { 112. } else { width };
+        let row_height = if icons { 110. } else { 32. };
+        let count = if icons {
+            (width / 112.).floor().max(1.) as usize
+        } else {
+            1
+        };
+        let rows = items.len().div_ceil(count);
+        let content_h = rows as f64 * row_height;
+        let area_h = (height - preview_height).max(70.);
+        let offset = self.tab().offset.min((content_h - area_h).max(0.));
+        let start = (offset / row_height).floor() as usize;
+        let visible = (area_h / row_height).ceil() as usize + 2;
+        let mut cells = Vec::new();
+        if gallery {
+            if let Some(e) = self.selected().first() {
+                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(e,(preview_height-40.).min(240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
+            }
+        }
+        for row in start..(start + visible).min(rows) {
+            for column in 0..count {
+                if let Some(index) = items.get(row * count + column) {
+                    let e = &self.tab().entries[*index];
+                    cells.push(self.file_cell(
+                        e,
+                        *index,
+                        column as f64 * cell_width,
+                        row as f64 * row_height - offset + preview_height,
+                        cell_width,
+                        row_height,
+                        icons,
+                        shared,
+                    ));
+                }
+            }
+        }
+        if items.is_empty() {
+            cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":height,"alignItems":"center","justifyContent":"center"}),vec![label(if self.loading{tr("files.rust.loading")}else{tr("files.empty")},json!({"fontSize":13,"color":dim(self)}))]));
+        }
+        if content_h > area_h {
+            let thumb = (area_h * area_h / content_h).max(24.);
+            let y = preview_height + offset / (content_h - area_h) * (area_h - thumb);
+            cells.push(view(json!({"position":"absolute","right":2,"top":y,"width":6,"height":thumb,"borderRadius":3,"backgroundColor":"rgba(150,150,165,0.55)"}),vec![]));
+        }
+        let mut list = view(
+            json!({"flex":1,"overflow":"hidden","backgroundColor":color(self,"windowBg","#202025")}),
+            cells,
+        );
+        list["events"] =
+            json!({"onWheel":["wheel"],"onContextMenu":["context",usize::MAX],"onClick":["clear"]});
+        if self.mode == Mode::Browser {
+            list["events"]["onMouseUp"] = json!(["drop", usize::MAX]);
+        }
+        if columns && !self.tab().columns.is_empty() {
+            let mut cols = Vec::new();
+            for (path, entries) in self.tab().columns.iter().rev().take(past).rev() {
+                let mut children = vec![label(
+                    json!(path.file_name().unwrap_or_default().to_string_lossy()),
+                    json!({"fontSize":11,"color":dim(self),"padding":8}),
+                )];
+                for e in entries
+                    .iter()
+                    .filter(|e| {
+                        (self.hidden || !e.name.starts_with('.')) && e.raw.to_str().is_some()
+                    })
+                    .take(150)
+                {
+                    let mut item = side_item(
+                        self,
+                        json!(e.name),
+                        json!(["navigate", if e.dir { e.raw.clone() } else { path.clone() }]),
+                        false,
+                        if e.dir { "folder" } else { "file" },
+                    );
+                    if !e.dir {
+                        item["events"] = json!({"onDoubleClick":["openRaw",e.raw]});
+                    }
+                    children.push(item);
+                }
+                cols.push(node("scroll",json!({"width":190,"flex":0,"flexShrink":0,"borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),children));
+            }
+            cols.push(list);
+            view(
+                json!({"flex":1,"flexDirection":"row","overflow":"hidden"}),
+                cols,
+            )
+        } else {
+            list
+        }
+    }
+    fn footer(&self) -> Value {
+        let shown = self.filtered().len();
+        let selected = self.selected().len();
+        let mut children = vec![label(
+            json!({"key":"files.info.items","params":{"count":shown}}),
+            json!({"fontSize":11,"color":dim(self)}),
+        )];
+        if selected > 0 {
+            children.push(label(
+                json!({"key":"files.rust.selected","params":{"count":selected}}),
+                json!({"fontSize":11,"color":dim(self)}),
+            ));
+        }
+        children.push(view(json!({"flex":1}), vec![]));
+        if self.loading || self.busy {
+            children.push(label(
+                tr("files.rust.loading"),
+                json!({"fontSize":11,"color":dim(self)}),
+            ));
+        }
+        if let Some(jobs) = self.jobs().as_array() {
+            for job in jobs.iter().take(2) {
+                children.push(label(
+                    json!(format!(
+                        "{} / {}",
+                        bytes(job["bytes"].as_u64().unwrap_or(0)),
+                        bytes(job["total"].as_u64().unwrap_or(0))
+                    )),
+                    json!({"fontSize":11,"color":dim(self)}),
+                ));
+                children.push(button(
+                    tr(if job["done"] == true {
+                        "files.rust.dismiss"
+                    } else {
+                        "shell.picker.cancel"
+                    }),
+                    json!([
+                        if job["done"] == true {
+                            "jobForget"
+                        } else {
+                            "jobCancel"
+                        },
+                        job["id"]
+                    ]),
+                    false,
+                ));
+            }
+        }
+        view(
+            json!({"height":27,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":10,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            children,
+        )
+    }
+    fn selection_footer(&self) -> Value {
+        let mut children = Vec::new();
+        if self.mode == Mode::Save {
+            children.push(input(&self.name, "name", tr("files.rust.filename")));
+        } else {
+            children.push(view(json!({"flex":1}), vec![]));
+        }
+        children.push(button(tr("shell.picker.cancel"), action("cancel"), false));
+        children.push(button(
+            tr(match self.mode {
+                Mode::Save => "files.rust.save",
+                Mode::Folder => "files.rust.chooseFolder",
+                _ => "files.menu.open",
+            }),
+            action("choose"),
+            self.mode == Mode::Open && self.selected().iter().all(|e| e.dir),
+        ));
+        view(
+            json!({"height":50,"paddingHorizontal":12,"flexDirection":"row","alignItems":"center","gap":8,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
+            children,
+        )
+    }
+    fn context_menu(&self, shared: &Shared) -> Option<Value> {
+        let (x, y) = self.context?;
+        let selected = !self.tab().selected.is_empty();
+        let mut choices = Vec::new();
+        let mut item = |key: &str, command: &str, disabled: bool| {
+            choices.push(button(tr(key), action(command), disabled))
+        };
+        item("files.menu.open", "open", !selected);
+        item("files.menu.quickLook", "preview", !selected);
+        item("files.menu.getInfo", "info", !selected);
+        if self.mode == Mode::Browser {
+            if self.tab().location == Location::Trash {
+                item("files.menu.restore", "restore", !selected);
+                item("files.menu.deleteNow", "delete", !selected);
+                item("files.menu.emptyTrash", "emptyTrash", false);
+            } else {
+                item("files.menu.copy", "copy", !selected);
+                item(
+                    "files.menu.cut",
+                    "cut",
+                    !selected || self.write_dir().is_none(),
+                );
+                item(
+                    "files.menu.paste",
+                    "paste",
+                    shared.clipboard.is_empty() || self.write_dir().is_none(),
+                );
+                item(
+                    "files.menu.rename",
+                    "rename",
+                    self.selected().len() != 1 || self.write_dir().is_none(),
+                );
+                item(
+                    "files.menu.duplicate",
+                    "duplicate",
+                    !selected || self.write_dir().is_none(),
+                );
+                item(
+                    "files.menu.trash",
+                    "trash",
+                    !selected || self.write_dir().is_none(),
+                );
+                item(
+                    "files.menu.newFolder",
+                    "newFolder",
+                    self.write_dir().is_none(),
+                );
+                item(
+                    "files.rust.compress",
+                    "compress",
+                    !selected || self.write_dir().is_none(),
+                );
+                if self.selected().iter().any(|e| archive(&e.name)) {
+                    item("files.rust.extract", "extract", false);
+                }
+            }
+            item("files.menu.copyPath", "copyPath", !selected);
+            item(
+                "files.menu.openTerminal",
+                "terminal",
+                self.tab().location.path().is_none(),
+            );
+            item(
+                "files.rust.pin",
+                "pin",
+                self.tab().location.path().is_none(),
+            );
+        }
+        item("files.menu.showHidden", "hidden", false);
+        item("files.menu.goToFolder", "goTo", false);
+        if self.mode == Mode::Browser {
+            item("files.menu.connect", "connect", false);
+            item("files.settings.open", "preferences", false);
+        }
+        if self.mode == Mode::Browser && selected && self.tab().location != Location::Trash {
+            choices.push(label(
+                tr("files.menu.openWith"),
+                json!({"fontSize":11,"color":dim(self),"padding":6}),
+            ));
+            let file = self.selected().first().cloned();
+            let mime = file
+                .as_ref()
+                .map(|e| match kind(&e.name) {
+                    "image" => "image/",
+                    "text" => "text/",
+                    "pdf" => "application/pdf",
+                    "video" => "video/",
+                    "audio" => "audio/",
+                    _ => "",
+                })
+                .unwrap_or("");
+            for app in shared
+                .apps
+                .iter()
+                .filter(|a| {
+                    if let Some(id) = a["id"].as_str() {
+                        if matches!(
+                            (id, mime),
+                            ("editor", "text/")
+                                | ("photos", "image/")
+                                | ("pdf", "application/pdf")
+                                | ("player", "video/")
+                                | ("player", "audio/")
+                        ) {
+                            return true;
+                        }
+                    }
+                    !mime.is_empty()
+                        && a["mimeTypes"].as_array().is_some_and(|types| {
+                            types
+                                .iter()
+                                .any(|v| v.as_str().is_some_and(|t| t.starts_with(mime)))
+                        })
+                })
+                .take(8)
+            {
+                choices.push(button(
+                    app["name"].clone(),
+                    json!(["openWith", app["desktopId"]]),
+                    false,
+                ));
+            }
+            choices.push(label(
+                tr("files.menu.tags"),
+                json!({"fontSize":11,"color":dim(self),"padding":6}),
+            ));
+            for color in ["red", "orange", "yellow", "green", "blue", "purple", "gray"] {
+                choices.push(button(
+                    tr(&format!("files.tag.{color}")),
+                    json!(["tag", color]),
+                    false,
+                ));
+            }
+        }
+        let mut panel = node(
+            "scroll",
+            json!({"position":"absolute","left":x.min(self.width-250.).max(6.),"top":y.min(self.height-(choices.len()as f64*30.+16.).min(self.height-40.)-6.).max(6.),"width":244,"height":(choices.len()as f64*30.+16.).min(self.height-40.),"padding":8,"gap":3,"borderRadius":9,"backgroundColor":color(self,"popupBg","#2c2c33"),"border":format!("1px solid {}",color(self,"separator","#44444c")),"boxShadow":"0 12px 30px rgba(0,0,0,0.4)"}),
+            choices,
+        );
+        panel["events"] = json!({"onMouseDown":["noop"]});
+        let mut overlay = view(
+            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height}),
+            vec![panel],
+        );
+        overlay["events"] = json!({"onClick":["closeContext"],"onContextMenu":["closeContext"]});
+        Some(overlay)
+    }
+    fn dialog_view(&self, shared: &Shared) -> Option<Value> {
+        let dialog = self.dialog.as_ref()?;
+        let mut content = Vec::new();
+        let mut title = tr("files.menu.getInfo");
+        let mut buttons = vec![button(
+            tr("shell.picker.cancel"),
+            action("cancelDialog"),
+            false,
+        )];
+        let mut wide = false;
+        match dialog {
+            Dialog::Text {
+                title: t,
+                value,
+                action: a,
+                ..
+            } => {
+                title = tr(t);
+                let mut field = input(value, "dialogText", json!(""));
+                field["key"] = json!(format!("dialog-{}", self.dialog_epoch));
+                content.push(field);
+                if a == "connect" {
+                    for uri in shared.preferences["servers"]["history"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .take(5)
+                    {
+                        let mut b = button(uri.clone(), action("dialogText"), false);
+                        b["value"] = uri.clone();
+                        b["action"] = json!(["recentServer", uri]);
+                        content.push(b);
+                    }
+                }
+                buttons.push(button(
+                    tr("files.rust.confirm"),
+                    action("submit"),
+                    value.trim().is_empty(),
+                ));
+            }
+            Dialog::Confirm { action: a, paths } => {
+                title = if a == "extension" {
+                    tr("files.rust.extensionTitle")
+                } else if a == "overwrite" {
+                    tr("files.rust.overwriteTitle")
+                } else if a == "empty" {
+                    tr("files.confirm.empty")
+                } else {
+                    json!({"key":"files.confirm.delete","params":{"count":paths.len()}})
+                };
+                content.push(label(
+                    if a == "extension" {
+                        tr("files.rust.extensionBody")
+                    } else if a == "overwrite" {
+                        tr("files.rust.overwriteBody")
+                    } else {
+                        tr("files.confirm.cantUndo")
+                    },
+                    json!({"color":dim(self),"fontSize":13,"lineHeight":1.4}),
+                ));
+                buttons.push(button(tr("files.rust.confirm"), action("confirm"), false));
+            }
+            Dialog::Info {
+                entries,
+                size,
+                comment,
+            } => {
+                wide = true;
+                if let Some(e) = entries.first() {
+                    title = json!(e.name);
+                    content.push(entry_icon(e, 50., false));
+                    for (k, v) in [
+                        (
+                            "files.info.where",
+                            json!(e
+                                .raw
+                                .parent()
+                                .unwrap_or(&self.policy.home)
+                                .to_string_lossy()),
+                        ),
+                        (
+                            "files.info.size",
+                            size.map(|s| json!(bytes(s)))
+                                .unwrap_or_else(|| tr("files.info.calculating")),
+                        ),
+                        (
+                            "files.info.modified",
+                            json!({"format":"date","value":e.mtime}),
+                        ),
+                        ("files.info.perms", json!(format!("{:o}", e.mode & 0o777))),
+                    ] {
+                        content.push(view(
+                            row(),
+                            vec![
+                                label(tr(k), json!({"width":120,"fontSize":12,"color":dim(self)})),
+                                label(v, json!({"flex":1,"fontSize":12,"color":txt(self)})),
+                            ],
+                        ));
+                    }
+                    if let Some(original) = &e.original {
+                        content.push(label(
+                            json!(original),
+                            json!({"fontSize":12,"color":dim(self)}),
+                        ));
+                    }
+                    content.push(input(comment, "comment", tr("files.info.addComment")));
+                    let mut tags = Vec::new();
+                    for color in ["red", "orange", "yellow", "green", "blue", "purple", "gray"] {
+                        tags.push(button(
+                            shared.preferences["tagNames"][color]
+                                .as_str()
+                                .map(|v| json!(v))
+                                .unwrap_or_else(|| tr(&format!("files.tag.{color}"))),
+                            json!(["tag", color]),
+                            false,
+                        ));
+                    }
+                    content.push(view(
+                        json!({"flexDirection":"row","flexWrap":"wrap","gap":5}),
+                        tags,
+                    ));
+                }
+            }
+            Dialog::Preview {
+                entry,
+                text,
+                image,
+                media,
+            } => {
+                wide = true;
+                title = json!(entry.name);
+                if let Some(id) = media {
+                    content.push(
+                        json!({"type":"media","media":id,"style":{"height":300,"width":600}}),
+                    );
+                } else if let Some(image) = image {
+                    content.push(json!({"type":"documentImage","image":image,"style":{"height":300,"width":600}}));
+                } else if kind(&entry.name) == "image" {
+                    content.push(view(json!({"height":320,"width":600,"alignItems":"center","justifyContent":"center"}),vec![entry_icon(entry,300.,true)]));
+                } else if let Some(text) = text {
+                    content.push(node("scroll",json!({"height":300,"width":600}),vec![label(json!(text),json!({"fontSize":12,"color":txt(self),"fontFamily":"monospace","lineHeight":1.4}))]));
+                } else {
+                    content.push(entry_icon(entry, 96., false));
+                    content.push(label(
+                        json!(bytes(entry.size)),
+                        json!({"fontSize":12,"color":dim(self)}),
+                    ));
+                }
+                buttons.push(button(tr("files.menu.open"), action("open"), false));
+            }
+            Dialog::Network { value } => {
+                wide = true;
+                title = tr("files.menu.connect");
+                if value["type"] == "question" {
+                    content.push(label(
+                        value["message"].clone(),
+                        json!({"color":txt(self),"fontSize":12,"maxHeight":230}),
+                    ));
+                    for (i, choice) in value["choices"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .enumerate()
+                    {
+                        buttons.push(button(choice.clone(), json!(["networkReply", i]), false));
+                    }
+                } else {
+                    content.push(label(
+                        tr("files.rust.credentials"),
+                        json!({"color":dim(self),"fontSize":12}),
+                    ));
+                    for (key, caption) in [
+                        ("user", "files.net.user"),
+                        ("domain", "files.net.domain"),
+                        ("password", "files.net.password"),
+                    ] {
+                        let mut field = input(
+                            value[key].as_str().unwrap_or(""),
+                            "networkField",
+                            tr(caption),
+                        );
+                        field["action"] = json!(["networkField", key]);
+                        field["secure"] = json!(key == "password");
+                        field["submit"] = json!(["networkReply", "login"]);
+                        field["cancel"] = json!(["cancelDialog"]);
+                        content.push(field);
+                    }
+                    if value["anonymous"] == true {
+                        buttons.push(button(
+                            tr("files.net.asGuest"),
+                            json!(["networkReply", "guest"]),
+                            false,
+                        ));
+                    }
+                    buttons.push(button(
+                        tr("files.rust.confirm"),
+                        json!(["networkReply", "login"]),
+                        false,
+                    ));
+                }
+            }
+            Dialog::Preferences => {
+                wide = true;
+                title = tr("files.settings.title");
+                for (key, label_key, default) in [
+                    ("foldersInTabs", "files.settings.tabs", false),
+                    ("showExtensions", "files.settings.extensions", true),
+                    ("warnExtension", "files.settings.warnExt", true),
+                    ("warnEmptyTrash", "files.settings.warnTrash", true),
+                    ("foldersFirst", "files.settings.foldersFirst", true),
+                ] {
+                    let checked = shared.preferences[key].as_bool().unwrap_or(default);
+                    content.push(button(
+                        json!({"key":label_key,"prefix":if checked{"✓  "}else{"    "}}),
+                        json!(["pref", key]),
+                        false,
+                    ));
+                }
+                content.push(label(
+                    tr("files.rust.preferencesHint"),
+                    json!({"fontSize":12,"color":dim(self)}),
+                ));
+            }
+        }
+        let mut body = vec![label(
+            title,
+            json!({"fontSize":17,"fontWeight":600,"color":txt(self)}),
+        )];
+        body.extend(content);
+        body.push(view(
+            json!({"flexDirection":"row","justifyContent":"flex-end","gap":8,"marginTop":8}),
+            buttons,
+        ));
+        let mut panel = view(
+            json!({"width":if wide{(self.width-60.).min(650.)}else{(self.width-60.).min(440.)},"maxHeight":self.height-30.,"padding":20,"gap":14,"borderRadius":12,"backgroundColor":color(self,"windowBg","#24242a"),"border":format!("1px solid {}",color(self,"separator","#45454c")),"boxShadow":"0 16px 40px rgba(0,0,0,0.5)"}),
+            body,
+        );
+        panel["events"] = json!({"onMouseDown":["noop"],"onClick":["noop"]});
+        Some(view(
+            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height,"backgroundColor":"rgba(0,0,0,0.35)","alignItems":"center","justifyContent":"center"}),
+            vec![panel],
+        ))
+    }
+    pub fn render(&self, shared: &Shared) -> Value {
+        let mut main = vec![self.toolbar(), self.tools()];
+        if self.tab().location == Location::Network {
+            let status = match self.network_status["state"].as_str().unwrap_or("") {
+                "no-lan" => "files.net.noLan",
+                "no-helper" => "files.net.noHelper",
+                "denied" => "files.net.denied",
+                "no-connector" => "files.net.noConnector",
+                _ => "files.net.listening",
+            };
+            if self.discovered.is_empty() {
+                main.push(label(
+                    tr(status),
+                    json!({"fontSize":12,"color":dim(self),"padding":8}),
+                ));
+            }
+            main.push(button(
+                tr("files.menu.connect"),
+                action("connect"),
+                self.busy,
+            ));
+        }
+        if self.mode == Mode::Browser {
+            main.push(self.tabs_view());
+        }
+        if let Some(error) = &self.error {
+            main.push(label(
+                json!({"error":error}),
+                json!({"fontSize":12,"color":"#ff8278","padding":8,"lineHeight":1.3}),
+            ));
+        }
+        for error in &self.job_errors {
+            main.push(view(json!({"height":32,"paddingHorizontal":8,"flexDirection":"row","alignItems":"center","gap":8}),vec![label(json!({"error":error}),json!({"flex":1,"fontSize":12,"color":"#ff8278"})),button(tr("files.rust.dismiss"),json!(["jobForget",0]),false)]));
+        }
+        main.push(self.entries_view(shared));
+        main.push(self.footer());
+        if self.mode != Mode::Browser {
+            main.push(self.selection_footer());
+        }
+        let body = view(
+            json!({"flex":1,"flexDirection":"row","overflow":"hidden"}),
+            vec![
+                self.sidebar(shared),
+                {
+                    let mut grip = view(json!({"width":5,"flexShrink":0}), vec![]);
+                    grip["events"] = json!({"onMouseDown":["resizeSide"]});
+                    grip
+                },
+                view(json!({"flex":1,"overflow":"hidden"}), main),
+            ],
+        );
+        let mut all = Vec::new();
+        if self.mode != Mode::Browser {
+            all.push(view(json!({"height":42,"paddingHorizontal":14,"justifyContent":"center","borderBottom":format!("1px solid {}",color(self,"separator","#38383e"))}),vec![label(if self.title.is_empty(){tr(match self.mode{Mode::Save=>"files.rust.save",Mode::Folder=>"files.rust.chooseFolder",_=>"files.menu.open"})}else{json!(self.title)},json!({"fontSize":14,"fontWeight":600,"color":txt(self)}))]));
+        }
+        all.push(body);
+        if let Some(drag) = self.drag.as_ref().filter(|d| d["active"] == true) {
+            all.push(view(json!({"position":"absolute","left":drag["atX"].as_f64().unwrap_or(0.)-20.,"top":drag["atY"].as_f64().unwrap_or(0.)-20.,"width":48,"height":48,"pointerEvents":"none","opacity":0.8}),vec![icon("files",42.)]));
+        }
+        if let Some(menu) = self.context_menu(shared) {
+            all.push(menu);
+        }
+        if let Some(dialog) = self.dialog_view(shared) {
+            all.push(dialog);
+        }
+        view(
+            json!({"flex":1,"backgroundColor":color(self,"windowBg","#202025"),"overflow":"hidden"}),
+            all,
+        )
+    }
+    pub fn menus(&self, shared: &Shared) -> Value {
+        let selected = !self.tab().selected.is_empty();
+        let writable = self.write_dir().is_some();
+        let item = |key: &str, act: &str, disabled: bool| json!({"label":{"key":key},"action":[act],"disabled":disabled});
+        json!([
+            {"label":{"key":"files.menu.file"},"items":[item("files.menu.newWindow","newWindow",false),item("files.menu.newTab","newTab",false),item("files.menu.newFolder","newFolder",!writable),"-",item("files.menu.open","open",!selected),item("files.menu.getInfo","info",!selected),item("files.menu.rename","rename",!writable||self.selected().len()!=1),item("files.menu.duplicate","duplicate",!writable||!selected),item("files.menu.trash","trash",!writable||!selected)]},
+            {"label":{"key":"files.menu.edit"},"items":[item("files.menu.copy","copy",!selected),item("files.menu.cut","cut",!selected||!writable),item("files.menu.paste","paste",!writable||shared.clipboard.is_empty()),item("files.menu.selectAll","selectAll",false)]},
+            {"label":{"key":"files.menu.view"},"items":[{"label":{"key":"files.view.icons"},"action":["view","icons"],"checked":self.tab().view=="icons"},{"label":{"key":"files.view.list"},"action":["view","list"],"checked":self.tab().view=="list"},{"label":{"key":"files.view.columns"},"action":["view","columns"],"checked":self.tab().view=="columns"},{"label":{"key":"files.view.gallery"},"action":["view","gallery"],"checked":self.tab().view=="gallery"},"-",item("files.menu.showHidden","hidden",false),{"label":{"key":"files.rust.sortName"},"action":["sort","name"]},{"label":{"key":"files.rust.sortSize"},"action":["sort","size"]},{"label":{"key":"files.rust.sortDate"},"action":["sort","date"]}]},
+            {"label":{"key":"files.menu.go"},"items":[item("files.menu.back","back",self.tab().back.is_empty()),item("files.menu.forward","forward",self.tab().forward.is_empty()),item("files.menu.up","up",self.tab().location.path().is_none()),item("files.menu.goToFolder","goTo",false),item("files.menu.connect","connect",false)]},
+            {"label":{"key":"files.settings.title"},"items":[item("files.settings.open","preferences",false)]}
+        ])
+    }
+}

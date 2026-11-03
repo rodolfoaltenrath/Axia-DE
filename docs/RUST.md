@@ -41,9 +41,10 @@ identificadores de até 1024 bytes.
 
 ## Build e testes
 
-O build requer Cargo e rustc. O crate não depende de pacotes externos: a
-compilação usa `--locked --offline` e não precisa baixar crates dentro do
-builder do RPM. O arquivo de lock acompanha o código.
+O build requer Cargo e rustc. As dependências externas estão fixadas em `rust/Cargo.lock` e incluídas em
+`rust/vendor`. A configuração `.cargo/config.toml` direciona o Cargo para essas
+cópias: a compilação usa `--locked --offline` e não baixa crates dentro do
+builder do RPM. As licenças dos autores acompanham o pacote.
 
 ```sh
 cargo test --manifest-path rust/Cargo.toml --locked --offline
@@ -62,3 +63,11 @@ DRM/KMS nem o resultado visual do blur em hardware.
 Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
+
+## Arquivos e seletores nativos
+
+O explorador e os seletores de abrir/salvar/pasta usam o módulo `files/`.
+Rust possui o estado e descreve a interface; a ponte QuickJS e o adaptador de
+widgets preservam o runtime da DE. A implementação anterior do app e de
+`fsops.c` foi removida; consumidores C mantêm a ABI declarada em `fsops.h`.
+Veja [FILES.md](FILES.md) para arquitetura, limites e testes.

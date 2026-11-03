@@ -4,7 +4,8 @@ CC      ?= cc
 CARGO   ?= cargo
 RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
-RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs)
+RUST_NATIVE_LIBS := $(shell pkg-config --libs gio-2.0)
+RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../rust/axia-shell/src/files/*.rs) ../.cargo/config.toml
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
 CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)
@@ -64,7 +65,7 @@ MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/cap
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
-SRC := src/hw/wallpaper_find.c src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/apps.c src/lpk.c src/fsops.c src/remote/mirror.c src/remote/ipnet.c src/remote/rtcwire.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
+SRC := src/hw/wallpaper_find.c src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/apps.c src/lpk.c src/remote/mirror.c src/remote/ipnet.c src/remote/rtcwire.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
        src/ui/node.c src/ui/style.c src/ui/layout.c src/ui/transform.c src/ui/text.c src/ui/image.c \
        src/ui/paint.c src/ui/js.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
@@ -111,13 +112,14 @@ DISK_SRC := src/disk/disk.c src/disk/smart.c src/disk/smartctl.c src/ui/js_disk.
 SRC += $(DISK_SRC)
 HDR += $(wildcard src/disk/*.h)
 SRC += src/platform/admin.c src/platform/net.c
-SRC += src/platform/seat.c src/platform/power.c
+SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c
 HDR += $(wildcard src/platform/*.h)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+	./build/fsops-test
 	./build/battery-refresh-test
 	./build/host-power-test
 	./build/glass-renderer-test
@@ -130,13 +132,13 @@ test-platform: build/battery-refresh-test build/host-power-test build/glass-rend
 	./build/cpu-cursor-test
 	./build/kms-cursor-test
 build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_golden.h src/canvas.c src/canvas.h src/glass_ffi.h src/par.c $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) -ldl -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/hw/power.c src/sec/json.c src/platform/power.h $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/hw/power.c src/sec/json.c $(RUST_LIB) -ldl -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/hw/power.c src/sec/json.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/host-power-test: tests/host_power_test.c src/platform/power.c src/platform/power.h src/vault/dbus.c $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ $< src/platform/power.c src/vault/dbus.c $(RUST_LIB) -ldl -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ $< src/platform/power.c src/vault/dbus.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/wallpaper-image-test: tests/wallpaper_image_test.c src/ui/image.c src/canvas.c src/glass_ffi.h build/obj/ui/stb.o $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c build/obj/ui/stb.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/cpu-cursor-test: tests/cpu_cursor_test.c src/main.c src/outputs.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/outputs.c -lm
 build/kms-cursor-test: tests/kms_cursor_test.c src/kms.c src/kms.h
@@ -148,7 +150,7 @@ test-rust:
 $(RUST_LIB): $(RUST_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
 build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
-	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) -ldl -lpthread -lm
+	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/seat-test: tests/seat_test.c src/platform/seat.c src/platform/seat.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -D_GNU_SOURCE -DLORD_LIBSEAT $(shell pkg-config --cflags libseat) -Isrc -o $@ tests/seat_test.c src/platform/seat.c
@@ -325,24 +327,24 @@ build/brokermail-test: tests/brokermail_test.c src/sec/brokermail.c src/sec/json
 	./$@ || { rm -f $@; exit 1; }
 # tests/launch_cli.c: the real Linux app launcher outside the desktop, for tests/fwlinux/files.sh
 # (built by `make test`, run by that script in the VM)
-LAUNCH_CLI_SRC := src/apps.c src/fsops.c src/hw/defaults.c src/hw/mimeapps.c src/sec/cgroup.c src/sec/sandbox.c \
+LAUNCH_CLI_SRC := src/apps.c src/hw/defaults.c src/hw/mimeapps.c src/sec/cgroup.c src/sec/sandbox.c \
                   src/sec/restrict.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
 test: build/launch-cli
 build/launch-cli: tests/launch_cli.c $(LAUNCH_CLI_SRC) src/apps.h $(wildcard src/sec/*.h src/fw/*.h src/hw/*.h)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/launch_cli.c $(LAUNCH_CLI_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/launch_cli.c $(LAUNCH_CLI_SRC) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 # tests/apps_actions_test.c: desktop actions (Actions= and [Desktop Action …]) in the real launcher
 test: build/apps-actions-test
 build/apps-actions-test: tests/apps_actions_test.c $(LAUNCH_CLI_SRC) src/apps.h $(wildcard src/sec/*.h src/fw/*.h src/hw/*.h)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/apps_actions_test.c $(LAUNCH_CLI_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/apps_actions_test.c $(LAUNCH_CLI_SRC) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # tests/defaults_test.c: the default app for a MIME type (user choice, system default, first
 # declaring app) and launchWith('') over a fake XDG tree
 test: build/defaults-test
 build/defaults-test: tests/defaults_test.c $(LAUNCH_CLI_SRC) src/apps.h $(wildcard src/sec/*.h src/fw/*.h src/hw/*.h)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/defaults_test.c $(LAUNCH_CLI_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/defaults_test.c $(LAUNCH_CLI_SRC) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # tests/notifyd_cli.c: the real notification server on a private bus, for tests/fwlinux/notify.sh
 NOTIFYD_CLI_SRC := src/hw/notifyd.c src/sec/appid.c src/hw/jbuf.c src/vault/dbus.c src/sec/restrict.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
@@ -397,9 +399,9 @@ build/dnsmap-test: tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules.c src/fw/fwm
 # backup engine: snapshots, hard links, restore, retention, interruptions, exclusions, encryption
 build/axia-server: build/obj/vault/monocypher.o
 test: build/backup-test
-build/backup-test: tests/backup_test.c src/backup/engine.c src/backup/crypt.c src/fsops.c src/backup/engine.h src/backup/crypt.h src/fsops.h build/obj/vault/monocypher.o
+build/backup-test: tests/backup_test.c src/backup/engine.c src/backup/crypt.c src/backup/engine.h src/backup/crypt.h src/fsops.h build/obj/vault/monocypher.o
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -isystem ../third_party/monocypher $(CFLAGS) $(WARN) -std=c11 -o $@ tests/backup_test.c src/backup/engine.c src/backup/crypt.c src/fsops.c build/obj/vault/monocypher.o -lpthread
+	$(CC) $(CPPFLAGS) -isystem ../third_party/monocypher $(CFLAGS) $(WARN) -std=c11 -o $@ tests/backup_test.c src/backup/engine.c src/backup/crypt.c build/obj/vault/monocypher.o -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # Monitor's MaxMind DB reader (country of an IP): known lookups and broken files
 build/mmdb-test: tests/mmdb_test.c src/monitor/mmdb.c src/monitor/mmdb.h src/pkg/xz.c build/obj/ui/stb.o
@@ -438,14 +440,14 @@ ENGINE_SRC := src/gpu/gscissor.c src/gpu/gcontend.c src/ui/node.c src/ui/style.c
               src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/canvas.c
 test: build/engine-test
 build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # wlroots proof of concept (poc/axia-wlr.c, docs/WLROOTS.md): the UI engine on wlroots 0.20, with
 # wlroots doing the backend, protocols and input. Built on request only, never installed.
 WLR_PKGS := wlroots-0.20 wayland-server xkbcommon pixman-1 libdrm
 build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) -DWLR_USE_UNSTABLE $(shell pkg-config --cflags $(WLR_PKGS)) $(CFLAGS) $(WARN) -std=c11 -o $@ \
-	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) -ldl -lm -lpthread
+	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 # the frame pipeline's decisions (src/fpipe.c, docs/GPU.md "The frame pipeline"): LORD_PIPELINE, the auto
 # mode, what a display does next, when input waits, and a display on a vblank grid with and without it
 test: build/fpipe-test
@@ -457,13 +459,13 @@ build/fpipe-test: tests/fpipe_test.c src/fpipe.c src/fpipe.h
 # step 9, the corners' restore on the drag layer and main's blur-margin repaint), never to make a changed frame pass
 # (tests/engine_test.c, "The dragged window, pixel for pixel")
 drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./build/engine-golden drag-golden
 build/canvas-test: tests/canvas_test.c src/canvas.c src/canvas.h $(RUST_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_CANVAS_TEST -o $@ tests/canvas_test.c src/canvas.c $(RUST_LIB) -ldl -lpthread -lm
-build/fsops-test: tests/fsops_test.c src/fsops.c src/fsops.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fsops_test.c src/fsops.c -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_CANVAS_TEST -o $@ tests/canvas_test.c src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/fsops-test: tests/fsops_test.c src/fsops.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fsops_test.c -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 # touchpad driver (src/tp): gestures of the simulated touchpad (../tests/touchpad-sim) → what's recognized
 build/tp-test: tests/tp_test.c src/tp/tp.c src/tp/tp.h ../tests/touchpad-sim/gestures.c ../tests/touchpad-sim/gestures.h
 	@mkdir -p build
@@ -576,7 +578,7 @@ build/gen/%.o: build/gen/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
 
 build/axia-server: $(OBJ) build/obj/ui/stb.o $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB)
-	$(CC) $(LDFLAGS) -o $@ $(filter-out $(RUST_LIB),$^) $(RUST_LIB) $(LDLIBS)
+	$(CC) $(LDFLAGS) -o $@ $(filter-out $(RUST_LIB),$^) $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS)
 
 # Root over SSH (advanced, src/remote/ssh_root.c): public key lines and fingerprints.
 test: build/ssh-root-test
@@ -726,3 +728,6 @@ build/wallpaper-find-test: tests/wallpaper_find_test.c src/hw/wallpaper_find.c s
 	./$@
 
 test: build/wallpaper-find-test
+
+# Shared filesystem algorithms are Rust, including helper/test consumers.
+build/fsops-test build/launch-cli build/apps-actions-test build/defaults-test build/backup-test: $(RUST_LIB)

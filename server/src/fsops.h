@@ -1,5 +1,5 @@
 /* fsops.h — file operations for lord.fs (Files): background copy/move,
- * Trash (freedesktop), information, bounded searches and mounted volumes (see fsops.c). */
+ * Trash (freedesktop), information, bounded searches and mounted volumes (see Rust files core). */
 #ifndef LORD_FSOPS_H
 #define LORD_FSOPS_H
 
@@ -10,7 +10,7 @@
 /* Allowed roots: the home folder and the user's mounts (/media/$USER, /run/media/$USER). */
 void fsops_init(const char *home, const char *user);
 int  fsops_allowed(const char *real);          /* already resolved path (realpath) inside a root */
-/* Network shares (see fsops.c): a kernel file system name of a share, and whether a path lies on a
+/* Network shares (see Rust files core): a kernel file system name of a share, and whether a path lies on a
  * share that stopped answering. Doesn't touch the path itself and waits under a second. */
 int fsops_share_fs(const char *fstype);
 int fsops_share_down(const char *path);

@@ -657,5 +657,12 @@
   "share.notResponding": "The computer sharing this does not answer",
   "wallpaper.downloadFailed": "The wallpaper could not be downloaded",
   "wallpaper.removeFailed": "The wallpaper could not be changed",
-  "wallpaper.notDownloaded": "That wallpaper is not downloaded"
+  "wallpaper.notDownloaded": "That wallpaper is not downloaded",
+  "files.invalidAddress": "This address is invalid. Try smb://server/folder.",
+  "files.networkAuth": "Could not sign in to the server. Check your username and password.",
+  "files.networkCancelled": "Connection cancelled.",
+  "files.networkFailed": "Could not connect. Check the address and your network connection.",
+  "files.networkUnavailable": "This server did not provide a folder. Check that Fedora network folder support is installed.",
+  "files.filenameEncoding": "This name uses an older encoding. Rename the file before opening it.",
+  "files.openFailed": "Could not open this file. Check that an app for this file type is installed."
 }

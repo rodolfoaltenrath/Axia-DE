@@ -47,7 +47,7 @@ LB_GL_FLAGS := $(if $(filter 1,$(GPU)),-DLORD_GPU $(shell pkg-config --cflags gb
 LB_GL_LIBS := $(if $(filter 1,$(GPU)),$(shell pkg-config --libs gbm egl glesv2))
 all: build/axia-bench
 build/axia-bench: $(LB_SRC) $(LB_GL_SRC) build/obj/ui/stb.o $(QJS_OBJ) build/gen/lb_corpus.h build/gen/lb_fonts.h $(wildcard src/bench/*.h) src/sec/sandbox.h src/sec/cgroup.h $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LB_GL_FLAGS) $(WARN) -std=c11 -o $@ $(LB_SRC) $(LB_GL_SRC) build/obj/ui/stb.o $(QJS_OBJ) $(RUST_LIB) $(LB_GL_LIBS) -ldl -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LB_GL_FLAGS) $(WARN) -std=c11 -o $@ $(LB_SRC) $(LB_GL_SRC) build/obj/ui/stb.o $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LB_GL_LIBS) -ldl -lm -lpthread
 
 # the workloads (short; the UI scene and every paragraph's glyphs too), the record checks (the sandbox
 # self-test's included), the thermal guard on fake sysfs trees and the boot history
@@ -58,7 +58,7 @@ build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/lbcond.c \
 	    src/bench/lbrun.c src/bench/bench.c src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/pkg/xz.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
-	    $(ENGINE_SRC) build/obj/ui/stb.o $(QJS_OBJ) $(RUST_LIB) -ldl -lm -lpthread
+	    $(ENGINE_SRC) build/obj/ui/stb.o $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # from a terminal, without a session: build/lordbench-cli quick|full [sustained_s] (needs build/axia-bench, and build/axia-media
 # for the video measurements; desktop mode needs a session: without one its frame results are skipped)
