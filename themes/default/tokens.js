@@ -24,6 +24,7 @@ export const wallpapers = [...lordosWallpapers, ...gradients];
 
 export function makeTheme({ mode, accent, effects }) {
   const dark = mode === 'dark';
+  const glass = lord.settings.glassMaterial(dark, effects !== false);
   return {
     mode,
     accent: accents[accent] || accents.azul,
@@ -45,8 +46,8 @@ export function makeTheme({ mode, accent, effects }) {
     panelBg: dark ? (effects ? 'rgba(36,36,42,0.72)' : '#2a2a30') : (effects ? 'rgba(246,246,248,0.78)' : '#f2f2f5'),
     windowBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.14)',
     titleBg: dark ? '#2b2b30' : '#ececef',
-    dockBg: dark ? 'rgba(46,46,56,0.42)' : 'rgba(255,255,255,0.38)',
-    dockBorder: dark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.55)',
+    dockBg: glass.backgroundColor,
+    dockBorder: glass.borderColor,
     lightOff: dark ? '#4a4a50' : '#c8c8cc',
     // overlay scroll bars (sdk/components.jsx ScrollView): a soft pill
     scrollThumb: dark ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.3)',

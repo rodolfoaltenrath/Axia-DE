@@ -139,7 +139,7 @@ function App() {
     left: desktopSwipe('left'), right: desktopSwipe('right'),
   }), []);
 
-  const wallpaper = findWallpaper(t.wallpapers, s.wallpaper);
+  const wallpaper = findWallpaper(t.wallpapers, s.wallpaper, s.wallpaperUser);
   // Pinned and open apps; windows of the same app (Linux too) share a single icon. The app launcher
   // is a Dock item too (it moves, but can't be removed).
   const entries = useDockEntries(DOCK_DEFAULT, { recents: dp.dockRecents ? 3 : 0, launcher: { Icon: LaunchpadIcon, onOpen: () => setLaunchpad(true) } });
@@ -192,7 +192,7 @@ function App() {
         {control && <Layer name="popover"><ControlCenter t={t} top={MENU_H} area={control} onClose={() => setControl(null)} /></Layer>}
         {context && (
           <Menu x={context.x} y={context.y} onClose={() => setContext(null)} items={[
-            { label: tr('shell.desktop.wallpaper'), onClick: () => setControl(main) },
+            { label: tr('shell.desktop.wallpaper'), onClick: () => wm.open('settings', { args: { section: 'wallpaper' } }) },
             { label: tr('shell.desktop.openLaunchpad'), onClick: () => setLaunchpad(true) },
             { label: tr('shell.desktops.overview'), onClick: () => toggleOverview() },
             '-',

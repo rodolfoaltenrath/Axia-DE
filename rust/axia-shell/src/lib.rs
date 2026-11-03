@@ -1,5 +1,7 @@
-//! First Rust module of Axia DE. Window-system objects remain in C/JavaScript.
-//! The C ABI copies keys into Rust-owned storage; no borrowed data survives a call.
+//! Rust services embedded in the existing C compositor.
+//! Window-system objects and the React UI retain their existing interfaces.
+mod glass;
+mod wallpaper;
 use std::ffi::{c_char, CStr};
 
 const LIMIT: usize = 512;

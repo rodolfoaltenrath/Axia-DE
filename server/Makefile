@@ -116,7 +116,8 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+	./build/wallpaper-image-test
 	./build/seat-test
 	./build/platform-admin-test
 	./build/switcher-ffi-test
@@ -124,6 +125,8 @@ test-platform: build/seat-test build/platform-admin-test build/keygrab-test buil
 	./build/wl-input-region-test
 	./build/cpu-cursor-test
 	./build/kms-cursor-test
+build/wallpaper-image-test: tests/wallpaper_image_test.c src/ui/image.c src/canvas.c src/glass_ffi.h build/obj/ui/stb.o $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lpthread -lm
 build/cpu-cursor-test: tests/cpu_cursor_test.c src/main.c src/outputs.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/outputs.c -lm
 build/kms-cursor-test: tests/kms_cursor_test.c src/kms.c src/kms.h
@@ -424,15 +427,15 @@ ENGINE_SRC := src/gpu/gscissor.c src/gpu/gcontend.c src/ui/node.c src/ui/style.c
               src/ui/paint.c src/ui/otf.c src/ui/fonts.c src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c \
               src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/canvas.c
 test: build/engine-test
-build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o -lm -lpthread
+build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # wlroots proof of concept (poc/axia-wlr.c, docs/WLROOTS.md): the UI engine on wlroots 0.20, with
 # wlroots doing the backend, protocols and input. Built on request only, never installed.
 WLR_PKGS := wlroots-0.20 wayland-server xkbcommon pixman-1 libdrm
-build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR)
+build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) -DWLR_USE_UNSTABLE $(shell pkg-config --cflags $(WLR_PKGS)) $(CFLAGS) $(WARN) -std=c11 -o $@ \
-	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(shell pkg-config --libs $(WLR_PKGS)) -lm -lpthread
+	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) -ldl -lm -lpthread
 # the frame pipeline's decisions (src/fpipe.c, docs/GPU.md "The frame pipeline"): LORD_PIPELINE, the auto
 # mode, what a display does next, when input waits, and a display on a vblank grid with and without it
 test: build/fpipe-test
@@ -443,12 +446,12 @@ build/fpipe-test: tests/fpipe_test.c src/fpipe.c src/fpipe.h
 # test_drag_exact's golden hashes for this architecture: only on the reference code (001633b plus
 # step 9, the corners' restore on the drag layer and main's blur-margin repaint), never to make a changed frame pass
 # (tests/engine_test.c, "The dragged window, pixel for pixel")
-drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o -lm -lpthread
+drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) -ldl -lm -lpthread
 	./build/engine-golden drag-golden
-build/canvas-test: tests/canvas_test.c src/canvas.c src/canvas.h
+build/canvas-test: tests/canvas_test.c src/canvas.c src/canvas.h $(RUST_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_CANVAS_TEST -o $@ tests/canvas_test.c src/canvas.c -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_CANVAS_TEST -o $@ tests/canvas_test.c src/canvas.c $(RUST_LIB) -ldl -lpthread -lm
 build/fsops-test: tests/fsops_test.c src/fsops.c src/fsops.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fsops_test.c src/fsops.c -lpthread
 # touchpad driver (src/tp): gestures of the simulated touchpad (../tests/touchpad-sim) → what's recognized

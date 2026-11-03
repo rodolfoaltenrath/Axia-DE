@@ -11,6 +11,8 @@
 struct Image {
     char *path;
     int w, h, opaque;
+    unsigned refs;              /* managed wallpapers can be released when their last node goes away */
+    int managed;
     uint32_t *px;                   /* premultiplied ARGB */
     uint32_t *scaled;               /* last scaled version */
     int sw, sh, sfit;
@@ -23,14 +25,18 @@ static struct Image *images;
 
 Image *image_get(const char *path) {
     for (Image *i = images; i; i = i->next)
-        if (!strcmp(i->path, path)) return i;
+        if (!strcmp(i->path, path)) { i->refs++; return i; }
     int w, h, ch;
     unsigned char *rgba = stbi_load(path, &w, &h, &ch, 4);
     if (!rgba) { fprintf(stderr, "image: could not load %s\n", path); return NULL; }
     Image *img = calloc(1, sizeof *img);
+    if (!img) { stbi_image_free(rgba); return NULL; }
     img->path = strdup(path);
+    img->refs = 1;
+    img->managed = strstr(path, "/axia/wallpapers/") != NULL;
     img->w = w; img->h = h; img->opaque = 1;
     img->px = malloc((size_t)w * h * 4);
+    if (!img->path || !img->px) { free(img->path); free(img->px); free(img); stbi_image_free(rgba); return NULL; }
     for (size_t i = 0; i < (size_t)w * h; i++) {
         uint32_t r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2], a = rgba[i * 4 + 3];
         if (a < 255) img->opaque = 0;
@@ -89,9 +95,18 @@ Image *image_argb(Image *img, int w, int h, const uint32_t *argb) {
     return img;
 }
 
-/* Frees an image from image_pixels (file images stay in the cache). */
+/* Theme assets stay cached. Managed wallpapers are reference-counted: switching
+ * pictures releases their original and scaled pixels once no display still uses them. */
 void image_release(Image *img) {
-    if (!img || img->path) return;
+    if (!img) return;
+    if (img->path) {
+        if (img->refs) img->refs--;
+        if (!img->managed || img->refs) return;
+        Image **link = &images;
+        while (*link && *link != img) link = &(*link)->next;
+        if (*link) *link = img->next;
+        free(img->path);
+    }
     free(img->px);
     free(img->scaled);
     free(img->scaled2);

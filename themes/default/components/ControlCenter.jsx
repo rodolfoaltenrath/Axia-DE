@@ -8,8 +8,8 @@ import { useEffect, useRef } from 'react';
 // Four wallpapers fit in the tile: the current one and a few from the collection (all of them are
 // in Settings → Wallpaper, which «Change Wallpaper…» opens).
 const QUICK = ['infinite-galaxy', 'violet-horizon', 'eternal-dawn', 'event-horizon', 'aurora'];
-function quickWallpapers(list, cur) {
-  const current = findWallpaper(list, cur);
+function quickWallpapers(list, cur, personal) {
+  const current = findWallpaper(list, cur, personal);
   const rest = QUICK.map((id) => list.find((w) => w.id === id)).filter((w) => w && w !== current);
   return [current, ...rest].filter(Boolean).slice(0, 4);
 }
@@ -120,10 +120,10 @@ export function ControlCenter({ t, top, onClose, area = null }) {
         </View>
       </Tile>
       <Tile t={t} style={{ gap: 8 }}>
-        <Text style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{tr('shell.cc.wallpaper')}</Text>
+        <View onClick={() => { onClose(); wm.open('settings', { args: { section: 'wallpaper' } }); }}><Text style={{ fontSize: 12, fontWeight: 600, color: t.accent }}>{tr('shell.desktop.wallpaper')} ›</Text></View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          {quickWallpapers(t.wallpapers, s.wallpaper).map((w) => (
-            <View key={w.id} onClick={() => set({ wallpaper: w.id })} style={{ width: 62, height: 40, borderRadius: 6, overflow: 'hidden',
+          {quickWallpapers(t.wallpapers, s.wallpaper, s.wallpaperUser).map((w) => (
+            <View key={w.id} onClick={() => set({ wallpaper: w.id, motion: {} })} style={{ width: 62, height: 40, borderRadius: 6, overflow: 'hidden',
               border: s.wallpaper === w.id ? `2px solid ${t.accent}` : `1px solid ${t.separator}` }}>
               <Image src={wallpaperThumb(w)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </View>

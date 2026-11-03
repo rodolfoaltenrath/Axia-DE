@@ -41,8 +41,8 @@ export function wallpaperSrc(w, width, height) {
   return list[list.length - 1].src;
 }
 
-// The wallpaper chosen in the settings, among a theme's list.
-export const findWallpaper = (list, id) => (list || []).find((w) => w.id === id)
+// Personal selections survive a theme switch; built-in fallbacks follow the theme's list.
+export const findWallpaper = (list, id, personal = []) => [...(personal || []), ...(list || [])].find((w) => w.id === id)
   || (list || []).find((w) => w.id === DEFAULT_WALLPAPER) || (list || [])[0] || null;
 
 // The small image for a picker (falls back to the full one for theme wallpapers without a thumb).

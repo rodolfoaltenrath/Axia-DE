@@ -5,7 +5,7 @@
 import {
   shortcutProfile, standaloneDesktop, View, Text, Image, useTheme, useSettings, shortcutList, shortcutsRev, themes, session, keyboard, admin, languages, setLanguage, useLocale,
   reloadCatalogs, tOptional, statusText, fs, useStore, SidebarItem, Toggle, Button, TextInput, ScrollView, SearchField, Hairline, useSystemInfo, useAppWindow, useTrackpads,
-  spacing, typeScale, registerDockActions, hasTouchpad, findWallpaper, wallpaperThumb, WALLPAPER_CATEGORIES, GREETER_WALLPAPER, setLoginStill, MOTION_SECTIONS, MOTION_RATES, motionBusy, motionItems, motionThumb, motionDownloads, useCodecs, downloadMotion, removeMotion, setLoginMotion, variantFor, userVideoProblem, media, FilePicker, screenDisplays, errorText, wm, Segmented, osk,
+  spacing, typeScale, registerDockActions, hasTouchpad, findWallpaper, wallpaperThumb, WALLPAPER_CATEGORIES, GREETER_WALLPAPER, setLoginStill, MOTION_SECTIONS, MOTION_RATES, motionBusy, motionItems, motionThumb, motionDownloads, useCodecs, downloadMotion, removeMotion, setLoginMotion, variantFor, userVideoProblem, media, FilePicker, Layer, addListener, mainBox, screenDisplays, errorText, wm, Segmented, osk,
   restoreMode, setRestoreMode, restoreBrowsers, setRestoreBrowsers,
 } from '@lordos/sdk';
 import { useEffect, useState } from 'react';
@@ -333,16 +333,27 @@ function Wallpapers() {
   const t = useTheme();
   const { t: tr } = useLocale();
   const [s, set] = useSettings();
-  const list = t.wallpapers || [];
-  if (!list.length) return <Stack><Note>{tr('settings.noWallpapers')}</Note></Stack>;
+  const [pickStill, setPickStill] = useState(false);
+  useEffect(() => pickStill ? addListener('keydown', (e) => { if (e.key === 'Escape') setPickStill(false); }) : undefined, [pickStill]);
   const [target, setTarget] = useState('desktop');
   const login = target === 'login';
+  const list = [...(login ? [] : (s.wallpaperUser || [])), ...(t.wallpapers || [])];
   const [note, setNote] = useState('');
   const shown = login ? s.loginWallpaper : s.wallpaper;
   const cur = findWallpaper(list, login ? (list.some((w) => w.id === shown) ? shown : GREETER_WALLPAPER) : s.wallpaper);
   const stillPick = (id) => {
     if (!login) { set({ wallpaper: id, motion: {} }); return; }
     setLoginStill(id).then(() => { set({ loginWallpaper: id }); setNote(tr('settings.motion.loginDone')); }, (e) => setNote(errorText(e)));
+  };
+  const importStill = (path) => {
+    setPickStill(false);
+    try {
+      const image = lord.settings.importWallpaper(path);
+      if (!image) { setNote(tr('settings.wallpaper.importFailed')); return; }
+      const personal = [image, ...(s.wallpaperUser || []).filter((w) => w.id !== image.id)];
+      set({ wallpaperUser: personal, wallpaper: image.id, motion: {} });
+      setNote('');
+    } catch (e) { setNote(tr('settings.wallpaper.importFailed')); }
   };
   const cats = [...new Set([...WALLPAPER_CATEGORIES, ...list.map((w) => w.category || 'other')])]
     .map((c) => [c, list.filter((w) => (w.category || 'other') === c)]).filter(([, ws]) => ws.length);
@@ -351,14 +362,18 @@ function Wallpapers() {
     <Stack>
       {!standaloneDesktop && <Segmented value={target} onChange={(v) => { setTarget(v); setNote(''); }} options={[['desktop', tr('settings.wallpaperFor.desktop')], ['login', tr('settings.wallpaperFor.login')]]} />}
       {note ? <Note>{note}</Note> : null}
+      {!login && <Section title={tr('settings.wallpaper.personal')}>
+        <Button label={tr('settings.wallpaper.chooseImage')} onClick={() => setPickStill(true)} />
+        <Note>{tr('settings.wallpaper.imageHint')}</Note>
+      </Section>}
       <Section>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.l, paddingVertical: spacing.m }}>
           <View style={{ width: 128, height: 72, borderRadius: 8, overflow: 'hidden', border: `1px solid ${t.separator}` }}>
             <Image src={wallpaperThumb(cur)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Text style={{ fontSize: typeScale.headline, fontWeight: 600, color: t.text, textAlign: 'start' }}>{wallpaperName(cur)}</Text>
-            <Text style={{ fontSize: typeScale.caption, color: t.textDim, textAlign: 'start' }}>{catName(cur.category || 'other')}</Text>
+            <Text style={{ fontSize: typeScale.headline, fontWeight: 600, color: t.text, textAlign: 'start' }}>{cur ? wallpaperName(cur) : tr('settings.noWallpapers')}</Text>
+            <Text style={{ fontSize: typeScale.caption, color: t.textDim, textAlign: 'start' }}>{cur ? catName(cur.category || 'other') : ''}</Text>
           </View>
         </View>
       </Section>
@@ -369,18 +384,23 @@ function Wallpapers() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: spacing.m }}>
             {ws.map((w) => (
               <View key={w.id} onClick={() => stillPick(w.id)} style={{ alignItems: 'center', gap: 6, width: 108 }}>
-                <View style={{ padding: 2, borderRadius: 10, border: `2px solid ${cur.id === w.id ? t.accent : 'transparent'}` }}>
+                <View style={{ padding: 2, borderRadius: 10, border: `2px solid ${cur?.id === w.id ? t.accent : 'transparent'}` }}>
                   <View style={{ width: 100, height: 56, borderRadius: 7, overflow: 'hidden', border: `1px solid ${t.separator}` }}>
                     <Image src={wallpaperThumb(w)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </View>
                 </View>
-                <Text style={{ fontSize: typeScale.caption, color: cur.id === w.id ? t.text : t.textDim, fontWeight: cur.id === w.id ? 600 : 400,
+                <Text style={{ fontSize: typeScale.caption, color: cur?.id === w.id ? t.text : t.textDim, fontWeight: cur?.id === w.id ? 600 : 400,
                   whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 108 }}>{wallpaperName(w)}</Text>
               </View>
             ))}
           </View>
         </Section>
       ))}
+      {pickStill && <Layer name="modal">
+        <View style={{ position: 'absolute', ...mainBox(), backgroundColor: 'rgba(0,0,0,0.25)' }}>
+          <FilePicker title={tr('settings.wallpaper.chooseImage')} filter={/\.(png|jpe?g)$/i} onPick={importStill} onClose={() => setPickStill(false)} />
+        </View>
+      </Layer>}
     </Stack>
   );
 }

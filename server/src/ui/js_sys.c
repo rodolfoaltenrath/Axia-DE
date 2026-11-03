@@ -14,6 +14,10 @@
  * lord.themes only accepts simple names. */
 #include "../hw/hw_admin.h"
 #include "js_sys.h"
+#include "wallpaper_ffi.h"
+#include "../glass_ffi.h"
+#include "stb_image.h"
+#include "stb_image_write.h"
 #include "js_err.h"
 #include "ui.h"
 #include "fonts.h"
@@ -371,6 +375,55 @@ static JSValue f_sys_cpu(JSContext *c, JSValueConst this_val, int argc, JSValueC
 
 static void settings_path(char *out, size_t size, const char *suffix) {
     snprintf(out, size, "%s/.config/axia/settings.json%s", home, suffix);
+}
+
+/* Rust owns the imported file and its bounds checks. Decode validation uses the same
+ * image library as rendering, before the immutable copy is offered to JavaScript. */
+static int wallpaper_png(const char *path, int w, int h, const unsigned char *rgba) {
+    return stbi_write_png(path, w, h, 4, rgba, w * 4);
+}
+static JSValue f_wallpaper_import(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (!argc || !JS_IsString(argv[0])) return js_throw_code(c, "media.invalidPath", NULL);
+    size_t n; const char *source = JS_ToCStringLen(c, &n, argv[0]);
+    if (!source) return JS_EXCEPTION;
+    char full[PATH_MAX], imported[PATH_MAX], thumbnail[PATH_MAX];
+    int ok = n < PATH_MAX && strlen(source) == n && resolve_readable(source, full) == 0 &&
+        axia_wallpaper_import(full, home, getenv("XDG_DATA_HOME"), imported, sizeof imported);
+    int w, h, ch;
+    /* Parse+decode the managed copy: a malformed or truncated source is never selected. */
+    unsigned char *pixels = ok ? stbi_load(imported, &w, &h, &ch, 4) : NULL;
+    if (ok && !pixels) { unlink(imported); ok = 0; }
+    if (ok && !axia_wallpaper_preview(imported, pixels, w, h, wallpaper_png, thumbnail, sizeof thumbnail)) ok = 0;
+    stbi_image_free(pixels);
+    JSValue value = JS_NULL;
+    if (ok) {
+        value = JS_NewObject(c);
+        JS_SetPropertyStr(c, value, "id", JS_NewString(c, imported));
+        JS_SetPropertyStr(c, value, "src", JS_NewString(c, imported));
+        JS_SetPropertyStr(c, value, "thumb", JS_NewString(c, thumbnail));
+        const char *name = strrchr(source, '/');
+        JS_SetPropertyStr(c, value, "name", JS_NewString(c, name ? name + 1 : source));
+        JS_SetPropertyStr(c, value, "category", JS_NewString(c, "personal"));
+    }
+    JS_FreeCString(c, source);
+    return value;
+}
+static JSValue f_glass_material(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    bool dark = argc && JS_ToBool(c, argv[0]) > 0;
+    bool effects = argc < 2 || JS_ToBool(c, argv[1]) > 0;
+    uint32_t color = axia_glass_tint(dark, effects), edge = axia_glass_outline(dark);
+    char tint[80], border[80];
+    /* CSS always uses a dot, including sessions whose C locale uses decimal commas. */
+    unsigned a = color >> 24, ea = edge >> 24;
+    snprintf(tint, sizeof tint, "rgba(%u,%u,%u,%u.%04u)", (color>>16)&255, (color>>8)&255, color&255,
+        a / 255, ((a % 255) * 10000 + 127) / 255);
+    snprintf(border, sizeof border, "rgba(255,255,255,%u.%04u)", ea / 255, ((ea % 255) * 10000 + 127) / 255);
+    JSValue value = JS_NewObject(c);
+    JS_SetPropertyStr(c, value, "backgroundColor", JS_NewString(c, tint));
+    JS_SetPropertyStr(c, value, "borderColor", JS_NewString(c, border));
+    return value;
 }
 
 static JSValue f_settings_load(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -974,6 +1027,7 @@ static JSValue f_image_size(JSContext *c, JSValueConst this_val, int argc, JSVal
     if (!img) return JS_NULL;
     int w = 0, h = 0;
     image_size(img, &w, &h);
+    image_release(img);
     JSValue o = JS_NewObject(c);
     JS_SetPropertyStr(c, o, "width", JS_NewInt32(c, w));
     JS_SetPropertyStr(c, o, "height", JS_NewInt32(c, h));
@@ -1414,6 +1468,8 @@ static const JSCFunctionListEntry system_funcs[] = {
     JS_CFUNC_DEF("cpuTimes", 0, f_sys_cpu),
 };
 static const JSCFunctionListEntry settings_funcs[] = {
+    JS_CFUNC_DEF("importWallpaper", 1, f_wallpaper_import),
+    JS_CFUNC_DEF("glassMaterial", 2, f_glass_material),
     JS_CFUNC_DEF("load", 0, f_settings_load),
     JS_CFUNC_DEF("save", 1, f_settings_save),
 };

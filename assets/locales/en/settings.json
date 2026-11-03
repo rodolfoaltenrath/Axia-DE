@@ -473,5 +473,10 @@
   "wallpaperFor.login": "Login screen",
   "kb.profile.title": "Shortcut profile",
   "kb.profile.label": "Keyboard shortcuts",
-  "kb.profile.hint": "Choose macOS (Super/Command + Tab) or Linux / Windows (Alt + Tab), independently of the visual theme. Applies immediately."
+  "kb.profile.hint": "Choose macOS (Super/Command + Tab) or Linux / Windows (Alt + Tab), independently of the visual theme. Applies immediately.",
+  "wallpaper.personal": "My pictures",
+  "wallpaper.chooseImage": "Choose an image…",
+  "wallpaper.imageHint": "PNG or JPEG, up to 32 MiB and 16 megapixels. A copy is kept for your desktop.",
+  "wallpaper.importFailed": "Could not import this image. Choose a valid PNG or JPEG up to 32 MiB and 16 megapixels.",
+  "wallpaperCategory.personal": "My pictures"
 }

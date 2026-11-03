@@ -13,6 +13,7 @@ const DEFAULTS = {
   motion: {},            // moving wallpaper per display: { '*': id, <display id>: id } (sdk/motion.jsx)
   motionFiles: {},       // id → the variant on disk
   motionUser: [],        // added videos: [{ id: 'user:…', name, path }]
+  wallpaperUser: [],     // managed still images imported by the Rust wallpaper service
   wallpaper: DEFAULT_WALLPAPER,  // Infinite Galaxy
   keyboard: 'latam',     // before M5; now keyboards (see keyboard.js)
   keyboards: null,       // [{ layout, variant }] from xkb-data

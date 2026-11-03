@@ -473,5 +473,10 @@
   "wallpaperFor.login": "Tela de login",
   "kb.profile.title": "Perfil de atalhos",
   "kb.profile.label": "Atalhos do teclado",
-  "kb.profile.hint": "Escolha macOS (Super/Command + Tab) ou Linux / Windows (Alt + Tab), independentemente do tema visual. A alteração é imediata."
+  "kb.profile.hint": "Escolha macOS (Super/Command + Tab) ou Linux / Windows (Alt + Tab), independentemente do tema visual. A alteração é imediata.",
+  "wallpaper.personal": "Minhas imagens",
+  "wallpaper.chooseImage": "Escolher uma imagem…",
+  "wallpaper.imageHint": "PNG ou JPEG, até 32 MiB e 16 megapixels. Uma cópia é mantida para sua área de trabalho.",
+  "wallpaper.importFailed": "Não foi possível importar a imagem. Escolha um PNG ou JPEG válido de até 32 MiB e 16 megapixels.",
+  "wallpaperCategory.personal": "Minhas imagens"
 }

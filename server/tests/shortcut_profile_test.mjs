@@ -20,9 +20,14 @@ assert.deepEqual(keys('quick', 'macos', ['Meta+A']), []); // leaves select-all a
 assert.deepEqual(keys('capture.area', 'linux'), ['Meta+Shift+S']);
 assert.deepEqual(keys('terminalDropdown', 'linux', ['F12']), ['F12']);
 assert.equal(profileEntry({ id: 'switchApps', keys: [], show: ['old'] }, 'linux').show, undefined);
+// Native material policy is tested through the real Rust bridge in switcher_smoke.
+// This unit test checks theme overrides and the SDK's handoff to that service.
+globalThis.lord = { settings: { glassMaterial: (dark, effects) => ({
+  backgroundColor: effects ? 'native-glass' : 'native-opaque', borderColor: 'native-outline',
+}) } };
 const glass = { mode: 'dark', effects: true, dockBg: 'rgba(46,46,56,0.42)', dockBorder: '#aaa', blur: 24 };
 assert.equal(dockGlass(glass).backdropFilter, 'blur(24px)');
 assert.equal(dockGlass(glass).backgroundColor, glass.dockBg);
 assert.equal(dockGlass({ ...glass, effects: false }).backdropFilter, 'blur(0px)');
-assert.equal(dockGlass({ ...glass, effects: false }).backgroundColor, '#2a2a30');
+assert.equal(dockGlass({ ...glass, effects: false }).backgroundColor, 'native-opaque');
 console.log('shortcut profiles and shared glass: passed');

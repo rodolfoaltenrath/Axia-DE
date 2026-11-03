@@ -4,6 +4,7 @@ import { render, View } from '@lordos/runtime';
 import { configureWindows, wm } from '../../sdk/windows.js';
 import { openSwitcher, switcherKey, switcherState, cancelSwitcher, AppSwitcher } from '../../sdk/appswitcher.jsx';
 import { useShortcuts, shortcutList } from '../../sdk/shortcuts.js';
+import { findWallpaper } from '../../sdk/wallpapers.js';
 import { settings } from '../../sdk/settings.js';
 
 const check = (ok, message) => { if (!ok) throw new Error('switcher smoke: ' + message); };
@@ -15,6 +16,19 @@ function Harness() {
 render(h(Harness));
 function runTests() {
   check(!!lord.switcher, 'Rust bridge exists');
+  const source = lord.fs.home() + '/wallpaper input.png';
+  const image = lord.settings.importWallpaper(source);
+  check(image && image.src !== source && image.thumb !== image.src, 'wallpaper has a managed copy and thumbnail');
+  check(lord.fs.stat(image.src) && lord.fs.stat(image.thumb), 'wallpaper files exist');
+  check(lord.settings.importWallpaper(source).id === image.id, 'importing twice reuses the file');
+  check(lord.settings.importWallpaper(lord.fs.home() + '/bad image.png') === null, 'corrupt image rejected');
+  check(lord.settings.importWallpaper(lord.fs.home() + '/huge image.png') === null, 'oversized image rejected');
+  check(lord.settings.importWallpaper(source + '\0extra') === null, 'embedded NUL rejected');
+  check(findWallpaper([], image.id, [image]) === image, 'personal wallpaper survives a theme without a collection');
+  check(lord.settings.glassMaterial(true, false).backgroundColor.endsWith(',1.0000)'), 'effects off is opaque');
+  settings.set({ wallpaperUser: [image], wallpaper: image.id, motion: {} });
+  check(lord.settings.save(JSON.stringify(settings.get()), true), 'wallpaper preferences are durable');
+  console.log('wallpaper integration: passed');
   configureWindows({ apps: ['files', 'terminal', 'calculator'].map((id) => ({ id, name: id })) });
   wm.open('files'); wm.open('terminal'); wm.open('calculator');
   const extra = wm.open('terminal', { new: true });

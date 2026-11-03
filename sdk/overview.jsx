@@ -179,7 +179,7 @@ function Strip({ o, th }) {
   const all = useStore(windows);
   const active = useStore(activeDesktop);
   const s = settings.get();
-  const wall = wallpaperThumb(findWallpaper(th.wallpapers, s.wallpaper));
+  const wall = wallpaperThumb(findWallpaper(th.wallpapers, s.wallpaper, s.wallpaperUser));
   const { strip } = o;
   return h(View, { style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'box-none' } },
     strip.cards.map((c, i) => h(Card, { key: c.id, c, index: i, th, all, active: c.id === active, wallpaper: wall, over: drag?.over === c.id, canRemove: strip.cards.length > 1 })),
