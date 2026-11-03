@@ -116,11 +116,14 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test test-rust
+test-platform: build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test test-rust
 	./build/seat-test
 	./build/platform-admin-test
 	./build/switcher-ffi-test
 	./build/keygrab-test
+	./build/wl-input-region-test
+build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --locked --offline
 $(RUST_LIB): $(RUST_INPUTS)
