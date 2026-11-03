@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Exercise the actual sandboxed media helper without a display or GPU.
-The generated H.264 fixture is decoded with hardware explicitly disabled.
+VP8 is available in Fedora/Copr without the optional Cisco H.264 decoder.
+Use --h264 for an additional run on systems providing that decoder.
 """
+import argparse
 import array
 import os
 from pathlib import Path
@@ -13,7 +15,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 HEADER = struct.Struct('<II6qII')
 
-def run(wallpaper):
+def run(wallpaper, fixture):
     parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     pid = os.fork()
     if not pid:
@@ -32,7 +34,7 @@ def run(wallpaper):
     pause_at = 0
     pause_frames = 0
     try:
-        with (ROOT / 'server/tests/fixtures/motion-h264.mp4').open('rb') as video:
+        with (ROOT / 'server/tests/fixtures' / fixture).open('rb') as video:
             params = (f'loop=1\naudio=0\nhw=0\nhwonly=0\nwallpaper={int(wallpaper)}\n'
                       'maxfps=15\nmaxwidth=1280\nmaxheight=720\nthreads=2\nrate=100\n').encode()
             send(1, values=[1], payload=params, fds=[video.fileno()])
@@ -75,7 +77,7 @@ def run(wallpaper):
         else:
             assert (1920,1080) in rings, 'ordinary videos were incorrectly capped'
             assert len(frames) > 65, 'ordinary video frame rate was capped'
-        print(f'motion playback: wallpaper={wallpaper}, {len(frames)} frames, rings={rings}, software decode, pause/loop checked')
+        print(f'motion playback: fixture={fixture}, wallpaper={wallpaper}, {len(frames)} frames, rings={rings}, software decode, pause/loop checked')
     finally:
         parent.close()
         try: os.kill(pid, signal.SIGTERM)
@@ -83,5 +85,9 @@ def run(wallpaper):
         os.waitpid(pid, 0)
 
 if __name__ == '__main__':
-    run(True)
-    run(False)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--h264', action='store_true', help='also test the optional H.264 software decoder')
+    args = parser.parse_args()
+    for fixture in ['motion-vp8.webm'] + (['motion-h264.mp4'] if args.h264 else []):
+        run(True, fixture)
+        run(False, fixture)

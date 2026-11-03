@@ -163,7 +163,8 @@ def main():
             for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)', 'switcher smoke:']:
                 assert error not in log, log
     if (REPO / 'server/build/axia-media').is_file():
-        print(run(sys.executable, str(REPO / 'server/tests/motion_playback_test.py')), end='')
+        # Keep helper diagnostics visible in RPM/Copr logs when a check fails.
+        subprocess.run([sys.executable, str(REPO / 'server/tests/motion_playback_test.py')], check=True)
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')
 
 
