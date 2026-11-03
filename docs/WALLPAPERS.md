@@ -30,9 +30,11 @@ The Settings panel explains the economical mode in everyday language, reports
 playback/download problems, and hides empty catalog categories. Videos remain
 opt-in. Choosing a still picture clears animation overrides.
 
-`motion_playback_test.py` decodes a generated H.264 fixture with hardware disabled,
+`motion_playback_test.py` decodes a generated VP8 fixture with hardware disabled,
 checks bounded wallpaper output and playback controls, then verifies an ordinary
 video still plays at full resolution/rate. It requires no display or network.
+VP8 keeps these checks runnable in Copr buildroots containing `noopenh264`.
+Use `--h264` to additionally exercise H.264 playback where its decoder is installed.
 
 ## Original distro implementation (historical reference)
 
