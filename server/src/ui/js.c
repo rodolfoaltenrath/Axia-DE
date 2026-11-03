@@ -623,6 +623,13 @@ double js_tick(double now) {
     JS_ToFloat64(ctx, &next, r);
     JS_FreeValue(ctx, r);
     drain_jobs();
+    /* Promises above can set timers (React schedules its work this way): the wait has to count them,
+     * or their update sleeps until an older timer happens to wake the loop. A time before any
+     * deadline fires nothing and only returns the wait. */
+    arg = JS_NewFloat64(ctx, -1);
+    r = call_hot(HOT_TICK, 1, &arg);
+    JS_ToFloat64(ctx, &next, r);
+    JS_FreeValue(ctx, r);
     return next;
 }
 
