@@ -88,10 +88,14 @@ A separação remove a necessidade dos serviços específicos do LordOS, mas nã
 
 ## Evolução
 
+Atualizações e distribuição de snapshots: [COPR-UPDATES.md](COPR-UPDATES.md).
+Migração para o repositório independente: [REPOSITORY.md](REPOSITORY.md).
+Origem e atribuição: [ORIGIN.md](../ORIGIN.md).
+
 - Trocar o compositor próprio pelo wlroots, mantendo o motor de UI; prova de conceito e plano em [WLROOTS.md](WLROOTS.md).
 - Integrar NetworkManager por D-Bus e autorização via polkit, sem assumir controle da rede do host.
 - Substituir as páginas administrativas restantes por adaptadores de serviços do host.
-- Publicar um RPM com build reproduzível do frontend conforme as regras de empacotamento do destino, dependências opcionais e assinatura própria do fork.
+- Validar a publicação dos snapshots no Copr e o primeiro upgrade real; frontend conforme as regras de empacotamento do destino segue como trabalho de distribuição.
 - Substituir a delegação de cgroups pedida ao `lord-sessiond` (`src/sec/cgroup.c`) pelo gerenciador systemd do usuário.
 - Decidir o destino de `axia-netperm` e `axia-fand` como unidades systemd do Fedora, ou removê-los.
 - Expandir a matriz de testes para outras distribuições e arquiteturas.

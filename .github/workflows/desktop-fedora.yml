@@ -2,6 +2,12 @@ name: Standalone desktop (Fedora)
 on:
   push:
   pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fedora-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   desktop:
     strategy:
@@ -10,10 +16,99 @@ jobs:
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:44
     steps:
-      - name: Build dependencies
-        run: dnf install -y git gcc make binutils python3 xz pkgconf-pkg-config wayland-devel wayland-protocols-devel libxkbcommon-devel libxcrypt-devel libseat-devel openssl-devel nodejs npm freerdp-devel mesa-libgbm-devel mesa-libEGL-devel mesa-libGLES-devel
+      - run: dnf install -y git
       - uses: actions/checkout@v4
+      - name: Build dependencies
+        run: |
+          dnf install -y dnf5-plugins nodejs npm mesa-libgbm-devel mesa-libEGL-devel mesa-libGLES-devel
+          dnf builddep -y packaging/rpm/axia-de.spec
       - run: npm ci
       - run: make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
+      - name: Touchpad regression tests
+        run: |
+          make -C server build/tp-test
+          server/build/tp-test
+      - name: Packaging tests
+        run: python3 -m unittest discover -s tools/desktop/tests -v
       - name: Stage installation
         run: make install PREFIX=/usr DESTDIR="$RUNNER_TEMP/axia-de"
+  rpm:
+    needs: desktop
+    runs-on: ubuntu-latest
+    container: registry.fedoraproject.org/fedora:44
+    steps:
+      - run: dnf install -y git
+      - uses: actions/checkout@v4
+      - name: RPM build dependencies
+        run: |
+          dnf install -y dnf5-plugins rpm-build nodejs npm
+          dnf builddep -y packaging/rpm/axia-de.spec
+      - name: Build source RPM
+        run: python3 tools/desktop/srpm.py --outdir "$GITHUB_WORKSPACE/build/srpm"
+      - name: Build and check the binary RPM
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/build/rpmbuild"
+          rpmbuild --rebuild --define "_topdir $GITHUB_WORKSPACE/build/rpmbuild" build/srpm/*.src.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axia-de-fedora-44
+          path: |
+            build/srpm/*.src.rpm
+            build/rpmbuild/RPMS/**/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+  copr:
+    needs: rpm
+    # Enable with a repository variable after the Copr project exists. Pull
+    # requests never receive publication credentials. SCM webhooks are optional;
+    # this job submits exactly the SRPM which passed the preceding checks.
+    if: >-
+      vars.COPR_PROJECT != '' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    container: registry.fedoraproject.org/fedora:44
+    concurrency:
+      group: copr-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - run: dnf install -y copr-cli
+      - uses: actions/download-artifact@v4
+        with:
+          name: axia-de-fedora-44
+          path: packages
+      - name: Submit the checked source RPM to Copr
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+          COPR_PROJECT: ${{ vars.COPR_PROJECT }}
+        run: |
+          python3 - <<'PY'
+          import configparser
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import tempfile
+
+          project = os.environ['COPR_PROJECT']
+          if not re.fullmatch(r'@?[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+', project):
+              raise SystemExit('COPR_PROJECT must be OWNER/PROJECT')
+          config = os.environ.pop('COPR_CONFIG')
+          parsed = configparser.ConfigParser(interpolation=None)
+          try:
+              parsed.read_string(config)
+          except configparser.Error:
+              raise SystemExit('COPR_CONFIG must be a valid INI file') from None
+          section = parsed['copr-cli']
+          if any(not section.get(k) for k in ['login', 'username', 'token']):
+              raise SystemExit('COPR_CONFIG is missing Copr credentials')
+          sources = list(Path('packages').rglob('*.src.rpm'))
+          if len(sources) != 1:
+              raise SystemExit('Expected exactly one checked source RPM')
+          with tempfile.TemporaryDirectory() as tmp:
+              path = Path(tmp) / 'copr'
+              path.touch(mode=0o600)
+              path.write_text(config)
+              subprocess.run(['copr-cli', '--config', str(path), 'build',
+                              project, str(sources[0])], check=True)
+          PY
