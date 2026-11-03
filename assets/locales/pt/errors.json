@@ -1,4 +1,10 @@
 {
+  "files.deviceDenied": "Não foi possível autorizar o acesso à unidade. Tente novamente e confirme a solicitação do sistema.",
+  "files.deviceBusy": "A unidade ainda está em uso. Feche os arquivos abertos nela e tente novamente.",
+  "files.deviceUnsupported": "Este formato de unidade não é suportado pelo sistema.",
+  "files.deviceUnavailable": "A unidade não está mais disponível. Verifique a conexão.",
+  "files.deviceFailed": "Não foi possível concluir a operação na unidade. Verifique a conexão e tente novamente.",
+  "files.brokenLink": "Este atalho aponta para um arquivo ou pasta que não está mais disponível.",
   "admin.actionFailed": "A ação terminou com um erro",
   "admin.forkFailed": "Não foi possível iniciar a ação",
   "admin.invalidArgument": "Argumento inválido",

@@ -1,12 +1,16 @@
 //! Arquivos: one Rust application and filesystem service for browser and dialogs.
+mod address;
 mod compat;
 mod ffi;
 mod model;
 pub mod operations;
+mod pdf_thumbnails;
 pub mod policy;
 mod thumbnails;
 pub mod trash;
+mod udisks;
 mod ui;
+mod volumes;
 
 pub type Result<T> = std::result::Result<T, String>;
 

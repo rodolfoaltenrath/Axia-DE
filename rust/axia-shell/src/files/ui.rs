@@ -107,6 +107,9 @@ pub fn icon(name: &str, size: f64) -> Value {
     if folder {
         children.push(view(json!({"position":"absolute","left":size*0.1,"top":size*0.13,"width":size*0.38,"height":size*0.25,"borderRadius":size*0.06,"backgroundColor":"#85ceff"}),vec![]));
         children.push(view(json!({"position":"absolute","left":size*0.08,"top":size*0.29,"width":size*0.84,"height":size*0.59,"borderRadius":size*0.07,"backgroundColor":base}),vec![]));
+    } else if name == "drive" {
+        children.push(view(json!({"position":"absolute","left":size*0.08,"top":size*0.2,"width":size*0.84,"height":size*0.63,"borderRadius":size*0.12,"backgroundColor":"#a2aab9"}),vec![]));
+        children.push(view(json!({"position":"absolute","left":size*0.18,"top":size*0.62,"width":size*0.64,"height":size*0.06,"backgroundColor":"#596677"}),vec![]));
     } else if name == "trash" {
         children.push(view(json!({"position":"absolute","left":size*0.25,"top":size*0.27,"width":size*0.5,"height":size*0.6,"borderRadius":size*0.06,"border":format!("{}px solid {base}",(size*0.065).max(1.))}),vec![]));
         children.push(view(json!({"position":"absolute","left":size*0.17,"top":size*0.18,"width":size*0.66,"height":(size*0.08).max(1.),"backgroundColor":base}),vec![]));
@@ -118,7 +121,12 @@ pub fn icon(name: &str, size: f64) -> Value {
     }
     view(json!({"width":size,"height":size,"flexShrink":0}), children)
 }
-fn entry_icon(e: &Entry, size: f64, thumb: bool) -> Value {
+fn entry_icon(s: &Session, e: &Entry, size: f64, thumb: bool) -> Value {
+    if thumb && !e.dir && kind(&e.name) == "pdf" {
+        if let Some(image) = s.pdf_thumbnails.get(e) {
+            return json!({"type":"documentImage","image":image,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":3}});
+        }
+    }
     if thumb && !e.dir && kind(&e.name) == "image" {
         if let Some(path) = thumbnails::get(e) {
             return json!({"type":"image","src":path,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":4}});
@@ -239,7 +247,48 @@ impl Session {
                 ));
             }
         }
-        for (path, _) in super::operations::mounts() {
+        if !shared.volumes.is_empty() {
+            items.push(label(
+                tr("files.rust.devices"),
+                json!({"color":dim(self),"fontSize":11,"padding":8,"marginTop":8}),
+            ));
+            for volume in &shared.volumes {
+                let mut entry = side_item(
+                    self,
+                    if volume.path.is_none() && !volume.mountable {
+                        json!({"key":"files.rust.manageVolume","params":{"name":volume.label}})
+                    } else {
+                        json!(volume.label)
+                    },
+                    json!(["volumeOpen", volume.id]),
+                    volume.path.as_ref().is_some_and(|p| {
+                        self.tab().location.path().is_some_and(|q| q.starts_with(p))
+                    }),
+                    "drive",
+                );
+                if self.mode == Mode::Browser {
+                    if let Some(path) = &volume.path {
+                        entry["events"]["onMouseUp"] = json!(["drop", path]);
+                    }
+                }
+                if volume.path.is_some() {
+                    let mut eject = view(
+                        json!({"width":22,"height":24,"alignItems":"center","justifyContent":"center","flexShrink":0}),
+                        vec![label(json!("⏏"), json!({"color":dim(self),"fontSize":14}))],
+                    );
+                    eject["events"] = json!({"onClick":["volumeRelease",volume.id]});
+                    entry["children"].as_array_mut().unwrap().push(eject);
+                }
+                if self.volume_busy.as_deref() == Some(&volume.id) {
+                    entry["style"]["opacity"] = json!(0.5);
+                }
+                items.push(entry);
+            }
+        }
+        for (path, _) in &shared.extra_mounts {
+            if shared.volumes.iter().any(|v| v.path.as_ref() == Some(path)) {
+                continue;
+            }
             items.push(side_item(
                 self,
                 json!(path.file_name().unwrap_or_default().to_string_lossy()),
@@ -555,7 +604,7 @@ impl Session {
         };
         let content = if icons {
             vec![
-                entry_icon(e, 56., true),
+                entry_icon(self, e, 56., true),
                 label(
                     json!(shown_name),
                     json!({"fontSize":12,"color":fg,"textAlign":"center","width":width-8.,"height":34,"overflow":"hidden"}),
@@ -563,7 +612,7 @@ impl Session {
             ]
         } else {
             let mut c = vec![
-                entry_icon(e, 22., false),
+                entry_icon(self, e, 22., false),
                 label(
                     json!(shown_name),
                     json!({"fontSize":13,"color":fg,"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
@@ -635,7 +684,7 @@ impl Session {
         let mut cells = Vec::new();
         if gallery {
             if let Some(e) = self.selected().first() {
-                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(e,(preview_height-40.).clamp(1.,240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
+                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(self, e,(preview_height-40.).clamp(1.,240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
             }
         }
         for row in start..(start + visible).min(rows) {
@@ -1026,7 +1075,7 @@ impl Session {
                 wide = true;
                 if let Some(e) = entries.first() {
                     title = json!(e.name);
-                    content.push(entry_icon(e, 50., false));
+                    content.push(entry_icon(self, e, 50., false));
                     for (k, v) in [
                         (
                             "files.info.where",
@@ -1094,11 +1143,11 @@ impl Session {
                 } else if let Some(image) = image {
                     content.push(json!({"type":"documentImage","image":image,"style":{"height":preview_height,"width":preview_width}}));
                 } else if kind(&entry.name) == "image" {
-                    content.push(view(json!({"height":preview_height,"width":preview_width,"alignItems":"center","justifyContent":"center"}),vec![entry_icon(entry,preview_height.min(preview_width),true)]));
+                    content.push(view(json!({"height":preview_height,"width":preview_width,"alignItems":"center","justifyContent":"center"}),vec![entry_icon(self, entry,preview_height.min(preview_width),true)]));
                 } else if let Some(text) = text {
                     content.push(node("scroll",json!({"height":preview_height,"width":preview_width}),vec![label(json!(text),json!({"fontSize":12,"color":txt(self),"fontFamily":"monospace","lineHeight":1.4}))]));
                 } else {
-                    content.push(entry_icon(entry, 96., false));
+                    content.push(entry_icon(self, entry, 96., false));
                     content.push(label(
                         json!(bytes(entry.size)),
                         json!({"fontSize":12,"color":dim(self)}),
@@ -1179,6 +1228,11 @@ impl Session {
                     json!({"fontSize":12,"color":dim(self)}),
                 ));
             }
+        }
+        // Validation must be visible in the dialog that failed, rather than
+        // only in the listing underneath its dimmed overlay.
+        if let Some(error) = &self.error {
+            content.insert(0,label(json!({"error":error}),json!({"fontSize":12,"color":"#ff8278","lineHeight":1.4,"maxHeight":60,"paddingBottom":6})));
         }
         let mut body = vec![label(
             title,

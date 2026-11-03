@@ -1,6 +1,7 @@
-//! Bounded, lazy thumbnails. At most two decoders run; the UI never decodes
+//! Bounded, lazy thumbnails. One decoder runs; the UI never decodes
 //! full-size pictures while scrolling through a directory.
 use super::policy;
+use image::ImageDecoder;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
@@ -40,7 +41,7 @@ pub fn get(entry: &super::operations::Entry) -> Option<String> {
             return (!file.is_empty()).then(|| file.clone());
         }
     }
-    if c.active >= 2 || c.pending.contains(path) {
+    if c.active >= 1 || c.pending.contains(path) {
         return None;
     }
     if c.ready.len() > 1024 {
@@ -73,13 +74,31 @@ pub fn get(entry: &super::operations::Entry) -> Option<String> {
                 if out.is_file() {
                     return Ok(out.to_string_lossy().into());
                 }
-                let mut reader = image::ImageReader::open(&source)?.with_guessed_format()?;
+                let file = OpenOptions::new()
+                    .read(true)
+                    .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+                    .open(&source)?;
+                let metadata = file.metadata()?;
+                if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 {
+                    return Err("unsupported thumbnail source".into());
+                }
+                let mut reader =
+                    image::ImageReader::new(std::io::BufReader::new(file)).with_guessed_format()?;
                 let mut limits = image::Limits::default();
                 limits.max_image_width = Some(10000);
                 limits.max_image_height = Some(10000);
-                limits.max_alloc = Some(32 * 1024 * 1024);
+                limits.max_alloc = Some(64 * 1024 * 1024);
                 reader.limits(limits);
-                let thumb = reader.decode()?.thumbnail(320, 240);
+                let mut decoder = reader.into_decoder()?;
+                if decoder.total_bytes() > 64 * 1024 * 1024 {
+                    return Err("thumbnail pixel budget exceeded".into());
+                }
+                let orientation = decoder
+                    .orientation()
+                    .unwrap_or(image::metadata::Orientation::NoTransforms);
+                let mut decoded = image::DynamicImage::from_decoder(decoder)?;
+                decoded.apply_orientation(orientation);
+                let thumb = decoded.thumbnail(decoded.width().min(320), decoded.height().min(240));
                 let temp = root.join(format!(".{key:016x}-{}.tmp", std::process::id()));
                 let file = OpenOptions::new()
                     .read(true)
@@ -136,4 +155,116 @@ pub fn get(entry: &super::operations::Entry) -> Option<String> {
         c.pending.remove(&path);
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{operations, tests::Home};
+    use super::*;
+    use std::time::{Duration, Instant};
+    #[test]
+    fn supported_images_generate_small_thumbnails_and_changed_images_refresh() {
+        let h = Home::new();
+        for (name, format) in [
+            ("image.png", image::ImageFormat::Png),
+            ("image.jpg", image::ImageFormat::Jpeg),
+            ("image.webp", image::ImageFormat::WebP),
+            ("image.gif", image::ImageFormat::Gif),
+            ("image.bmp", image::ImageFormat::Bmp),
+        ] {
+            let source = h.path(name);
+            image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+                800,
+                600,
+                image::Rgb([40, 120, 220]),
+            ))
+            .save_with_format(&source, format)
+            .unwrap();
+            let e = operations::entry(&source).unwrap();
+            let until = Instant::now() + Duration::from_secs(5);
+            let path = loop {
+                if let Some(p) = get(&e) {
+                    break p;
+                }
+                assert!(Instant::now() < until, "missing thumbnail for {name}");
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            let (w, h) = image::image_dimensions(&path).unwrap();
+            assert!(w <= 320 && h <= 240);
+            assert_eq!(w * 3, h * 4);
+            image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+                100,
+                100,
+                image::Rgb([220, 20, 50]),
+            ))
+            .save_with_format(&source, format)
+            .unwrap();
+            let changed = operations::entry(&source).unwrap();
+            let path2 = loop {
+                if let Some(p) = get(&changed) {
+                    break p;
+                }
+                assert!(Instant::now() < until);
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            assert_ne!(path, path2);
+            assert_eq!(image::image_dimensions(&path2).unwrap(), (100, 100));
+        }
+    }
+    #[test]
+    fn broken_images_and_fifos_do_not_stall_the_decoder() {
+        let h = Home::new();
+        h.file("broken.png", "not a picture");
+        let fifo = h.path("pipe.png");
+        let raw = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(raw.as_ptr(), 0o600) }, 0);
+        for p in [h.path("broken.png"), fifo] {
+            let e = operations::entry(&p).unwrap();
+            assert!(get(&e).is_none());
+            let until = Instant::now() + Duration::from_secs(2);
+            loop {
+                let c = cache().lock().unwrap();
+                let done = c.ready.contains_key(&p) && !c.pending.contains(&p);
+                drop(c);
+                if done {
+                    break;
+                }
+                assert!(Instant::now() < until);
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(get(&e).is_none());
+        }
+    }
+}
+
+#[cfg(test)]
+mod large_image {
+    use super::super::{operations, tests::Home};
+    use super::*;
+    use std::time::{Duration, Instant};
+    #[test]
+    fn an_ordinary_twelve_megapixel_photo_fits_the_thumbnail_budget() {
+        let h = Home::new();
+        let source = h.path("phone.jpg");
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            4000,
+            3000,
+            image::Rgb([40, 120, 220]),
+        ))
+        .save_with_format(&source, image::ImageFormat::Jpeg)
+        .unwrap();
+        let e = operations::entry(&source).unwrap();
+        let until = Instant::now() + Duration::from_secs(15);
+        let path = loop {
+            if let Some(p) = get(&e) {
+                break p;
+            }
+            assert!(
+                Instant::now() < until,
+                "12 MP JPEG did not produce a thumbnail"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(image::image_dimensions(path).unwrap(), (320, 240));
+    }
 }

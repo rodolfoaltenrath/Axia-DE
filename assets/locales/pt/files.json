@@ -1,4 +1,6 @@
 {
+  "rust.manageVolume": "{name} (gerenciar)",
+  "rust.devices": "Dispositivos",
   "rust.refresh": "Atualizar pasta",
   "actions": "Ações",
   "cancel": "Cancelar",

@@ -24,3 +24,5 @@ logs/
 /dist/
 /assets/hwreport/snapshot.json.sig
 HANDOFF.md
+
+tests/files-smoke.bundle.js

@@ -136,6 +136,13 @@ if (!names.length) await build({
   alias: { '@lordos/runtime': path.join(root, 'runtime/index.js'), '@lordos/sdk': path.join(root, 'sdk/index.js') },
   define: defines, logLevel: 'warning',
 });
+if (!names.length) await build({
+  entryPoints: [path.join(root, 'server/tests/files_smoke.jsx')],
+  outfile: path.join(root, 'tests/files-smoke.bundle.js'),
+  bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
+  alias: { '@lordos/runtime': path.join(root, 'runtime/index.js'), '@lordos/sdk': path.join(root, 'sdk/index.js') },
+  define: defines, logLevel: 'warning',
+});
 // the verified-code manifest of what was just built (unsigned: a development build until
 // tools/release/sign-code.sh signs it on the maintainer's machine)
 const cm = writeManifest(root);
