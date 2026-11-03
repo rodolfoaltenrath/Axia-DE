@@ -1,5 +1,18 @@
 # Settings: Displays, Bluetooth, Energy, Cooling, Notifications, Date & Time, Default Apps
 
+## Axia on Fedora: live battery status
+
+The battery uses the existing unprivileged `/sys/class/power_supply` reader. A
+Rust scheduler (`rust/axia-shell/src/power.rs`) refreshes it every 10 seconds when
+a system battery is present, and every 60 seconds otherwise. Charger/battery
+uevents still refresh immediately. The deadline participates in the compositor's
+poll timeout, so updates also work while the desktop is idle; there is no new
+thread, daemon or JavaScript polling. Identical snapshots emit no UI event.
+
+`server/tests/battery_refresh_test.c` changes a fake sysfs battery without sending
+uevents and exercises the real hardware tick, published percentage, timeout and
+deduplication. The remaining sections include the original LordOS architecture.
+
 Eight Settings pages laid out like the system settings of popular desktop systems, with the hardware side in
 `server/src/hw/` (C, libc only) and the session side in `sdk/hardware.jsx`, `sdk/defaults.js` and
 `sdk/notify.js`. Tested on VM 118 (`lordos-notes`) with `lord-sessiond`, virtio-gpu and a virtual

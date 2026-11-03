@@ -192,7 +192,7 @@ export const session = {
   lock: () => typeof lord.session !== 'undefined' && lord.session.lock(),
   switchUser: () => typeof lord.session !== 'undefined' && lord.session.switchUser(),
   // Restart… and Shut Down… (0.8.1): a confirmation with a 60 s countdown (sdk/power.jsx), then
-  // lord-sessiond decides. canPower(): only in a session lord-sessiond shows on the monitor.
+  // Fedora's logind decides; the original LordOS session daemon remains supported.
   canPower,
   restart: () => askPower('reboot'),
   shutdown: () => askPower('poweroff'),

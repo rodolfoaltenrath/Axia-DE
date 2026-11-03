@@ -4,11 +4,10 @@
 // session.restart() / session.shutdown() open <PowerDialog>, which a theme renders in the «modal»
 // layer inside its ThemeProvider (so the sheet takes the theme's colors; default and classic do):
 // what will happen, a 60 s countdown that does it if nobody cancels, the apps still open and the
-// other users logged in. Confirming asks lord-sessiond
-// (root) through lord.session.power('reboot'|'poweroff'); axia-server runs nothing. The policy is
-// decided there: alone, any user; with other users' sessions open, only an administrator. The sheet
-// shows the same rule beforehand, and a refusal from lord-sessiond comes back as
-// {t:'power', ok:false, why:'admin'}.
+// other users logged in. Fedora sessions ask logind asynchronously through the
+// Rust service and C D-Bus adapter. The host decides authorization, including other
+// sessions and apps preventing shutdown. The original LordOS session daemon is
+// still supported for sessions managed by it.
 import { createElement as h, useEffect, useState } from 'react';
 import { View, Text, addListener, mainDisplay } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
@@ -19,20 +18,30 @@ import { windows } from './windows.js';
 import { windowAppName } from './apps.js';
 import { remote } from './remote.js';
 import { flushSession, resumeSession } from './sessionrestore.jsx';
+import { onSessionPowerResult } from './hardware.jsx';
 
 export const POWER_SECONDS = 60;
-// null, or { action: 'reboot'|'poweroff', until (ms), state: 'ask'|'sent'|'denied'|'unavailable' }
+// null, or { action, until (ms), host, state: ask/sent/denied/inhibited/unavailable }
 export const powerAsk = createStore(null);
 
-// Only in the session on the monitor: lord-sessiond reads requests from that one alone, so a session
-// seen only through the remote desktop isn't offered Restart or Shut Down.
-export const canPower = () => typeof lord.session !== 'undefined' && typeof lord.session.power === 'function' && lord.session.managed()
-  && (typeof lord.session.onMonitor !== 'function' || lord.session.onMonitor());
+// A local Fedora seat, or the monitor connection of the original session daemon.
+const hostPower = () => typeof lord.session?.hostPower === 'function' && lord.session.hostPower();
+export const canPower = () => typeof lord.session !== 'undefined' && typeof lord.session.power === 'function'
+  && (hostPower() || (lord.session.managed()
+    && (typeof lord.session.onMonitor !== 'function' || lord.session.onMonitor())));
 
 export function askPower(action) {
   if (action !== 'reboot' && action !== 'poweroff') return;
-  powerAsk.set({ action, until: Date.now() + POWER_SECONDS * 1000, state: 'ask' });
+  if (powerAsk.get()?.state === 'sent') return;
+  powerAsk.set({ action, until: Date.now() + POWER_SECONDS * 1000, state: 'ask', host: hostPower() });
 }
+
+onSessionPowerResult((data) => {
+  if (data?.ok !== false || powerAsk.get()?.state !== 'sent') return;
+  resumeSession();
+  const state = data.why === 'denied' ? 'denied' : data.why === 'inhibited' ? 'inhibited' : 'unavailable';
+  powerAsk.set((p) => p ? { ...p, state } : p);
+});
 
 // lord-sessiond's answers reach the session through the login screen's channel (RP_GREETER_IN);
 // the login screen theme has its own handler, so this one is only set in a user session.
@@ -80,7 +89,7 @@ export function PowerDialog() {
   const [info, setInfo] = useState(null);
   const open = !!ask;
   useEffect(() => { setInfo(open ? sessionInfo() : null); }, [open, ask?.action]);
-  const blocked = !!(info && info.others.length && !info.admin);
+  const blocked = !!(!ask?.host && info && info.others.length && !info.admin);
   const counting = open && ask.state === 'ask' && info && !blocked;
 
   const cancel = () => powerAsk.set(null);
@@ -104,6 +113,7 @@ export function PowerDialog() {
   useEffect(() => {
     if (!open) return undefined;
     return addListener('keydown', (e) => {
+      if (powerAsk.get()?.state === 'sent') return;
       if (e.key === 'Escape') cancel();
       else if (e.key === 'Enter') confirm();
     });
@@ -118,6 +128,8 @@ export function PowerDialog() {
   const say = (text, color) => lines.push(h(Text, { key: lines.length, style: { fontSize: typeScale.body, color: color || th.textDim, lineHeight: 1.4, textAlign: 'start' } }, text));
   if (ask.state === 'sent') say(t(reboot ? 'shell.power.restarting' : 'shell.power.shuttingDown'));
   else if (ask.state === 'unavailable') say(t('shell.power.unavailable'), '#e5483f');
+  else if (ask.state === 'inhibited') say(t('shell.power.inhibited'), '#e5483f');
+  else if (ask.state === 'denied' && ask.host) say(t('shell.power.denied'), '#e5483f');
   else if (ask.state === 'denied' || blocked) {
     if (info?.others.length) say(t('shell.power.others', { count: info.others.length, list: info.others.join(', ') }));
     say(t(reboot ? 'shell.power.needAdminRestart' : 'shell.power.needAdminShutdown'), '#e5483f');

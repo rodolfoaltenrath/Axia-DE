@@ -152,6 +152,8 @@
   "picker.empty": "No hay archivos acá.",
   "power.apps": "Apps abiertas: {list}. Se van a cerrar: guardá tu trabajo antes.",
   "power.cancel": "Cancelar",
+  "power.denied": "La acción no fue autorizada. Puedes volver a intentarlo y confirmar tu contraseña si se solicita.",
+  "power.inhibited": "La computadora está ocupada o una aplicación está impidiendo esta acción. Guarda tu trabajo, cierra las aplicaciones y vuelve a intentarlo.",
   "power.needAdminRestart": "Solo un administrador puede reiniciar la computadora mientras otros usuarios tienen la sesión abierta.",
   "power.needAdminShutdown": "Solo un administrador puede apagar la computadora mientras otros usuarios tienen la sesión abierta.",
   "power.others": {

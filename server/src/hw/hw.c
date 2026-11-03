@@ -7,13 +7,22 @@
 #include "ppd.h"
 #include "sysbus.h"
 #include "uevent.h"
+#include "../platform/power.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static const DisplayHost *host;
 static PowerState power;
+static int started;
+
+static double now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+}
 
 void hw_emit(const char *kind, const char *json) { if (host && host->event) host->event(kind, json); }
 const PowerState *hw_power(void) { return &power; }
@@ -22,8 +31,14 @@ static void power_changed(void) {
     power_read("/sys/class/power_supply", &power);
     char j[4096];
     power_json(&power, j, sizeof j);
-    hw_emit("power", j);
+    if (axia_battery_changed(j)) hw_emit("power", j);
 }
+
+void hw_tick(double now) {
+    if (started && axia_battery_due(now, false, power.has_battery)) power_changed();
+}
+
+double hw_timeout(double now) { return started ? axia_battery_timeout(now) : -1; }
 
 static void td_signal(const DMsg *m) {
     if (m->path && !strcmp(m->path, "/org/freedesktop/timedate1") && m->member && !strcmp(m->member, "PropertiesChanged")) hw_timedate_refresh();
@@ -33,7 +48,12 @@ void hw_start(const DisplayHost *h, int with_bus) {
     host = h;
     display_init(h);
     power_read("/sys/class/power_supply", &power);
-    if (uevent_open()) fprintf(stderr, "hw: no kernel uevents (hotplugged displays and batteries are not followed)\n");
+    started = 1;
+    axia_battery_due(now_ms(), true, power.has_battery);
+    char initial[4096];
+    power_json(&power, initial, sizeof initial);
+    axia_battery_changed(initial);
+    if (uevent_open()) fprintf(stderr, "hw: no kernel uevents (battery refresh remains active; display hotplug unavailable)\n");
     if (with_bus && notifyd_start(hw_emit)) fprintf(stderr, "hw: no notification server for Linux apps\n");
     if (with_bus && pwguard_start()) fprintf(stderr, "hw: PipeWire not reachable yet (the microphone and camera restrictions of Linux apps apply once it is)\n");
     if (with_bus && sysbus_start() == 0) {
@@ -59,7 +79,10 @@ void hw_dispatch(const struct pollfd *p, int n) {
         if (p[i].fd == uevent_fd()) {
             int m = uevent_dispatch();
             if (m & UEV_DRM) display_hotplug();
-            if (m & UEV_POWER) power_changed();
+            if (m & UEV_POWER) {
+                axia_battery_due(now_ms(), true, power.has_battery);
+                power_changed();
+            }
             if (m & UEV_BACKLIGHT) display_hotplug();      /* the list carries the backlight */
         } else if (p[i].fd == sysbus_fd()) sysbus_dispatch();
         else if (p[i].fd == notifyd_fd()) notifyd_dispatch();

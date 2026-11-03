@@ -35,6 +35,7 @@ export const timedate = createStore(null);
 export const displayConfirm = createStore(null);   // { conn, old, deadline, left }
 const btResults = new Set();
 const ppdResults = new Set();
+const sessionPowerResults = new Set();
 
 export const useDisplays = () => useStore(displays);
 export const useBattery = () => useStore(battery);
@@ -43,6 +44,7 @@ export const usePowerProfiles = () => useStore(powerProfiles);
 export const useTimedate = () => useStore(timedate);
 export const onBluetoothResult = (fn) => { btResults.add(fn); return () => btResults.delete(fn); };
 export const onPowerProfileResult = (fn) => { ppdResults.add(fn); return () => ppdResults.delete(fn); };
+export const onSessionPowerResult = (fn) => { sessionPowerResults.add(fn); return () => sessionPowerResults.delete(fn); };
 
 // ---- defaults kept in settings.json ----
 
@@ -364,6 +366,7 @@ globalThis.__lordHw = (kind, data) => {
     case 'bt-result': for (const fn of btResults) { try { fn(data); } catch (e) { console.log(`bt: ${e}`); } } break;
     case 'ppd': powerProfiles.set(data); break;
     case 'ppd-result': for (const fn of ppdResults) { try { fn(data); } catch (e) { console.log(`ppd: ${e}`); } } break;
+    case 'session-power': for (const fn of sessionPowerResults) fn(data); break;
     case 'timedate': timedate.set(data); break;
     case 'notify': linuxNotify(data); break;
     case 'notify-close': { const own = fromLinux.get(data?.id); if (own) dismissNotification(own, 'remote'); break; }

@@ -5,6 +5,7 @@ mod glass_render;
 mod wallpaper;
 mod motion;
 mod motion_store;
+mod power;
 use std::ffi::{c_char, CStr};
 
 const LIMIT: usize = 512;
