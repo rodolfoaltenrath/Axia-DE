@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import struct
+import zlib
 
 from install import install, REPO, DESKTOP_BINARIES
 
@@ -60,7 +62,9 @@ def main():
             (home / 'runtime').mkdir(mode=0o700)
             config = home / '.config/axia'
             config.mkdir(parents=True)
-            env = dict(os.environ, HOME=tmp, USER='nobody', XDG_RUNTIME_DIR=str(home / 'runtime'))
+            env = dict(os.environ, HOME=tmp, USER='nobody', XDG_RUNTIME_DIR=str(home / 'runtime'),
+                       XDG_DATA_HOME=str(home / '.local/share'), XDG_CONFIG_HOME=str(home / '.config'),
+                       XDG_CACHE_HOME=str(home / '.cache'), XDG_STATE_HOME=str(home / '.local/state'))
             for key in ['SUDO_USER', 'DBUS_SESSION_BUS_ADDRESS', 'WAYLAND_DISPLAY', 'DISPLAY']:
                 env.pop(key, None)
             opts = {}
@@ -98,6 +102,18 @@ def main():
                     assert error not in log, log
                 for app in ['store', 'settings', 'files']:
                     assert f'timing: {app} window committed' in log, log
+            # Real PNG with a space in its source name. The bridge must copy, validate
+            # and thumbnail it, then persist a theme-independent wallpaper selection.
+            def png(w, h, pixels):
+                def chunk(kind, value):
+                    return struct.pack('>I', len(value)) + kind + value + struct.pack('>I', zlib.crc32(kind + value))
+                return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0))
+                        + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
+            inputs = {'wallpaper input.png': png(400, 240, (b'\0' + b'\x20\x60\xa0\xff' * 400) * 240),
+                      'bad image.png': b'broken PNG',
+                      'huge image.png': png(8192, 8192, b'')}
+            for name, data in inputs.items():
+                (home / name).write_bytes(data)
             # Exercise the real Rust -> C -> QuickJS -> SDK path, not a JS mock.
             fixture = (REPO / 'tests/switcher-smoke.bundle.js').read_bytes()
             target = staged / 'themes/default/theme.bundle.js'
@@ -114,6 +130,18 @@ def main():
                 cwd=staged / 'bin', env=env, timeout=25, **opts)
             log = (home / '.cache/axia/session.log').read_text()
             assert 'switcher integration: passed' in log, log
+            assert 'wallpaper integration: passed' in log, log
+            selected = json.loads(prefs.read_text())
+            image = selected['wallpaperUser'][0]
+            assert selected['wallpaper'] == image['id']
+            assert Path(image['src']).read_bytes() == inputs['wallpaper input.png']
+            thumb = Path(image['thumb']).read_bytes()
+            width, height = struct.unpack('>II', thumb[16:24])
+            assert 0 < width <= 320 and 0 < height <= 180
+            assert Path(image['src']).stat().st_mode & 0o777 == 0o600
+            # The source can disappear without losing the managed wallpaper.
+            (home / 'wallpaper input.png').unlink()
+            assert Path(image['src']).is_file()
             for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)', 'switcher smoke:']:
                 assert error not in log, log
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')

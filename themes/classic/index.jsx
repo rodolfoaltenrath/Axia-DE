@@ -179,7 +179,7 @@ function App() {
     left: desktopSwipe('left'), right: desktopSwipe('right'),
   }), []);
 
-  const wallpaper = findWallpaper(t.wallpapers, s.wallpaper);
+  const wallpaper = findWallpaper(t.wallpapers, s.wallpaper, s.wallpaperUser);
   const isOnBar = (x, y) => onBar(pos, x, y);
   const preview = useStore(snapPreview);
   const top = mounted[mounted.length - 1];

@@ -473,5 +473,10 @@
   "wallpaperFor.login": "Pantalla de inicio de sesión",
   "kb.profile.title": "Perfil de atajos",
   "kb.profile.label": "Atajos del teclado",
-  "kb.profile.hint": "Elige macOS (Super/Command + Tab) o Linux / Windows (Alt + Tab), independientemente del tema visual. Se aplica de inmediato."
+  "kb.profile.hint": "Elige macOS (Super/Command + Tab) o Linux / Windows (Alt + Tab), independientemente del tema visual. Se aplica de inmediato.",
+  "wallpaper.personal": "Mis imágenes",
+  "wallpaper.chooseImage": "Elegir una imagen…",
+  "wallpaper.imageHint": "PNG o JPEG, hasta 32 MiB y 16 megapíxeles. Se guarda una copia para tu escritorio.",
+  "wallpaper.importFailed": "No se pudo importar la imagen. Elige un PNG o JPEG válido de hasta 32 MiB y 16 megapíxeles.",
+  "wallpaperCategory.personal": "Mis imágenes"
 }

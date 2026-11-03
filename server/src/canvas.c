@@ -1,5 +1,6 @@
 /* canvas.c — primitives with alpha, signed-distance antialiasing and clipping. */
 #include "canvas.h"
+#include "glass_ffi.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -482,7 +483,7 @@ static void blur_down(void *ctx, int j0, int j1) {
         for (int j = j0; j < j1; j++) memcpy(b->buf + (size_t)j * sw, c->px + (size_t)(by0 + j) * c->stride + bx0, (size_t)sw * 4);
         return;
     }
-    uint32_t *acc = malloc((size_t)sw * 2 * 4);
+    uint32_t *acc = axia_glass_scratch((size_t)sw * 2);
     if (!acc) return;
     int span = bx1 - bx0, full = span / f;
     for (int j = j0; j < j1; j++) {
@@ -508,7 +509,6 @@ static void blur_down(void *ctx, int j0, int j1) {
             b->buf[(size_t)j * sw + i] = n ? ((ag >> 16) / n) << 24 | ((rb >> 16) / n) << 16 | ((ag & 0xffff) / n) << 8 | ((rb & 0xffff) / n) : 0;
         }
     }
-    free(acc);
 }
 
 /* Separable box blur, 3 passes ≈ Gaussian, edges repeated. Both directions slide a window sum (the
@@ -517,7 +517,7 @@ static void blur_rows(void *ctx, int j0, int j1) {
     Blur *b = ctx;
     int w = b->sw, rad = b->rad;
     const uint8_t *dt = b->dt;
-    uint32_t *tmp = malloc((size_t)w * 4);
+    uint32_t *tmp = axia_glass_scratch((size_t)w);
     if (!tmp) return;
     for (int j = j0; j < j1; j++) {
         uint32_t *row = b->buf + (size_t)j * w;
@@ -537,7 +537,6 @@ static void blur_rows(void *ctx, int j0, int j1) {
             sb += (int)(add & 255) - (int)(sub & 255);
         }
     }
-    free(tmp);
 }
 
 static void blur_copy(void *ctx, int j0, int j1) {
@@ -584,9 +583,9 @@ static void blur_up(void *ctx, int j0, int j1) {
     Canvas *c = b->c;
     int cw = b->cw, sw = b->sw, sh = b->sh, x0 = b->x0, x1 = b->x1, by0 = b->by0, in0 = b->in0, in1 = b->in1;
     float x = b->x, y = b->y, w = b->w, h = b->h, r = b->r, inv = b->inv;
-    int *hr = malloc((size_t)cw * 8 * sizeof(int));
-    uint32_t *vrow = malloc((size_t)cw * 4);
-    if (!hr || !vrow) { free(hr); free(vrow); return; }
+    int *hr = (int *)axia_glass_scratch((size_t)cw * 9);
+    if (!hr) return;
+    uint32_t *vrow = (uint32_t *)(hr + (size_t)cw * 8);
     int *hrow[2] = { hr, hr + (size_t)cw * 4 }, hidx[2] = { -1, -1 };
     uint8_t *vrow8 = (uint8_t *)vrow;
     for (int j = b->y0 + j0; j < b->y0 + j1; j++) {
@@ -650,8 +649,6 @@ static void blur_up(void *ctx, int j0, int j1) {
             row[i] = over_alpha(pa, d >> 24) << 24 | (prb + drb) | (pg + dg);
         }
     }
-    free(hr);
-    free(vrow);
 }
 
 void canvas_backdrop_blur(Canvas *c, float x, float y, float w, float h, float r, int radius) {
@@ -666,22 +663,22 @@ void canvas_backdrop_blur(Canvas *c, float x, float y, float w, float h, float r
     b.sw = (b.bx1 - b.bx0 + b.f - 1) / b.f;
     b.sh = (b.by1 - b.by0 + b.f - 1) / b.f;
     b.rad = radius / (2 * b.f) > 0 ? radius / (2 * b.f) : 1;
-    int win = 2 * b.rad + 1;
     b.cw = b.x1 - b.x0;
-    b.buf = malloc((size_t)b.sw * b.sh * 4);
-    b.src = malloc((size_t)b.sw * b.sh * 4);
-    uint8_t *dt = malloc((size_t)255 * win + 1);
-    b.sum = malloc((size_t)b.sw * 4 * sizeof(int));
-    b.cx0 = malloc((size_t)b.cw * 3 * sizeof(int));
-    if (!b.buf || !b.src || !dt || !b.sum || !b.cx0) goto out;
-    for (int k = 0; k <= 255 * win; k++) dt[k] = (uint8_t)(k / win);
-    b.dt = dt;
+    AxiaGlassBuffers storage;
+    if (!axia_glass_prepare(b.sw, b.sh, b.rad, b.cw, &storage)) return;
+    b.buf = storage.pixels; b.src = storage.source;
+    b.sum = storage.sums; b.cx0 = storage.columns; b.dt = storage.division;
     long small = (long)b.sw * b.sh;
     blur_phase(&b, b.sh, (long)(b.bx1 - b.bx0) * (b.by1 - b.by0), blur_down);
-    for (int pass = 0; pass < 3; pass++) {
-        blur_phase(&b, b.sh, small, blur_rows);
-        blur_phase(&b, b.sh, small, blur_copy);
-        blur_phase(&b, b.sw, small, blur_cols);
+    /* Compare the actual reduced backdrop, including external windows. No wallpaper-only
+     * cache or hash collision can leave stale glass after a window moves or repaints. */
+    if (!axia_glass_reuse()) {
+        for (int pass = 0; pass < 3; pass++) {
+            blur_phase(&b, b.sh, small, blur_rows);
+            blur_phase(&b, b.sh, small, blur_copy);
+            blur_phase(&b, b.sw, small, blur_cols);
+        }
+        axia_glass_commit();
     }
     b.r = fix_radius(r, w, h);
     b.cx = x + w * 0.5f; b.cy = y + h * 0.5f; b.hw = w * 0.5f; b.hh = h * 0.5f;
@@ -704,12 +701,6 @@ void canvas_backdrop_blur(Canvas *c, float x, float y, float w, float h, float r
     while (b.in1 > b.in0 && b.in1 - 1 + 1 > x + w - 1) b.in1--;
     if (b.in0 >= b.in1) b.in0 = b.in1 = b.x1;
     blur_phase(&b, b.y1 - b.y0, (long)b.cw * (b.y1 - b.y0), blur_up);
-out:
-    free(b.buf);
-    free(b.src);
-    free(dt);
-    free(b.sum);
-    free(b.cx0);
 }
 
 void canvas_corners_save(Canvas *c, Corners *k, float x, float y, float w, float h, float r) {
