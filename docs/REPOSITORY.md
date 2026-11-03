@@ -1,28 +1,31 @@
 # Repositório independente Axia-DE
 
-Nome escolhido: `Axia-DE`. A migração de Git não exige mudar o nome do pacote
+Repositório: <https://github.com/rodolfoaltenrath/Axia-DE>.
+A migração de Git não exige mudar o nome do pacote
 `axia-de`, os dados em `~/.config/axia` ou o projeto Copr. A autoria do código
 herdado está registrada em [ORIGIN.md](../ORIGIN.md) e [LICENSE](../LICENSE).
 
-## Publicar mantendo o histórico
+## Trabalhar no projeto
 
-Criar no GitHub um repositório vazio chamado `Axia-DE`, sem README ou licença
-automáticos. O código atual já contém esses arquivos e os avisos de origem.
+A branch `main` do Axia-DE contém a adaptação independente, as correções e o
+histórico da branch `feature/standalone-fedora-de`. A licença MIT original e os
+avisos de origem continuam presentes; eles não precisam ser criados novamente
+pelo formulário do GitHub.
 
-Após revisar e commitar as alterações locais, a branch a publicar é a adaptação
-`feature/standalone-fedora-de`, **não a `main` antiga do LordOS**. Por exemplo,
-partindo dessa branch e sem alterações pendentes:
+Nesta cópia local, `origin` aponta para o Axia-DE. O remoto anterior foi
+preservado como `legacy`, e a antiga branch local `main` do LordOS foi preservada
+como `lordos-main`. O fluxo normal de trabalho passa a ser:
 
 ```sh
 git status --short
-git remote add axia https://github.com/rodolfoaltenrath/Axia-DE.git
-git push axia HEAD:main
+git switch main
+git pull --ff-only
+# editar, revisar e commitar as alterações
+git push
 ```
 
-Se o remoto `axia` já existir, conferir seu endereço com `git remote -v` em vez
-de substituí-lo às cegas. Esse push mantém o histórico da branch e cria `main`
-no destino, sem alterar o repositório antigo. Não é preciso fazer force-push nem
-apagar o `.git`.
+`git remote -v` permite conferir os destinos. A publicação no Axia-DE preserva
+o histórico; não é preciso usar force-push nem apagar o `.git`.
 
 Para trabalhar depois em uma pasta com o nome novo:
 
@@ -33,10 +36,9 @@ cd Axia-DE
 git remote add upstream https://github.com/lordbasex/LordOS.git
 ```
 
-O remoto `upstream` serve para consultar a origem e trazer mudanças específicas,
-sem transformar novamente a Axia em uma distro LordOS. Antes de publicar,
-confirmar que os arquivos novos e as correções locais foram commitados; um push
-não inclui arquivos ainda fora do histórico.
+O remoto `upstream` serve para consultar a origem e trazer mudanças específicas.
+Antes de publicar, confirmar que os arquivos novos e as correções locais foram
+commitados; um push não inclui arquivos ainda fora do histórico.
 
 ## Integração de atualizações
 
