@@ -1,7 +1,8 @@
 /* power.h — batteries and chargers from /sys/class/power_supply (Settings → Battery, the menu
  * bar percentage and the low-battery notice). Read-only and unprivileged; refreshed on
- * power_supply uevents (hw/uevent.c), never polled. The root directory is a parameter so
- * tests/power_test.c can use a fake sysfs tree. */
+ * power_supply uevents and a bounded Rust refresh timer (10 s with a system battery,
+ * 60 s without one). Only changed snapshots are emitted. The root directory is a
+ * parameter so tests/settings_hw_test.c can use a fake sysfs tree. */
 #ifndef LORD_HW_POWER_H
 #define LORD_HW_POWER_H
 

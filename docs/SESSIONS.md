@@ -1,5 +1,28 @@
 # Sessions, login screen and fast user switching (M8)
 
+## Axia on Fedora: restart and shut down
+
+The default menu and classic Start menu retain their existing confirmation dialog.
+On a local Fedora session, `lord.session.hostPower()` exposes the host backend
+without requiring `LORDOS_SESSIOND`. Rust validates the two fixed actions, prevents
+concurrent requests and classifies results; `server/src/platform/power.c` sends
+asynchronous `Reboot(true)` / `PowerOff(true)` requests over the existing system
+D-Bus connection. [logind](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.login1.html)
+decides authorization and inhibitor handling; its normal polkit authentication is
+allowed. There is no root helper, forced shutdown or shell command.
+
+Refused/cancelled authorization, blocked operations and unavailable services are
+reported in plain language, and a refusal resumes normal session snapshots. The
+dialog cannot be dismissed while an accepted request is pending. Headless and
+remote-only sessions without a local seat cannot use the host backend. Sessions
+managed by the original LordOS daemon retain their existing transport and policy.
+
+`host_power_test.c` captures and answers the actual D-Bus adapter without contacting
+logind. The staged headless check covers Fedora/legacy menu eligibility and error
+delivery using an explicitly mocked session API; it never requests real shutdown.
+
+The remaining sections describe the original LordOS session manager.
+
 LordOS has its own session manager, `lord-sessiond`. It does the same as GDM or any other
 "display manager":
 

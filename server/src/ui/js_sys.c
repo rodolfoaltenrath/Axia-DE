@@ -18,6 +18,7 @@
 #include "../hw/wallpaper_find.h"
 #include "../pkg/crypto.h"
 #include "../glass_ffi.h"
+#include "../platform/power.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include <signal.h>
@@ -2177,13 +2178,17 @@ static JSValue f_session_switch(JSContext *c, JSValueConst this_val, int argc, J
     return JS_NewBool(c, mirror_has_seat());
 }
 
-/* lord.session.power('reboot'|'poweroff'): asks lord-sessiond (root), which decides (docs/SESSIONS.md,
- * "Restart and Shut Down from a session"). Only those two words, sent as a fixed message; axia-server
- * runs nothing. false if no lord-sessiond drives this session's monitor. */
+/* Fixed power requests: Fedora uses logind via the Rust service and async D-Bus
+ * adapter; sessions with LORDOS_SESSIOND retain their original transport. */
 static JSValue f_session_power(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
     const char *w = argc ? JS_ToCString(c, argv[0]) : NULL;
     if (!w) return JS_EXCEPTION;
+    if (!getenv("LORDOS_SESSIOND")) {
+        int sent = !greeter_mode && host_power_request(w);
+        JS_FreeCString(c, w);
+        return JS_NewBool(c, sent);
+    }
     const char *msg = !strcmp(w, "reboot") ? "{\"a\":\"power\",\"p\":\"reboot\"}"
                     : !strcmp(w, "poweroff") ? "{\"a\":\"power\",\"p\":\"poweroff\"}" : NULL;
     JS_FreeCString(c, w);
@@ -2200,10 +2205,16 @@ static JSValue f_session_on_monitor(JSContext *c, JSValueConst this_val, int arg
     return JS_NewBool(c, !greeter_mode && mirror_has_seat());
 }
 
+static JSValue f_session_host_power(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t; (void)argc; (void)argv;
+    return JS_NewBool(c, !greeter_mode && !getenv("LORDOS_SESSIOND") && host_power_available());
+}
+
 static const JSCFunctionListEntry session_funcs[] = {
     JS_CFUNC_DEF("managed", 0, f_session_managed),
     JS_CFUNC_DEF("onMonitor", 0, f_session_on_monitor),
     JS_CFUNC_DEF("power", 1, f_session_power),
+    JS_CFUNC_DEF("hostPower", 0, f_session_host_power),
     JS_CFUNC_DEF("lock", 0, f_session_lock),
     JS_CFUNC_DEF("switchUser", 0, f_session_switch),
 };

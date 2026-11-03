@@ -152,6 +152,8 @@
   "picker.empty": "No files here.",
   "power.apps": "Open apps: {list}. They will be closed: save your work first.",
   "power.cancel": "Cancel",
+  "power.denied": "The action was not authorized. You can try again and confirm your password if asked.",
+  "power.inhibited": "The computer is busy or an app is preventing this action. Save your work, close your apps and try again.",
   "power.needAdminRestart": "Only an administrator can restart the computer while other users are logged in.",
   "power.needAdminShutdown": "Only an administrator can shut down the computer while other users are logged in.",
   "power.others": {

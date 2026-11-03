@@ -6,16 +6,50 @@ import { openSwitcher, switcherKey, switcherState, cancelSwitcher, AppSwitcher }
 import { useShortcuts, shortcutList } from '../../sdk/shortcuts.js';
 import { findWallpaper } from '../../sdk/wallpapers.js';
 import { settings } from '../../sdk/settings.js';
+import { askPower, canPower, powerAsk, PowerDialog } from '../../sdk/power.jsx';
 
 const check = (ok, message) => { if (!ok) throw new Error('switcher smoke: ' + message); };
 function Harness() {
   useShortcuts({ grabs: 'flow' });
   useEffect(() => { const timer = setTimeout(runTests, 100); return () => clearTimeout(timer); }, []);
-  return h(View, { style: { width: 1000, height: 700, backgroundColor: '#487383' } }, h(AppSwitcher));
+  return h(View, { style: { width: 1000, height: 700, backgroundColor: '#487383' } }, h(AppSwitcher), h(PowerDialog));
 }
 render(h(Harness));
 function runTests() {
   check(!!lord.switcher, 'Rust bridge exists');
+  check(typeof lord.session.hostPower === 'function' && !lord.session.hostPower(),
+    'headless tests cannot request host power');
+  const nativeSession = lord.session;
+  try {
+    // Test only the UI contract. No native power method is ever called.
+    lord.session = { hostPower: () => true, managed: () => false, power: () => { throw new Error('unexpected power request'); } };
+    check(canPower(), 'Fedora host power is offered without the LordOS session daemon');
+    askPower('reboot');
+    check(powerAsk.get()?.host && powerAsk.get()?.state === 'ask', 'restart requires confirmation');
+    for (const why of ['denied', 'inhibited', 'unavailable']) {
+      powerAsk.set({ ...powerAsk.get(), state: 'sent' });
+      globalThis.__lordHw('session-power', { ok: false, why });
+      check(powerAsk.get()?.state === why, 'host refusal reaches the dialog: ' + why);
+    }
+    lord.session = { managed: () => true, onMonitor: () => false, power: () => false };
+    check(!canPower(), 'legacy remote-only sessions keep their existing restriction');
+    lord.session.onMonitor = () => true;
+    check(canPower(), 'legacy local sessions remain supported');
+  } finally {
+    lord.session = nativeSession;
+    powerAsk.set(null);
+  }
+  console.log('session power integration: passed');
+  // Render confirmation and host failure states. The real native API stays
+  // headless and the deadline is far away; no power action can be sent here.
+  const dialogStates = ['ask', 'denied', 'inhibited', 'unavailable'];
+  const showDialog = () => {
+    const state = dialogStates.shift();
+    powerAsk.set(state ? { action: 'reboot', host: true, until: Date.now() + 3600000, state } : null);
+    if (state) setTimeout(showDialog, 80);
+    else console.log('host power dialog rendering: passed');
+  };
+  showDialog();
   const profile = lord.settings.motionProfile(false, false, false);
   check(profile.codecs.join() === 'h264' && profile.width === 1280 && profile.height === 720 && profile.fps === 15 && profile.threads === 2,
     'CPU laptop gets a bounded native playback profile');

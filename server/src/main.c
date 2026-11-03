@@ -2463,6 +2463,9 @@ int main(int argc, char **argv) {
         tp_tick(now);                       /* touchpad: tocar, arrastrar, inercia (tp/tp.c) */
         if (wl_idle_inhibited()) display_activity(now_ms());   /* a video or a presentation keeps the screen on */
         display_tick(now_ms());             /* screen off, lock and sleep after N minutes (src/hw) */
+        hw_tick(now);
+        double pwd = hw_timeout(now);
+        if (pwd >= 0 && (delay < 0 || pwd < delay)) delay = pwd;
         double hwd = display_timeout(now_ms());
         if (hwd >= 0 && (delay < 0 || hwd < delay)) delay = hwd;
         /* Settings → Displays or a hotplug: displays, modes, scales, arrangement (between frames) */
