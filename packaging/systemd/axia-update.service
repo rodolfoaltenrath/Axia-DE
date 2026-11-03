@@ -1,0 +1,12 @@
+[Unit]
+Description=Update the installed Axia DE package
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/usr/share/wayland-sessions/axia.desktop
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/dnf5 --refresh --assumeyes --setopt=gpgcheck=True --setopt=install_weak_deps=False upgrade axia-de
+TimeoutStartSec=20min
+Nice=10
+IOSchedulingClass=idle

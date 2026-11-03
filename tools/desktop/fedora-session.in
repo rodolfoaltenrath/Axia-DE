@@ -39,7 +39,7 @@ def main():
     env = dict(os.environ, XDG_CURRENT_DESKTOP='Axia', XDG_SESSION_DESKTOP='axia',
                XDG_SESSION_TYPE='wayland', GDK_BACKEND='wayland', MOZ_ENABLE_WAYLAND='1',
                DISPLAY='')
-    server = subprocess.Popen(['/usr/bin/axia-session'], env=env)
+    server = subprocess.Popen(['@BINDIR@/axia-session'], env=env)
     helpers = []
 
     def stop(signum, frame):

@@ -64,6 +64,8 @@ def install(prefix, libexecdir, destdir):
     if (REPO / 'code-manifest.sig').exists():
         copy(REPO / 'code-manifest.sig', target / 'code-manifest.sig')
     bindir = prefix / 'bin'
+    copy(REPO / 'tools/desktop/fedora-session.in', target / 'fedora-session', 0o755)
+    (target / 'fedora-session').write_text((target / 'fedora-session').read_text().replace('@BINDIR@', str(bindir)))
     launcher = stage / bindir.relative_to('/') / 'axia-session'
     launcher.parent.mkdir(parents=True, exist_ok=True)
     launcher.write_text((REPO / 'tools/desktop/axia-session.in').read_text().replace('@ROOT@', str(root)))
@@ -77,12 +79,14 @@ def install(prefix, libexecdir, destdir):
             link.symlink_to(root / 'bin' / name)
     session = stage / prefix.relative_to('/') / 'share/wayland-sessions/axia.desktop'
     session.parent.mkdir(parents=True, exist_ok=True)
-    session.write_text((REPO / 'packaging/desktop/axia.desktop.in').read_text().replace('@BINDIR@', str(bindir)))
-    for file in ['LICENSE', 'THIRD_PARTY.md', 'README.md']:
+    session.write_text((REPO / 'packaging/desktop/axia.desktop.in').read_text().replace('@ROOT@', str(root)))
+    for file in ['LICENSE', 'THIRD_PARTY.md', 'ORIGIN.md', 'README.md']:
         copy(REPO / file, stage / prefix.relative_to('/') / 'share/doc/axia-de' / file)
     copy(REPO / 'docs/STANDALONE.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/STANDALONE.md')
+    copy(REPO / 'docs/COPR-UPDATES.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/COPR-UPDATES.md')
+    copy(REPO / 'docs/REPOSITORY.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/REPOSITORY.md')
     copy(REPO / 'server/src/bench/fonts/OFL.txt', stage / prefix.relative_to('/') / 'share/licenses/axia-de/OFL-Noto.txt')
-    for file in ['LICENSE', 'LICENSE-SecLists']:
+    for file in ['LICENSE', 'LICENCE.md', 'LICENSE-SecLists']:
         for src in (REPO / 'third_party').rglob(file):
             copy(src, stage / prefix.relative_to('/') / 'share/licenses/axia-de/third_party' / src.relative_to(REPO / 'third_party'))
     print(f'Installed desktop in {target}')

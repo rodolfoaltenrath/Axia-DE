@@ -44,7 +44,8 @@ def customize(root):
                                        'Exec=/usr/libexec/axia/fedora-session')
     text = re.sub(r'^DesktopNames=.*\n?', '', text, flags=re.M)
     write(root, str(session.relative_to(root)), text + 'DesktopNames=Axia;\n')
-    write(root, '/usr/libexec/axia/fedora-session', (HERE / 'session.py').read_text(), 0o755)
+    wrapper = (HERE.parent / 'desktop/fedora-session.in').read_text().replace('@BINDIR@', '/usr/bin')
+    write(root, '/usr/libexec/axia/fedora-session', wrapper, 0o755)
     write(root, '/usr/libexec/axia/installer-browser',
           (HERE / 'installer-browser.py').read_text(), 0o755)
     normal_gdm = '[daemon]\nDefaultSession=axia.desktop\nInitialSetupEnable=False\n'
