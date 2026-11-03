@@ -553,7 +553,9 @@ int kms_cursor_image(Kms *k, const uint32_t *argb, int w, int h, int hot_x, int 
         for (int x = 0; x < w && x < 64; x++) k->cursor_map[(size_t)y * k->cursor_w + x] = argb[(size_t)y * w + x];
     struct drm_mode_cursor2 c = { .flags = DRM_MODE_CURSOR_BO, .crtc_id = k->crtc_id, .width = 64, .height = 64,
                                   .handle = k->cursor_handle, .hot_x = hot_x, .hot_y = hot_y };
-    k->cursor_ok = xioctl(k->fd, DRM_IOCTL_MODE_CURSOR2, &c) == 0;
+    int ok = xioctl(k->fd, DRM_IOCTL_MODE_CURSOR2, &c) == 0;
+    if (!ok) kms_cursor_show(k, 0);   /* hide the previous image before clearing cursor_ok */
+    k->cursor_ok = ok;
     k->cursor_visible = k->cursor_ok;
     return k->cursor_ok ? 0 : -1;
 }

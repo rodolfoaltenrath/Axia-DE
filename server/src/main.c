@@ -359,20 +359,25 @@ static void pointer_phys(const Server *s, const Out *o, int *x, int *y) {
     *y = (int)lround(py);
 }
 
-/* GPU path, one display: the cursor plane follows the pointer. */
+/* A KMS cursor plane moves independently of CPU/GPU composition and page flips. */
 static void hw_cursor_move(Server *s) {
     if (!s->hw_cursor) return;
     /* the plane of the display under the pointer shows it; the others hide theirs */
     int at = out_at_pointer(s);
     for (int i = 0; i < OUT_MAX; i++) {
         Out *o = &s->out[i];
-        if (!o->on || o->gpu < 0) continue;
+        if (!o->on || (gpu_active() && o->gpu < 0)) continue;
         if (i != at || s->cursor_mode == 2) { kms_cursor_show(&o->kms, 0); continue; }
         int x, y;
         pointer_phys(s, o, &x, &y);
         kms_cursor_show(&o->kms, 1);
         kms_cursor_move(&o->kms, x - s->cursor_hx, y - s->cursor_hy);
     }
+}
+static void cursor_motion(Server *s) {
+    if (s->hw_cursor) hw_cursor_move(s);
+    /* Capture viewers still need cursor position/image notifications in frames. */
+    if (!s->hw_cursor || mirror_watchers() || media_needs_cpu()) s->cursor_dirty = 1;
 }
 static const char *const cursor_arrow[] = {
     "X", "XX", "XoX", "XooX", "XoooX", "XooooX", "XoooooX", "XooooooX", "XoooooooX",
@@ -441,6 +446,7 @@ static int drop_privileges(const char *user) {
 
 static void update_cursor(Server *s);
 static int gpu_start(Server *s);
+static void cpu_cursor_start(Server *s);
 
 /* Forma del cursor del nodo bajo el puntero: la del primero hacia arriba que tenga `cursor`. */
 static int node_cursor(const Node *n) {
@@ -533,8 +539,7 @@ static void remote_settle(Server *s) {
     wl_pointer_confine(&s->cx, &s->cy);
     s->lx = s->cx;
     s->ly = s->cy;
-    if (s->hw_cursor) hw_cursor_move(s);
-    else s->cursor_dirty = 1;
+    cursor_motion(s);
     dispatch_pointer(s);
 }
 
@@ -694,8 +699,9 @@ static void cpu_takeover(Server *s) {
     prep_undo_all(s);                           /* a frame prepared for the GPU is painted again */
     for (int i = 0; i < OUT_MAX; i++) {
         Out *o = &s->out[i];
-        if (!o->on || o->gpu < 0) continue;
+        if (!o->on) continue;
         kms_cursor_show(&o->kms, 0);
+        if (o->gpu < 0) continue;
         kms_set_fb(&o->kms, o->kms.buf[o->kms.front].fb_id);
         o->kms.custom = 0;
         o->gpu = -1;
@@ -860,6 +866,7 @@ static void outputs_apply(Server *s) {
     set_size(s, p.bw > 0 ? p.bw : (int)k0->width, p.bh > 0 ? p.bh : (int)k0->height);
     for (int i = 0; i < OUT_MAX; i++) s->out[i].gpu = -1;     /* the GPU stopped above */
     if (gpu_allowed(s) && !s->gpu_paused) gpu_start(s);
+    if (!gpu_active()) cpu_cursor_start(s);
     s->cursor_dirty = 1;
 }
 
@@ -1072,14 +1079,13 @@ static void on_input(void *ud, const InputDevice *d, const struct input_event *e
         s->lx = s->cx;
         s->ly = s->cy;
         if (s->moved) {
-            if (s->hw_cursor) hw_cursor_move(s);
-            else s->cursor_dirty = 1;
+            cursor_motion(s);
         }
         /* el movimiento solo se junta: se manda una vez por cuadro (pointer_flush, al terminar el
          * page flip); los botones y la rueda, enseguida (con el movimiento que haya hasta acá) */
         if (s->nbuttons || s->wheel) {
             dispatch_pointer(s);
-            if (gpu_active()) update_cursor(s);     /* la app pudo pedir otro cursor (u ocultarlo) */
+            if (gpu_active() || s->hw_cursor) update_cursor(s);
         } else if (s->moved) s->motion_pending = 1;
         if (d->tp) tp_latency(d->tp, ev);       /* touchpad: latencia por gesto en el registro */
         tp_route_wheel_flush();                 /* rueda de alta resolución u horizontal */
@@ -1341,29 +1347,65 @@ static void arrow_argb(uint32_t *px, int w, int h) {
     canvas_bitmap(&c, 0, 0, cursor_arrow, 0xff000000u, 0xffffffffu);
 }
 
-/* GPU path cursor: it changes when the app asks for another (or hides it, or the arrow is back). */
+static void cursor_plane_fallback(Server *s) {
+    for (int i = 0; i < OUT_MAX; i++) if (s->out[i].on) {
+        kms_cursor_show(&s->out[i].kms, 0);
+        s->out[i].full_copy = 2;
+        s->out[i].cdirty = 1;
+    }
+    s->hw_cursor = 0;
+    s->cursor_dirty = 1;
+    fprintf(stderr, "cursor: plane unavailable; using software cursor\n");
+}
+
+/* Update the image only when its generation or visibility changes. CPU cursor
+ * planes have no GPU texture: that must not invalidate this cache each frame. */
 static void update_cursor(Server *s) {
-    Cur c;
-    cursor_local(s, &c, out_scale(&s->out[0]));
+    Cur c = {0};
+    cursor_local(s, &c, out_scale(gpu_active() ? &s->out[0] : main_out(s)));
     const uint32_t *px = c.px;
     int w = c.w, h = c.h, hx = c.hx, hy = c.hy, mode = c.mode;
     unsigned gen = c.gen;
-    if (gen == s->cursor_gen && mode == s->cursor_mode && s->cursor_tex) return;
+    if (gen == s->cursor_gen && mode == s->cursor_mode && (gpu_active() ? s->cursor_tex != NULL : s->hw_cursor)) return;
     s->cursor_gen = gen;
     s->cursor_mode = mode;
+    /* Keep oversized/custom cursors intact on the software path. */
+    if (!gpu_active() && mode == 1 && (!px || w <= 0 || h <= 0 || w > 64 || h > 64)) {
+        cursor_plane_fallback(s);
+        return;
+    }
     static uint32_t arrow[64 * 64];
     if (mode != 1 || w > 64 || h > 64) { arrow_argb(arrow, 64, 64); px = arrow; w = h = 64; hx = hy = 0; }
     s->cursor_hx = hx;
     s->cursor_hy = hy;
     if (s->hw_cursor) {
-        if (mode != 2)
+        if (mode != 2) {
+            int failed = 0;
             for (int i = 0; i < OUT_MAX; i++)
-                if (s->out[i].on && s->out[i].gpu >= 0) kms_cursor_image(&s->out[i].kms, px, w, h, hx, hy);
+                if (s->out[i].on && (!gpu_active() || s->out[i].gpu >= 0))
+                    failed |= kms_cursor_image(&s->out[i].kms, px, w, h, hx, hy) != 0;
+            if (failed) cursor_plane_fallback(s);
+        }
         hw_cursor_move(s);
     }
+    if (!gpu_active()) return;
     s->cursor_tex = gpu_tex_pixels(s->cursor_tex, px, w, h, 0);
     s->cursor_tex_w = w;
     s->cursor_tex_h = h;
+}
+
+/* The Fedora CPU build can use KMS's existing cursor plane too. Start with a
+ * single upright output; rotation/multiple CPU displays keep the software path. */
+static void cpu_cursor_start(Server *s) {
+    if (gpu_active() || s->headless || getenv("LORD_SW_CURSOR") || out_count(s) != 1) return;
+    Out *o = main_out(s);
+    if (o->kms.fd < 0 || o->d.rot) return;
+    s->hw_cursor = 1;
+    s->cursor_gen = 0;
+    s->cursor_mode = -1;
+    o->full_copy = 2;              /* clear any software cursor left in either buffer */
+    update_cursor(s);
+    fprintf(stderr, "cursor: CPU composition, %s\n", s->hw_cursor ? "hardware plane" : "software fallback");
 }
 
 /* GPU (Mesa) on the session's card; without a usable one, the CPU path goes on. */
@@ -1554,7 +1596,8 @@ static void present_cpu(Server *s, Out *o, int index, Rect r, int feed) {
         mirror_cursor(px_, py_, k.mode, k.px, k.w, k.h, k.hx, k.hy, k.gen);
     }
     cursor_local(s, &k, out_scale(o));      /* the arrow is also an image (cursor.c) */
-    Rect cr = cursor_rect(s, o, &k);
+    int plane = s->hw_cursor && (!gpu_active() || o->gpu >= 0);
+    Rect cr = plane ? (Rect){0} : cursor_rect(s, o, &k);
     o->cur_on = cr.x1 > cr.x0;
     if (!xf) {
         if (!tinted) display_tint(&out, need);   /* Night Light without a gamma LUT (software) */
@@ -1704,6 +1747,7 @@ static int cpu_switch(Server *s) {
     gpu_shutdown();
     s->gpu_paused = 1;
     cpu_takeover(s);
+    cpu_cursor_start(s);
     full_damage(s);
     return 1;
 }
@@ -1824,6 +1868,7 @@ static void out_present(Server *s, Out *o, int i, Rect r, const Out *feed, LbPha
             fprintf(stderr, "gpu: a frame failed; going on by CPU\n");
             gpu_shutdown();
             cpu_takeover(s);
+            cpu_cursor_start(s);
             full_damage(s);
         }
     } else present_cpu(s, o, i, r, o == feed);
@@ -2372,7 +2417,7 @@ int main(int argc, char **argv) {
          * mouse de 1000 Hz no llama a JS (ni a las apps Linux) mil veces por segundo. */
         if (s.motion_pending && !out_blocked(&s, main_out(&s))) {
             dispatch_pointer(&s);
-            if (gpu_active()) update_cursor(&s);
+            if (gpu_active() || s.hw_cursor) update_cursor(&s);
         }
         /* LordBench's scene moves its window one step per frame, as a drag does (ui/grab.c) */
         if (grab_scripted() && !any_blocked(&s)) grab_script_tick(now_ms());
@@ -2446,6 +2491,7 @@ int main(int argc, char **argv) {
             }
         }
         js_input_flush();                   /* the on-screen keyboard's taps (js_input.c), as physical keys */
+        if (s.hw_cursor) update_cursor(&s); /* client cursor changes need no scene redraw */
         /* the frame pipeline (fpipe.h): a prepared frame whose flip is done is submitted, and the next one may
          * be painted while every display waits for its flip */
         int ahead = !unseen && can_prepare(&s);

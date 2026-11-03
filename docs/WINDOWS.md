@@ -13,8 +13,32 @@ and the cursor shows the arrow for each direction.
 | ![cursors](windows-resize-cursors.png) | ![app](windows-app-cursor.png) |
 | LordOS cursors (`server/src/cursor.c`) at 2x over light and dark backgrounds; the red dot is the hotspot | The I-beam in Chromium's address bar: it asks for it via `cursor-shape-v1` and LordOS draws it |
 
-The screenshots are from VM 118 on the CPU path (on the GPU path the cursor goes through the cursor
-plane and `screendump` doesn't show it).
+The screenshots are from VM 118 before CPU cursor-plane support. A hardware cursor is not part of
+the primary framebuffer, so `screendump` does not show it.
+
+## Cursor plane with CPU composition (Fedora)
+
+The Fedora package composes the desktop on the CPU. Previously only GPU composition enabled the
+KMS cursor plane, so the software arrow had to wait for a composed frame and its page flip. A
+busy browser could make the arrow stutter even when input routing was correct.
+
+CPU composition now attempts the existing KMS cursor plane on a single unrotated display. Motion
+moves that plane directly, including while a scene flip is pending. Cursor images are uploaded
+only when their generation or visibility changes. The primary framebuffer does not draw a second
+cursor; recording and remote viewing keep their cursor updates. No input thread or GPU renderer
+is added: a long operation on the compositor's main thread can still delay reading input.
+
+Rotated/multiple CPU displays and `LORD_SW_CURSOR` keep software cursors. If a plane rejects an
+image, or a custom CPU cursor exceeds 64×64 pixels, the old plane is hidden and both software
+buffers are refreshed. Display changes and GPU-to-CPU transitions initialize the cursor again.
+The session logs `cursor: CPU composition, hardware plane` when activation succeeds.
+
+`make -C server build/cpu-cursor-test build/kms-cursor-test` builds deterministic tests with
+recorded KMS calls. They cover 1,000 moves during a pending flip with one image upload and no
+scene redraw requests for pure motion, cursor visibility/hotspots, software fallback, capture
+updates, and hiding the previous image after a failed upload. These run in `test-platform` too.
+This is a call-count regression test, not a measured improvement on physical hardware; verify
+the notebook's actual pointer smoothness after updating the session.
 
 ## Why it wasn't smooth (before)
 
