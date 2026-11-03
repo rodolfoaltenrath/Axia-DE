@@ -39,6 +39,8 @@ jobs:
     steps:
       - run: dnf install -y git
       - uses: actions/checkout@v4
+      - name: Trust the checked-out workspace in the build container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: RPM build dependencies
         run: |
           dnf install -y dnf5-plugins rpm-build nodejs npm
