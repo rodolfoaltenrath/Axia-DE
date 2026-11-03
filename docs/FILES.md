@@ -51,6 +51,10 @@ the active tab visible and provide buttons to reach the remaining tabs.
 File choosers use this same content inside a modal sheet; they keep their own
 Open/Save and Cancel actions. Information, previews and confirmations stay within
 the owning window, with scrollable content and actions accessible after resizing.
+Icon columns share the available width evenly, reserving 12 pixels for the
+scrollbar. Short windows use 100-pixel rows (110 in taller views), keeping the
+56-pixel icons and readable filenames while showing more content. Rendering,
+keyboard movement, scrolling and PDF requests use the same grid geometry.
 Rust response effects are queued independently of React rendering, so batched
 snapshots cannot drop an open, preview, mount or resource-release operation.
 Visible file rows, keyboard navigation and scrollbar movement share one Rust

@@ -441,6 +441,18 @@ impl Session {
         let past = self.past_columns();
         (self.width - self.side_width - 5. - past as f64 * 190.).max(1.)
     }
+    // One geometry for painting, keyboard movement, scrolling and PDF requests.
+    // Leave room for the scrollbar, then distribute the full width across cells.
+    pub(super) fn entry_grid(&self) -> (usize, f64, f64) {
+        let width = (self.entry_width() - 12.).max(1.);
+        if self.tab().view == "icons" {
+            let columns = (width / 112.).floor().max(1.) as usize;
+            let row = if self.entry_area() < 360. { 100. } else { 110. };
+            (columns, width / columns as f64, row)
+        } else {
+            (1, width, 32.)
+        }
+    }
     fn past_columns(&self) -> usize {
         if self.tab().view == "columns" {
             self.tab().columns.len().min(if self.width > 1000. {
@@ -668,13 +680,7 @@ impl Session {
         let gallery = self.tab().view == "gallery";
         let columns = self.tab().view == "columns";
         let preview_height = self.gallery_height();
-        let cell_width = if icons { 112. } else { width };
-        let row_height = if icons { 110. } else { 32. };
-        let count = if icons {
-            (width / 112.).floor().max(1.) as usize
-        } else {
-            1
-        };
+        let (count, cell_width, row_height) = self.entry_grid();
         let rows = items.len().div_ceil(count);
         let content_h = rows as f64 * row_height;
         let area_h = self.entry_area();
