@@ -24,14 +24,15 @@ typedef struct {
     int64_t seq;
     struct SwsContext *sws;
     int sw, sh, sfmt, sws_dw, sws_dh;
-    int box_w, box_h, native;
+    int box_w, box_h, native, max_w, max_h;
     AVFrame *last;                  /* last presented frame (to redraw when the size changes) */
     int64_t last_pts;
 } Out;
 
 static Out O = { .fd = -1, .server_cur = -1 };
 
-void lm_out_init(int native) { O.native = native; }
+void lm_out_init(int native) { O.native = native; O.max_w = O.max_h = 0; }
+void lm_out_limit(int w, int h) { O.max_w = w; O.max_h = h; }
 int  lm_out_has_box(void) { return O.box_w > 0; }
 int  lm_out_has_last(void) { return O.last != NULL; }
 const AVFrame *lm_out_last(void) { return O.last; }
@@ -47,6 +48,10 @@ static void out_size(const AVFrame *f, int *w, int *h) {
         double s = fmin(O.box_w / dw, (double)O.box_h / sh);
         *w = (int)lround(dw * s);
         *h = (int)lround(sh * s);
+    }
+    if (O.max_w > 0 && O.max_h > 0) {
+        double scale = fmin(1.0, fmin((double)O.max_w / *w, (double)O.max_h / *h));
+        *w = (int)lround(*w * scale); *h = (int)lround(*h * scale);
     }
     if (*w > MP_MAX_DIM) *w = MP_MAX_DIM;
     if (*h > MP_MAX_DIM) *h = MP_MAX_DIM;

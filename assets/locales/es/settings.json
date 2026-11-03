@@ -432,7 +432,7 @@
   "wallpaperCategory.earth": "Tierra",
   "motion.title": "Fondos en movimiento",
   "motion.hint": "Se descargan al elegirlos. Se pausan cuando el escritorio queda tapado, en pantalla completa, cuando te alejás y con poca batería.",
-  "motion.needsGpu": "Los fondos en movimiento necesitan una GPU compatible.",
+  "motion.needsGpu": "No se pudieron iniciar los fondos animados. Puedes seguir usando una imagen.",
   "motion.display": "Pantalla",
   "motion.allDisplays": "Todas las pantallas",
   "motion.none": "Volver a fondo fijo",
@@ -443,7 +443,7 @@
   "motion.remove": "Borrar descarga",
   "motion.credits": "Créditos",
   "motion.problem.tooLong": "El video dura más de 10 segundos.",
-  "motion.problem.format": "Esta GPU no puede decodificar ese formato de video.",
+  "motion.problem.format": "Este vídeo no es compatible. Prueba otro archivo MP4.",
   "motion.problem.unreadable": "Ese archivo no se puede leer como video.",
   "motion.item.earth-night-lights": "Luces nocturnas",
   "motion.item.earth-spin": "Canica azul",
@@ -478,5 +478,9 @@
   "wallpaper.chooseImage": "Elegir una imagen…",
   "wallpaper.imageHint": "PNG o JPEG, hasta 32 MiB y 16 megapíxeles. Se guarda una copia para tu escritorio.",
   "wallpaper.importFailed": "No se pudo importar la imagen. Elige un PNG o JPEG válido de hasta 32 MiB y 16 megapíxeles.",
-  "wallpaperCategory.personal": "Mis imágenes"
+  "wallpaperCategory.personal": "Mis imágenes",
+  "motion.efficientHint": "El modo de ahorro usa animaciones más ligeras y lentas para mantener el equipo ágil. Se pausan cuando otros programas necesitan más rendimiento.",
+  "motion.playbackFailed": "No se pudo reproducir este fondo. Prueba otro vídeo o elige una imagen.",
+  "motion.downloadFailed": "No se pudo descargar este fondo. Revisa tu conexión e inténtalo de nuevo.",
+  "motion.problem.tooLarge": "Este vídeo es demasiado exigente para un fondo. Elige un vídeo más pequeño de hasta 10 segundos."
 }

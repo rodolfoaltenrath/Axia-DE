@@ -432,7 +432,7 @@
   "wallpaperCategory.earth": "Terra",
   "motion.title": "Fundos em movimento",
   "motion.hint": "São baixados quando você escolhe um. Pausam quando a área de trabalho fica coberta, em tela cheia, quando você se afasta e com pouca bateria.",
-  "motion.needsGpu": "Os fundos em movimento precisam de uma GPU compatível.",
+  "motion.needsGpu": "Não foi possível iniciar os fundos animados. Você pode continuar usando uma imagem.",
   "motion.display": "Tela",
   "motion.allDisplays": "Todas as telas",
   "motion.none": "Voltar ao fundo fixo",
@@ -443,7 +443,7 @@
   "motion.remove": "Apagar download",
   "motion.credits": "Créditos",
   "motion.problem.tooLong": "O vídeo dura mais de 10 segundos.",
-  "motion.problem.format": "Esta GPU não decodifica esse formato de vídeo.",
+  "motion.problem.format": "Esse vídeo não é compatível. Tente outro arquivo MP4.",
   "motion.problem.unreadable": "Esse arquivo não pode ser lido como vídeo.",
   "motion.item.earth-night-lights": "Luzes noturnas",
   "motion.item.earth-spin": "Bola de gude azul",
@@ -478,5 +478,9 @@
   "wallpaper.chooseImage": "Escolher uma imagem…",
   "wallpaper.imageHint": "PNG ou JPEG, até 32 MiB e 16 megapixels. Uma cópia é mantida para sua área de trabalho.",
   "wallpaper.importFailed": "Não foi possível importar a imagem. Escolha um PNG ou JPEG válido de até 32 MiB e 16 megapixels.",
-  "wallpaperCategory.personal": "Minhas imagens"
+  "wallpaperCategory.personal": "Minhas imagens",
+  "motion.efficientHint": "O modo econômico usa animações mais leves e lentas para manter o computador ágil. Elas pausam quando outros programas precisam de mais desempenho.",
+  "motion.playbackFailed": "Não conseguimos reproduzir esse fundo. Tente outro vídeo ou escolha uma imagem.",
+  "motion.downloadFailed": "Não conseguimos baixar esse fundo. Confira sua conexão e tente novamente.",
+  "motion.problem.tooLarge": "Esse vídeo é pesado para usar como fundo. Escolha um vídeo menor, com até 10 segundos."
 }

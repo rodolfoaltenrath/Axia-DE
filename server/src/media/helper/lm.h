@@ -72,6 +72,7 @@ int  lm_encode_image(const AVFrame *bgra, const char *format, int quality, int o
 void lm_probe_json(AVFormatContext *fmt, LmBuf *b);
 
 /* ---- frame output to axia-server (lm_out.c) ---- */
+void lm_out_limit(int width, int height); /* wallpaper output budget; other media stays unlimited */
 void lm_out_init(int native);           /* native: original size (without scaling to the box) */
 int  lm_out_present(AVFrame *f, int64_t pts);   /* 0 presented, 1 dropped (no slot), -1 error */
 void lm_out_ack(uint32_t id);

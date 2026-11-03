@@ -2,6 +2,7 @@
 
 Axia embeds these services in `rust/axia-shell`; there is no new daemon, runtime,
 Cargo dependency, privileged action or distribution-specific wallpaper service.
+Catalog video downloads use the host's curl executable in a background worker.
 The React settings page and existing C compositor use narrow C ABI adapters.
 
 ## Wallpapers
@@ -28,14 +29,15 @@ The login wallpaper and third-party desktop settings remain separate.
 
 ## Glass
 
-Rust owns reusable working buffers, worker-local scratch, the reduced backdrop
-cache, and the light/dark tint and outline policy. C retains its parallel raster
-kernels, clipping, compositing order and damage tracking. The blur remains the
+Rust owns every backdrop pixel kernel, geometry, clipping, reusable working
+buffer, worker scratch, reduced backdrop cache, and the light/dark material policy.
+The old C blur implementation is removed. C provides a thin canvas/worker-pool
+adapter, compositing order and damage tracking. The blur remains the
 same three-pass reduced-resolution algorithm; rounded clipping is applied anew
 at the current position. The Dock and Rust app switcher share the material.
 Disabling effects makes their material opaque and disables blur.
 
-Before each lookup, C samples the actual backdrop into Rust-owned memory, including
+Before each lookup, Rust samples the actual backdrop into its owned memory, including
 external app content on the CPU renderer. The cache compares every reduced input
 pixel, dimensions and blur radius. It reuses only the blurred intermediate, never
 a screen rectangle, tint or rounded edge. Wallpaper changes, app updates and window
@@ -57,12 +59,16 @@ in Fedora RPMs (`GPU=0`) or claim to implement a GPU blur pass.
 ## Validation
 
 `make -C server test-platform` runs Rust validity/budget tests, the C ABI selector
-checks, wallpaper image lifetime and existing input/cursor regressions.
+checks, 128 frozen legacy-C pixel comparisons (serial/parallel, cold/cached),
+wallpaper image lifetime and existing input/cursor regressions.
 `build/engine-test` (run from `server/`) checks compositor partial repaints and
 existing CPU/GPU model pixel goldens. `tools/desktop/check.py` starts both native
 themes and imports real PNG fixtures through Rust → C → QuickJS, validates invalid
 inputs, managed thumbnails, persistence, theme-independent selection and the app
-switcher. All run in isolated profiles without touching the active session.
+switcher. It also exercises the asynchronous Rust motion store with an offline
+SHA-256-verified catalog fixture, and tests the actual sandboxed player without a
+GPU: frame size/rate bounds, pause/resume, looping, and uncapped ordinary videos.
+All run in isolated profiles without touching the active session.
 
 `server/tests/glass_bench.c` compares a fixed 1366×220 backdrop, a 1000×136 glass
 region and radius 24. Compile the same harness against the reference `canvas.c`
@@ -70,12 +76,19 @@ and this version. Compare checksums for unchanged and changing backgrounds befor
 considering timings. This is a serial raster microbenchmark, not a measurement of
 mouse latency, complete desktop FPS, or GPU rendering.
 
-Local validation on 2026-11-03: 12 Rust tests, 9,521 compositor checks, 602 Wayland
-input checks, 24 cursor checks, image lifetime, both headless themes, and PNG import
-integration passed. A separate isolated UI run opened the chooser and selected a
-JPEG by pointer input. The serial benchmark produced identical reference/new
-checksums: unchanged 3.608 → 2.687 ms/frame; changing 3.439 → 3.082 ms/frame.
-These timings are indicative local samples, not a desktop performance guarantee.
+Local validation on 2026-11-03: 17 Rust tests, 128 frozen C/Rust pixel comparisons,
+9,521 compositor checks, 602 Wayland input checks, 24 cursor checks, image lifetime,
+both headless themes and native wallpaper/motion-storage integration passed. The
+software-only player produced 43 wallpaper frames with a 1280×720 ring, pause/resume
+and looping; an ordinary video kept 1920×1080 and about 100 frames in the same test.
+A separate isolated run downloaded a real catalog video, verified its SHA-256 and
+played it through the actual CPU compositor/helper on the local Intel laptop.
+
+The Rust horizontal pass writes directly to the second buffer, eliminating both
+the per-row scratch copy and the whole-intermediate copy of the legacy C path.
+Serial blur microbenchmarks retain identical checksums. Local cached-C/Rust samples
+were 2.298/2.264 ms per unchanged frame and 3.098/3.055 ms per changing frame;
+variation between runs is large enough that these are not a desktop speedup claim.
 
 The per-language catalog checks pass for English, Spanish and Portuguese. The
 repository-wide text lint still reports its pre-existing six prose exceptions in

@@ -9,6 +9,9 @@ bool axia_glass_prepare(size_t w, size_t h, size_t radius, size_t columns, AxiaG
 bool axia_glass_reuse(void);
 void axia_glass_commit(void);
 uint32_t *axia_glass_scratch(size_t words);
+typedef void (*AxiaGlassKernel)(void *, int, int);
+typedef void (*AxiaGlassParallel)(int, uint64_t, AxiaGlassKernel, void *);
+void axia_glass_render(void *canvas, float x, float y, float w, float h, float r, int radius, AxiaGlassParallel parallel);
 uint32_t axia_glass_tint(bool dark, bool effects);
 uint32_t axia_glass_outline(bool dark);
 #endif

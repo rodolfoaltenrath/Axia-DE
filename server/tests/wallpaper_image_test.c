@@ -6,7 +6,7 @@
 #include "../src/ui/image.c"
 #include "stb_image_write.h"
 int main(void) {
-    char root[]="/tmp/axia-image-XXXXXX",dir[256],path[256];
+    char root[]="/tmp/axia-image-XXXXXX",dir[256],path[512];
     assert(mkdtemp(root));
     snprintf(dir,sizeof dir,"%s/axia",root);assert(!mkdir(dir,0700));
     snprintf(dir,sizeof dir,"%s/axia/wallpapers",root);assert(!mkdir(dir,0700));

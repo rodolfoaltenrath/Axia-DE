@@ -15,9 +15,13 @@
 #include "../hw/hw_admin.h"
 #include "js_sys.h"
 #include "wallpaper_ffi.h"
+#include "../hw/wallpaper_find.h"
+#include "../pkg/crypto.h"
 #include "../glass_ffi.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
+#include <signal.h>
+#include <sys/prctl.h>
 #include "js_err.h"
 #include "ui.h"
 #include "fonts.h"
@@ -424,6 +428,68 @@ static JSValue f_glass_material(JSContext *c, JSValueConst self, int argc, JSVal
     JS_SetPropertyStr(c, value, "backgroundColor", JS_NewString(c, tint));
     JS_SetPropertyStr(c, value, "borderColor", JS_NewString(c, border));
     return value;
+}
+
+/* The compositor blocks signals for signalfd. Restore the child's mask and
+ * terminate a background downloader if its owning session exits. Async-signal-safe. */
+static bool motion_child_setup(uint32_t parent) {
+    sigset_t empty; sigemptyset(&empty);
+    return !sigprocmask(SIG_SETMASK, &empty, NULL) && !prctl(PR_SET_PDEATHSIG, SIGTERM) && (uint32_t)getppid() == parent;
+}
+static bool motion_hash(const char *path, const char *expected) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    Sha256 hash; sha256_init(&hash);
+    unsigned char buf[32768], digest[32]; size_t n;
+    while ((n = fread(buf, 1, sizeof buf, f))) sha256_update(&hash, buf, n);
+    int ok = !ferror(f); fclose(f);
+    sha256_final(&hash, digest); char hex[65]; hex_encode(digest, 32, hex);
+    return ok && !strcmp(hex, expected);
+}
+static int motion_entry(JSContext *c, int argc, JSValueConst *argv, char *url, char *sha, unsigned long long *size) {
+    if (!argc || !JS_IsString(argv[0])) return -1;
+    size_t n; const char *arg = JS_ToCStringLen(c, &n, argv[0]);
+    if (!arg) return -1;
+    char path[PATH_MAX + 32]; snprintf(path, sizeof path, "%s/wallpapers/motion.json", js_sys_assets());
+    size_t len = 0; char *catalog = read_small(path, 1024 * 1024, &len);
+    int rc = catalog && n < 120 && n == strlen(arg) ? hw_wallpaper_find(catalog, len, arg, url, 1024, sha, 65, size) : -1;
+    free(catalog); JS_FreeCString(c, arg); return rc;
+}
+static JSValue f_motion_download(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self; char url[1024], sha[65]; unsigned long long size;
+    if (motion_entry(c, argc, argv, url, sha, &size)) return JS_NewInt32(c, 0);
+    return JS_NewUint32(c, axia_motion_download(url, sha, size, home, getenv("XDG_DATA_HOME"), motion_hash, motion_child_setup));
+}
+static JSValue f_motion_poll(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self; uint32_t id = 0, percent = 0; char path[PATH_MAX];
+    if (argc) JS_ToUint32(c, &id, argv[0]);
+    int status = axia_motion_poll(id, path, sizeof path, &percent);
+    JSValue out = JS_NewObject(c);
+    JS_SetPropertyStr(c, out, "status", JS_NewInt32(c, status));
+    JS_SetPropertyStr(c, out, "percent", JS_NewUint32(c, percent));
+    if (status == 1) JS_SetPropertyStr(c, out, "path", JS_NewString(c, path));
+    return out;
+}
+static JSValue f_motion_remove(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self; char url[1024], sha[65]; unsigned long long size;
+    int ok = !motion_entry(c, argc, argv, url, sha, &size) && axia_motion_remove(sha, home, getenv("XDG_DATA_HOME"));
+    return JS_NewBool(c, ok);
+}
+static JSValue f_motion_profile(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self; AxiaMotionProfile p = {0};
+    axia_motion_profile(argc > 0 && JS_ToBool(c, argv[0]) > 0, argc > 1 && JS_ToBool(c, argv[1]) > 0,
+        argc > 2 && JS_ToBool(c, argv[2]) > 0, &p);
+    JSValue out = JS_NewObject(c), codecs = JS_NewArray(c); unsigned i = 0;
+    if (p.codecs & 2) JS_SetPropertyUint32(c, codecs, i++, JS_NewString(c, "hevc"));
+    if (p.codecs & 1) JS_SetPropertyUint32(c, codecs, i++, JS_NewString(c, "h264"));
+    JS_SetPropertyStr(c, out, "codecs", codecs);
+    JS_SetPropertyStr(c, out, "width", JS_NewUint32(c, p.width));
+    JS_SetPropertyStr(c, out, "height", JS_NewUint32(c, p.height));
+    JS_SetPropertyStr(c, out, "fps", JS_NewUint32(c, p.fps));
+    JS_SetPropertyStr(c, out, "threads", JS_NewUint32(c, p.threads));
+    JS_SetPropertyStr(c, out, "rate", JS_NewUint32(c, p.rate));
+    JS_SetPropertyStr(c, out, "hardware", JS_NewBool(c, p.hardware));
+    return out;
 }
 
 static JSValue f_settings_load(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -1469,6 +1535,10 @@ static const JSCFunctionListEntry system_funcs[] = {
 };
 static const JSCFunctionListEntry settings_funcs[] = {
     JS_CFUNC_DEF("importWallpaper", 1, f_wallpaper_import),
+    JS_CFUNC_DEF("motionProfile", 3, f_motion_profile),
+    JS_CFUNC_DEF("downloadMotion", 1, f_motion_download),
+    JS_CFUNC_DEF("pollMotion", 1, f_motion_poll),
+    JS_CFUNC_DEF("removeMotion", 1, f_motion_remove),
     JS_CFUNC_DEF("glassMaterial", 2, f_glass_material),
     JS_CFUNC_DEF("load", 0, f_settings_load),
     JS_CFUNC_DEF("save", 1, f_settings_save),
