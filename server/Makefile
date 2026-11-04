@@ -118,11 +118,12 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/fsops-test
 	./build/battery-refresh-test
 	./build/host-power-test
 	./build/portal-files-test
+	./build/media-preview-test
 	./build/glass-renderer-test
 	./build/wallpaper-image-test
 	./build/seat-test
@@ -139,6 +140,8 @@ build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/hw/powe
 build/portal-files-test: tests/portal_files_test.c src/ui/portal_files.c src/ui/portal_files.h src/vault/dbus.c
 	# Keep transport calls visible to --wrap; RPM LTO can inline the real bus functions.
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -fno-lto -Wl,--wrap=dbus_send,--wrap=dbus_reply,--wrap=dbus_error -o $@ $< src/ui/portal_files.c src/vault/dbus.c
+build/media-preview-test: tests/media_preview_test.c src/media/mview.c src/media/media_int.h src/canvas.c $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/media/mview.c src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/host-power-test: tests/host_power_test.c src/platform/power.c src/platform/power.h src/vault/dbus.c $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ $< src/platform/power.c src/vault/dbus.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/wallpaper-image-test: tests/wallpaper_image_test.c src/ui/image.c src/canvas.c src/glass_ffi.h build/obj/ui/stb.o $(RUST_LIB)

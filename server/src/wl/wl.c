@@ -118,6 +118,7 @@ struct Surf {
     struct wl_resource *res;
     struct wl_client *client;
     int id;
+    uint64_t preview_gen;
     /* pending until commit */
     struct wl_resource *p_buf;
     struct wl_listener p_buf_destroy;
@@ -604,6 +605,7 @@ static void srf_commit(struct wl_client *c, struct wl_resource *r) {
     (void)c;
     Surf *s = wl_resource_get_user_data(r);
     if (keylag_enabled && key_focus && c == key_focus->client) keylag_commit();
+    s->preview_gen++;
     commit_input_region(s);
     if (s->p_attached) {
         take_buffer(s, s->p_buf);
@@ -2339,6 +2341,39 @@ int wl_draws_meet(Rect r) {
         if (b.x0 < r.x1 && r.x0 < b.x1 && b.y0 < r.y1 && r.y0 < b.y1) return 1;
     }
     return 0;
+}
+
+/* Preview paint is read-only: no configure, X placement, holes or frame callbacks. */
+static uint64_t preview_generation(const Surf *s) {
+    if (!s) return 0;
+    uint64_t gen = s->preview_gen + (uint64_t)s->id;
+    for (int i=0;i<s->nkids;i++) gen = gen * 1099511628211ull ^ preview_generation(s->kids[i]);
+    return gen;
+}
+uint64_t wl_preview_generation(int id) { return preview_generation(find(id)); }
+static void preview_tree(Canvas *c, Surf *s, float x, float y, float op) {
+    if (s->content) {
+        if (s->dmabuf && gpu_active()) {
+            int w=(int)ceilf(s->lw * paint_view.k), h=(int)ceilf(s->lh * paint_view.k);
+            w=w<1?1:w>384?384:w; h=h<1?1:h>256?256:h;
+            uint32_t *px=malloc((size_t)w*h*4);
+            GpuTex *tex=dm_tex(s->dmabuf);
+            if (px && gpu_tex_read_scaled(tex,px,w,h)==0) {
+                float sx,sy,sw,sh;source_rect(s,&sx,&sy,&sw,&sh);
+                float kx=(float)w/s->w, ky=(float)h/s->h;
+                canvas_blit_scaled(c,px,w,w,h,sx*kx,sy*ky,sw*kx,sh*ky,
+                    PVX(x),PVY(y),s->lw*paint_view.k,s->lh*paint_view.k,op,s->opaque);
+            } else if (s->px) blit_surface(c,s,x,y,1,1,op);
+            free(px);
+        } else if (s->px) blit_surface(c,s,x,y,1,1,op);
+    }
+    for (int i=0;i<s->nkids;i++) preview_tree(c,s->kids[i],x+s->kids[i]->sx,y+s->kids[i]->sy,op);
+}
+void wl_preview_paint(Canvas *c,int id,float x,float y,float w,float h,float op) {
+    Surf *s=find(id); if (!s || s->role!=R_TOPLEVEL) return;
+    Rect old=canvas_push_clip(c,PVX(x),PVY(y),w*paint_view.k,h*paint_view.k);
+    preview_tree(c,s,x-s->gx,y-s->gy,op);
+    canvas_set_clip(c,old);
 }
 
 void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, float op) {

@@ -1053,3 +1053,5 @@ void term_wheel(Session *s, int lines, float lx, float ly, int mods) {
     }
     vt_scroll_view(t, lines);
 }
+
+uint64_t term_preview_generation(int id) { Session *s=term_get(id);return s?s->t.preview_gen:0; }

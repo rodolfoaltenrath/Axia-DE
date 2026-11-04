@@ -23,6 +23,15 @@
 #include "ui/ui.h"
 #include "ui/unicode.h"
 
+uint64_t term_preview_generation(int id) { (void)id; return 0; }
+uint64_t media_preview_generation(int id) { (void)id; return 0; }
+uint64_t wl_preview_generation(int id) { return (uint64_t)id; }
+void wl_preview_paint(Canvas *c,int id,float x,float y,float w,float h,float op) {
+    (void)op;
+    float k=paint_view.k;
+    canvas_rrect(c,(x-paint_view.x)*k+paint_view.dx,(y-paint_view.y)*k+paint_view.dy,w*k,h*k,0,0xff406080u+(uint32_t)id);
+}
+
 /* ---- stubs for what paint.c reaches outside the UI engine ---- */
 /* the terminal (test_drag_exact): a dark box with a cursor block; where it was painted is noted in
  * logical px, as term_paint.c notes s->gx… for term_damage */
@@ -1534,6 +1543,32 @@ static void test_grow_wrap_height(void) {
 /* GPU path: a Linux window in a scaled node goes through the raster like the rest of the subtree, with
  * wl.c told the transform and asked to open the hole before the blend. It used to refuse the raster,
  * and the whole window was painted at full size: past the screen's edge in the Overview (Pi 5, 0.8.7). */
+static void test_dock_preview_capture(void) {
+    ui_reset();
+    Node *root=view(NULL);ui.root=root;
+    sn(root,"backgroundColor",0xff112233);
+    Node *source=box_in(root,40,30,200,100,0xffcc2211);
+    Node *surf=node_new(NODE_SURFACE);surf->term=3;node_append(source,surf);
+    sn(surf,"width",100);sn(surf,"height",50);
+    layout_root(root,400,300);
+    uint64_t sig=paint_preview_signature(source);
+    PaintView keep=paint_view;
+    uint32_t px[100*50];Canvas small;canvas_init(&small,px,100,50,100);
+    nwdraw=0;test_gpu=1;
+    CHECK(paint_preview(&small,source),"preview captures a native subtree");
+    CHECK(px[10*100+10]==0xff406083u,"Wayland content is visible in preview");
+    CHECK(px[40*100+80]==0xffcc2211u,"preview preserves frame content and aspect ratio");
+    CHECK(nwdraw==0,"preview never adds GPU holes or changes the frame draw list");
+    CHECK(source->ax==40 && source->ay==30 && source->w==200 && source->h==100,"preview keeps source geometry");
+    CHECK(!paint_preview_mode && !paint_capture_mode && !memcmp(&keep,&paint_view,sizeof keep),"preview restores paint state");
+    CHECK(sig==paint_preview_signature(source),"capture itself does not invalidate source signature");
+    node_invalidate(surf);CHECK(sig!=paint_preview_signature(source),"child changes invalidate thumbnail");
+    source->protect=1;paint_preview(&small,source);
+    CHECK(px[10*100+10]==0xff000000u,"protected window is black in previews");
+    source->s.display_none=1;CHECK(!paint_preview(&small,source),"unmounted window cannot be captured");
+    test_gpu=0;
+}
+
 static void test_transform_surface(void) {
     ui_reset();
     Node *root = view(NULL);
@@ -3059,6 +3094,7 @@ int main(int argc, char **argv) {
     test_transform_math();
     test_transform_paint_hit();
     test_transform_surface();
+    test_dock_preview_capture();
     test_transform_self_restyle();
     test_layers();
     test_backdrop_band();

@@ -584,8 +584,7 @@ void term_paint(Canvas *c, int id, float x, float y, float w, float h, float op)
      * (paint_view.k, docs/DISPLAYS.md) draws with the profile's font and padding at its size */
     const float k = paint_view.k;
     int lcw = (int)fcw, lch = (int)fch, lpad = (int)p->padding;
-    t->cell_w = fcw;
-    t->cell_h = fch;
+    if (!paint_preview_mode) { t->cell_w = fcw; t->cell_h = fch; }
     int cols = (int)((w / k - 2 * lpad) / lcw), rows = (int)((h / k - 2 * lpad) / lch);
     static TermProfile scaled;
     if (k != 1) {
@@ -600,13 +599,13 @@ void term_paint(Canvas *c, int id, float x, float y, float w, float h, float op)
     if (k != 1) { cw = (int)lroundf(colw); ch = (int)ceilf(rowh); }
     if (cols < 2) cols = 2;
     if (rows < 1) rows = 1;
-    if (cols != t->cols || rows != t->rows) {
+    if (!paint_preview_mode && (cols != t->cols || rows != t->rows)) {
         vt_resize(t, cols, rows);
         if (s->gateway) t->events |= EV_RESIZE;      /* tmux pane: the app notifies tmux */
         else if (s->alive) pty_resize(s->fd, t->cols, t->rows, t->cols * lcw, t->rows * lch);
     }
     /* where the terminal is, for the mouse: logical */
-    s->gx = (x - paint_view.dx) / k + paint_view.x; s->gy = (y - paint_view.dy) / k + paint_view.y; s->gw = w / k; s->gh = h / k;
+    if (!paint_preview_mode) { s->gx = (x - paint_view.dx) / k + paint_view.x; s->gy = (y - paint_view.dy) / k + paint_view.y; s->gw = w / k; s->gh = h / k; }
 
     uint32_t dbg = vt_resolve(t, 0, 0), dfg = vt_resolve(t, 0, 1);
     if (t->modes & M_REVERSE) { uint32_t tmp = dbg; dbg = dfg; dfg = tmp; }
@@ -764,8 +763,7 @@ void term_paint(Canvas *c, int id, float x, float y, float w, float h, float op)
         fill(c, (int)(x + w) - 8, by, (int)(x + w) - 2, by + (int)bar, 0x80000000u | ((lum(dbg) < 0.25f ? 0xffffff : 0x000000)));
     }
 
-    s->drawn_cx = t->cx;
-    s->drawn_cy = t->cy;
+    if (!paint_preview_mode) { s->drawn_cx = t->cx; s->drawn_cy = t->cy; }
     canvas_set_clip(c, old);
 }
 #undef COLX

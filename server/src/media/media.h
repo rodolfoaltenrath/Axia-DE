@@ -41,4 +41,6 @@ const Canvas *media_composed(const Canvas *out, int remote, const MediaCursor *c
 /* Protected windows present in the tree (counted at the moment). */
 int media_protected_count(void);
 
+uint64_t media_preview_generation(int id);
+
 #endif

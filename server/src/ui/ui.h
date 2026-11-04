@@ -358,6 +358,9 @@ Node *hit_test(Node *root, float x, float y);
 /* Capture mode (media/capture.c): protected nodes are painted black and app windows
  * are copied even when compositing on the GPU. paint_capture paints the whole tree this way. */
 extern int paint_capture_mode;
+extern int paint_preview_mode;
+uint64_t paint_preview_signature(Node *root);
+int paint_preview(Canvas *c, Node *root);
 void  paint_capture(Canvas *c, Node *root);
 
 #endif

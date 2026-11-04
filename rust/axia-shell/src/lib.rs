@@ -10,6 +10,7 @@ mod power;
 mod network;
 mod network_bus;
 mod tray;
+mod dock_preview;
 use std::ffi::{c_char, CStr};
 
 const LIMIT: usize = 512;

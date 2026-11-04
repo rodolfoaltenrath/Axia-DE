@@ -28,3 +28,5 @@ logs/
 HANDOFF.md
 
 tests/files-smoke.bundle.js
+
+tests/dock-preview-smoke.bundle.js

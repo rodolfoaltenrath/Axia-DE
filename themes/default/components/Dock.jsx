@@ -1,4 +1,4 @@
-import { dockGlass } from '@lordos/sdk';
+import { dockGlass, useDockPreviews } from '@lordos/sdk';
 // Dock with magnification by mouse position, tooltip and open-app dot. It can go at the bottom,
 // on the left or on the right (Settings → Desktop & Dock), auto-hide and show recent
 // apps. Left and right are physical sides of the screen, also in Arabic or Hebrew (as
@@ -285,7 +285,14 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const areaRef = useRef(area);
   areaRef.current = area;
   const external = !!drag && drag.source !== 'dock';
-  const shown = useAutohide(autohide, position, rect, keepOpen || hovered >= 0 || dragging, areaRef, external);
+  const anchor = (i) => (position === 'bottom' ? { x: start + iconC[i], y: AB - MARGIN - Math.max(bar, sizes[i] + PAD) - 10 }
+    : position === 'left' ? { x: AX + MARGIN + Math.max(bar, sizes[i] + PAD) + 10, y: start + iconC[i] }
+      : { x: AR - MARGIN - Math.max(bar, sizes[i] + PAD) - 10, y: start + iconC[i] });
+  const hit = hovered >= 0 ? items[hovered] : null;
+  const previewAnchor = useRef(null);
+  if (hovered >= 0) previewAnchor.current = anchor(hovered);
+  const preview = useDockPreviews({ hit, anchor: previewAnchor.current, area, position, disabled: keepOpen || dragging, theme: t });
+  const shown = useAutohide(autohide, position, rect, keepOpen || preview.open || hovered >= 0 || dragging, areaRef, external);
   const hide = Math.round((1 - shown) * (bar + MARGIN + 2));
 
   // Drop target (sdk/dock.js): the index among the shown pinned items, or the Trash. Computed from
@@ -340,10 +347,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const dot = (s) => (position === 'bottom' ? { left: s / 2 - 2, bottom: -7 } : position === 'left' ? { top: s / 2 - 2, left: -7 } : { top: s / 2 - 2, right: -7 });
   const dotColor = t.mode === 'dark' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.7)';
   // where to open the right-click menu and the tooltip: beside the icon, on the inner side
-  const anchor = (i) => (position === 'bottom' ? { x: start + iconC[i], y: AB - MARGIN - bar - 6 }
-    : position === 'left' ? { x: AX + MARGIN + bar + 8, y: start + iconC[i] } : { x: AR - MARGIN - bar - 8, y: start + iconC[i] });
-  const hit = hovered >= 0 ? items[hovered] : null;
-  const showTip = hovered >= 0 && !keepOpen;
+  const showTip = hovered >= 0 && !keepOpen && !preview.open;
   const label = !hit ? '' : hit.trash ? tr('shell.trash.name') : hit.launcher ? tr('shell.menu.apps') : appName(hit);
   const tip = (
     <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, backgroundColor: t.panelBg,
@@ -413,6 +417,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
           </View>
         )))}
       </View>
+      {preview.panel}
       {/* the name tooltip (not while the icon's menu is open: the menu takes that place) */}
       <Layer name="tooltip">
         {showTip && position === 'bottom' && (

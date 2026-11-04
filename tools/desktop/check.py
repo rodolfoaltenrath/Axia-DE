@@ -9,12 +9,48 @@ import tempfile
 import struct
 import zlib
 import sys
+import socket
+import time
 
 from install import install, REPO, DESKTOP_BINARIES
 
 
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
+
+
+def run_viewed(args, runtime, **kwargs):
+    """Enable headless painting through a private viewer and drain its output."""
+    with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **kwargs) as proc:
+        try:
+            with socket.socket(socket.AF_UNIX) as viewer:
+                deadline = time.monotonic() + 20
+                while True:
+                    try:
+                        viewer.connect(str(runtime / 'axia/remote.sock'))
+                        break
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        if proc.poll() is not None or time.monotonic() >= deadline:
+                            raise RuntimeError('Dock smoke viewer could not connect')
+                        time.sleep(0.02)
+                payload = struct.pack('<BBHI', 2, 0, 24, 300)
+                viewer.sendall(struct.pack('<IB', len(payload) + 1, 32) + payload)
+                viewer.settimeout(0.2)
+                while proc.poll() is None:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Dock smoke session did not finish')
+                    try:
+                        if not viewer.recv(65536):
+                            break
+                    except socket.timeout:
+                        pass
+            stdout, stderr = proc.communicate(timeout=5)
+            if proc.returncode:
+                raise subprocess.CalledProcessError(proc.returncode, args, stdout, stderr)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=5)
 
 
 def main():
@@ -177,6 +213,21 @@ def main():
             log = (home / '.cache/axia/session.log').read_text()
             assert 'files integration: passed' in log, log
             for error in ['files smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
+                assert error not in log, log
+            # Dock policy, real native thumbnail updates and idle shutdown.
+            fixture = (REPO / 'tests/dock-preview-smoke.bundle.js').read_bytes()
+            target.write_bytes(fixture)
+            for entry in staged_manifest['files']:
+                if entry['path'] == 'themes/default/theme.bundle.js':
+                    entry['size'] = len(fixture)
+                    entry['sha256'] = hashlib.sha256(fixture).hexdigest()
+            (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
+            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '6',
+                        '--theme', '../themes/default/theme.bundle.js'], home / 'runtime',
+                       cwd=staged / 'bin', env=env, **opts)
+            log = (home / '.cache/axia/session.log').read_text()
+            assert 'dock preview integration: passed' in log, log
+            for error in ['dock preview smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
     if (REPO / 'server/build/axia-media').is_file():
         # Keep helper diagnostics visible in RPM/Copr logs when a check fails.

@@ -89,12 +89,15 @@ static inline uint32_t bilinear(const uint32_t *px, int w, int h, float u, float
 void media_paint(Canvas *c, int handle, int node, float x, float y, float w, float h, float radius, float op) {
     MediaSrc *s = media_src_get(handle);
     if (!s || w < 1 || h < 1) return;
+    MediaSrc preview;
+    if (paint_preview_mode) {
+        preview = *s; preview.cache = NULL; preview.cache_w = preview.cache_h = 0; s = &preview;
+    }
     s->node = node;
     int bw = (int)lroundf(w), bh = (int)lroundf(h);
-    s->box_w = bw;
-    s->box_h = bh;
+    if (!paint_preview_mode) { s->box_w = bw; s->box_h = bh; }
     /* the helper scales to the box size: it's notified when it changes */
-    if ((s->kind == SK_PLAYER || s->kind == SK_CAMERA) && s->sock >= 0 && (bw != s->sent_w || bh != s->sent_h)) {
+    if (!paint_preview_mode && (s->kind == SK_PLAYER || s->kind == SK_CAMERA) && s->sock >= 0 && (bw != s->sent_w || bh != s->sent_h)) {
         int rw = (s->view.rot % 180) ? bh : bw, rh = (s->view.rot % 180) ? bw : bh;
         if (s->view.zoom > 0 || s->view.fit) { rw = 0; rh = 0; }      /* with zoom: original size */
         if (rw > 0 && mp_sendv(s->sock, MM_SIZE, 0, rw, rh, 0, 0) == 0) { s->sent_w = bw; s->sent_h = bh; }
@@ -110,7 +113,7 @@ void media_paint(Canvas *c, int handle, int node, float x, float y, float w, flo
     int rot = s->view.rot;
     int rw = rot % 180 ? sh : sw, rh = rot % 180 ? sw : sh;
     float sc;
-    if (s->view.zoom > 0) sc = s->view.zoom;
+    if (s->view.zoom > 0) sc = s->view.zoom * (paint_preview_mode ? paint_view.k : 1);
     else if (s->view.fit == 1) sc = fmaxf(w / rw, h / rh);
     else sc = fminf(w / rw, h / rh);
     /* video: the frame already comes at the right size; if it differs by one pixel from rounding, it's copied anyway */
@@ -160,7 +163,7 @@ void media_paint(Canvas *c, int handle, int node, float x, float y, float w, flo
         const uint32_t *lp = px;
         int lw = sw, lh = sh;
         float lf = 1;
-        if (!ring && sc < 0.5f) {
+        if (!paint_preview_mode && !ring && sc < 0.5f) {
             if (s->nmip == 0 || mip_seq_of[s->id % MEDIA_MAX_SRC] != s->frame_seq) { build_mips(s, px, sw, sh); mip_seq_of[s->id % MEDIA_MAX_SRC] = s->frame_seq; }
             for (int l = 0; l < s->nmip && sc * lf < 0.5f; l++) { lp = s->mip[l]; lw = s->mip_w[l]; lh = s->mip_h[l]; lf *= 2; }
         }
@@ -194,6 +197,7 @@ void media_paint(Canvas *c, int handle, int node, float x, float y, float w, flo
         }
     }
     canvas_blit(c, s->cache, vw, vh, vx0, vy0, 0, op, opaque);
+    if (paint_preview_mode) free(s->cache);
     canvas_set_clip(c, old);
 }
 
@@ -216,3 +220,5 @@ int media_cover_node(float x0, float y0, float x1, float y1) {
     }
     return 0;
 }
+
+uint64_t media_preview_generation(int id) { MediaSrc *s=media_src_get(id);return s?((uint64_t)s->frame_seq<<32)^s->view.gen:0; }

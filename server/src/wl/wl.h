@@ -73,6 +73,8 @@ void wl_tf_nested(int d);                /* +1 / -1: inside another transform: n
 void wl_tf_open_holes(Canvas *c);        /* in the canvas the raster goes to, before it is blended */
 void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, float op);
 void wl_paint_popups(Canvas *c);
+uint64_t wl_preview_generation(int id);
+void wl_preview_paint(Canvas *c, int id, float x, float y, float w, float h, float op);
 
 /* Presentation (main.c). */
 int  wl_gpu_layers_empty(void);             /* no app window, fullscreen or menu to draw (the buffer-age scissor) */

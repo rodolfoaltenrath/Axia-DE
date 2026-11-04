@@ -92,10 +92,11 @@ static void buf_push(Buffer *b) {
 static Cell blank(const Term *t) { return (Cell){ 0, 0, t->pen.bg, 0, 0 }; }
 
 void vt_mark_dirty(Term *t, int row) {
+    t->preview_gen++;
     if (row >= 0 && row < t->rows) t->dirty[row] = 1;
 }
 
-static void dirty_all(Term *t) { t->all_dirty = 1; }
+static void dirty_all(Term *t) { t->preview_gen++; t->all_dirty = 1; }
 
 static void reply(Term *t, const char *fmt, ...) {
     char buf[512];

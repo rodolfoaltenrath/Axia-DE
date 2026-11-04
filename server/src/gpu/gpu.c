@@ -37,6 +37,7 @@ int  gpu_tex_current(const GpuTex *t) { (void)t; return 0; }
 unsigned gpu_generation(void) { return 0; }
 void gpu_set_hooks(void (*lost)(void), void (*changed)(void)) { (void)lost; (void)changed; }
 int  gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h) { (void)t; (void)px; (void)w; (void)h; return -1; }
+int gpu_tex_read_scaled(const GpuTex *t, uint32_t *px, int w, int h) { (void)t; (void)px; (void)w; (void)h; return -1; }
 int  gpu_add_output(Kms *k) { (void)k; return -1; }
 int  gpu_frame(int out, const Canvas *s, Rect d, void (*f)(int)) { (void)out; (void)s; (void)d; (void)f; return -1; }
 int  gpu_gdrag_ready(int out) { (void)out; return 0; }
@@ -748,8 +749,8 @@ void gpu_tex_free(GpuTex *t) {
     free(t);
 }
 
-int gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
-    if (!gpu_tex_current(t) || !px || w != t->w || h != t->h || w <= 0 || h <= 0 || w > 8192 || h > 8192) return -1;
+static int tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
+    if (!gpu_tex_current(t) || !px || w <= 0 || h <= 0 || w > 8192 || h > 8192) return -1;
     while (glGetError() != GL_NO_ERROR) {}
     GLuint tex = 0, fbo = 0;
     glGenTextures(1, &tex);
@@ -792,6 +793,15 @@ int gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
     glDeleteFramebuffers(1, &fbo);
     glDeleteTextures(1, &tex);
     return ok ? 0 : -1;
+}
+
+int gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
+    if (!t || w != t->w || h != t->h) return -1;
+    return tex_read(t, px, w, h);
+}
+int gpu_tex_read_scaled(const GpuTex *t, uint32_t *px, int w, int h) {
+    if (w > 384 || h > 256) return -1;
+    return tex_read(t, px, w, h);
 }
 
 /* ---- drawing ---- */
