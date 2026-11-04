@@ -367,6 +367,13 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
     }
   }
   const trashLit = (drag && drag.over && drag.over.trash) || (trashHover && buttonDown.current && !drag);
+  // A quiet highlight accompanies magnification, using the theme's existing material.
+  // It adds no blur, timer or hit area; the fixed-size Dock keeps its original appearance.
+  const hoverPlate = (i) => magnify && hovered === i && !keepOpen ? (
+    <View style={{ position: 'absolute', left: -3, top: -3, right: -3, bottom: -3,
+      borderRadius: sizes[i] * 0.225 + 3, backgroundColor: t.hover,
+      border: `1px solid ${t.windowBorder}`, pointerEvents: 'none' }} />
+  ) : null;
   const ghost = drag ? (
     <View style={{ position: 'absolute', left: drag.x - BASE / 2, top: drag.y - BASE / 2, width: BASE, height: BASE, pointerEvents: 'none',
       opacity: drag.removing ? 0.55 : 0.92 }}>
@@ -404,12 +411,14 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
             onMouseUp={() => setTimeout(refreshTrash, 60)}
             style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i], borderRadius: sizes[i] * 0.22,
               backgroundColor: trashLit ? 'rgba(255,255,255,0.22)' : 'transparent' }}>
+            {hoverPlate(i)}
             <TrashIcon size={sizes[i]} full={trashFull} dark={t.mode === 'dark'} />
           </View>
         ) : (
           <View key={app.id} onClick={() => { if (!dockDragJustEnded()) onOpen(app.id); }} onContextMenu={() => onContext?.(app.id, anchor(i))}
             onMouseDown={(e) => { if (!e.button) beginDockDrag({ id: app.id, Icon: app.Icon, x: e.x, y: e.y, source: 'dock' }); }}
             style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i] }}>
+            {hoverPlate(i)}
             <app.Icon size={sizes[i]} />
             {running.includes(app.id) && (
               <View style={{ position: 'absolute', ...dot(sizes[i]), width: 4, height: 4, borderRadius: 2, backgroundColor: dotColor }} />
