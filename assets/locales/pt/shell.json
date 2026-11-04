@@ -304,5 +304,10 @@
   "shortcuts.appWindows": "Janelas do app",
   "shortcuts.switchDesktop": "Trocar de área de trabalho",
   "shortcuts.newDesktop": "Nova área de trabalho",
-  "shortcuts.closeDesktop": "Fechar área de trabalho"
+  "shortcuts.closeDesktop": "Fechar área de trabalho",
+  "tray.title": "Apps em segundo plano",
+  "tray.hint": "Clique para abrir · botão direito para opções",
+  "tray.close": "Fechar",
+  "tray.empty": "Nenhum aplicativo na bandeja.",
+  "tray.failed": "Não foi possível acessar o aplicativo. Tente novamente."
 }

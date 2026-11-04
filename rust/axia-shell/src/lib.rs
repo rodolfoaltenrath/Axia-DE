@@ -7,6 +7,9 @@ mod wallpaper;
 mod motion;
 mod motion_store;
 mod power;
+mod network;
+mod network_bus;
+mod tray;
 use std::ffi::{c_char, CStr};
 
 const LIMIT: usize = 512;

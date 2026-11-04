@@ -89,9 +89,9 @@ const captionFormat = () => `${locale.get()}|${formatDate(FORMAT_SAMPLE)}|${form
 function FilesContextMenu({ node, send }) {
   const origin = useRef(null), [position, setPosition] = useState(null);
   useEffect(() => {
-    const [x, y] = lord.getLayout(origin.current.id);
+    const [x, y] = node.absolute ? [0, 0] : lord.getLayout(origin.current.id);
     setPosition({ x: x + node.x, y: y + node.y });
-  }, [node.x, node.y]);
+  }, [node.x, node.y, node.absolute]);
   const convert = (item) => item === '-' ? item : ({ ...item, label: caption(item.label),
     submenu: item.submenu?.map(convert), onClick: item.action ? () => send(item.action) : undefined });
   return h(View, { ref: origin, style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1 } },
@@ -140,7 +140,7 @@ function Filename({ node, props, children }) {
 
 }
 
-const Widget = memo(function WidgetNode({ node, send }) {
+export const RustWidget = memo(function WidgetNode({ node, send }) {
   if (!node) return null;
   if (node.type === 'icon') return h(Widget, { node: iconTree(node.name, node.size), send });
   const props = { style: node.style };
@@ -164,6 +164,8 @@ const Widget = memo(function WidgetNode({ node, send }) {
     default: return h(View, props, ...children);
   }
 });
+
+const Widget = RustWidget;
 
 function eventData(e, root) {
   if (!e) return {};

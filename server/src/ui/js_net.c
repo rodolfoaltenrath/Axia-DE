@@ -1,8 +1,6 @@
-/* js_net.c — lord.net: network state for the Network and VPN app (see docs/NETWORK.md).
- *
- * Everything is read-only and without root (rtnetlink and public files in /etc/lordos/net). Anything
- * that changes something goes through the privileged helper: the SDK's admin.run('net-…'). Kernel
- * changes (links, addresses, routes) arrive at __lordNet(what), with what = link | addr | route. */
+/* lord.net exposes existing netlink counters and JSON-only bridges to the
+ * Rust Fedora NetworkManager and StatusNotifier services. The historical net-*
+ * administration helper remains disabled in the standalone Fedora build. */
 #include "js_net.h"
 #include "../net/net.h"
 #include "js_err.h"
@@ -84,7 +82,50 @@ static JSValue f_vpn_types(JSContext *c, JSValueConst t, int argc, JSValueConst 
     return json_or_null(c, net_vpn_types_json(), "<net.vpnTypes>");
 }
 
+/* JSON-only bridge; NetworkManager and the panel model are owned by Rust. */
+extern char *axia_network_request(const char *input);
+extern void axia_network_free(char *value);
+static JSValue f_host(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (!argc) return JS_NULL;
+    size_t len;
+    const char *input = JS_ToCStringLen(c, &len, argv[0]);
+    if (!input) return JS_EXCEPTION;
+    if (len > 16384 || memchr(input, 0, len)) {
+        JS_FreeCString(c, input);
+        return JS_ThrowRangeError(c, "network request is invalid");
+    }
+    char *result = axia_network_request(input);
+    JS_FreeCString(c, input);
+    if (!result) return JS_ThrowOutOfMemory(c);
+    JSValue out = JS_ParseJSON(c, result, strlen(result), "<axia-network>");
+    axia_network_free(result);
+    return out;
+}
+
+extern char *axia_tray_request(const char *input);
+extern void axia_tray_free(char *value);
+static JSValue f_tray(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (!argc) return JS_NULL;
+    size_t len;
+    const char *input = JS_ToCStringLen(c, &len, argv[0]);
+    if (!input) return JS_EXCEPTION;
+    if (len > 16384 || memchr(input, 0, len)) {
+        JS_FreeCString(c, input);
+        return JS_ThrowRangeError(c, "network request is invalid");
+    }
+    char *result = axia_tray_request(input);
+    JS_FreeCString(c, input);
+    if (!result) return JS_ThrowOutOfMemory(c);
+    JSValue out = JS_ParseJSON(c, result, strlen(result), "<axia-tray>");
+    axia_tray_free(result);
+    return out;
+}
+
 static const JSCFunctionListEntry net_funcs[] = {
+    JS_CFUNC_DEF("host", 1, f_host),
+    JS_CFUNC_DEF("tray", 1, f_tray),
     JS_CFUNC_DEF("vpnTypes", 0, f_vpn_types),
     JS_CFUNC_DEF("interfaces", 0, f_interfaces),
     JS_CFUNC_DEF("routes", 0, f_routes),

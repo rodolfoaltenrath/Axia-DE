@@ -33,7 +33,7 @@ Image *image_get(const char *path) {
     if (!img) { stbi_image_free(rgba); return NULL; }
     img->path = strdup(path);
     img->refs = 1;
-    img->managed = strstr(path, "/axia/wallpapers/") != NULL;
+    img->managed = strstr(path, "/axia/wallpapers/") != NULL || strstr(path, "/axia/tray/") != NULL;
     img->w = w; img->h = h; img->opaque = 1;
     img->px = malloc((size_t)w * h * 4);
     if (!img->path || !img->px) { free(img->path); free(img->px); free(img); stbi_image_free(rgba); return NULL; }

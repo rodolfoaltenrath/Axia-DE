@@ -304,5 +304,10 @@
   "shortcuts.appWindows": "App windows",
   "shortcuts.switchDesktop": "Switch desktop",
   "shortcuts.newDesktop": "New desktop",
-  "shortcuts.closeDesktop": "Close desktop"
+  "shortcuts.closeDesktop": "Close desktop",
+  "tray.title": "Background apps",
+  "tray.hint": "Click to open · right-click for options",
+  "tray.close": "Close",
+  "tray.empty": "No apps in the tray.",
+  "tray.failed": "Could not reach the application. Try again."
 }
