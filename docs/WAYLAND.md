@@ -258,7 +258,7 @@ What a window with its own bar still gets from LordOS (both themes, `WINDOWS.md`
   get them; an existing profile keeps its frame until its user flips the switch below (Settings
   shows how many Chromium profiles don't follow it, with a «Change them» button). The root
   migration never touches home folders.
-- **The LordOS GTK theme's title buttons** (`assets/gtk/LordOS*/gtk-3.0/gtk.css`): GTK sizes a title
+- **The Axia GTK theme's title buttons** (`assets/gtk/Axia*/gtk-3.0/gtk.css`): GTK sizes a title
   button by its 16 px icon, and Chromium does the same when it draws its tab strip with the GTK
   theme, so the button stays 16 px and the circle is a 13 px radial gradient inside it; measured on
   the VM: 12–13 px circles, 21 px from center to center, like LordOS's own frame.
@@ -273,11 +273,13 @@ What a window with its own bar still gets from LordOS (both themes, `WINDOWS.md`
   When they change, `SettingChanged` is sent. If another program already owns the name
   `org.freedesktop.portal.Desktop`, LordOS doesn't take it over and says so in the log.
 - **GTK 3.** Outside Flatpak it doesn't read the portal: it reads GSettings.
-  - axia-server passes `GSETTINGS_BACKEND=keyfile` to the apps and writes the same keys to
-    `~/.config/glib-2.0/settings/keyfile`, without deleting what the apps store. GLib watches that
+  - axia-server passes `GSETTINGS_BACKEND=keyfile` to the apps. The Rust appearance module merges
+    the same keys into `$XDG_CONFIG_HOME/glib-2.0/settings/keyfile` (default `~/.config`),
+    without deleting what the apps store. GLib watches that
     file, so GTK 3 also changes live.
-  - The `LordOS`/`LordOS-dark` theme (`assets/gtk/`, installed in `/usr/share/themes`) is Adwaita
-    with LordOS's colors, bar and traffic lights.
+  - The `Axia`/`Axia-dark` theme (`assets/gtk/`, installed in `PREFIX/share/themes`) is Adwaita
+    with Axia's colors, bar and traffic lights. Discovery follows XDG data directories and
+    falls back to Adwaita if the matching variant is unavailable.
   - GTK 3 has no accent: its own stays blue.
 - **The buttons** go on the left in traffic-light order (`close,minimize,maximize:`). The Lord Classic
   theme asks for them on the right with the `gtkButtons` token (`:minimize,maximize,close`). GTK

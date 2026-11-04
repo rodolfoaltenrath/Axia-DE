@@ -72,6 +72,33 @@ widgets preservam o runtime da DE. A implementação anterior do app e de
 `fsops.c` foi removida; consumidores C mantêm a ABI declarada em `fsops.h`.
 Veja [FILES.md](FILES.md) para arquitetura, limites e testes.
 
+## Aparência de aplicativos externos
+
+`appearance.rs` encontra os temas GTK `Axia`/`Axia-dark` nos diretórios XDG
+de dados e em `~/.themes`. Sem o tema correspondente, usa Adwaita. O instalador
+publica as duas variantes em `PREFIX/share/themes`, onde o GTK pode encontrá-las.
+O portal C continua publicando modo, destaque e ordem dos botões por D-Bus;
+Rust substitui o código C de descoberta e gravação das preferências GLib.
+
+O módulo respeita `XDG_CONFIG_HOME`, preserva grupos e preferências de outros
+aplicativos e troca o arquivo atomicamente, com permissão 0600. Arquivos maiores
+que 1 MiB, ilegíveis ou com UTF-8 inválido são preservados. Conteúdo idêntico
+não causa escrita. Não há thread adicional, consultas periódicas, alterações em
+perfis de navegador ou cópia de pixels por conta dessa integração.
+
+Aplicativos que negociam decoração do servidor usam a moldura da Axia existente.
+Os que desenham a própria barra conservam abas, menus e áreas de clique. O tema
+GTK 3 adapta seus controles compatíveis; GTK 4/libadwaita e outros toolkits
+continuam recebendo as preferências que suportam pelo portal. Não se força
+`GTK_THEME`, transparência ou blur sobre o conteúdo de aplicativos externos.
+
+O RPM inclui agora GBM/EGL/GLES (`GPU=1`), permitindo ao compositor existente
+usar aceleração e importar buffers de apps externos quando o hardware e o
+formato forem compatíveis. A detecção e o retorno à composição por CPU são
+preservados. Isso não altera o motor interno dos aplicativos nem garante ganho
+em toda carga. Para desativar durante diagnóstico, inicie uma nova sessão com
+`LORD_GPU=0`; não é preciso recompilar o pacote.
+
 ## Brilho e previews da Dock
 
 `brightness.rs` identifica os controladores em `/sys/class/backlight` e aplica

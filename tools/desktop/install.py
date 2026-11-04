@@ -51,6 +51,11 @@ def install(prefix, libexecdir, destdir):
             copy(src, target / 'bin' / name, 0o755)
     for name in ['fonts', 'locales', 'shell', 'icons', 'brand', 'monitor', 'help', 'wallpapers', 'gtk', 'store', 'hwreport', 'fw', 'browser']:
         shutil.copytree(REPO / 'assets' / name, target / 'assets' / name, dirs_exist_ok=True)
+    # GTK searches the shared data directories, not the compositor's libexec assets.
+    for name in ['Axia', 'Axia-dark']:
+        shutil.copytree(REPO / 'assets/gtk' / name,
+                        stage / prefix.relative_to('/') / 'share/themes' / name,
+                        dirs_exist_ok=True)
     copy(REPO / 'assets/app-host.bundle.js', target / 'assets/app-host.bundle.js')
     shutil.copytree(REPO / 'assets/sysapps', target / 'assets/sysapps', dirs_exist_ok=True)
     theme_names = sorted({p.split('/')[1] for p in code_paths if p.startswith('themes/')})

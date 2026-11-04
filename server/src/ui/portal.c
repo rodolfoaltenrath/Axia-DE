@@ -1,12 +1,13 @@
 /* portal.c — our own org.freedesktop.portal.Settings (without xdg-desktop-portal): GTK, GNOME
  * (libadwaita) and Qt apps read from here the dark/light mode, the accent color, the order of the
- * title bar buttons and the GTK 3 theme, and follow LordOS's changes live (SettingChanged).
+ * title bar buttons and the GTK 3 theme, and follow Axia's changes live (SettingChanged).
  * Uses Passwords' own D-Bus client (vault/dbus.c). See docs/WAYLAND.md, "GTK and GNOME apps".
  *
  * GTK 3 outside Flatpak doesn't read the portal: it reads GSettings. axia-server gives the apps
- * GSETTINGS_BACKEND=keyfile and writes those same keys to ~/.config/glib-2.0/settings/keyfile, which
+ * GSETTINGS_BACKEND=keyfile and uses Rust to merge those keys into $XDG_CONFIG_HOME/glib-2.0/settings/keyfile, which
  * GLib watches: GTK 3 also changes live (without dconf or running gsettings). */
 #include "portal.h"
+#include "appearance.h"
 #include "portal_files.h"
 #include "../vault/dbus.h"
 
@@ -14,7 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #define BUS_NAME "org.freedesktop.portal.Desktop"
@@ -276,92 +276,6 @@ static void changed(int i) {
     dw_free(&b);
 }
 
-/* ---- ~/.config/glib-2.0/settings/keyfile: [group] key=value (GVariant text) ----
- * Only our keys are replaced and whatever the apps saved is kept. */
-static void keyfile_set(char **buf, const char *group, const char *key, const char *val) {
-    char head[96], line[256];
-    snprintf(head, sizeof head, "[%s]", group);
-    snprintf(line, sizeof line, "%s=%s\n", key, val);
-    char *b = *buf;
-    size_t n = strlen(b);
-    char *g = NULL;
-    for (char *p = b; p && *p; p = strchr(p, '\n') ? strchr(p, '\n') + 1 : NULL)
-        if (!strncmp(p, head, strlen(head)) && (p[strlen(head)] == '\n' || !p[strlen(head)])) { g = p; break; }
-    char *out = malloc(n + strlen(head) + strlen(line) + 4);
-    if (!out) return;
-    if (!g) {                                   /* new group at the end */
-        sprintf(out, "%s%s%s\n%s", b, n && b[n - 1] != '\n' ? "\n" : "", head, line);
-    } else {
-        char *body = strchr(g, '\n');
-        body = body ? body + 1 : g + strlen(g);
-        char *end = body;                       /* up to the next group */
-        while (*end && *end != '[') { char *nl = strchr(end, '\n'); end = nl ? nl + 1 : end + strlen(end); }
-        size_t kl = strlen(key);
-        char *k = NULL;
-        for (char *p = body; p < end; ) {
-            char *nl = strchr(p, '\n');
-            if (!strncmp(p, key, kl) && p[kl] == '=') { k = p; break; }
-            p = nl ? nl + 1 : end;
-        }
-        if (k) {
-            char *nl = strchr(k, '\n');
-            char *after = nl ? nl + 1 : k + strlen(k);
-            sprintf(out, "%.*s%s%s", (int)(k - b), b, line, after);
-        } else sprintf(out, "%.*s%s%s", (int)(body - b), b, line, body);
-    }
-    free(b);
-    *buf = out;
-}
-
-static void keyfile_write(void) {
-    const char *home = getenv("HOME");
-    if (!home) return;
-    char dir[512], path[600], tmp[620];
-    snprintf(dir, sizeof dir, "%s/.config", home);
-    mkdir(dir, 0700);
-    snprintf(dir, sizeof dir, "%s/.config/glib-2.0", home);
-    mkdir(dir, 0700);
-    snprintf(dir, sizeof dir, "%s/.config/glib-2.0/settings", home);
-    mkdir(dir, 0700);
-    snprintf(path, sizeof path, "%s/keyfile", dir);
-    snprintf(tmp, sizeof tmp, "%s/.keyfile-lordos", dir);
-    char *buf = NULL;
-    FILE *f = fopen(path, "r");
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        long n = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        if (n >= 0 && n < (1 << 20) && (buf = malloc((size_t)n + 1))) { buf[fread(buf, 1, (size_t)n, f)] = 0; }
-        fclose(f);
-    }
-    if (!buf && !(buf = calloc(1, 1))) return;
-    char v[96];
-    snprintf(v, sizeof v, "'%s'", gtk_theme);
-    keyfile_set(&buf, "org/gnome/desktop/interface", "gtk-theme", v);
-    keyfile_set(&buf, "org/gnome/desktop/interface", "color-scheme", dark ? "'prefer-dark'" : "'default'");
-    snprintf(v, sizeof v, "'%s'", acc_name);
-    keyfile_set(&buf, "org/gnome/desktop/interface", "accent-color", v);
-    snprintf(v, sizeof v, "'%s'", buttons);
-    keyfile_set(&buf, "org/gnome/desktop/wm/preferences", "button-layout", v);
-    f = fopen(tmp, "w");
-    if (!f) { free(buf); return; }
-    int ok = fputs(buf, f) >= 0;
-    ok = fclose(f) == 0 && ok;
-    if (ok) rename(tmp, path); else unlink(tmp);
-    free(buf);
-}
-
-static int theme_installed(const char *name) {
-    char p[256];
-    struct stat st;
-    snprintf(p, sizeof p, "/usr/share/themes/%s/gtk-3.0/gtk.css", name);
-    if (!stat(p, &st)) return 1;
-    const char *home = getenv("HOME");
-    if (!home) return 0;
-    snprintf(p, sizeof p, "%s/.local/share/themes/%s/gtk-3.0/gtk.css", home, name);
-    return !stat(p, &st);
-}
-
 void portal_set(int is_dark, const double rgb[3], const char *accent_name, const char *button_layout) {
     int old_dark = dark;
     double old[3] = { acc[0], acc[1], acc[2] };
@@ -373,9 +287,7 @@ void portal_set(int is_dark, const double rgb[3], const char *accent_name, const
     for (int i = 0; i < 3; i++) acc[i] = rgb[i] < 0 ? 0 : rgb[i] > 1 ? 1 : rgb[i];
     if (accent_name) snprintf(acc_name, sizeof acc_name, "%s", accent_name);
     if (button_layout) snprintf(buttons, sizeof buttons, "%s", button_layout);
-    /* GTK 3: our own theme if installed (assets/gtk), otherwise Adwaita */
-    const char *t = dark ? "LordOS-dark" : "LordOS";
-    snprintf(gtk_theme, sizeof gtk_theme, "%s", theme_installed(t) ? t : dark ? "Adwaita-dark" : "Adwaita");
+    snprintf(gtk_theme, sizeof gtk_theme, "%s", axia_appearance_theme(dark));
     if (old_dark != dark) { changed(0); changed(3); }
     if (memcmp(old, acc, sizeof old)) changed(1);
     if (strcmp(old_name, acc_name)) changed(4);
@@ -384,8 +296,7 @@ void portal_set(int is_dark, const double rgb[3], const char *accent_name, const
     if (up) dbus_flush(&conn);
     static int written;
     if (!written || old_dark != dark || strcmp(old_name, acc_name) || strcmp(old_theme, gtk_theme) || strcmp(old_buttons, buttons)) {
-        written = 1;
-        keyfile_write();
+        written = axia_appearance_write(dark, gtk_theme, acc_name, buttons) == 0;
     }
 }
 

@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=X-GNOME-Metatheme
-Name=LordOS-dark
-Comment=LordOS para GTK 3
+Name=Axia-dark
+Comment=Axia para GTK 3
 Encoding=UTF-8
 
 [X-GNOME-Metatheme]
-GtkTheme=LordOS-dark
+GtkTheme=Axia-dark

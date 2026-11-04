@@ -17,6 +17,9 @@ BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-protocols)
 BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(libseat)
+BuildRequires:  pkgconfig(gbm)
+BuildRequires:  pkgconfig(egl)
+BuildRequires:  pkgconfig(glesv2)
 BuildRequires:  pkgconfig(openssl)
 BuildRequires:  pkgconfig(freerdp3)
 BuildRequires:  pkgconfig(freerdp-client3)
@@ -72,7 +75,8 @@ It does not replace the display manager or enable system services.
 # dist.sh includes the frontend built from package-lock.json. No network access
 # or Node.js runtime is needed to compile or run this local RPM.
 %set_build_flags
-%make_build -C server GPU=0
+# Include the accelerated compositor; runtime detection retains CPU fallback.
+%make_build -C server GPU=1
 test -x server/build/axia-media
 test -x server/build/axia-doc
 
@@ -82,10 +86,10 @@ install -Dpm 644 packaging/systemd/axia-update.service %{buildroot}%{_unitdir}/a
 install -Dpm 644 packaging/systemd/axia-update.timer %{buildroot}%{_unitdir}/axia-update.timer
 
 %check
-%make_build -C server GPU=0 test-platform
-%make_build -C server GPU=0 build/tp-test
+%make_build -C server GPU=1 test-platform
+%make_build -C server GPU=1 build/tp-test
 server/build/tp-test
-python3 tools/desktop/check.py
+python3 tools/desktop/check.py --require-gpu
 
 # Automatic updates are opt-in; do not run presets which could enable this timer.
 %preun
@@ -115,6 +119,8 @@ exit 0
 %{_bindir}/axia-sysreport
 %{_libexecdir}/axia/
 %{_datadir}/wayland-sessions/axia.desktop
+%{_datadir}/themes/Axia/
+%{_datadir}/themes/Axia-dark/
 %{_datadir}/doc/axia-de/
 %{_datadir}/licenses/axia-de/third_party/
 %{_datadir}/licenses/axia-de/rust/

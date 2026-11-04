@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check that built/staged artifacts form an independent desktop."""
+import argparse
 import hashlib
 import json
 import os
@@ -54,7 +55,12 @@ def run_viewed(args, runtime, **kwargs):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--require-gpu', action='store_true', help='verify the RPM includes EGL composition')
+    args = parser.parse_args()
     symbols = run('nm', str(REPO / 'server/build/axia-server'))
+    if args.require_gpu:
+        assert ' U eglInitialize' in symbols, 'RPM compositor was built without GPU support'
     for symbol in ['pkg_act_install', 'pkg_act_update', 'install_act_run', 'net_act_restore',
                    'act_langpack', 'js_pkg_register', 'js_imager_register', 'pin_load',
                    'pkg_act_source_add', 'hw_act_wallpaper_get', 'share_act_mount',
@@ -84,6 +90,11 @@ def main():
         assert not (Path(tmp) / 'etc').exists()
         assert not (Path(tmp) / 'usr/lib/systemd').exists()
         assert (Path(tmp) / 'usr/share/wayland-sessions/axia.desktop').is_file()
+        for theme in ['Axia', 'Axia-dark']:
+            source = REPO / 'assets/gtk' / theme
+            installed = Path(tmp) / 'usr/share/themes' / theme
+            for file in ['index.theme', 'gtk-3.0/gtk.css']:
+                assert (installed / file).read_bytes() == (source / file).read_bytes()
         desktop = (Path(tmp) / 'usr/share/wayland-sessions/axia.desktop').read_text()
         assert 'Exec=/usr/libexec/axia/fedora-session' in desktop
         assert 'DesktopNames=Axia;' in desktop
@@ -102,6 +113,7 @@ def main():
             config.mkdir(parents=True)
             env = dict(os.environ, HOME=tmp, USER='nobody', XDG_RUNTIME_DIR=str(home / 'runtime'),
                        XDG_DATA_HOME=str(home / '.local/share'), XDG_CONFIG_HOME=str(home / '.config'),
+                       XDG_DATA_DIRS=f"{staged.parents[1] / 'share'}:/usr/local/share:/usr/share",
                        XDG_CACHE_HOME=str(home / '.cache'), XDG_STATE_HOME=str(home / '.local/state'))
             for key in ['SUDO_USER', 'DBUS_SESSION_BUS_ADDRESS', 'WAYLAND_DISPLAY', 'DISPLAY']:
                 env.pop(key, None)
@@ -135,6 +147,9 @@ def main():
                         print(log.read_text())
                     raise
                 log = (home / '.cache/axia/session.log').read_text()
+                toolkit = (home / '.config/glib-2.0/settings/keyfile').read_text()
+                assert "gtk-theme='Axia" in toolkit, 'staged GTK theme was not discovered'
+                assert 'button-layout=' in toolkit, 'GTK button layout was not synchronized'
                 assert f'js: theme ../themes/{theme}/theme.bundle.js loaded' in log, log
                 for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'code refused']:
                     assert error not in log, log
