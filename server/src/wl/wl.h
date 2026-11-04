@@ -81,6 +81,7 @@ void wl_preview_paint(Canvas *c, int id, float x, float y, float w, float h, flo
 int  wl_gpu_layers_empty(void);             /* no app window, fullscreen or menu to draw (the buffer-age scissor) */
 void wl_gpu_draw_layer(int layer);          /* 0 = windows (below the UI), 1 = menus and fullscreen */
 void wl_paint_fullscreen(Canvas *out);      /* CPU path: the fullscreen window over the frame */
+int wl_capture_error(int reset);           /* reject incomplete GPU screenshots */
 int  wl_fullscreen_active(void);
 int  wl_try_scanout(int cursor_free);       /* GPU path: 1 if fullscreen went straight to the card */
 int  wl_wants_frame(void);                  /* an app changed its content */

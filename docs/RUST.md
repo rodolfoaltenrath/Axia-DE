@@ -101,6 +101,16 @@ em toda carga. Para desativar durante diagnóstico, inicie uma nova sessão com
 
 ## Brilho e previews da Dock
 
+`backdrop.rs` integra as texturas de aplicativos externos ao glass com GPU ativa.
+O compositor fornece somente amostras reduzidas da região que o blur precisa.
+Rust limita o cache a quatro entradas e 2 MiB, invalida pela geração do conteúdo
+e combina essas amostras com a transparência da interface antes do filtro.
+Os kernels e o desenho do glass continuam em `glass_render.rs`. O callback GL
+roda na thread da interface, antes dos workers; os workers somente leem os dados.
+As capturas usam leitura completa apenas sob demanda, sem guardar cópias extras
+de todas as janelas ou desligar a aceleração. Preferências de barras e temas
+internos dos navegadores e do VS Code continuam pertencendo aos aplicativos.
+
 `brightness.rs` identifica os controladores em `/sys/class/backlight` e aplica
 valores pela sessão do `systemd-logind` (`SetBrightness`). Não usa o helper
 administrativo antigo nem executa comandos externos. Uma thread recebe apenas

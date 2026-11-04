@@ -12,6 +12,10 @@ uint32_t *axia_glass_scratch(size_t words);
 typedef void (*AxiaGlassKernel)(void *, int, int);
 typedef void (*AxiaGlassParallel)(int, uint64_t, AxiaGlassKernel, void *);
 void axia_glass_render(void *canvas, float x, float y, float w, float h, float r, int radius, AxiaGlassParallel parallel);
+/* UI-thread callback: NULL pixels queries a generation key; otherwise fills the
+ * downsampled background. Zero means no GPU background or an unavailable read. */
+typedef uint64_t (*AxiaGlassBackdrop)(int, int, int, int, int, int, int, uint32_t *);
+void axia_glass_set_backdrop(AxiaGlassBackdrop reader);
 uint32_t axia_glass_tint(bool dark, bool effects);
 uint32_t axia_glass_outline(bool dark);
 #endif

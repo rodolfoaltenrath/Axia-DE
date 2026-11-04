@@ -14,7 +14,7 @@
     "other": "No se pudieron cambiar {count} perfiles de navegador y quedaron como estaban."
   },
   "browserTabs.firefoxKept": "Un perfil de Firefox lo define en su propio archivo user.js, así que no se tocó.",
-  "browserTabs.hint": "Activado: Chromium y Firefox dibujan una sola barra con sus pestañas y los botones de ventana de Axia DE. Desactivado: usan el marco de Axia DE. Cambia tus perfiles de navegador y se aplica la próxima vez que se abre cada navegador.",
+  "browserTabs.hint": "Activado: Chromium, Firefox y LibreWolf mantienen las pestañas y botones en su propia barra. El navegador dibuja los botones y pueden diferir de las apps de Axia. Desactivado: usa el marco de Axia cuando es compatible. Se aplica al volver a abrir el navegador.",
   "browserTabs.label": "Navegadores: pestañas en la barra de título",
   "browserTabs.othersOff": {
     "one": "{count} perfil de Chromium todavía usa el marco de Axia DE",

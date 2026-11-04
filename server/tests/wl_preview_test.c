@@ -5,12 +5,15 @@ Ui ui;
 PaintView paint_view;
 static Node privacy;
 Node *node_get(int id) {return id==7?&privacy:NULL;}
-int gpu_active(void){return 0;}
-unsigned gpu_generation(void){return 0;}
-int gpu_tex_current(const GpuTex *t){(void)t;return 0;}
+static int gpu_on, reads, fail_read;
+int paint_capture_mode, paint_preview_mode;
+int gpu_active(void){return gpu_on;}
+unsigned gpu_generation(void){return gpu_on?1:0;}
+int gpu_tex_current(const GpuTex *t){return t!=NULL;}
 GpuTex *gpu_tex_dmabuf(const GpuDmabuf *d){(void)d;return NULL;}
 void gpu_tex_free(GpuTex *t){(void)t;}
 int gpu_tex_read_scaled(const GpuTex *t,uint32_t *p,int w,int h){(void)t;(void)p;(void)w;(void)h;return -1;}
+int gpu_tex_read(const GpuTex *t,uint32_t *p,int w,int h){assert(t);reads++;if(fail_read)return -1;for(int i=0;i<w*h;i++)p[i]=0xff204080;return 0;}
 int main(void) {
     uint32_t content[16],child_px[4],out[16];
     for(int i=0;i<16;i++)content[i]=0xff204080u;
@@ -29,6 +32,15 @@ int main(void) {
     root.has_geom=1;root.gw=3;root.gh=2;assert(wl_preview_size(100,&w,&h)&&w==3&&h==2);
     privacy.protect=1;assert(!wl_preview_size(100,&w,&h));privacy.protect=0;
     assert(!wl_preview_size(999,&w,&h));
+    Dmabuf dm={.tex=(GpuTex*)1};root.dmabuf=&dm;root.px=NULL;gpu_on=1;
+    paint_capture_mode=1;canvas_clear(&c,0xff000000);
+    paint_tree(&c,&root,0,0,1,(Rect){0,0,4,4});
+    assert(out[0]==0xff204080 && out[15]==child_px[0] && reads==1);
+    assert(root.px==NULL && root.dmabuf==&dm && !root.mapped && root.conf_w==0);
+    fail_read=1;paint_tree(&c,&root,0,0,1,(Rect){0,0,4,4});assert(wl_capture_error(1));assert(!wl_capture_error(0));fail_read=0;
+    paint_capture_mode=0;canvas_clear(&c,0xff000000);ndraws[0]=0;
+    paint_tree(&c,&root,0,0,1,(Rect){0,0,4,4});assert(reads==2 && ndraws[0]==2);
+    root.dmabuf=NULL;gpu_on=0;
     puts("wl-preview: retained pixels, subsurfaces, geometry, privacy and unchanged mapping passed");
     return 0;
 }

@@ -409,6 +409,18 @@ static void test_firefox_disk(void) {
     CHECK(r.failed == 1 && !strcmp(get("h2/target"), "keep"), "linked user.js refused (failed %d)", r.failed);
 }
 
+static void test_librewolf_disk(void) {
+    char cfg[512], home[512];BrfResult r;
+    path(cfg,sizeof cfg,"h3/.config");path(home,sizeof home,"h3");
+    put("h3/.config/librewolf/librewolf/profiles.ini","[Profile0]\nIsRelative=1\nPath=abcd.default\n");
+    put("h3/.config/librewolf/librewolf/abcd.default/user.js","// keep my preferences\nuser_pref(\"other.option\", true);\n");
+    brf_firefox_apply(cfg,home,1,&r);
+    CHECK(r.found && r.profiles==1 && r.changed==1 && !r.failed,"LibreWolf Fedora profile discovered once");
+    CHECK(strstr(get("h3/.config/librewolf/librewolf/abcd.default/user.js"),"other.option")!=NULL,"LibreWolf other preferences kept");
+    brf_firefox_apply(cfg,home,0,&r);
+    CHECK(r.changed==1 && brf_userjs_ours(get("h3/.config/librewolf/librewolf/abcd.default/user.js"),strlen(get("h3/.config/librewolf/librewolf/abcd.default/user.js")))==0,"LibreWolf frame choice reversible");
+}
+
 static int edit_file(const char *file, int on) {
     FILE *f = fopen(file, "rb");
     if (!f) { perror(file); return 2; }
@@ -431,6 +443,7 @@ int main(int argc, char **argv) {
     test_userjs();
     test_chromium_disk();
     test_firefox_disk();
+    test_librewolf_disk();
     BrfResult a = { 1, 2, 1, 1, 0, 0, 0 }, b = { 0 };
     char *j = brf_result_json(&a, &b);
     JDoc d;

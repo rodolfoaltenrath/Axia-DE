@@ -61,6 +61,7 @@ struct Blur {
     cx1: *mut i32,
     cfx: *mut i32,
     failed: AtomicBool,
+    backdrop: *const u32,
 }
 unsafe fn phase(b: &Blur, n: i32, work: u64, run: Kernel, parallel: Option<Parallel>) {
     let ctx = b as *const Blur as *mut c_void;
@@ -219,6 +220,16 @@ fn over(p: u32, d: u32, a: u32) -> u32 {
     let rb = (((d & 0xff00ff) * ia) >> 8) & 0xff00ff;
     let g = (((d & 0xff00) * ia) >> 8) & 0xff00;
     (over_alpha(pa, d >> 24) << 24) | (prb + rb) | (pg + g)
+}
+
+unsafe extern "C" fn backdrop_over(ctx: *mut c_void, j0: i32, j1: i32) {
+    let b = &*ctx.cast::<Blur>();
+    for i in j0 * b.sw..j1 * b.sw {
+        let p = b.buf.offset(i as isize);
+        if *p >> 24 < 255 {
+            *p = over(*p, *b.backdrop.offset(i as isize), 255);
+        }
+    }
 }
 #[inline]
 fn coverage(b: &Blur, i: i32, j: i32) -> f32 {
@@ -449,6 +460,7 @@ pub unsafe extern "C" fn axia_glass_render(
         cx1: s.columns.offset(cw as isize),
         cfx: s.columns.offset((cw * 2) as isize),
         failed: AtomicBool::new(false),
+        backdrop: ptr::null(),
     };
     phase(
         &b,
@@ -459,6 +471,18 @@ pub unsafe extern "C" fn axia_glass_render(
     );
     if b.failed.load(Ordering::Relaxed) {
         return;
+    }
+    // The GPU reader runs before workers and only when the CPU image contains
+    // holes. Mix the small underlay into blur input, leaving canvas alpha and
+    // rounded output untouched. Screenshots use their complete CPU image.
+    if std::slice::from_raw_parts(b.buf, (sw * sh) as usize)
+        .iter()
+        .any(|p| p >> 24 < 255)
+    {
+        b.backdrop = crate::backdrop::read([bx0, by0, bx1, by1, f, sw, sh]);
+        if !b.backdrop.is_null() {
+            phase(&b, sh, sw as u64 * sh as u64, backdrop_over, parallel);
+        }
     }
     if !axia_glass_reuse() {
         for _ in 0..3 {

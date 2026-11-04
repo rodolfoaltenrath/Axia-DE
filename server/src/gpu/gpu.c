@@ -14,6 +14,7 @@
  * softpipe) our own CPU path is faster. LORD_GPU=1 forces it (tests), LORD_GPU=0
  * turns it off, LORD_GPU_DEBUG=1 reports what it does. Built without Mesa (no -DLORD_GPU) these are stubs. */
 #include "gpu.h"
+#include <math.h>
 #include "gscissor.h"
 #include "../outputs.h"
 
@@ -38,6 +39,9 @@ unsigned gpu_generation(void) { return 0; }
 void gpu_set_hooks(void (*lost)(void), void (*changed)(void)) { (void)lost; (void)changed; }
 int  gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h) { (void)t; (void)px; (void)w; (void)h; return -1; }
 int gpu_tex_read_scaled(const GpuTex *t, uint32_t *px, int w, int h) { (void)t; (void)px; (void)w; (void)h; return -1; }
+int gpu_tex_read_region(const GpuTex *t, uint32_t *px, int w, int h, float x, float y, float width, float height) {
+    (void)t;(void)px;(void)w;(void)h;(void)x;(void)y;(void)width;(void)height;return -1;
+}
 int  gpu_add_output(Kms *k) { (void)k; return -1; }
 int  gpu_frame(int out, const Canvas *s, Rect d, void (*f)(int)) { (void)out; (void)s; (void)d; (void)f; return -1; }
 int  gpu_gdrag_ready(int out) { (void)out; return 0; }
@@ -749,8 +753,13 @@ void gpu_tex_free(GpuTex *t) {
     free(t);
 }
 
-static int tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
+static int tex_read_region(const GpuTex *t, uint32_t *px, int w, int h, float x, float y, float width, float height) {
     if (!gpu_tex_current(t) || !px || w <= 0 || h <= 0 || w > 8192 || h > 8192) return -1;
+    if (!isfinite(x) || !isfinite(y) || !isfinite(width) || !isfinite(height) || width <= 0 || height <= 0) return -1;
+    GLint old_fbo, old_view[4];
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
+    glGetIntegerv(GL_VIEWPORT, old_view);
+    GLboolean blend = glIsEnabled(GL_BLEND), scissor = glIsEnabled(GL_SCISSOR_TEST);
     while (glGetError() != GL_NO_ERROR) {}
     GLuint tex = 0, fbo = 0;
     glGenTextures(1, &tex);
@@ -775,7 +784,8 @@ static int tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
         glUniform1f(G.u_opaque[p], t->opaque ? 1.0f : 0.0f);
         glUniform1f(G.u_swap[p], t->swap ? 1.0f : 0.0f);
         /* the image's first row at y = -1: glReadPixels returns it first */
-        static const GLfloat v[] = { -1, -1, 0, 0,  1, -1, 1, 0,  -1, 1, 0, 1,  1, 1, 1, 1 };
+        float u0 = x/t->w, v0 = y/t->h, u1 = (x+width)/t->w, v1 = (y+height)/t->h;
+        const GLfloat v[] = { -1, -1, u0, v0,  1, -1, u1, v0,  -1, 1, u0, v1,  1, 1, u1, v1 };
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 16, v);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 16, v + 2);
         glEnableVertexAttribArray(0);
@@ -787,9 +797,11 @@ static int tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
             const uint8_t *b = (const uint8_t *)&px[i];
             px[i] = (uint32_t)b[3] << 24 | (uint32_t)b[0] << 16 | (uint32_t)b[1] << 8 | b[2];
         }
-        glEnable(GL_BLEND);
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)old_fbo);
+    glViewport(old_view[0],old_view[1],old_view[2],old_view[3]);
+    if (blend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    if (scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
     glDeleteFramebuffers(1, &fbo);
     glDeleteTextures(1, &tex);
     return ok ? 0 : -1;
@@ -797,11 +809,15 @@ static int tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
 
 int gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h) {
     if (!t || w != t->w || h != t->h) return -1;
-    return tex_read(t, px, w, h);
+    return tex_read_region(t, px, w, h, 0, 0, t->w, t->h);
 }
 int gpu_tex_read_scaled(const GpuTex *t, uint32_t *px, int w, int h) {
     if (w > 384 || h > 256) return -1;
-    return tex_read(t, px, w, h);
+    return t ? tex_read_region(t, px, w, h, 0, 0, t->w, t->h) : -1;
+}
+int gpu_tex_read_region(const GpuTex *t,uint32_t *px,int w,int h,float x,float y,float width,float height) {
+    if (w < 1 || h < 1 || (size_t)w*h > 262144) return -1;
+    return tex_read_region(t,px,w,h,x,y,width,height);
 }
 
 /* ---- drawing ---- */

@@ -87,9 +87,20 @@ milliseconds no longer turns 60 frames a second into 57.
   pixel was, including those outside a window's rounded corners, which then showed black while
   dragging. (Black corners in the remote desktop's frames of a dragged window are a known issue of
   0.8.5-beta, still being looked at.)
-- **Background blur** (Dock, Control Center) also carries alpha. Over an app window it tints but
-  doesn't blur, because the window isn't in the canvas. Blurring app content is pending; it needs
-  a GPU blur pass.
+- **Background blur** (Dock, Control Center) reads cropped, downsampled intersections of the
+  external windows below the glass. `backdrop.rs` caches these samples (at most four tiles,
+  2 MiB total), and the existing Rust renderer mixes them into its blur input, preserving UI
+  alpha, rounded corners and the material style. A new surface frame invalidates the sample;
+  only glass intersecting that window is damaged. No full-window readback runs per frame.
+  For blur radius >= 12, samples use one quarter of the resolution on each axis.
+- **Screenshots** repaint with capture mode and read GPU-only DMA-BUF surfaces on demand,
+  including subsurfaces, menus and fullscreen. Protected content is still black. Temporary
+  full-resolution pixels are released immediately; capture doesn't map windows or resize apps.
+  `gpu_tex_read_region` preserves the GL framebuffer, viewport, blend and scissor state.
+
+  Optional hardware regression (render node only; does not take over the display):
+  `make -C server GPU=1 build/gpu-capture-test && server/build/gpu-capture-test /dev/dri/renderD128`.
+  Exit 77 means no usable render node; the ordinary CPU/GPU build tests remain headless.
 - **Content:**
   - shm: the usual copy, uploaded to the surface's texture when it changes;
   - dmabuf: `EGL_EXT_image_dma_buf_import(_modifiers)` and `GL_OES_EGL_image_external`, with no

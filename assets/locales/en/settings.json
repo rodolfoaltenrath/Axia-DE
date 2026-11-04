@@ -14,7 +14,7 @@
     "other": "{count} browser profiles could not be changed and were left as they were."
   },
   "browserTabs.firefoxKept": "A Firefox profile sets this in its own user.js file, so it was left alone.",
-  "browserTabs.hint": "On: Chromium and Firefox draw a single bar with their tabs and Axia DE's window buttons. Off: they use the Axia DE frame. It changes your browser profiles and applies the next time each browser opens.",
+  "browserTabs.hint": "On: Chromium, Firefox and LibreWolf keep tabs and buttons in their own bar. Button appearance belongs to the browser and can differ from Axia apps. Off: use the Axia window frame when supported. Takes effect the next time the browser opens.",
   "browserTabs.label": "Browsers: tabs in the title bar",
   "browserTabs.othersOff": {
     "one": "{count} Chromium profile still uses the Axia DE frame",

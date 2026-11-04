@@ -174,12 +174,14 @@ MediaSrc *media_screenshot(const char *app, int x, int y, int w, int h) {
     canvas_init(&c, full, W, H, W);
     canvas_clear(&c, 0x000000);
     PaintView keep = paint_view;
+    wl_capture_error(1);
     if (m) paint_view = (PaintView){ (float)m->v.x, (float)m->v.y, (float)m->v.k, (float)m->v.dx, (float)m->v.dy, -1 };
     paint_capture(&c, ui.root);
     paint_capture_mode = 1;
     wl_paint_fullscreen(&c);
     paint_capture_mode = 0;
     paint_view = keep;
+    if (wl_capture_error(1)) { free(full); return NULL; }
     if (w <= 0 || h <= 0) { x = 0; y = 0; w = W; h = H; }
     if (x < 0) { w += x; x = 0; }
     if (y < 0) { h += y; y = 0; }

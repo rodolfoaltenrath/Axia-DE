@@ -118,7 +118,10 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+	./build/ui-damage-test
+	./build/glass-damage-test
+	./build/brframe-test
 	./build/wl-preview-test
 	./build/fsops-test
 	./build/battery-refresh-test
@@ -136,6 +139,10 @@ test-platform: build/wl-preview-test build/media-preview-test build/portal-files
 	./build/kms-cursor-test
 build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_golden.h src/canvas.c src/canvas.h src/glass_ffi.h src/par.c $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/glass-damage-test: tests/glass_damage_test.c src/ui/paint.c $(HDR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lm
+build/ui-damage-test: tests/ui_damage_test.c src/main.c $(HDR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/outputs.c -lm
 build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/hw/power.c src/sec/json.c src/platform/power.h $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/hw/power.c src/sec/json.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/portal-files-test: tests/portal_files_test.c src/ui/portal_files.c src/ui/portal_files.h src/vault/dbus.c
@@ -153,6 +160,8 @@ build/kms-cursor-test: tests/kms_cursor_test.c src/kms.c src/kms.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $<
 build/wl-preview-test: tests/wl_preview_test.c src/wl/wl.c $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -lwayland-client -ldl -lpthread -lm
+build/gpu-capture-test: tests/gpu_capture_test.c src/wl/wl.c src/gpu/gpu.c $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/gpu/gpu.c src/kms.c src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS) -ldl
 build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:

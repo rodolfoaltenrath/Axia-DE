@@ -14,7 +14,7 @@
     "other": "Não foi possível alterar {count} perfis de navegador, que ficaram como estavam."
   },
   "browserTabs.firefoxKept": "Um perfil do Firefox define isso no seu próprio arquivo user.js, então não foi alterado.",
-  "browserTabs.hint": "Ativado: o Chromium e o Firefox desenham uma única barra com suas abas e os botões de janela do Axia DE. Desativado: usam a moldura do Axia DE. Altera seus perfis de navegador e vale na próxima vez que cada navegador abrir.",
+  "browserTabs.hint": "Ativado: Chromium, Firefox e LibreWolf mantêm as abas e os botões na própria barra. O desenho dos botões pertence ao navegador e pode ser diferente dos apps da Axia. Desativado: usa a moldura da Axia quando compatível. Vale na próxima vez que o navegador abrir.",
   "browserTabs.label": "Navegadores: abas na barra de título",
   "browserTabs.othersOff": {
     "one": "{count} perfil do Chromium ainda usa a moldura do Axia DE",

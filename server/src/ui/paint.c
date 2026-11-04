@@ -1546,6 +1546,18 @@ static int blur_hidden(Node *n) {
     return h.covered;
 }
 
+static int external_glass_walk(Node *n, Box area) {
+    if (!n || n->type == NODE_RAW || n->s.display_none) return 0;
+    int hits = 0;
+    if (n->s.backdrop_blur >= 1 && n->w > 0 && n->h > 0) {
+        Box near = blur_near(n);
+        if (box_meets(area, near)) { damage_add(near); hits = 1; }
+    }
+    for (Node *child=n->first;child;child=child->next) hits |= external_glass_walk(child,area);
+    return hits;
+}
+int paint_external_glass_damage(Box area) { return external_glass_walk(ui.root,area); }
+
 static void blur_walk(Node *n, int *grew) {
     if (n->type == NODE_RAW || n->s.display_none) return;
     Box b = n->prev_box;
@@ -2090,10 +2102,13 @@ int paint_capture_mode;
 
 void paint_capture(Canvas *c, Node *root) {
     if (!root) return;
+    int keep_mode = paint_capture_mode, ks = skip_until, kr = skip_reached, kc = paint_cull;
+    skip_until = skip_reached = paint_cull = 0;
     paint_capture_mode = 1;
     paint_node(c, root, 1);
     wl_paint_popups(c);
-    paint_capture_mode = 0;
+    paint_capture_mode = keep_mode;
+    skip_until = ks; skip_reached = kr; paint_cull = kc;
 }
 
 static Node *hit(Node *n, float x, float y) {
