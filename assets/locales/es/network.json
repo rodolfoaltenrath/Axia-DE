@@ -129,5 +129,6 @@
   "quick.failed": "No se pudo conectar. Comprueba la red e inténtalo de nuevo.",
   "quick.busy": "Espera a que termine la operación actual.",
   "quick.gone": "La red está fuera de alcance. Busca de nuevo.",
+  "quick.allNetworks": "Todas las redes y ajustes…",
   "quick.scanFailed": "No se pudo actualizar la lista. Inténtalo en unos instantes."
 }

@@ -7832,39 +7832,6 @@
     }
   },
   {
-    "file": "docs/cleaner-scan.png",
-    "category": "apps",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Cleaner, ready to scan",
-      "es": "Cleaner, listo para analizar",
-      "pt": "Cleaner, pronto para analisar"
-    }
-  },
-  {
-    "file": "docs/cleaner-review.png",
-    "category": "apps",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Cleaner: review before anything changes",
-      "es": "Cleaner: revisás antes de que algo cambie",
-      "pt": "Cleaner: revise antes de qualquer mudança"
-    }
-  },
-  {
-    "file": "docs/cleaner-storage.png",
-    "category": "apps",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Cleaner: what takes the space",
-      "es": "Cleaner: qué ocupa el espacio",
-      "pt": "Cleaner: o que ocupa o espaço"
-    }
-  },
-  {
     "file": "docs/remote-desk-computers.png",
     "category": "apps",
     "theme": "dark",

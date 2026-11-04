@@ -1,6 +1,6 @@
 // Top menu bar: L menu, active app, Window menu, keyboard layout,
 // Control Center and clock.
-import { View, Text, BackgroundApps, NetworkConnectionIcon, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems } from '@lordos/sdk';
+import { View, Text, BackgroundApps, NetworkConnectionIcon, NetworkPopover, SearchGlyph, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems } from '@lordos/sdk';
 import { useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';
 
@@ -37,7 +37,7 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
   const clock = useClock(format, 1000);
   useSettings();         // the active keyboard layout lives in the settings
   const [open, setOpen] = useState(null);
-  const refs = { logo: useRef(null), app: useRef(null), window: useRef(null), help: useRef(null) };
+  const refs = { logo: useRef(null), app: useRef(null), window: useRef(null), help: useRef(null), network: useRef(null) };
   const appRefs = useRef({});
   const app = focused ? getApp(focused) : null;
   const extra = useAppMenus(focused) || [];
@@ -47,7 +47,7 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
     const [x, , w] = lord.getLayout(ref.current.id);
     return direction() === 'rtl' ? x + w : x;
   };
-  const toggle = (name, ref) => setOpen((o) => (o?.name === name ? null : { name, x: anchorX(ref) }));
+  const toggle = (name, ref) => { if (controlCenter) onControlCenter(); spotlight.close(); setOpen((o) => (o?.name === name ? null : { name, x: anchorX(ref) })); };
   const close = () => setOpen(null);
 
   const menus = {
@@ -112,13 +112,14 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
           <Label t={t}>{keyboard.label(keyboard.active())}</Label>
         </BarItem>
         <StatusItems color={t.menuText} />
-        <BackgroundApps color={t.menuText} />
+        <BackgroundApps color={t.menuText} onOpen={() => { close(); if (controlCenter) onControlCenter(); spotlight.close(); }} />
         <PrivacyIndicators />
-        <BarItem t={t} onClick={() => spotlight.toggle()}><Label t={t}>⌕</Label></BarItem>
-        <BarItem t={t} active={controlCenter} onClick={onControlCenter}><NetworkConnectionIcon color={t.menuText} /></BarItem>
-        <BarItem t={t} active={controlCenter} onClick={onControlCenter}><ControlGlyph t={t} /></BarItem>
+        <BarItem t={t} onClick={() => { close(); if (controlCenter) onControlCenter(); spotlight.toggle(); }}><SearchGlyph size={18} color={t.menuText} /></BarItem>
+        <BarItem t={t} active={open?.name === 'network'} anchorRef={refs.network} onClick={() => toggle('network', refs.network)}><NetworkConnectionIcon color={t.menuText} /></BarItem>
+        <BarItem t={t} active={controlCenter} onClick={() => { close(); spotlight.close(); onControlCenter(); }}><ControlGlyph t={t} /></BarItem>
         <BarItem t={t}><Label t={t}>{clock}</Label></BarItem>
       </View>
+      {open?.name === 'network' && <NetworkPopover anchor={refs.network} onClose={close} area={area} />}
       {cur && <Menu x={open.x} y={area.y + height + 2} items={cur.items} onClose={close} anchor={anchor} width={260} />}
     </View>
   );

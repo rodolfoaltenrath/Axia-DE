@@ -84,11 +84,6 @@ Website: [lordos.org](https://lordos.org) · Brand kit: [LORDOS-BRAND.md](LORDOS
 | [MAIL.md](MAIL.md) | Mail, Calendar, Contacts and Reminders |
 | [MONITOR.md](MONITOR.md) | Monitor: usage, processes, network map and connections, firewall, disk health, cooling |
 | [SYSTEM.md](SYSTEM.md) | Disks, Backups, Logs, Clock and Help |
-| [CLEANER.md](CLEANER.md) | Cleaner: storage and maintenance |
-| [CLEANER-ARCHITECTURE.md](CLEANER-ARCHITECTURE.md) | Cleaner's design |
-| [CLEANER-SECURITY.md](CLEANER-SECURITY.md) | Cleaner's safety model |
-| [CLEANER-TESTS.md](CLEANER-TESTS.md) | Cleaner's tests and measurements |
-| [CLEANER-ROADMAP.md](CLEANER-ROADMAP.md) | The state of each Cleaner feature |
 | [VIRTUALIZATION.md](VIRTUALIZATION.md) | Machines, the virtualization app: plan (MVP from 0.8.8) |
 | [FLATPAK.md](FLATPAK.md) | Flatpak and Flathub: a design review, not planned for any release |
 

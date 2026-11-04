@@ -688,7 +688,7 @@ include $(sort $(wildcard mk/*.mk))
 
 # The modules above add compositor objects outside SRC; rebuild them on GPU
 # changes too, so switching builds cannot retain a GPU object.
-$(HW_OBJ) $(LAN_SRV_OBJ) $(CLEAN_SRV_OBJ) $(LB_SRV_OBJ) $(MAILC_OBJ) $(VC_OBJ) build/obj/outputs.o: build/gen/profile.h
+$(HW_OBJ) $(LAN_SRV_OBJ) $(LB_SRV_OBJ) $(MAILC_OBJ) $(VC_OBJ) build/obj/outputs.o: build/gen/profile.h
 build/axia-bench: build/gen/profile.h
 
 

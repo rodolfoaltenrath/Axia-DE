@@ -19,7 +19,6 @@
 #include "js_input.h"
 #include "js_fw.h"
 #include "js_backup.h"
-#include "js_clean.h"
 #include "js_lan.h"
 #include "js_rdesk.h"
 #include "js_broker.h"
@@ -427,7 +426,6 @@ static void session_context(void) {
     js_backup_register(ctx, lord);     /* lord.backup: Backups (backup/) */
     js_rdesk_register(ctx, lord);      /* lord.rdesk: the RDP and VNC apps */
     js_lan_register(ctx, lord);        /* lord.lan: Files → Network (lan/, docs/FILES.md) */
-    js_clean_register(ctx, lord);      /* lord.clean: Cleaner (clean/, docs/CLEANER-ARCHITECTURE.md) */
     js_logs_register(ctx, lord);       /* lord.logs: journal and LordOS logs (Logs app) */
     js_help_register(ctx, lord);       /* lord.help (Help) and lord.time.zoneOffset (Clock, tzif.c) */
     js_hw_register(ctx, lord);         /* lord.display/power/bt/mime/timedate (Settings, src/hw) */

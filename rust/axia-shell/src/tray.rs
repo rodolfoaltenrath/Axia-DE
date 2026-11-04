@@ -876,6 +876,35 @@ fn popup(panel: &Panel, state: &State, theme: &Value) -> Value {
         content,
     )
 }
+fn panel_tree(panel: &mut Panel, s: &State, t: &Value, color: Option<&str>) -> Value {
+    if s.items.is_empty() {
+        panel.open = false;
+        panel.menu_key = None;
+        return json!({"button":null,"panel":null,"open":false,"context":false});
+    }
+    let color = color.unwrap_or(t["text"].as_str().unwrap_or("#fff"));
+    let mut dots = vec![];
+    for row in 0..2 {
+        for col in 0..3 {
+            dots.push(view(json!({"position":"absolute","left":col*5,"top":row*5,"width":3,"height":3,"borderRadius":1,"backgroundColor":color}),vec![]));
+        }
+    }
+    let button = action_view(
+        json!({"height":22,"paddingHorizontal":8,"justifyContent":"center","alignItems":"center","flexDirection":"row","gap":5}),
+        vec![
+            view(json!({"width":13,"height":8}), dots),
+            label(json!(s.items.len().to_string()), color, 10),
+        ],
+        json!(["toggle"]),
+    );
+
+    let popup = if panel.open {
+        popup(panel, s, t)
+    } else {
+        Value::Null
+    };
+    json!({"button":button,"panel":popup,"open":panel.open,"context":panel.menu_key.is_some()})
+}
 fn request(v: Value) -> Result<Value> {
     let s = service().out.lock().map_err(|_| "unavailable")?.clone();
     let op = v["op"].as_str().unwrap_or("");
@@ -884,17 +913,63 @@ fn request(v: Value) -> Result<Value> {
             json!({"count":s.items.len(),"apps":s.items.iter().map(|i|&i.title).collect::<Vec<_>>()}),
         );
     }
-    PANELS.with(|p|{let mut p=p.borrow_mut();if op=="create"{p.0+=1;let id=p.0;p.1.insert(id,Panel::default());return Ok(json!({"id":id}))}let id=v["id"].as_u64().ok_or("badRequest")?;if op=="close"{p.1.remove(&id);return Ok(Value::Null)}let panel=p.1.get_mut(&id).ok_or("badRequest")?;
- let a=&v["action"];let key=a[1].as_str().unwrap_or("");match a[0].as_str().unwrap_or(""){
- "toggle"=>{panel.open=!panel.open;panel.menu_key=None},"dismiss"=>{panel.open=false;panel.menu_key=None},"closeContext"=>panel.menu_key=None,
- "activate"|"menu"=>{let x=v["screenX"].as_i64().unwrap_or(0)as i32;let y=v["screenY"].as_i64().unwrap_or(0)as i32;let c=if a[0]=="activate" && !s.items.iter().any(|i|i.id==key&&i.only_menu){Command::Activate(key.into(),x,y)}else{panel.menu_key=Some(key.into());panel.x=v["screenX"].as_i64().unwrap_or(0)as i32;panel.y=v["screenY"].as_i64().unwrap_or(0)as i32;Command::Menu(key.into(),x,y)};let _=service().tx.try_send(c);},
- "menuEvent"=>{panel.menu_key=None;let _=service().tx.try_send(Command::Event(key.into(),a[2].as_i64().unwrap_or(0)as i32));},_=>{}}
- let t=&v["theme"];let fg=t["text"].as_str().unwrap_or("#fff");let color=v["color"].as_str().unwrap_or(fg);
- let mut dots=vec![];for row in 0..2{for col in 0..3{dots.push(view(json!({"position":"absolute","left":col*5,"top":row*5,"width":3,"height":3,"borderRadius":1,"backgroundColor":color}),vec![]));}}
- let button=action_view(json!({"height":22,"paddingHorizontal":8,"justifyContent":"center","alignItems":"center","flexDirection":"row","gap":5}),vec![view(json!({"width":13,"height":8}),dots),label(json!(s.items.len().to_string()),color,10)],json!(["toggle"]));
- let popup=if panel.open{popup(panel,&s,t)}else{Value::Null};
- let result=json!({"button":button,"panel":popup,"open":panel.open,"context":panel.menu_key.is_some()});let encoded=result.to_string();if encoded==panel.previous{return Ok(Value::Null)}panel.previous=encoded;Ok(result)
- })
+    PANELS.with(|p| {
+        let mut p = p.borrow_mut();
+        if op == "create" {
+            p.0 += 1;
+            let id = p.0;
+            p.1.insert(id, Panel::default());
+            return Ok(json!({"id":id}));
+        }
+        let id = v["id"].as_u64().ok_or("badRequest")?;
+        if op == "close" {
+            p.1.remove(&id);
+            return Ok(Value::Null);
+        }
+        let panel = p.1.get_mut(&id).ok_or("badRequest")?;
+        let a = &v["action"];
+        let key = a[1].as_str().unwrap_or("");
+        match a[0].as_str().unwrap_or("") {
+            "toggle" => {
+                panel.open = !panel.open;
+                panel.menu_key = None
+            }
+            "dismiss" => {
+                panel.open = false;
+                panel.menu_key = None
+            }
+            "closeContext" => panel.menu_key = None,
+            "activate" | "menu" => {
+                let x = v["screenX"].as_i64().unwrap_or(0) as i32;
+                let y = v["screenY"].as_i64().unwrap_or(0) as i32;
+                let c = if a[0] == "activate" && !s.items.iter().any(|i| i.id == key && i.only_menu)
+                {
+                    Command::Activate(key.into(), x, y)
+                } else {
+                    panel.menu_key = Some(key.into());
+                    panel.x = v["screenX"].as_i64().unwrap_or(0) as i32;
+                    panel.y = v["screenY"].as_i64().unwrap_or(0) as i32;
+                    Command::Menu(key.into(), x, y)
+                };
+                let _ = service().tx.try_send(c);
+            }
+            "menuEvent" => {
+                panel.menu_key = None;
+                let _ = service().tx.try_send(Command::Event(
+                    key.into(),
+                    a[2].as_i64().unwrap_or(0) as i32,
+                ));
+            }
+            _ => {}
+        }
+        let result = panel_tree(panel, &s, &v["theme"], v["color"].as_str());
+        let encoded = result.to_string();
+        if encoded == panel.previous {
+            return Ok(Value::Null);
+        }
+        panel.previous = encoded;
+        Ok(result)
+    })
 }
 #[no_mangle]
 pub unsafe extern "C" fn axia_tray_request(input: *const c_char) -> *mut c_char {
@@ -1059,5 +1134,34 @@ mod edge_cases {
     fn malformed_variants_are_empty_not_glib_assertions() {
         assert_eq!(V::text("not a tuple").child(1).len(), 0);
         assert!(menu_nodes(&V::tuple(vec![]), "app", 0, &mut 128).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::*;
+    #[test]
+    fn registration_and_removal_control_visibility_and_close_stale_popup() {
+        let mut state = State::default();
+        let mut panel = Panel::default();
+        assert!(panel_tree(&mut panel, &state, &json!({}), None)["button"].is_null());
+        state.items.push(Item {
+            id: "test".into(),
+            name: "org.test.App".into(),
+            path: "/Item".into(),
+            title: "Steam".into(),
+            menu: "/Menu".into(),
+            only_menu: false,
+            attention: false,
+            icon: None,
+            passive: false,
+        });
+        assert!(panel_tree(&mut panel, &state, &json!({}), None)["button"].is_object());
+        panel.open = true;
+        assert!(panel_tree(&mut panel, &state, &json!({}), None)["panel"].is_object());
+        state.items.clear();
+        let empty = panel_tree(&mut panel, &state, &json!({}), None);
+        assert!(empty["button"].is_null() && empty["panel"].is_null());
+        assert!(!panel.open && panel.menu_key.is_none());
     }
 }

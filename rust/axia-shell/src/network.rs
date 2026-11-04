@@ -309,6 +309,7 @@ fn worker(rx: mpsc::Receiver<Command>, out: std::sync::Arc<Mutex<Snapshot>>) {
 }
 #[derive(Default)]
 struct Panel {
+    compact: bool,
     selected: Option<String>,
     password: String,
     message: String,
@@ -508,8 +509,12 @@ impl Panel {
             content.push(text(tr("disabled"), dim, 12));
         } else {
             let mut rows = vec![];
-            for n in &s.networks {
+            let mut selected_detail = None;
+            for (index, n) in s.networks.iter().enumerate() {
                 let selected = self.selected.as_deref() == Some(&n.id);
+                if self.compact && index >= 6 && !selected {
+                    continue;
+                }
                 let mut name = text(json!(n.ssid), fg, 12);
                 name["style"]["flex"] = json!(1);
                 name["style"]["minWidth"] = json!(0);
@@ -517,7 +522,7 @@ impl Panel {
                 name["style"]["textOverflow"] = json!("ellipsis");
                 name["style"]["overflow"] = json!("hidden");
                 let mut row = view(
-                    json!({"flexDirection":"row","alignItems":"center","gap":10,"padding":10,"borderRadius":8,"backgroundColor":if selected{theme(t,"selection",bg)}else{"transparent"}}),
+                    json!({"flexDirection":"row","alignItems":"center","gap":10,"padding":8,"height":40,"flexShrink":0,"borderRadius":8,"backgroundColor":if selected{theme(t,"selection",bg)}else{"transparent"}}),
                     vec![
                         glyph("wifi", n.strength, if n.connected { accent } else { fg }),
                         name,
@@ -557,7 +562,12 @@ impl Panel {
                             ],
                         ));
                     }
-                    rows.push(view(json!({"padding":10,"gap":8}), detail));
+                    let detail = view(json!({"padding":10,"gap":8}), detail);
+                    if self.compact {
+                        selected_detail = Some(detail);
+                    } else {
+                        rows.push(detail);
+                    }
                 }
             }
             if rows.is_empty() {
@@ -567,7 +577,13 @@ impl Panel {
                     12,
                 ));
             }
-            content.push(json!({"type":"scroll","style":{"height":(s.networks.len()*42+if self.selected.is_some(){130}else{0}).clamp(44,240),"flexShrink":1},"children":rows}));
+            content.push(json!({"type":"scroll","style":{"height":if self.compact {(s.networks.len().min(4)*40).clamp(44,160)}else{(s.networks.len()*42+if self.selected.is_some(){130}else{0}).clamp(44,240)},"flex":0},"children":rows}));
+            if let Some(detail) = selected_detail {
+                content.push(detail);
+            }
+            if self.compact {
+                content.push(button("allNetworks", json!(["settings"]), false));
+            }
         }
         view(json!({"gap":10}), content)
     }
@@ -595,7 +611,9 @@ fn request(v: Value) -> Result<Value> {
         if op == "create" {
             p.0 += 1;
             let id = p.0;
-            p.1.insert(id, Panel::default());
+            let mut panel = Panel::default();
+            panel.compact = v["compact"].as_bool().unwrap_or(false);
+            p.1.insert(id, panel);
             if s.available && s.enabled && !s.busy {
                 let _ = service().tx.try_send(Command::Scan);
             }
@@ -729,8 +747,50 @@ mod tests {
         };
         let mut p = Panel::default();
         p.action(&json!(["select", "ap"]), &s).unwrap();
-        assert!(p.tree(&s, &json!({})).to_string().contains("secure"));
+        assert!(p
+            .tree(&s, &json!({}))
+            .to_string()
+            .contains("\"secure\":true"));
         assert!(glyph("ethernet", 0, "#fff").to_string().contains("border"));
         assert!(p.action(&json!(["connect"]), &s).is_err());
+    }
+}
+
+#[cfg(test)]
+mod compact_tests {
+    use super::*;
+    #[test]
+    fn crowded_airwaves_keep_a_small_list_and_password_outside_the_scroll() {
+        let mut s = Snapshot {
+            available: true,
+            enabled: true,
+            hardware: true,
+            radios: vec!["radio".into()],
+            ..Snapshot::default()
+        };
+        for n in 0..100 {
+            s.networks.push(Network {
+                id: format!("ap{n}"),
+                ssid: format!("Rede {n}"),
+                security: Security::Psk,
+                ..Network::default()
+            });
+        }
+        let mut p = Panel::default();
+        p.compact = true;
+        p.selected = Some("ap99".into());
+        let tree = p.tree(&s, &json!({}));
+        let children = tree["children"].as_array().unwrap();
+        let scroll = children.iter().find(|n| n["type"] == "scroll").unwrap();
+        assert_eq!(scroll["style"]["flex"], 0);
+        assert!(scroll["style"]["height"].as_u64().unwrap() <= 160);
+        assert_eq!(scroll["children"].as_array().unwrap().len(), 7); // six best plus selected AP
+        assert!(!scroll.to_string().contains("\"secure\":true"));
+        assert!(children
+            .iter()
+            .any(|n| n.to_string().contains("\"secure\":true")));
+        assert!(children
+            .iter()
+            .any(|n| n.to_string().contains("allNetworks")));
     }
 }

@@ -149,9 +149,6 @@ EOF
     if have node; then run "place-model-test (sdk/placemodel.js)" node tests/place_model_test.mjs; fi
     if have node; then run "fwrule-input-test (sdk/fwrule.js)" node tests/fwrule_input_test.mjs
     else skip "fwrule-input-test" "node"; fi
-    # which installed kernels Cleaner may offer (sdk/oldkernels.js)
-    if have node; then run "oldkernels-test (sdk/oldkernels.js)" node tests/oldkernels_test.mjs
-    else skip "oldkernels-test" "node"; fi
     # the Dock's pinned-list model (sdk/dockmodel.js)
     if have node; then run "files-model-test (apps/files)" node tests/files_model_test.mjs; fi
     if have node; then run "osk-model-test (sdk/oskmodel.js)" node tests/osk_model_test.mjs

@@ -42,7 +42,6 @@ completo desses aplicativos.
 | Logs | GNOME Logs | Leitor próprio de journal e logs da DE. Consultas de sistema pelo SDK passam por `logs-system`, indisponível sem o helper; confirmar a cobertura necessária antes de substituir. |
 | Loja | GNOME Software | Complementares: a loja nativa gerencia `.lpk` e encaminha os pacotes do sistema ao gerenciador do host. Preservar GNOME Software para o sistema. |
 | Configurações | GNOME Settings | Configura o shell e possui integrações existentes, como áudio. Administração de rede/VPN, usuários e outras áreas não foi integralmente substituída por adaptadores do Fedora. Preservar as ferramentas do host. |
-| Cleaner | GNOME Disk Usage Analyzer | Há sobreposição em análise de espaço, mas as funções não são idênticas. Limpeza administrativa do sistema ainda depende do backend removido. Não ocultar Baobab por equivalência presumida. |
 | Remote Desk | GNOME Connections | Cliente RDP/VNC existe e tem helper instalado; conexão, clipboard e reconexão precisam de teste com um destino real. |
 
 Arquivos oferece abas, quatro visualizações, lixeira, prévia e operações locais.

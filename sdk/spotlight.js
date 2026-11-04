@@ -9,6 +9,8 @@ import { createElement as h, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Image, addListener, screen, mainBox } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { useTheme } from './theme.js';
+import { dockGlass } from './glass.js';
+import { SearchGlyph } from './searchglyph.jsx';
 import { t, tOptional, formatNumber, formatDate, locale } from './i18n.js';
 import { settings } from './settings.js';
 import { wm, getApp, windows } from './windows.js';
@@ -456,11 +458,11 @@ function Panel() {
       onClick: (e) => e.stopPropagation(),
       style: {
         position: 'absolute', left: Math.round((mainBox().width - W) / 2), top: Math.round(mainBox().height * 0.16), width: W,
-        borderRadius: 14, backgroundColor: th.windowBg, border: `1px solid ${th.separator}`, boxShadow: '0 24px 60px rgba(0,0,0,0.5)', overflow: 'hidden',
+        borderRadius: 16, ...dockGlass(th), boxShadow: '0 24px 60px rgba(0,0,0,0.5)', overflow: 'hidden',
       },
     },
     h(View, { style: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 } },
-      h(Text, { style: { fontSize: 20, color: th.textDim } }, '⌕'),
+      h(SearchGlyph, { size: 24, color: th.textDim }),
       h(TextInput, { value: query, onChange: setQuery, autoFocus: true, size: 20, placeholder: t('shell.spotlight.placeholder'),
         onKeyDown: onKey, onCancel: () => spotlight.close(), style: { flex: 1, backgroundColor: 'transparent', border: '0 solid transparent' } })),
     query.trim() && h(View, { style: { height: 1, backgroundColor: th.separator } }),
