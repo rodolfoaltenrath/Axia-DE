@@ -1,22 +1,22 @@
-/* LordOS's GTK 3 theme (LordOS): Adwaita with LordOS's colors, title bar and traffic lights. The
- * LordOS portal picks it (gtk-theme) by the mode; GTK 3 has no accent of its own, so it stays blue.
+/* Axia's GTK 3 theme (Axia): Adwaita with Axia's colors, title bar and traffic lights. The
+ * Axia portal picks it (gtk-theme) by the mode; GTK 3 has no accent of its own, so it stays blue.
  * GTK 4 and libadwaita take the mode and the accent from the portal. */
 @import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained.css");
-@define-color lordos_title_bg #ececee;
-@define-color lordos_separator rgba(0, 0, 0, 0.1);
-@define-color lordos_light_off #d0d0d4;
+@define-color axia_title_bg #ececee;
+@define-color axia_separator rgba(0, 0, 0, 0.1);
+@define-color axia_light_off #d0d0d4;
 @define-color theme_selected_bg_color #0a84ff;
 @define-color theme_selected_fg_color #ffffff;
 @define-color theme_bg_color #f6f6f7;
 @define-color theme_base_color #ffffff;
 @define-color theme_fg_color #1c1c1e;
 
-/* Traffic lights like LordOS's default frame: 13 px circles, 8 px apart, vertically centered;
- * the order comes from LordOS through the portal and GSettings (close,minimize,maximize: on the
- * left; the Lord Classic theme asks for :minimize,maximize,close). GTK sizes a title button by its
+/* Traffic lights like Axia's default frame: 13 px circles, 8 px apart, vertically centered;
+ * the order comes from Axia through the portal and GSettings (close,minimize,maximize: on the
+ * left; the Axia Classic theme asks for :minimize,maximize,close). GTK sizes a title button by its
  * 16 px icon (Chromium and Firefox do the same when they draw their tab strip with this theme), so
  * the button stays 16 px and the circle is a 13 px radial gradient inside it; the icon is the
- * glyph shown on hover, as in LordOS's frame. */
+ * glyph shown on hover, as in Axia's frame. */
 headerbar button.titlebutton,
 .titlebar button.titlebutton {
   min-width: 16px; min-height: 16px; padding: 0; margin: 0 -1px 0 0;
@@ -31,12 +31,19 @@ headerbar button.titlebutton.maximize, .titlebar button.titlebutton.maximize {
   background-image: radial-gradient(circle closest-side, #28c840 74%, transparent 81%); }
 headerbar button.titlebutton:hover, .titlebar button.titlebutton:hover { color: rgba(0, 0, 0, 0.6); }
 headerbar button.titlebutton:backdrop, .titlebar button.titlebutton:backdrop {
-  background-image: radial-gradient(circle closest-side, @lordos_light_off 74%, transparent 81%); }
+  background-image: radial-gradient(circle closest-side, @axia_light_off 74%, transparent 81%); }
 headerbar button.titlebutton:backdrop:hover, .titlebar button.titlebutton:backdrop:hover { color: transparent; }
 
-/* The bar like LordOS windows */
-decoration { border-radius: 12px 12px 0 0; }
-headerbar, .titlebar { background-image: none; background-color: @lordos_title_bg; border-bottom: 1px solid @lordos_separator;
+/* Match the Axia window surface too: Adwaita's compiled background rules do
+ * not all reference the public theme colors above. Keep client bars and tabs. */
+window.background { background-color: @theme_bg_color; color: @theme_fg_color; }
+window.background.csd { border-radius: 0 0 12px 12px; }
+decoration { border-radius: 12px; }
+window.csd.maximized, window.csd.fullscreen,
+window.csd.maximized decoration, window.csd.fullscreen decoration { border-radius: 0; }
+
+/* The bar like Axia windows */
+headerbar, .titlebar { background-image: none; background-color: @axia_title_bg; border-bottom: 1px solid @axia_separator;
   box-shadow: none; min-height: 40px; }
-headerbar:backdrop, .titlebar:backdrop { background-color: @lordos_title_bg; }
+headerbar:backdrop, .titlebar:backdrop { background-color: @axia_title_bg; }
 headerbar .title { font-weight: 600; }

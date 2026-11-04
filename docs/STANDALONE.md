@@ -75,6 +75,13 @@ No Fedora, instale `libasan` e `libubsan` para os testes com sanitização. `mak
 
 A CI `.github/workflows/desktop-fedora.yml` reproduz o build e os testes em Fedora 44, com variantes de compilação CPU e GPU. O modo headless não exercita DRM/KMS, input físico, aceleração de GPU nem políticas SELinux.
 
+O RPM é compilado com `GPU=1` e as dependências GBM/EGL/GLES. A GPU é selecionada
+automaticamente na sessão física; sem aceleração compatível, o compositor
+retorna ao caminho CPU. Os temas GTK `Axia` e `Axia-dark` são instalados em
+`/usr/share/themes` para os aplicativos externos, com preferências sincronizadas
+pelo módulo Rust de aparência. Barras próprias dos aplicativos são preservadas;
+nem todos os toolkits permitem alterar todos os controles internos.
+
 ## Compatibilidade ainda a validar
 
 1. Login real por GDM/SDDM e TTY; seleção da GPU em máquinas com mais de uma placa.
