@@ -17,6 +17,9 @@ fn view(style: Value, children: Vec<Value>) -> Value {
 fn label(text: Value, style: Value) -> Value {
     json!({"type":"text","text":text,"style":style})
 }
+fn file_label(s: &Session, text: Value, full: Value, style: Value) -> Value {
+    json!({"type":"filename","text":text,"tooltip":full,"tooltipLayer":if s.mode==Mode::Browser{"tooltip"}else{"system"},"style":style})
+}
 pub fn tr(key: &str) -> Value {
     json!({"key":key})
 }
@@ -145,11 +148,18 @@ fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &st
         vec![
             icon_ref(kind, 19.),
             label(
-                text,
-                json!({"fontSize":13,"color":txt(s),"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
+                text.clone(),
+                json!({"fontSize":13,"color":txt(s),"flex":1,"minWidth":0,"whiteSpace":"nowrap","textOverflow":"ellipsis","numberOfLines":1,"overflow":"hidden"}),
             ),
         ],
     );
+    n["type"] = json!("fileTile");
+    n["tooltip"] = text;
+    n["tooltipLayer"] = json!(if s.mode == Mode::Browser {
+        "tooltip"
+    } else {
+        "system"
+    });
     n["events"] = json!({"onClick":command});
     if s.mode == Mode::Browser && command[0] == "navigate" {
         n["events"]["onMouseUp"] = json!(["drop", command[1]]);
@@ -361,9 +371,11 @@ impl Session {
                 self.tab().forward.is_empty(),
                 false,
             ),
-            label(
+            file_label(
+                self,
                 self.title_value(),
-                json!({"flex":1,"minWidth":0,"fontSize":15,"fontWeight":600,"color":txt(self),"whiteSpace":"nowrap","overflow":"hidden"}),
+                self.title_value(),
+                json!({"flex":1,"minWidth":0,"fontSize":15,"fontWeight":600,"color":txt(self),"whiteSpace":"nowrap","textOverflow":"ellipsis","numberOfLines":1,"overflow":"hidden"}),
             ),
         ];
         let modes = [
@@ -444,32 +456,39 @@ impl Session {
     }
     pub(super) fn entry_width(&self) -> f64 {
         let past = self.past_columns();
-        (self.width - self.side_width - 5. - past as f64 * 190.).max(1.)
+        (self.width - self.side_width - 5. - past as f64 * self.column_width()).max(1.)
     }
     // One geometry for painting, keyboard movement, scrolling and PDF requests.
     // Leave room for the scrollbar, then distribute the full width across cells.
     pub(super) fn entry_grid(&self) -> (usize, f64, f64) {
         let width = (self.entry_width() - 12.).max(1.);
         if self.tab().view == "icons" {
-            let columns = (width / 112.).floor().max(1.) as usize;
-            let row = if self.entry_area() < 360. { 100. } else { 110. };
+            let columns = (width / (112. * self.zoom)).floor().max(1.) as usize;
+            let row = if self.entry_area() < 360. {
+                100. * self.zoom
+            } else {
+                110. * self.zoom
+            };
             (columns, width / columns as f64, row)
         } else {
-            (1, width, 32.)
+            (1, width, (32. * self.zoom).max(26.))
         }
     }
+    pub(super) fn column_row(&self) -> f64 {
+        28. * self.zoom
+    }
+    fn column_width(&self) -> f64 {
+        190. * self.zoom
+    }
     fn past_columns(&self) -> usize {
-        if self.tab().view == "columns" {
-            self.tab().columns.len().min(if self.width > 1000. {
-                2
-            } else if self.width - self.side_width > 390. {
-                1
-            } else {
-                0
-            })
-        } else {
-            0
+        if self.tab().view != "columns" {
+            return 0;
         }
+        let available = self.width - self.side_width - 5.;
+        let capacity = ((available - 160. * self.zoom) / self.column_width())
+            .floor()
+            .clamp(0., 2.) as usize;
+        self.tab().columns.len().min(capacity)
     }
     pub(super) fn entry_height(&self) -> f64 {
         (self.height
@@ -526,9 +545,11 @@ impl Session {
                 json!({"flex":1,"minWidth":0,"height":28,"flexDirection":"row","alignItems":"center","paddingHorizontal":6,"gap":4,"backgroundColor":if i==self.active{color(self,"windowBg","#202025")}else{"transparent".into()},"borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),
                 vec![
                     close,
-                    label(
+                    file_label(
+                        self,
+                        title.clone(),
                         title,
-                        json!({"flex":1,"fontSize":12,"fontWeight":if i==self.active{600}else{400},"color":if i==self.active{txt(self)}else{dim(self)},"whiteSpace":"nowrap","overflow":"hidden","textAlign":"center"}),
+                        json!({"flex":1,"minWidth":0,"numberOfLines":1,"textOverflow":"ellipsis","fontSize":12,"fontWeight":if i==self.active{600}else{400},"color":if i==self.active{txt(self)}else{dim(self)},"whiteSpace":"nowrap","overflow":"hidden","textAlign":"center"}),
                     ),
                 ],
             );
@@ -621,30 +642,30 @@ impl Session {
         };
         let content = if icons {
             vec![
-                entry_icon(self, e, 56., true),
+                entry_icon(self, e, 56. * self.zoom, true),
                 label(
                     json!(shown_name),
-                    json!({"fontSize":12,"color":fg,"textAlign":"center","width":width-8.,"height":34,"overflow":"hidden"}),
+                    json!({"fontSize":(12.*self.zoom).max(10.),"lineHeight":1.3,"color":fg,"textAlign":"center","width":(width-14.).max(1.),"height":((12.*self.zoom).max(10.)*2.6+2.).ceil(),"numberOfLines":2,"textOverflow":"ellipsis","overflow":"hidden"}),
                 ),
             ]
         } else {
             let mut c = vec![
-                entry_icon(self, e, 22., false),
+                entry_icon(self, e, 22. * self.zoom, false),
                 label(
                     json!(shown_name),
-                    json!({"fontSize":13,"color":fg,"flex":1,"whiteSpace":"nowrap","overflow":"hidden"}),
+                    json!({"fontSize":(13.*self.zoom).max(11.),"color":fg,"flex":1,"minWidth":0,"whiteSpace":"nowrap","numberOfLines":1,"textOverflow":"ellipsis","overflow":"hidden"}),
                 ),
             ];
-            if width > 400. {
+            if width > 400. * self.zoom {
                 c.push(label(
                     json!(if e.dir { String::new() } else { bytes(e.size) }),
-                    json!({"fontSize":12,"color":dim(self),"width":82,"textAlign":"right"}),
+                    json!({"fontSize":12.*self.zoom,"color":dim(self),"width":82.*self.zoom,"textAlign":"right"}),
                 ));
             }
-            if width > 560. {
+            if width > 560. * self.zoom {
                 c.push(label(
                     json!({"format":"date","value":e.mtime}),
-                    json!({"fontSize":11,"color":dim(self),"width":135}),
+                    json!({"fontSize":11.*self.zoom,"color":dim(self),"width":135.*self.zoom}),
                 ));
             }
             if let Some(tags) = shared.tags.get(&e.path) {
@@ -666,10 +687,17 @@ impl Session {
             c
         };
         let mut cell = view(
-            json!({"position":"absolute","left":x,"top":y,"width":width,"height":height,"paddingHorizontal":7,"gap":if icons{5}else{8},"flexDirection":if icons{"column"}else{"row"},"alignItems":"center","justifyContent":if icons{"center"}else{"flex-start"},"borderRadius":6,"backgroundColor":if selected{color(self,"accent","#1485f8")}else{"transparent".into()}}),
+            json!({"position":"absolute","left":x,"top":y,"width":width,"height":height,"paddingHorizontal":7,"gap":if icons{5.*self.zoom}else{8.*self.zoom},"flexDirection":if icons{"column"}else{"row"},"alignItems":"center","justifyContent":if icons{"center"}else{"flex-start"},"borderRadius":6,"backgroundColor":if selected{color(self,"accent","#1485f8")}else{"transparent".into()}}),
             content,
         );
         cell["key"] = json!(format!("entry:{}", e.path));
+        cell["type"] = json!("fileTile");
+        cell["tooltip"] = json!(e.name);
+        cell["tooltipLayer"] = json!(if self.mode == Mode::Browser {
+            "tooltip"
+        } else {
+            "system"
+        });
         cell["events"] = json!({"onClick":["select",i],"onDoubleClick":["activate",i],"onContextMenu":["context",i]});
         if self.mode == Mode::Browser {
             cell["events"]["onMouseDown"] = json!(["dragStart", i]);
@@ -696,7 +724,7 @@ impl Session {
         let mut cells = Vec::new();
         if gallery {
             if let Some(e) = self.selected_entries().next() {
-                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(self, e,(preview_height-40.).clamp(1.,240.),true),label(json!(e.name),json!({"fontSize":13,"color":txt(self)}))]));
+                cells.push(view(json!({"position":"absolute","left":0,"top":0,"width":width,"height":preview_height,"alignItems":"center","justifyContent":"center","backgroundColor":color(self,"sidebarBg","#25252b")}),vec![entry_icon(self, e,(preview_height-40.).clamp(1.,240.),true),file_label(self,json!(e.name),json!(e.name),json!({"fontSize":13.*self.zoom,"numberOfLines":1,"textOverflow":"ellipsis","color":txt(self)}))]));
             }
         }
         // Cells stay at fixed positions inside one moving container, so scrolling
@@ -753,10 +781,12 @@ impl Session {
         }
         if columns && !self.tab().columns.is_empty() {
             let mut cols = Vec::new();
+            let column_width = self.column_width();
+            let row_height = self.column_row();
             for (path, entries) in self.tab().columns.iter().rev().take(past).rev() {
                 let mut children = vec![label(
                     json!(path.file_name().unwrap_or_default().to_string_lossy()),
-                    json!({"position":"absolute","left":0,"top":0,"width":189,"height":28,"fontSize":11,"color":dim(self),"padding":8,"backgroundColor":color(self,"windowBg","#202025"),"zIndex":1}),
+                    json!({"position":"absolute","left":0,"top":0,"width":column_width-1.,"height":row_height,"fontSize":(11.*self.zoom).max(10.),"color":dim(self),"paddingHorizontal":8.*self.zoom,"paddingVertical":4.*self.zoom,"whiteSpace":"nowrap","textOverflow":"ellipsis","backgroundColor":color(self,"windowBg","#202025"),"zIndex":1}),
                 )];
                 let entries: Vec<_> = entries
                     .iter()
@@ -764,16 +794,16 @@ impl Session {
                         (self.hidden || !e.name.starts_with('.')) && e.raw.to_str().is_some()
                     })
                     .collect();
-                let area = (height - 28.).max(1.);
+                let area = (height - row_height).max(1.);
                 let offset = self
                     .tab()
                     .column_offsets
                     .get(path)
                     .copied()
                     .unwrap_or(0.)
-                    .min((entries.len() as f64 * 28. - area).max(0.));
-                let start = (offset / 28.).floor() as usize;
-                let count = (area / 28.).ceil() as usize + 1;
+                    .min((entries.len() as f64 * row_height - area).max(0.));
+                let start = (offset / row_height).floor() as usize;
+                let count = (area / row_height).ceil() as usize + 1;
                 for (i, e) in entries.iter().enumerate().skip(start).take(count) {
                     let mut item = side_item(
                         self,
@@ -783,15 +813,19 @@ impl Session {
                         if e.dir { "folder" } else { "file" },
                     );
                     item["style"]["position"] = json!("absolute");
-                    item["style"]["top"] = json!(28. + i as f64 * 28. - offset);
-                    item["style"]["width"] = json!(189);
+                    item["style"]["top"] = json!(row_height + i as f64 * row_height - offset);
+                    item["style"]["width"] = json!(column_width - 1.);
+                    item["style"]["height"] = json!(row_height);
+                    item["children"][0] =
+                        icon(if e.dir { "folder" } else { "file" }, 19. * self.zoom);
+                    item["children"][1]["style"]["fontSize"] = json!((13. * self.zoom).max(11.));
                     if !e.dir {
                         item["events"] = json!({"onDoubleClick":["openRaw",e.raw]});
                     }
                     children.push(item);
                 }
                 let mut col = view(
-                    json!({"width":190,"flexShrink":0,"overflow":"hidden","borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),
+                    json!({"width":column_width,"flexShrink":0,"overflow":"hidden","borderRight":format!("1px solid {}",color(self,"separator","#38383e"))}),
                     children,
                 );
                 col["events"] = json!({"onWheel":["columnWheel",path]});
@@ -1031,7 +1065,9 @@ impl Session {
         if choices.is_empty() {
             return None;
         }
-        Some(json!({"type":"contextMenu","x":x,"y":y,"items":choices}))
+        Some(
+            json!({"type":"contextMenu","x":x,"y":y,"items":choices,"layer":if self.mode==Mode::Browser {"popover"} else {"system"}}),
+        )
     }
     fn dialog_view(&self, shared: &Shared) -> Option<Value> {
         let dialog = self.dialog.as_ref()?;

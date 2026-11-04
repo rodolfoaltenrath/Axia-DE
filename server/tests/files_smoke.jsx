@@ -59,6 +59,12 @@ async function exercise() {
   const tile = () => find(latest.tree, (n) => n.type === 'documentImage' && n.style.width === 56 && bound.has(n.image?.id));
   await wait(tile, 'first PDF page appears as an actual bound thumbnail');
   const tileId = tile().image.id;
+  await send(['zoom', 1.5]);
+  await wait(() => find(latest.tree, (n) => n.type === 'documentImage' && n.style.width === 84 && n.image?.id === tileId), 'content zoom reuses the existing PDF thumbnail');
+  const nameTile = find(latest.tree, (n) => n.type === 'fileTile' && n.tooltip === 'preview.pdf');
+  check(nameTile, 'file row preserves its full name for hover');
+  check(find(nameTile, (n) => n.type === 'text' && n.style?.textOverflow === 'ellipsis' && n.style.numberOfLines === 2), 'icon labels request two-line ellipsis');
+  await send(['zoom', 1]); await wait(tile, 'reset restores original thumbnail size');
   check(menuUpdates > 0, 'browser publishes its menus');
   const menuCount = menuUpdates;
   for (const offset of [20, 0]) {

@@ -230,6 +230,9 @@ pub struct Session {
     pub volume_busy: Option<String>,
     volume_paths: Vec<PathBuf>,
     pub side_width: f64,
+    pub zoom: f64,
+    zoom_save: Option<Instant>,
+    zoom_wheel: f64,
     pub drag: Option<Value>,
     pub job_errors: Vec<String>,
     pub dialog_epoch: u64,
@@ -542,6 +545,13 @@ impl Session {
                 .as_f64()
                 .unwrap_or(190.)
                 .clamp(150., 340.),
+            zoom: shared.preferences["contentZoom"]
+                .as_f64()
+                .filter(|v| v.is_finite())
+                .unwrap_or(1.)
+                .clamp(0.75, 2.),
+            zoom_save: None,
+            zoom_wheel: 0.,
             drag: None,
             job_errors: Vec::new(),
             dialog_epoch: 0,
@@ -976,7 +986,58 @@ impl Session {
         self.context = None;
         self.load(shared);
     }
+    pub fn flush_zoom(&mut self, shared: &Shared) {
+        if self.zoom_save.take().is_some() {
+            let _ = shared.save(&self.policy);
+        }
+    }
+    fn set_zoom(&mut self, value: f64, shared: &mut Shared) {
+        let value = value.clamp(0.75, 2.);
+        if !value.is_finite() || (value - self.zoom).abs() < 0.001 {
+            return;
+        }
+        let (columns, _, row) = self.entry_grid();
+        let anchor = (self.tab().offset / row).floor() as usize * columns;
+        let fraction = (self.tab().offset / row).fract();
+        self.zoom = value;
+        let (columns, _, row) = self.entry_grid();
+        self.tab_mut().offset = ((anchor / columns) as f64 + fraction) * row;
+        self.tab_mut().column_offsets.clear();
+        self.clamp_scroll();
+        shared.preferences["contentZoom"] = json!(value);
+        self.zoom_save = Some(Instant::now() + Duration::from_millis(700));
+        self.dirty = true;
+    }
+    fn zoom_scroll(&mut self, event: &Value, shared: &mut Shared) {
+        let delta = event["deltaY"].as_f64().unwrap_or(0.);
+        if !delta.is_finite() {
+            return;
+        }
+        if self.zoom_wheel.signum() != delta.signum() {
+            self.zoom_wheel = 0.;
+        }
+        self.zoom_wheel += delta.clamp(-384., 384.);
+        let steps = (self.zoom_wheel / 48.).trunc().clamp(-8., 8.) as i32;
+        self.zoom_wheel %= 48.;
+        for _ in 0..steps.unsigned_abs() {
+            self.zoom_step(-(steps as f64), shared);
+        }
+    }
+    fn zoom_step(&mut self, direction: f64, shared: &mut Shared) {
+        let levels = [0.75, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
+        let next = if direction > 0. {
+            levels.into_iter().find(|v| *v > self.zoom + 0.001)
+        } else {
+            levels.into_iter().rev().find(|v| *v < self.zoom - 0.001)
+        };
+        if let Some(value) = next {
+            self.set_zoom(value, shared);
+        }
+    }
     pub fn poll(&mut self, context: &Value, shared: &Shared) {
+        if self.zoom_save.is_some_and(|due| Instant::now() >= due) {
+            self.flush_zoom(shared);
+        }
         let paths: Vec<_> = shared
             .volumes
             .iter()
@@ -1760,6 +1821,11 @@ impl Session {
                     self.tab_mut().offset = 0.;
                 }
                 "columnWheel" => {
+                    if event["ctrl"] == true {
+                        self.zoom_scroll(event, shared);
+                        return Ok(());
+                    }
+                    self.zoom_wheel = 0.;
                     let path = PathBuf::from(arg.as_str().ok_or("sys.badArgument")?);
                     if let Some((_, entries)) = self.tab().columns.iter().find(|(p, _)| *p == path)
                     {
@@ -1770,8 +1836,9 @@ impl Session {
                                     && e.raw.to_str().is_some()
                             })
                             .count();
+                        let row = self.column_row();
                         let max =
-                            (count as f64 * 28. - (self.entry_height() - 28.).max(1.)).max(0.);
+                            (count as f64 * row - (self.entry_height() - row).max(1.)).max(0.);
                         let old = self.tab().column_offsets.get(&path).copied().unwrap_or(0.);
                         self.tab_mut().column_offsets.insert(
                             path,
@@ -1779,7 +1846,16 @@ impl Session {
                         );
                     }
                 }
+                "zoom" => {
+                    self.zoom_wheel = 0.;
+                    self.set_zoom(arg.as_f64().unwrap_or(1.), shared);
+                }
                 "wheel" => {
+                    if event["ctrl"] == true {
+                        self.zoom_scroll(event, shared);
+                        return Ok(());
+                    }
+                    self.zoom_wheel = 0.;
                     let delta = event["deltaY"].as_f64().unwrap_or(0.);
                     let before = self.tab().offset;
                     let tab = self.tab_mut();
@@ -2645,6 +2721,24 @@ impl Session {
         let lower = key.to_lowercase();
         let modifier = e["ctrl"].as_bool().unwrap_or(false) || e["meta"].as_bool().unwrap_or(false);
         let shift = e["shift"].as_bool().unwrap_or(false);
+        if modifier && self.dialog.is_none() {
+            match key {
+                "0" => {
+                    self.zoom_wheel = 0.;
+                    self.set_zoom(1., shared);
+                    return Ok(());
+                }
+                "+" | "=" => {
+                    self.zoom_step(1., shared);
+                    return Ok(());
+                }
+                "-" => {
+                    self.zoom_step(-1., shared);
+                    return Ok(());
+                }
+                _ => (),
+            }
+        }
         let action = if key == "Escape" {
             if self.dialog.is_some() {
                 Some("cancelDialog")

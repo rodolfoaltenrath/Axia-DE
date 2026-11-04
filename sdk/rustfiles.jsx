@@ -1,7 +1,7 @@
 // Generic host adapter for Rust-owned widget trees and effects. There is no
 // filesystem/navigation state here: browser and every picker use lord.files.
-import { createElement as h, memo, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Image, MediaView, mainBox, addListener } from '@lordos/runtime';
+import { createElement as h, Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, Image, MediaView, mainBox, addListener, screen } from '@lordos/runtime';
 import { Button, TextInput, ScrollView, useAppWindow, useKeyboard, hasTextFocus } from './components.jsx';
 import { useTheme } from './theme.js';
 import { Toolbar, ToolbarButton, ToolbarGroup } from './controls.jsx';
@@ -95,7 +95,49 @@ function FilesContextMenu({ node, send }) {
   const convert = (item) => item === '-' ? item : ({ ...item, label: caption(item.label),
     submenu: item.submenu?.map(convert), onClick: item.action ? () => send(item.action) : undefined });
   return h(View, { ref: origin, style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1 } },
-    position ? h(Menu, { ...position, items: node.items.map(convert), onClose: () => send(['closeContext']) }) : null);
+    position ? h(Menu, { ...position, layer: node.layer || 'popover', items: node.items.map(convert), onClose: () => send(['closeContext']) }) : null);
+}
+
+// Full names live outside clipped/virtualized rows; inactive labels own no timers.
+function FilenameBubble({ node, tip, full }) {
+  const theme = useTheme(), win = useAppWindow();
+  return h(Layer, { name: node.tooltipLayer || 'tooltip' },
+    h(View, { protected: !!win?.protected, style: { position: 'absolute', left: tip.x, top: tip.y, width: tip.width,
+      paddingHorizontal: 10, paddingVertical: 8, borderRadius: 7, pointerEvents: 'none',
+      backgroundColor: theme.popupBg || (theme.mode === 'dark' ? '#34343a' : '#fafafa'),
+      border: `1px solid ${theme.separator}`, boxShadow: '0 4px 14px rgba(0,0,0,0.25)' } },
+      h(Text, { style: { fontSize: 12, lineHeight: 1.4, color: theme.text } }, full)));
+}
+function Filename({ node, props, children }) {
+  const ref = useRef(null), timer = useRef(0);
+  const [tip, setTip] = useState(null);
+  const full = caption(node.tooltip ?? node.text);
+  const hide = () => { clearTimeout(timer.current); timer.current = 0; setTip(null); };
+  useEffect(() => { hide(); return () => clearTimeout(timer.current); }, [full, node.style?.width, node.style?.fontSize]);
+  useEffect(() => {
+    if (!tip) return;
+    const off = addListener('pointerdown', hide), keys = addListener('keydown', hide);
+    return () => { off(); keys(); };
+  }, [!!tip]);
+  const enter = () => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      if (!ref.current || !full) return;
+      const [x, y, , h] = lord.getLayout(ref.current.id);
+      const measured = lord.measureText(full, 12, 400);
+      const width = Math.min(440, screen.width - 16, Math.max(100, measured + 20));
+      const lines = Math.max(1, Math.ceil(measured / (width - 20)));
+      const height = Math.min(screen.height - 16, lines * 17 + 16);
+      setTip({ x: Math.max(8, Math.min(x, screen.width - width - 8)),
+        y: y + h + height + 8 < screen.height ? y + h + 6 : Math.max(8, y - height - 6), width });
+    }, 550);
+  };
+  return h(Fragment, null,
+    h(node.type === 'fileTile' ? View : Text, { ...props, ref, onMouseEnter: enter, onMouseLeave: hide,
+      onMouseDown: (e) => { hide(); props.onMouseDown?.(e); }, onWheel: (e) => { hide(); props.onWheel?.(e); } },
+      node.type === 'fileTile' ? children : caption(node.text)),
+    tip ? h(FilenameBubble, { node, tip, full }) : null);
+
 }
 
 const Widget = memo(function WidgetNode({ node, send }) {
@@ -109,6 +151,8 @@ const Widget = memo(function WidgetNode({ node, send }) {
     case 'toolbar': return h(Toolbar, props, ...children);
     case 'toolGroup': return h(ToolbarGroup, props, ...children);
     case 'tool': return h(ToolWidget, { node, send });
+    case 'fileTile':
+    case 'filename': return h(Filename, { node, props, children });
     case 'text': return h(Text, props, caption(node.text));
     case 'button': return h(Button, { ...props, primary: node.primary, disabled: node.disabled, small: true, label: caption(node.label), onClick: node.disabled ? undefined : (e) => send(node.action, e) });
     case 'input': return h(TextInput, { ...props, value: node.value, placeholder: caption(node.placeholder), autoFocus: node.autoFocus, secure: node.secure,
