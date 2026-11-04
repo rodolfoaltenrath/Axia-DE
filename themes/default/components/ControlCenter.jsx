@@ -1,7 +1,7 @@
 // Control Center: appearance, sound and media. Network has its own menu.
 import {
   View, Text, Toggle, Slider, ScrollView, screen, useSettings, wm, session, addListener, t as tr, dockGlass,
-  useSound, defaultSink, sound, NowPlayingTile,
+  useSound, defaultSink, sound, NowPlayingTile, BrightnessControl,
 } from '@lordos/sdk';
 import { useEffect, useRef } from 'react';
 
@@ -62,6 +62,10 @@ export function ControlCenter({ t, top, onClose, area = null }) {
             <Toggle on={s.effects} onChange={(effects) => set({ effects })} />
           </Tile>
         </View>
+        <Tile t={t} style={{ gap: 8 }}>
+          <Text style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{tr('prefs.display.brightness')}</Text>
+          <BrightnessControl />
+        </Tile>
         <SoundTile t={t} />
         <NowPlayingTile />
         <Tile t={t} style={{ gap: 10 }}>

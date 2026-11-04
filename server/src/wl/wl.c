@@ -2351,6 +2351,13 @@ static uint64_t preview_generation(const Surf *s) {
     return gen;
 }
 uint64_t wl_preview_generation(int id) { return preview_generation(find(id)); }
+int wl_preview_size(int id, int *w, int *h) {
+    Surf *s=find(id);
+    if (!s || s->role!=R_TOPLEVEL || node_protected(s->node)) return 0;
+    *w=s->has_geom?s->gw:s->lw; *h=s->has_geom?s->gh:s->lh;
+    return *w>0 && *h>0;
+}
+
 static void preview_tree(Canvas *c, Surf *s, float x, float y, float op) {
     if (s->content) {
         if (s->dmabuf && gpu_active()) {

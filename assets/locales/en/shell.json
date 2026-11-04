@@ -28,6 +28,8 @@
   "cc.memory": "Memory",
   "cc.network": "Network",
   "cc.offline": "Offline",
+  "cc.brightnessUnavailable": "Use your monitor’s buttons to adjust brightness.",
+  "cc.brightnessFailed": "Could not adjust brightness. Please try again.",
   "cc.sound": "Sound",
   "cc.wallpaper": "Wallpaper",
   "classic.allApps": "All apps",

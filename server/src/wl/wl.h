@@ -74,6 +74,7 @@ void wl_tf_open_holes(Canvas *c);        /* in the canvas the raster goes to, be
 void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, float op);
 void wl_paint_popups(Canvas *c);
 uint64_t wl_preview_generation(int id);
+int wl_preview_size(int id, int *w, int *h);
 void wl_preview_paint(Canvas *c, int id, float x, float y, float w, float h, float op);
 
 /* Presentation (main.c). */

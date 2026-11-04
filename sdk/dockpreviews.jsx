@@ -22,10 +22,11 @@ export function useDockPreviews({ hit, anchor, area, position, disabled, theme }
     if (hovered) c.key = hovered;
     const mine = p.all.filter((w) => dockIdOfWindow(w) === c.key && !w.pip).slice(-128).reverse();
     const out = request({ op: blocked ? 'dismiss' : op, id: c.id, key: hovered, inside: c.inside,
-      windows: mine.map((w) => ({ id: w.id, node: w.protected ? 0 : wm.previewNode(w.id), title: windowTitle(w), protected: !!w.protected })),
+      windows: mine.map((w) => ({ id: w.id, node: w.protected ? 0 : wm.previewNode(w.id), surface: w.protected ? 0 : (w.args?.surface || 0), title: windowTitle(w), protected: !!w.protected })),
       ax: p.area.x, ay: p.area.y, aw: p.area.w, ah: p.area.h, side: p.position,
       x: p.anchor?.x, y: p.anchor?.y, ...extra });
     if (!out) return;
+    const firstOpen = out.open && !c.state?.open;
     const signature = JSON.stringify(out);
     if (signature !== c.signature) { c.signature = signature; c.state = out; setState(out); }
     if (out.open && capture) {
@@ -33,13 +34,14 @@ export function useDockPreviews({ hit, anchor, area, position, disabled, theme }
       for (let j = 0; j < out.cards.length; j++) {
         const i = (c.cursor + j) % out.cards.length, card = out.cards[i];
         const image = images.current.get(card.id);
-        if (image && card.node && lord.wm.thumbnail(c.id, card.node, image.id, Math.ceil(out.cardWidth), Math.ceil(out.imageHeight))) {
+        const take = card.surface ? lord.wm.thumbnailSurface : lord.wm.thumbnail;
+        if (image && take && (card.surface || card.node) && take(c.id, card.surface || card.node, image.id, Math.ceil(out.cardWidth), Math.ceil(out.imageHeight))) {
           c.cursor = (i + 1) % out.cards.length; break;
         }
       }
     }
     if (out.open || out.pending) {
-      if (!c.timer) c.timer = setTimeout(() => { c.timer = 0; poll.current?.('poll', {}, true); }, 70);
+      if (!c.timer) c.timer = setTimeout(() => { c.timer = 0; poll.current?.('poll', {}, true); }, out.pending ? 30 : firstOpen ? 10 : 70);
     } else { clearTimeout(c.timer); c.timer = 0; }
   };
   poll.current = sync;
@@ -69,7 +71,7 @@ export function useDockPreviews({ hit, anchor, area, position, disabled, theme }
       style: { width: state.cardWidth, borderRadius: 10, overflow: 'hidden', cursor: 'pointer' } },
     h(View, { style: { width: state.cardWidth, height: state.imageHeight, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.windowBg } },
       Icon ? h(Icon, { size: 40 }) : null,
-      card.node ? h(Image, { ref: (inst) => { if (inst) images.current.set(card.id, inst); else images.current.delete(card.id); },
+      (card.node || card.surface) ? h(Image, { ref: (inst) => { if (inst) images.current.set(card.id, inst); else images.current.delete(card.id); },
         style: { position: 'absolute', left: 0, top: 0, width: state.cardWidth, height: state.imageHeight, objectFit: 'contain', pointerEvents: 'none' } }) : null),
     h(Text, { style: { height: 30, paddingHorizontal: 6, fontSize: 12, lineHeight: 30, color: theme.text,
       textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }, card.title));

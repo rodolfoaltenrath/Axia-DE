@@ -99,6 +99,9 @@ impl V {
     pub(crate) fn owned(p: Obj) -> Self {
         Self(unsafe { g_variant_ref_sink(p) })
     }
+    pub(crate) fn uint32(v: u32) -> Self {
+        Self::owned(unsafe { g_variant_new_uint32(v) })
+    }
     pub fn text(s: &str) -> Self {
         Self::owned(unsafe { g_variant_new_string(cs(s).as_ptr()) })
     }

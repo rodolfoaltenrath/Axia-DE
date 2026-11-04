@@ -28,6 +28,8 @@
   "cc.memory": "Memoria",
   "cc.network": "Red",
   "cc.offline": "Sin conexión",
+  "cc.brightnessUnavailable": "Usa los botones del monitor para ajustar el brillo.",
+  "cc.brightnessFailed": "No se pudo ajustar el brillo. Inténtalo de nuevo.",
   "cc.sound": "Sonido",
   "cc.wallpaper": "Fondo de pantalla",
   "classic.allApps": "Todas las apps",

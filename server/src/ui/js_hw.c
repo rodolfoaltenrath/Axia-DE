@@ -205,8 +205,20 @@ static JSValue f_display_wake(JSContext *c, JSValueConst t, int argc, JSValueCon
     return JS_UNDEFINED;
 }
 
+extern char *axia_brightness_request(const char *);
+extern void axia_brightness_free(char *);
+static JSValue f_brightness(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;if (!argc) return JS_NULL;
+    size_t len=0;const char *input=JS_ToCStringLen(c,&len,argv[0]);if (!input) return JS_EXCEPTION;
+    if (len>2048 || memchr(input,0,len)) {JS_FreeCString(c,input);return JS_ThrowRangeError(c,"invalid brightness request");}
+    char *result=axia_brightness_request(input);JS_FreeCString(c,input);
+    if (!result) return JS_ThrowOutOfMemory(c);
+    JSValue out=JS_ParseJSON(c,result,strlen(result),"<brightness>");axia_brightness_free(result);return out;
+}
+
 static const JSCFunctionListEntry display_funcs[] = {
     JS_CFUNC_DEF("list", 0, f_display_list),
+    JS_CFUNC_DEF("brightness", 1, f_brightness),
     JS_CFUNC_DEF("apply", 6, f_display_apply),
     JS_CFUNC_DEF("save", 1, f_display_save),
     JS_CFUNC_DEF("arrange", 4, f_display_arrange),
