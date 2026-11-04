@@ -26,7 +26,11 @@ this panel does not implement an enterprise secret-agent prompt. Hidden SSIDs
 are not listed. Association success and Internet availability are different:
 joining a hotel/captive network does not guarantee Internet access.
 
-The background-app button opens a separate glass tray. The Rust host implements
+The background-app button opens a compact glass icon grid, without a heading,
+instructions or close button. A single app uses a 56-pixel panel; the grid
+wraps at five columns and scrolls after four rows. Hover shows the full name,
+left-click activates the app and right-click opens its menu. Clicking outside
+or pressing Escape closes the tray. The Rust host implements
 `org.kde.StatusNotifierWatcher`, StatusNotifierItem/AppIndicator registrations,
 icon pixmaps/raster icon names, activation, and `com.canonical.dbusmenu` menus.
 It can also use an existing watcher without stealing its name. Icons disappear

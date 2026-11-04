@@ -808,6 +808,74 @@ struct Panel {
     previous: String,
 }
 thread_local! {static PANELS:RefCell<(u64,HashMap<u64,Panel>)>=RefCell::new((0,HashMap::new()));}
+// Icon widgets are described only while the tray is open. A single app takes
+// 56 × 56 pixels; larger collections wrap at five columns and scroll after four rows.
+fn popup(panel: &Panel, state: &State, theme: &Value) -> Value {
+    const CELL: usize = 40;
+    const GAP: usize = 4;
+    let count = state.items.len();
+    let columns = count.clamp(1, 5);
+    let rows = count.div_ceil(columns).clamp(1, 4);
+    let fg = theme["text"].as_str().unwrap_or("#fff");
+    let dim = theme["textDim"].as_str().unwrap_or("#aaa");
+    let mut content = vec![];
+    let grid_width = 16 + columns * (CELL + GAP) - GAP;
+    let width = if count == 0 || !state.message.is_empty() {
+        grid_width.max(184)
+    } else {
+        grid_width
+    };
+    if count == 0 {
+        content.push(label(tr("empty"), dim, 12));
+    } else {
+        let mut icons = vec![];
+        for item in &state.items {
+            let icon = if let Some(path) = &item.icon {
+                json!({"type":"image","src":path,"style":{"width":24,"height":24,"objectFit":"contain"}})
+            } else {
+                view(
+                    json!({"width":24,"height":24,"borderRadius":6,"alignItems":"center","justifyContent":"center","backgroundColor":theme["hover"]}),
+                    vec![label(
+                        json!(item.title.chars().next().unwrap_or('A').to_string()),
+                        fg,
+                        14,
+                    )],
+                )
+            };
+            let mut tile = action_view(
+                json!({"width":CELL,"height":CELL,"flexShrink":0,"alignItems":"center","justifyContent":"center","borderRadius":8,
+                "backgroundColor":if item.attention {theme["hover"].clone()} else {json!("transparent")}}),
+                vec![icon],
+                json!(["activate", item.id]),
+            );
+            // Reuse the renderer's delayed full-name bubble without adding
+            // another tooltip implementation or a timer for inactive icons.
+            tile["type"] = json!("fileTile");
+            tile["tooltip"] = json!(item.title);
+            tile["events"]["onContextMenu"] = json!(["menu", item.id]);
+            icons.push(tile);
+        }
+        content.push(json!({"type":"scroll","style":{"height":rows*(CELL+GAP)-GAP,"flex":0},"children":[
+            view(json!({"width":columns*(CELL+GAP)-GAP,"flexDirection":"row","flexWrap":"wrap","gap":GAP}),icons)
+        ]}));
+    }
+    if !state.message.is_empty() {
+        content.push(label(tr("failed"), dim, 11));
+    }
+    if let Some(key) = &panel.menu_key {
+        if let Some((menu_key, items)) = &state.menu {
+            if key == menu_key {
+                content.push(json!({"type":"contextMenu","absolute":true,"x":panel.x,"y":panel.y,"items":items}));
+            }
+        }
+    }
+    view(
+        json!({"position":"absolute","right":0,"top":28,"width":width,"padding":8,"gap":6,"borderRadius":12,
+        "backgroundColor":theme["panelBg"],"backdropFilter":format!("blur({}px)",theme["blur"].as_f64().unwrap_or(24.)),
+        "border":format!("1px solid {}",theme["windowBorder"].as_str().unwrap_or("#555")),"boxShadow":"0 8px 24px rgba(0,0,0,0.3)"}),
+        content,
+    )
+}
 fn request(v: Value) -> Result<Value> {
     let s = service().out.lock().map_err(|_| "unavailable")?.clone();
     let op = v["op"].as_str().unwrap_or("");
@@ -821,14 +889,10 @@ fn request(v: Value) -> Result<Value> {
  "toggle"=>{panel.open=!panel.open;panel.menu_key=None},"dismiss"=>{panel.open=false;panel.menu_key=None},"closeContext"=>panel.menu_key=None,
  "activate"|"menu"=>{let x=v["screenX"].as_i64().unwrap_or(0)as i32;let y=v["screenY"].as_i64().unwrap_or(0)as i32;let c=if a[0]=="activate" && !s.items.iter().any(|i|i.id==key&&i.only_menu){Command::Activate(key.into(),x,y)}else{panel.menu_key=Some(key.into());panel.x=v["screenX"].as_i64().unwrap_or(0)as i32;panel.y=v["screenY"].as_i64().unwrap_or(0)as i32;Command::Menu(key.into(),x,y)};let _=service().tx.try_send(c);},
  "menuEvent"=>{panel.menu_key=None;let _=service().tx.try_send(Command::Event(key.into(),a[2].as_i64().unwrap_or(0)as i32));},_=>{}}
- let t=&v["theme"];let fg=t["text"].as_str().unwrap_or("#fff");let dim=t["textDim"].as_str().unwrap_or("#aaa");let color=v["color"].as_str().unwrap_or(fg);
+ let t=&v["theme"];let fg=t["text"].as_str().unwrap_or("#fff");let color=v["color"].as_str().unwrap_or(fg);
  let mut dots=vec![];for row in 0..2{for col in 0..3{dots.push(view(json!({"position":"absolute","left":col*5,"top":row*5,"width":3,"height":3,"borderRadius":1,"backgroundColor":color}),vec![]));}}
  let button=action_view(json!({"height":22,"paddingHorizontal":8,"justifyContent":"center","alignItems":"center","flexDirection":"row","gap":5}),vec![view(json!({"width":13,"height":8}),dots),label(json!(s.items.len().to_string()),color,10)],json!(["toggle"]));
- let mut content=vec![view(json!({"flexDirection":"row","justifyContent":"space-between","alignItems":"center"}),vec![label(tr("title"),fg,13),json!({"type":"button","label":tr("close"),"action":["dismiss"]})])];
- if s.items.is_empty(){content.push(label(tr("empty"),dim,12));}else{content.push(label(tr("hint"),dim,11));let mut rows=vec![];for i in &s.items{let icon=if let Some(path)=&i.icon{json!({"type":"image","src":path,"style":{"width":24,"height":24,"objectFit":"contain"}})}else{view(json!({"width":24,"height":24,"borderRadius":6,"alignItems":"center","justifyContent":"center","backgroundColor":t["hover"]}),vec![label(json!(i.title.chars().next().unwrap_or('A').to_string()),fg,14)])};let mut title=label(json!(i.title),fg,12);title["style"]["flex"]=json!(1);title["style"]["minWidth"]=json!(0);title["style"]["whiteSpace"]=json!("nowrap");title["style"]["overflow"]=json!("hidden");title["style"]["textOverflow"]=json!("ellipsis");let mut row=action_view(json!({"flexDirection":"row","alignItems":"center","gap":10,"padding":9,"borderRadius":8,"backgroundColor":if i.attention{t["hover"].clone()}else{json!("transparent")}}),vec![icon,title,action_view(json!({"paddingHorizontal":8,"paddingVertical":4,"borderRadius":5,"backgroundColor":t["hover"]}),vec![label(json!("•••"),dim,12)],json!(["menu",i.id]))],json!(["activate",i.id]));row["events"]["onContextMenu"]=json!(["menu",i.id]);rows.push(row)}content.push(json!({"type":"scroll","style":{"height":(s.items.len()*44).clamp(44,300)},"children":rows}));}
- if !s.message.is_empty(){content.push(label(tr("failed"),dim,11))}
- if let Some(key)=&panel.menu_key{if let Some((menu_key,items))=&s.menu{if key==menu_key{content.push(json!({"type":"contextMenu","absolute":true,"x":panel.x,"y":panel.y,"items":items}));}}}
- let popup=if panel.open{view(json!({"position":"absolute","right":0,"top":28,"width":300,"padding":12,"gap":10,"borderRadius":14,"backgroundColor":t["panelBg"],"backdropFilter":format!("blur({}px)",t["blur"].as_f64().unwrap_or(24.)),"border":format!("1px solid {}",t["windowBorder"].as_str().unwrap_or("#555")),"boxShadow":"0 12px 32px rgba(0,0,0,0.35)"}),content)}else{Value::Null};
+ let popup=if panel.open{popup(panel,&s,t)}else{Value::Null};
  let result=json!({"button":button,"panel":popup,"open":panel.open,"context":panel.menu_key.is_some()});let encoded=result.to_string();if encoded==panel.previous{return Ok(Value::Null)}panel.previous=encoded;Ok(result)
  })
 }
