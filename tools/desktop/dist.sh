@@ -28,7 +28,7 @@ with tarfile.open(out, 'w:gz') as archive:
                  'tests', 'tools/desktop', 'tools/build-theme.mjs', 'tools/code-manifest.mjs', 'packaging/desktop',
                  'packaging/rpm', 'packaging/systemd', 'Makefile', 'package.json', 'package-lock.json',
                  'code-manifest.json', 'LICENSE', 'THIRD_PARTY.md', 'ORIGIN.md', 'README.md',
-                 'docs/STANDALONE.md', 'docs/COPR-UPDATES.md', 'docs/REPOSITORY.md', 'docs/RUST.md', 'docs/SHORTCUTS.md', 'docs/FILES.md']:
+                 'docs/STANDALONE.md', 'docs/COPR-UPDATES.md', 'docs/REPOSITORY.md', 'docs/RUST.md', 'docs/SHORTCUTS.md', 'docs/FILES.md', 'docs/FEDORA-NETWORK-TRAY.md']:
         archive.add(root / path, arcname=f'{name}/{path}', filter=select)
 print(out)
 PY

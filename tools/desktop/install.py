@@ -86,6 +86,7 @@ def install(prefix, libexecdir, destdir):
     copy(REPO / 'docs/COPR-UPDATES.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/COPR-UPDATES.md')
     copy(REPO / 'docs/REPOSITORY.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/REPOSITORY.md')
     copy(REPO / 'docs/RUST.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/RUST.md')
+    copy(REPO / 'docs/FEDORA-NETWORK-TRAY.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/FEDORA-NETWORK-TRAY.md')
     copy(REPO / 'docs/FILES.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/FILES.md')
     copy(REPO / 'docs/SHORTCUTS.md', stage / prefix.relative_to('/') / 'share/doc/axia-de/docs/SHORTCUTS.md')
     copy(REPO / 'server/src/bench/fonts/OFL.txt', stage / prefix.relative_to('/') / 'share/licenses/axia-de/OFL-Noto.txt')
