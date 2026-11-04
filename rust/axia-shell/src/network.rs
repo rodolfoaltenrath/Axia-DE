@@ -470,6 +470,9 @@ impl Panel {
         )];
         if !s.available {
             content.push(text(tr("unavailable"), dim, 12));
+            if self.compact {
+                content.push(button("allNetworks", json!(["settings"]), false));
+            }
             return view(json!({"gap":12}), content);
         }
         let mut header = vec![text(json!("Wi-Fi"), fg, 13)];
@@ -581,15 +584,31 @@ impl Panel {
             if let Some(detail) = selected_detail {
                 content.push(detail);
             }
-            if self.compact {
-                content.push(button("allNetworks", json!(["settings"]), false));
-            }
+        }
+        if self.compact {
+            content.push(button("allNetworks", json!(["settings"]), false));
         }
         view(json!({"gap":10}), content)
     }
 }
 fn request(v: Value) -> Result<Value> {
     let op = v["op"].as_str().unwrap_or("");
+    if op == "icon" {
+        // The always-visible icon needs only connection type and signal strength,
+        // not a clone of every discovered AP and saved connection.
+        let (kind, strength) = {
+            let s = service().snapshot.lock().map_err(|_| "unavailable")?;
+            (
+                s.kind.clone(),
+                s.wifi.as_ref().map(|n| n.strength).unwrap_or(0),
+            )
+        };
+        return Ok(glyph(
+            &kind,
+            strength,
+            v["color"].as_str().unwrap_or("#fff"),
+        ));
+    }
     let mut s = service()
         .snapshot
         .lock()
@@ -598,13 +617,6 @@ fn request(v: Value) -> Result<Value> {
     s.busy |= CONNECTING.load(std::sync::atomic::Ordering::Acquire);
     if op == "status" {
         return Ok(json!(s));
-    }
-    if op == "icon" {
-        return Ok(glyph(
-            &s.kind,
-            s.wifi.as_ref().map(|n| n.strength).unwrap_or(0),
-            v["color"].as_str().unwrap_or("#fff"),
-        ));
     }
     PANELS.with(|p| {
         let mut p = p.borrow_mut();
@@ -759,6 +771,38 @@ mod tests {
 #[cfg(test)]
 mod compact_tests {
     use super::*;
+    #[test]
+    fn network_settings_remain_reachable_without_an_active_wifi_radio() {
+        let mut p = Panel::default();
+        p.compact = true;
+        for s in [
+            Snapshot::default(), // NetworkManager unavailable
+            Snapshot {
+                available: true,
+                ..Snapshot::default()
+            }, // no Wi-Fi adapter
+            Snapshot {
+                available: true,
+                radios: vec!["radio".into()],
+                ..Snapshot::default()
+            }, // disabled
+            Snapshot {
+                available: true,
+                enabled: true,
+                radios: vec!["radio".into()],
+                ..Snapshot::default()
+            }, // rfkill
+        ] {
+            let tree = p.tree(&s, &json!({}));
+            let buttons: Vec<_> = tree["children"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|n| n["type"] == "button" && n["action"] == json!(["settings"]))
+                .collect();
+            assert_eq!(buttons.len(), 1, "settings must stay reachable: {s:?}");
+        }
+    }
     #[test]
     fn crowded_airwaves_keep_a_small_list_and_password_outside_the_scroll() {
         let mut s = Snapshot {
