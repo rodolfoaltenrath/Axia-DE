@@ -304,5 +304,10 @@
   "shortcuts.appWindows": "Ventanas de la app",
   "shortcuts.switchDesktop": "Cambiar de escritorio",
   "shortcuts.newDesktop": "Nuevo escritorio",
-  "shortcuts.closeDesktop": "Cerrar escritorio"
+  "shortcuts.closeDesktop": "Cerrar escritorio",
+  "tray.title": "Apps en segundo plano",
+  "tray.hint": "Clic para abrir · botón derecho para opciones",
+  "tray.close": "Cerrar",
+  "tray.empty": "No hay aplicaciones en la bandeja.",
+  "tray.failed": "No se pudo acceder a la aplicación. Inténtalo de nuevo."
 }

@@ -28,6 +28,11 @@ jobs:
           node server/tests/shortcut_profile_test.mjs
           node server/tests/motion_model_test.mjs
       - run: make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
+      - name: Rust network and background-app contracts
+        if: matrix.gpu == 1
+        run: |
+          dnf install -y python3-gobject-base dbus-daemon
+          dbus-run-session -- python3 tools/desktop/network-tray-check.py
       - name: Touchpad regression tests
         run: |
           make -C server build/tp-test

@@ -273,3 +273,6 @@ export { userVideoProblem, motionCodecs, MAX_SECONDS } from './motionmodel.js';
 export { lordosWallpapers, wallpaperSrc, wallpaperThumb, findWallpaper, DEFAULT_WALLPAPER, GREETER_WALLPAPER, WALLPAPER_CATEGORIES } from './wallpapers.js';
 export { appGroup, appMenuItems, runningApps, forceQuit, recentItems, storeUpdates, hideApp, hideOthers, toggleShowDesktop, appSettingsItem } from './appcontrol.js';
 export { windowMenuItems, moveResizeItems } from './windowmenu.js';
+
+export { RustNetworkPanel, NetworkConnectionIcon } from './network.jsx';
+export { BackgroundApps } from './tray.jsx';

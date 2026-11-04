@@ -1,7 +1,7 @@
-// Settings → Network: interfaces, Wi-Fi and VPN (our own WireGuard, OpenVPN). Reads the state without root
-// (lord.net, netlink) and makes changes through the administration helper (net-* actions). See docs/NETWORK.md.
+// Settings → Network. Fedora Wi-Fi uses the Rust NetworkManager panel shared
+// with quick settings. Interface counters and the older VPN UI retain their APIs.
 import {
-  View, Text, useTheme, useLocale, Button, Toggle, Segmented, TextInput,
+  View, Text, RustNetworkPanel, useTheme, useLocale, Button, Toggle, Segmented, TextInput,
   admin, fs, formatBytes, keyring, AutofillButton, spacing, typeScale, errorText, statusText,
 } from '@lordos/sdk';
 import { useEffect, useState } from 'react';
@@ -124,87 +124,8 @@ function InterfacePage({ name, net }) {
 
 // ---- Wi-Fi ----
 
-const bars = (dbm) => (dbm >= -55 ? '▂▄▆█' : dbm >= -67 ? '▂▄▆' : dbm >= -78 ? '▂▄' : '▂');
-
-function WifiPage({ net }) {
-  const t = useTheme();
-  const { t: tr } = useLocale();
-  const radios = net.ifs.filter((i) => i.type === 'wifi');
-  const [dev, setDev] = useState(radios[0]?.name || '');
-  const [list, setList] = useState([]);
-  const [scanning, setScanning] = useState(false);
-  const [pick, setPick] = useState(null);
-  const [pass, setPass] = useState('');
-  const [msg, setMsg] = useState(null);
-  const known = has() ? lord.net.wifiKnown() : [];
-  const cur = net.ifs.find((i) => i.name === dev);
-  const scan = () => {
-    if (!dev) return;
-    setScanning(true);
-    const found = [];
-    admin.run('net-wifi-scan', dev, (line) => { try { found.push(JSON.parse(line)); } catch (e) { /* text */ } }, { quiet: true })
-      .then(() => setList(found.sort((a, b) => b.signal - a.signal)), (e) => setMsg({ ok: false, text: e.message }))
-      .finally(() => setScanning(false));
-  };
-  useEffect(() => { scan(); }, [dev]);
-  useNetEvent((text) => {
-    const m = /^net wifi (\S+) (connected|disconnected|wrong-key|no-sae)\s?(.*)$/.exec(text);
-    if (!m || m[1] !== dev) return;
-    if (m[2] === 'connected') setMsg({ ok: true, text: tr('network.wifi.connected', { ssid: m[3] }) });
-    else if (m[2] === 'wrong-key') setMsg({ ok: false, text: tr('network.wifi.wrongKey') });
-    else if (m[2] === 'no-sae') setMsg({ ok: false, text: tr('network.wifi.noSae') });
-  });
-  if (!radios.length) return <Stack><Section title="Wi-Fi" footer={tr('network.wifi.none')} /></Stack>;
-  const connect = (n, password) => {
-    setPick(null);
-    setPass('');
-    // the password also goes to the session keyring (Passwords → Session keyring; docs/PASSWORDS.md)
-    if (password && n.ssid) keyring.set('settings', { service: `wifi:${n.ssid}`, secret: password, label: `Wi-Fi ${n.ssid}` }).catch(() => {});
-    run(setMsg, 'net-wifi-connect', `${dev}\n${n.ssid}\n${password || ''}`, tr('network.wifi.connecting', { ssid: n.ssid }));
-  };
-  const dim = { fontSize: typeScale.caption, color: t.textDim, whiteSpace: 'nowrap' };
-  return (
-    <Stack>
-      <Section title="Wi-Fi" accessory={(
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s }}>
-          {radios.length > 1 && <Segmented small value={dev} onChange={setDev} options={radios.map((r) => [r.name, r.name])} />}
-          <Button small label={scanning ? tr('network.wifi.scanning') : tr('network.wifi.scan')} onClick={() => !scanning && scan()} />
-          {cur?.up && <Button small label={tr('network.wifi.disconnect')} onClick={() => run(setMsg, 'net-wifi-disconnect', dev)} />}
-        </View>
-      )}>
-        {list.length === 0 ? <SettingRow label={scanning ? tr('network.wifi.scanning') : tr('network.wifi.noNetworks')} labelStyle={{ color: t.textDim }} /> : null}
-        {list.map((n, idx) => (
-          <View key={`${n.bssid}${idx}`}>
-            <SettingRow onClick={() => (n.security === 'open' || n.known ? connect(n, '') : setPick(n))}
-              icon={<Text style={{ width: 30, fontSize: typeScale.callout, color: t.accent, direction: 'ltr' }}>{bars(n.signal)}</Text>}
-              label={n.ssid || tr('network.wifi.hidden')} labelStyle={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>
-              {n.known && <Text style={dim}>{tr('network.wifi.saved')}</Text>}
-              <Text style={dim}>{n.security === 'open' ? tr('network.wifi.open') : n.security.toUpperCase()}</Text>
-              <Text style={{ ...dim, width: 64, textAlign: 'end', direction: 'ltr' }}>{`${n.signal} dBm`}</Text>
-            </SettingRow>
-            {pick === n && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s, paddingBottom: spacing.m }}>
-                <TextInput secure autoFocus value={pass} onChange={setPass} placeholder={tr('network.wifi.password')} onSubmit={() => connect(n, pass)}
-                  onCancel={() => setPick(null)} style={{ flex: 1 }} />
-                <AutofillButton app="settings" service={`wifi:${n.ssid}`} ssid={n.ssid} onFill={({ password }) => setPass(password || '')} />
-                <Button primary label={tr('network.wifi.join')} onClick={() => connect(n, pass)} />
-              </View>
-            )}
-          </View>
-        ))}
-      </Section>
-      <Message msg={msg} />
-      {known.length > 0 && (
-        <Section title={tr('network.wifi.known')}>
-          {known.map((k) => (
-            <SettingRow key={k.ssid} label={k.ssid}>
-              {admin.available() && <Button small label={tr('network.wifi.forget')} onClick={() => run(setMsg, 'net-wifi-forget', k.ssid)} />}
-            </SettingRow>
-          ))}
-        </Section>
-      )}
-    </Stack>
-  );
+function WifiPage() {
+  return <Stack><Section title="Wi-Fi"><RustNetworkPanel /></Section></Stack>;
 }
 
 // ---- VPN ----

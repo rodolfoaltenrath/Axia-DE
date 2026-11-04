@@ -42,6 +42,8 @@ Requires:       xkeyboard-config
 Requires:       libX11-common
 Requires:       tzdata
 Requires:       dnf5
+Requires:       NetworkManager
+Requires:       NetworkManager-wifi
 Requires:       udisks2
 Requires:       gvfs
 Requires:       gvfs-fuse

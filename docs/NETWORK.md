@@ -1,3 +1,7 @@
+> Fedora/Axia DE: see [Fedora network and background applications](FEDORA-NETWORK-TRAY.md).
+> The document below describes the historical LordOS networking stack, which is
+> not linked into the standalone Fedora desktop. Keep NetworkManager enabled.
+
 # Network and VPN in LordOS
 
 LordOS's networking is its own and runs directly on top of the kernel. It doesn't use NetworkManager, D-Bus, libnl, wg-quick or wireguard-tools. The code is in `server/src/net/` and has two sides:

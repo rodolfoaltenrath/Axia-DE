@@ -1,6 +1,6 @@
 // Top menu bar: L menu, active app, Window menu, keyboard layout,
 // Control Center and clock.
-import { View, Text, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems } from '@lordos/sdk';
+import { View, Text, BackgroundApps, NetworkConnectionIcon, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems } from '@lordos/sdk';
 import { useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';
 
@@ -112,8 +112,10 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
           <Label t={t}>{keyboard.label(keyboard.active())}</Label>
         </BarItem>
         <StatusItems color={t.menuText} />
+        <BackgroundApps color={t.menuText} />
         <PrivacyIndicators />
         <BarItem t={t} onClick={() => spotlight.toggle()}><Label t={t}>⌕</Label></BarItem>
+        <BarItem t={t} active={controlCenter} onClick={onControlCenter}><NetworkConnectionIcon color={t.menuText} /></BarItem>
         <BarItem t={t} active={controlCenter} onClick={onControlCenter}><ControlGlyph t={t} /></BarItem>
         <BarItem t={t}><Label t={t}>{clock}</Label></BarItem>
       </View>
