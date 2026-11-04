@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     ffi::{c_char, CStr, CString},
 };
-const OPEN_MS: f64 = 420.;
+const OPEN_MS: f64 = 220.;
 const LEAVE_MS: f64 = 300.;
 #[derive(Default)]
 struct Preview {
@@ -14,6 +14,7 @@ struct Preview {
     left: Option<f64>,
     open: bool,
     page: usize,
+    anchor: Option<(f64, f64)>,
     signatures: HashMap<i32, u64>,
     next_capture: f64,
     interval: f64,
@@ -71,6 +72,8 @@ impl Preview {
         // Keep side docks' panels inside the space between the Dock and the far edge.
         let x = number("x", ax + aw / 2.);
         let y = number("y", ay + ah - 80.);
+        // Hold the opening position as Dock magnification settles under the pointer.
+        let (x, y) = *self.anchor.get_or_insert((x, y));
         let room_w = if side == "left" {
             ax + aw - x - 12.
         } else if side == "right" {
@@ -116,9 +119,14 @@ impl Preview {
             y - height / 2.
         };
         self.signatures.retain(|node, _| {
-            cards
-                .iter()
-                .any(|c| c["node"].as_i64() == Some(*node as i64))
+            cards.iter().any(|c| {
+                c["node"].as_i64() == Some(*node as i64)
+                    || c["surface"]
+                        .as_i64()
+                        .filter(|s| *s > 0)
+                        .map(|s| s | 0x40000000)
+                        == Some(*node as i64)
+            })
         });
         json!({"open":true,"pending":false,"key":self.key,"cards":cards,"page":self.page,"pages":pages,
             "left":left.clamp(ax + 4., (ax + aw - width - 4.).max(ax + 4.)),
@@ -233,14 +241,31 @@ mod tests {
     fn delay_grace_and_switching_apps() {
         let mut s = Preview::default();
         assert_eq!(s.update(&input("a", false), 0.)["pending"], true);
-        assert_eq!(s.update(&input("a", false), 419.)["open"], false);
-        assert_eq!(s.update(&input("a", false), 420.)["open"], true);
+        assert_eq!(s.update(&input("a", false), 219.)["open"], false);
+        assert_eq!(s.update(&input("a", false), 220.)["open"], true);
         assert_eq!(s.update(&input("", false), 430.)["open"], true);
         assert_eq!(s.update(&input("", true), 600.)["open"], true);
         assert_eq!(s.update(&input("b", false), 610.)["open"], false);
         assert_eq!(s.update(&input("b", false), 1030.)["open"], true);
         s.update(&input("", false), 1040.);
         assert_eq!(s.update(&input("", false), 1340.)["open"], false);
+    }
+    #[test]
+    fn popup_stays_put_when_dock_shrinks_and_pointer_enters_preview() {
+        let mut s = Preview::default();
+        let mut v = input("a", false);
+        s.update(&v, 0.);
+        let first = s.update(&v, 230.);
+        v["x"] = json!(540.);
+        v["y"] = json!(560.);
+        let shrink = s.update(&v, 240.);
+        v["key"] = json!("");
+        v["inside"] = json!(true);
+        let enter = s.update(&v, 260.);
+        assert_eq!(first["left"], shrink["left"]);
+        assert_eq!(first["top"], shrink["top"]);
+        assert_eq!(first["left"], enter["left"]);
+        assert_eq!(first["top"], enter["top"]);
     }
     #[test]
     fn aggregate_budget_deduplicates_and_backs_off() {

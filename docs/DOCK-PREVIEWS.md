@@ -1,9 +1,10 @@
 # Live Dock previews
 
-In the default theme, hover over an open app for 420 ms to show its windows.
+In the default theme, hover over an open app for 220 ms to show its windows.
 Move into the panel to keep it open, click a window to focus it, or leave for
 300 ms to dismiss it. Escape and an outside click also close it. Paging keeps
 all windows accessible without making the panel wider than the display. Dock
+The panel holds its opening position while Dock magnification settles. Dock
 menus and dragging suppress the preview; auto-hide stays open while using it.
 
 The panel reuses `dockGlass`, including its light/dark tint, outline, blur and
@@ -29,7 +30,7 @@ full-resolution GPU screenshot is needed. Surface crops and subsurfaces are
 preserved. Native UI trees use the existing rasterizer at thumbnail scale.
 
 Previews do not synthesize frame callbacks: a minimized or suspended app can
-stop producing content. If its frame is unmounted, its icon and title are shown.
+stop producing content. Linux apps use their retained compositor surfaces even when minimized or their UI frames are unmounted; the last available frame remains visible when a client stops rendering. Native apps without a mounted frame keep the icon/title fallback.
 Protected windows show an icon, and protected descendant nodes are blacked out.
 No polling or capture timer remains once the panel and hover delay are closed.
 

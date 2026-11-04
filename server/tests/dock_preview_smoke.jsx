@@ -27,7 +27,7 @@ function Harness() {
 async function run() {
   check(source?.id && lord.wm.preview, 'native source and bridge exist');
   check(calls === 0, 'no capture work at rest');
-  switchHover(true); await sleep(260); check(!latest.open, 'hover delay prevents accidental popup');
+  switchHover(true); await sleep(150); check(!latest.open, 'hover delay prevents accidental popup');
   await sleep(600); check(latest.open && captures > 0, 'hover opens and captures real source');
   const before = captures; await sleep(600); check(captures > before, 'changed content produces live frames');
   check(lastSource === source.id, 'captures original window, never the panel');

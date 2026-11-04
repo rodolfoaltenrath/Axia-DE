@@ -274,3 +274,5 @@ export { BackgroundApps } from './tray.jsx';
 export { useDockPreviews } from './dockpreviews.jsx';
 
 export { SearchGlyph } from './searchglyph.jsx';
+
+export { BrightnessControl } from './brightness.jsx';

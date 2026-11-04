@@ -6,7 +6,7 @@
 // Layout: the arrangement on top, then the selected display's
 // settings in inset boxes, with the scale as "Larger text … More space" tiles.
 import {
-  View, Text, useTheme, useLocale, useSettings, Slider, Toggle, admin, useDisplays, applyDisplay, DisplayGlyph, addListener,
+  View, Text, useTheme, useLocale, useSettings, Slider, Toggle, BrightnessControl, useDisplays, applyDisplay, DisplayGlyph, addListener,
   arrangeDisplay, setDisplayMirror, setMainDisplay, setCaptureAllDisplays, typeScale, spacing,
   nightPrefs, nightActive, setNightManual, previewNight, nightTick, sunTimes, formatTime, Button,
   identifyDisplays, IDENTIFY_MS, displayNumbers, snapDisplay, resolveDrop, displayPlacementOk, SNAP_PREVIEW_PX,
@@ -213,31 +213,9 @@ function DisplayHeader({ cur, sizeLine, several, n, t, tr }) {
   );
 }
 
-function Brightness({ list }) {
-  const t = useTheme();
+function Brightness() {
   const { t: tr } = useLocale();
-  const [vals, setVals] = useState({});
-  const timer = useRef(0);
-  const [err, setErr] = useState('');
-  if (!list.length) return [<SettingRow key="none" label={tr('prefs.display.brightness')} hint={tr('prefs.display.noBacklight')} disabled />];
-  return list.map((b) => {
-    const v = vals[b.name] ?? b.value;
-    const set = (x) => {
-      const n = Math.max(1, Math.round(x));          // 0 turns some panels fully off
-      setVals((o) => ({ ...o, [b.name]: n }));
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => admin.run('display-brightness', `${b.name} ${n}`, undefined, { quiet: true }).then(() => setErr(''), (e) => setErr(e.message)), 120);
-    };
-    return (
-      <SettingRow key={b.name} label={tr('prefs.display.brightness')} hint={err || (list.length > 1 ? b.name : '')}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s, direction: 'ltr' }}>
-          <Text style={{ fontSize: 12, color: t.textDim }}>☼</Text>
-          <Slider value={v} min={0} max={b.max} width={180} onChange={set} />
-          <Text style={{ fontSize: 15, color: t.textDim }}>☀</Text>
-        </View>
-      </SettingRow>
-    );
-  });
+  return <SettingRow label={tr('prefs.display.brightness')}><BrightnessControl all /></SettingRow>;
 }
 
 function NightShift() {
@@ -333,7 +311,7 @@ export function DisplaysSettings() {
             <Toggle small on={!!cur.main} onChange={(on) => { if (on && !cur.main) setMainDisplay(cur.id); }} />
           </SettingRow>
         ) : null}
-        <Brightness list={d.backlight || []} />
+        <Brightness />
       </Section>
 
       <Section title={tr('prefs.display.scale')} footer={tr('prefs.display.scaleHint')}

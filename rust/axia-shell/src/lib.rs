@@ -7,6 +7,7 @@ mod wallpaper;
 mod motion;
 mod motion_store;
 mod power;
+mod brightness;
 mod network;
 mod network_bus;
 mod tray;

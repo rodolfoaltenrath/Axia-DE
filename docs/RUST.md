@@ -71,3 +71,21 @@ Rust possui o estado e descreve a interface; a ponte QuickJS e o adaptador de
 widgets preservam o runtime da DE. A implementação anterior do app e de
 `fsops.c` foi removida; consumidores C mantêm a ABI declarada em `fsops.h`.
 Veja [FILES.md](FILES.md) para arquitetura, limites e testes.
+
+## Brilho e previews da Dock
+
+`brightness.rs` identifica os controladores em `/sys/class/backlight` e aplica
+valores pela sessão do `systemd-logind` (`SetBrightness`). Não usa o helper
+administrativo antigo nem executa comandos externos. Uma thread recebe apenas
+o último valor pendente; nenhuma leitura de sysfs ou chamada D-Bus bloqueia a
+interface. O SDK agrupa movimentos do slider em 70 ms e consulta o estado apenas
+enquanto o painel ou a página de Ajustes estiverem abertos. Sem controlador
+compatível, o slider fica desativado, como em monitores de desktop sem backlight
+controlável por essa interface. Valores enviados ao hardware nunca chegam a zero.
+
+`dock_preview.rs` abre o painel após 220 ms e mantém a posição até fechar ou
+mudar de aplicativo. A captura de apps Linux usa diretamente as superfícies
+retidas no compositor, mesmo com a janela minimizada. Os limites de captura e
+a adaptação ao custo real continuam ativos, sem forçar o aplicativo a produzir
+novos quadros. Os testes privados de rede/bandeja também simulam o logind para
+validar o brilho e a recusa de permissões sem alterar o monitor real.

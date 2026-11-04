@@ -32,6 +32,40 @@ def main():
                   GLib.Variant('(su)', (NM, 4)), None, 0, 1000, None)
     records = set()
     failures = []
+    # The brightness service uses logind, never a root helper or the real backlight.
+    login = 'org.freedesktop.login1'
+    bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus',
+                  'org.freedesktop.DBus', 'RequestName',
+                  GLib.Variant('(su)', (login, 4)), None, 0, 1000, None)
+    def login_call(connection, sender, path, interface, method, args, invocation):
+        try:
+            values = args.unpack()
+            if method == 'GetSessionByPID':
+                assert values[0] > 0
+                records.add('brightness-session')
+                invocation.return_value(GLib.Variant('(o)', ('/org/freedesktop/login1/session/test',)))
+            elif method == 'SetBrightness':
+                assert values[:2] == ('backlight', 'intel_backlight')
+                if values[2] == 999:
+                    records.add('brightness-denied')
+                    invocation.return_dbus_error('org.freedesktop.DBus.Error.AccessDenied', 'fixture')
+                else:
+                    assert values[2] == 397
+                    records.add('brightness-write')
+                    invocation.return_value(None)
+            else:
+                raise AssertionError(method)
+        except Exception as error:
+            failures.append(f'{method}: {type(error).__name__}')
+            invocation.return_dbus_error('org.axia.Test.Failed', type(error).__name__)
+    login_xml = '''<node><interface name="org.freedesktop.login1.Manager">
+      <method name="GetSessionByPID"><arg type="u" direction="in"/><arg type="o" direction="out"/></method>
+      </interface><interface name="org.freedesktop.login1.Session">
+      <method name="SetBrightness"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="u" direction="in"/></method>
+      </interface></node>'''
+    login_info = Gio.DBusNodeInfo.new_for_xml(login_xml)
+    bus.register_object('/org/freedesktop/login1', login_info.interfaces[0], login_call, None, None)
+    bus.register_object('/org/freedesktop/login1/session/test', login_info.interfaces[1], login_call, None, None)
     registered = False
     wired = False
     ssid = list('Café: casa'.encode())
@@ -222,12 +256,12 @@ def main():
             process.kill()
         output = process.communicate()[0]
         print(output, end='')
-        expected = {'scan', 'toggle', 'saved-password-update', 'saved-activation', 'new-activation', 'denied', 'wired', 'unplug',
+        expected = {'brightness-session', 'brightness-write', 'brightness-denied', 'scan', 'toggle', 'saved-password-update', 'saved-activation', 'new-activation', 'denied', 'wired', 'unplug',
                     'tray-activate', 'tray-about-to-show', 'tray-menu-layout', 'tray-menu-event', 'tray-disconnect'}
         missing = expected - records
         if process.returncode or failures or missing:
             raise SystemExit(f'FAILED: exit={process.returncode}, errors={failures}, missing={sorted(missing)}')
-        print('Network and tray private-bus checks passed; host connectivity untouched.')
+        print('Network, tray and brightness private-bus checks passed; host settings untouched.')
 
 
 if __name__ == '__main__':

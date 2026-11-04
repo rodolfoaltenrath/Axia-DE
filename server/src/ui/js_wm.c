@@ -18,6 +18,7 @@
 #include "grab.h"
 #include "portal.h"
 #include "ui.h"
+#include "../wl/wl.h"
 #include <time.h>
 
 #include <math.h>
@@ -224,6 +225,37 @@ static JSValue f_thumbnail(JSContext *c,JSValueConst self,int argc,JSValueConst 
     return JS_NewBool(c,ok);
 }
 
+/* Capture the client's retained surface even when its frame is minimized/unmounted.
+ * This never maps a window or sends a configure/frame callback to the client. */
+static JSValue f_thumbnail_surface(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self; uint32_t handle=0; int32_t sid=0,target=0,w=0,h=0; int sw=0,sh=0;
+    if (argc<5 || JS_ToUint32(c,&handle,argv[0]) || JS_ToInt32(c,&sid,argv[1]) ||
+        JS_ToInt32(c,&target,argv[2]) || JS_ToInt32(c,&w,argv[3]) || JS_ToInt32(c,&h,argv[4])) return JS_FALSE;
+    Node *dst=node_get(target);
+    if (!dst || dst->type!=NODE_IMAGE || sid<=0 || sid>=0x40000000 || w<1 || h<1 || w>384 || h>256) return JS_FALSE;
+    if (!wl_preview_size(sid,&sw,&sh)) {
+        if (dst->img) {image_release(dst->img);dst->img=NULL;dst->paint_dirty=1;dst->gen++;ui.dirty=1;}
+        return JS_FALSE;
+    }
+    double now=preview_now();
+    uint64_t sig=wl_preview_generation(sid)^((uint64_t)(unsigned)w<<48)^((uint64_t)(unsigned)h<<32);
+    if (!axia_dock_preview_due(handle,sid|0x40000000,sig,now,!dst->img)) return JS_FALSE;
+    uint32_t *px=calloc((size_t)w*h,sizeof *px); int ok=0;
+    if (px) {
+        Canvas canvas;canvas_init(&canvas,px,w,h,w);canvas_clear(&canvas,0xff17171cu);
+        PaintView keep=paint_view;
+        float k=fminf((float)w/sw,(float)h/sh);
+        paint_view=(PaintView){0,0,k,(w-sw*k)*0.5f,(h-sh*k)*0.5f,keep.index};
+        wl_preview_paint(&canvas,sid,0,0,sw,sh,1);
+        paint_view=keep;
+        dst->img=image_argb(dst->img,w,h,px);
+        if (dst->img) {dst->paint_dirty=1;dst->gen++;ui.dirty=1;ok=1;}
+        free(px);
+    }
+    double end=preview_now();axia_dock_preview_done(handle,end-now,end);
+    return JS_NewBool(c,ok);
+}
+
 static const JSCFunctionListEntry portal_funcs[] = {
     JS_CFUNC_DEF("set", 1, f_portal_set),
     JS_CFUNC_DEF("pickResult", 2, f_portal_pick_result),
@@ -232,6 +264,7 @@ static const JSCFunctionListEntry portal_funcs[] = {
 static const JSCFunctionListEntry wm_funcs[] = {
     JS_CFUNC_DEF("preview", 1, f_preview),
     JS_CFUNC_DEF("thumbnail", 5, f_thumbnail),
+    JS_CFUNC_DEF("thumbnailSurface", 5, f_thumbnail_surface),
     JS_CFUNC_DEF("grab", 3, f_grab),
     JS_CFUNC_DEF("cancel", 0, f_cancel),
     JS_CFUNC_DEF("pointer", 0, f_pointer),
