@@ -27,7 +27,8 @@ export function useDockPreviews({ hit, anchor, area, position, disabled, theme }
       x: p.anchor?.x, y: p.anchor?.y, ...extra });
     if (!out) return;
     const firstOpen = out.open && !c.state?.open;
-    const signature = JSON.stringify(out);
+    // Remaining hover time only schedules work; it does not change anything on screen.
+    const signature = out.open ? JSON.stringify(out) : 'closed';
     if (signature !== c.signature) { c.signature = signature; c.state = out; setState(out); }
     if (out.open && capture) {
       // Round-robin; at most one capture per tick, with the real budget enforced in Rust.
@@ -41,7 +42,7 @@ export function useDockPreviews({ hit, anchor, area, position, disabled, theme }
       }
     }
     if (out.open || out.pending) {
-      if (!c.timer) c.timer = setTimeout(() => { c.timer = 0; poll.current?.('poll', {}, true); }, out.pending ? 30 : firstOpen ? 10 : 70);
+      if (!c.timer) c.timer = setTimeout(() => { c.timer = 0; poll.current?.('poll', {}, true); }, out.pending ? Math.max(1, Math.ceil(out.waitMs ?? 30)) : firstOpen ? 10 : 70);
     } else { clearTimeout(c.timer); c.timer = 0; }
   };
   poll.current = sync;

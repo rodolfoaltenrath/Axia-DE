@@ -83,7 +83,7 @@ enquanto o painel ou a página de Ajustes estiverem abertos. Sem controlador
 compatível, o slider fica desativado, como em monitores de desktop sem backlight
 controlável por essa interface. Valores enviados ao hardware nunca chegam a zero.
 
-`dock_preview.rs` abre o painel após 220 ms e mantém a posição até fechar ou
+`dock_preview.rs` abre o painel após 140 ms e mantém a posição até fechar ou
 mudar de aplicativo. A captura de apps Linux usa diretamente as superfícies
 retidas no compositor, mesmo com a janela minimizada. Os limites de captura e
 a adaptação ao custo real continuam ativos, sem forçar o aplicativo a produzir

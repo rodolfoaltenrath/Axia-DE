@@ -8,8 +8,11 @@ const check = (value, message) => { if (!value) throw new Error('dock preview sm
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const theme = { ...DEFAULT_TOKENS, dockBg: 'rgba(32,34,48,0.55)', dockBorder: 'rgba(255,255,255,0.2)', blur: 24 };
 let captures = 0, calls = 0, lastSource = 0, switchHover, latest, source;
+let hoverStarted = 0, firstImageMs = null, pendingRequests = 0;
+const originalPreview = lord.wm.preview;
+lord.wm.preview = (...args) => { const out = originalPreview(...args); if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++; return out; };
 const original = lord.wm.thumbnail;
-lord.wm.thumbnail = (...args) => { calls++; const ok = original(...args); if (ok) { captures++; lastSource = args[1]; } return ok; };
+lord.wm.thumbnail = (...args) => { calls++; const ok = original(...args); if (ok) { captures++; lastSource = args[1]; if (firstImageMs == null) firstImageMs = lord.now() - hoverStarted; } return ok; };
 configureWindows({ apps: [{ id: 'preview-test', name: 'Live preview' }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
 windows.set([{ id: 'preview-test', app: 'preview-test', title: 'Live preview', x: 50, y: 40, w: 600, h: 300 }]);
 function Harness() {
@@ -27,8 +30,11 @@ function Harness() {
 async function run() {
   check(source?.id && lord.wm.preview, 'native source and bridge exist');
   check(calls === 0, 'no capture work at rest');
-  switchHover(true); await sleep(150); check(!latest.open, 'hover delay prevents accidental popup');
+  hoverStarted = lord.now();
+  switchHover(true); await sleep(80); check(!latest.open, 'hover delay prevents accidental popup');
   await sleep(600); check(latest.open && captures > 0, 'hover opens and captures real source');
+  console.log('dock preview timing: ' + JSON.stringify({ firstImageMs, pendingRequests }));
+  check(pendingRequests <= 3, 'hover waits for its deadline without repeated polling');
   const before = captures; await sleep(600); check(captures > before, 'changed content produces live frames');
   check(lastSource === source.id, 'captures original window, never the panel');
   check(captures < 25, 'aggregate refresh remains bounded');

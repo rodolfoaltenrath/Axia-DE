@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     ffi::{c_char, CStr, CString},
 };
-const OPEN_MS: f64 = 220.;
+const OPEN_MS: f64 = 140.;
 const LEAVE_MS: f64 = 300.;
 #[derive(Default)]
 struct Preview {
@@ -21,27 +21,34 @@ struct Preview {
     cost: f64,
 }
 impl Preview {
+    fn clear_interaction(&mut self) {
+        // Opening another app must not bypass a slow GPU's aggregate cooldown.
+        *self = Self {
+            next_capture: self.next_capture,
+            interval: self.interval,
+            cost: self.cost,
+            ..Self::default()
+        };
+    }
     fn update(&mut self, v: &Value, now: f64) -> Value {
         if v["op"] == "dismiss" {
-            *self = Self::default();
+            self.clear_interaction();
             return json!({"open":false,"pending":false});
         }
         let key = v["key"].as_str().unwrap_or("");
         let inside = v["inside"].as_bool().unwrap_or(false);
         if !key.is_empty() {
             if self.key != key {
-                *self = Self {
-                    key: key.chars().take(1024).collect(),
-                    since: now,
-                    interval: 67.,
-                    ..Self::default()
-                };
+                self.clear_interaction();
+                self.key = key.chars().take(1024).collect();
+                self.since = now;
+                self.interval = self.interval.max(67.);
             }
             self.left = None;
         } else if !inside {
             let left = *self.left.get_or_insert(now);
             if !self.open || now - left >= LEAVE_MS {
-                *self = Self::default();
+                self.clear_interaction();
             }
         } else {
             self.left = None;
@@ -56,7 +63,7 @@ impl Preview {
             self.open = true;
         }
         if !self.open {
-            return json!({"open":false,"pending":true});
+            return json!({"open":false,"pending":true,"waitMs":(OPEN_MS-(now-self.since)).max(1.)});
         }
         let number = |key: &str, fallback: f64| {
             v[key]
@@ -241,14 +248,39 @@ mod tests {
     fn delay_grace_and_switching_apps() {
         let mut s = Preview::default();
         assert_eq!(s.update(&input("a", false), 0.)["pending"], true);
-        assert_eq!(s.update(&input("a", false), 219.)["open"], false);
-        assert_eq!(s.update(&input("a", false), 220.)["open"], true);
+        assert_eq!(s.update(&input("a", false), 139.)["open"], false);
+        assert_eq!(s.update(&input("a", false), 140.)["open"], true);
         assert_eq!(s.update(&input("", false), 430.)["open"], true);
         assert_eq!(s.update(&input("", true), 600.)["open"], true);
         assert_eq!(s.update(&input("b", false), 610.)["open"], false);
         assert_eq!(s.update(&input("b", false), 1030.)["open"], true);
         s.update(&input("", false), 1040.);
         assert_eq!(s.update(&input("", false), 1340.)["open"], false);
+    }
+    #[test]
+    fn hover_deadline_reports_remaining_time_and_cancels_without_capture() {
+        let mut s = Preview::default();
+        assert_eq!(s.update(&input("a", false), 0.)["waitMs"], 140.);
+        assert_eq!(s.update(&input("a", false), 37.)["waitMs"], 103.);
+        assert_eq!(s.update(&input("b", false), 38.)["waitMs"], 140.);
+        assert_eq!(s.update(&input("", false), 80.)["pending"], false);
+        assert!(!s.due(5, 1, 1000., true));
+    }
+    #[test]
+    fn capture_cooldown_survives_app_switch_and_dismissal() {
+        let mut s = Preview::default();
+        s.update(&input("a", false), 0.);
+        s.update(&input("a", false), 140.);
+        assert!(s.due(5, 1, 140., true));
+        s.done(20., 160.); // next capture cannot happen before 840 ms
+        s.update(&input("b", false), 170.);
+        assert_eq!(s.update(&input("b", false), 310.)["open"], true);
+        assert!(!s.due(6, 1, 310., true));
+        s.update(&json!({"op":"dismiss"}), 320.);
+        s.update(&input("c", false), 330.);
+        s.update(&input("c", false), 470.);
+        assert!(!s.due(7, 1, 470., true));
+        assert!(s.due(7, 1, 841., true));
     }
     #[test]
     fn popup_stays_put_when_dock_shrinks_and_pointer_enters_preview() {
