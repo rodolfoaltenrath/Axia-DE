@@ -95,6 +95,9 @@ networks plus the selected one if needed, in a scroll area capped at 160 px.
 The password form stays outside that list, and “All networks and settings”
 opens the full network settings. The general Control Center keeps appearance,
 sound and media; it no longer duplicates Wi-Fi, wallpaper or resource meters.
+The settings shortcut remains available with Wi-Fi disabled, blocked or absent,
+and while NetworkManager is unavailable. The always-visible connection icon
+reads only connection type and signal strength, without copying the AP list.
 
 The Rust tray publishes no button when no StatusNotifier application exists.
 Removing the last application also dismisses its open popup and context menu;
