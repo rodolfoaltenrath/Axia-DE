@@ -1,9 +1,9 @@
 # Live Dock previews
 
-In the default theme, hover over an open app for 220 ms to show its windows.
+In the default theme, hover over an open app for 140 ms to show its windows.
 Move into the panel to keep it open, click a window to focus it, or leave for
 300 ms to dismiss it. Escape and an outside click also close it. Paging keeps
-all windows accessible without making the panel wider than the display. Dock
+all windows accessible without making the panel wider than the display.
 The panel holds its opening position while Dock magnification settles. Dock
 menus and dragging suppress the preview; auto-hide stays open while using it.
 
@@ -11,13 +11,15 @@ The panel reuses `dockGlass`, including its light/dark tint, outline, blur and
 effects-disabled material. There is no separate approximation of that material.
 
 `rust/axia-shell/src/dock_preview.rs` owns hover timing, grace, layout, pagination,
-source signature tracking and the aggregate capture budget. The SDK binds window
+source signature tracking and the aggregate capture budget. Pending hover requests
+include the remaining delay so the SDK can wait once instead of polling. The SDK binds window
 metadata, input and native image handles to that policy. The C bridge only reads
 compositor objects and fills bounded node-owned images; it never captures the
 screen, writes PNG files, changes focus, configures clients or asks apps to render.
 
 Only the visible page is captured. A shared interval starts at 67 ms (at most
-15 captures/second across all cards), with round-robin selection. Changed node
+15 captures/second across all cards), with round-robin selection. App switches
+and dismissal preserve that cooldown, including backoff after slow captures. Changed node
 and committed surface generations invalidate thumbnails; unchanged content does
 not get repainted. Capture duration increases the interval to target roughly
 3% of one UI thread, capped at one second between captures. This is adaptive
