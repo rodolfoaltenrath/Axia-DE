@@ -54,7 +54,7 @@ function fitWidth(items, min) {
 // keys: this menu has the keyboard (a submenu takes it while it is open; onBack gives it back).
 // Every menu is drawn in the shell's popover layer (sdk/layers.js), above the Dock, the menu bar and
 // the windows wherever it is rendered from; its submenus go in the same layer, beside it.
-export function Menu({ x, y, items, onClose, anchor, width: minWidth = 220, above = false, sub = false, nodeRef, side = null, centered = false, onBack }) {
+export function Menu({ x, y, items, onClose, anchor, width: minWidth = 220, above = false, sub = false, nodeRef, side = null, centered = false, onBack, layer = 'popover' }) {
   const t = useTheme();
   const own = useRef(null);
   const ref = nodeRef || own;
@@ -144,5 +144,5 @@ export function Menu({ x, y, items, onClose, anchor, width: minWidth = 220, abov
       onBack={subMenu.keys ? () => setSubMenu(null) : undefined} />}
     </>
   );
-  return sub ? body : <Layer name="popover">{body}</Layer>;
+  return sub ? body : <Layer name={layer}>{body}</Layer>;
 }

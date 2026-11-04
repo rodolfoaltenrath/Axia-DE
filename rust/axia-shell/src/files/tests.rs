@@ -1653,3 +1653,144 @@ fn contextual_menu_only_contains_available_actions_in_compact_groups() {
     assert!(items.iter().any(|i| i["label"]["key"] == "files.menu.tags"
         && i["submenu"].as_array().is_some_and(|v| v.len() == 7)));
 }
+
+#[test]
+fn content_zoom_is_bounded_local_and_preserves_navigation_at_every_scale() {
+    let h = Home::new();
+    for n in 0..120 {
+        h.file(&format!("entry-{n:03}.txt"), "");
+    }
+    let (mut s, mut shared) = h.session(json!({}));
+    let other = Session::new(2, &json!({}), &mut shared).unwrap();
+    let side = s.side_width;
+    s.poll(&json!({"width":640,"height":400}), &shared);
+    for _ in 0..3 {
+        s.event(
+            &json!({"action":["wheel"],"ctrl":true,"deltaY":-12}),
+            &mut shared,
+        );
+    }
+    assert_eq!(s.zoom, 1.);
+    s.event(
+        &json!({"action":["wheel"],"ctrl":true,"deltaY":-12}),
+        &mut shared,
+    );
+    assert_eq!(s.zoom, 1.1);
+    assert_eq!(other.zoom, 1.);
+    assert_eq!(s.side_width, side);
+    for view in ["icons", "list", "columns", "gallery"] {
+        event(&mut s, &mut shared, "view", json!(view));
+        for scale in [0.75, 1., 1.5, 2.] {
+            event(&mut s, &mut shared, "zoom", json!(scale));
+            s.event(&json!({"action":["key"],"key":"End"}), &mut shared);
+            let selected = *s.tab().selected.first().unwrap();
+            assert_eq!(s.tab().entries[selected].name, "entry-119.txt");
+            fn find(v: &Value, index: usize) -> Option<&Value> {
+                if v["events"]["onClick"] == json!(["select", index]) {
+                    return Some(v);
+                }
+                v["children"]
+                    .as_array()?
+                    .iter()
+                    .find_map(|c| find(c, index))
+            }
+            let tree = s.render(&shared);
+            let cell = find(&tree, selected).expect("selected file stays materialized");
+            let bottom = cell["style"]["top"].as_f64().unwrap()
+                + cell["style"]["height"].as_f64().unwrap()
+                - s.tab().offset;
+            assert!(
+                bottom <= s.entry_height() + 0.01,
+                "last file remains inside viewport at {scale}"
+            );
+            assert_eq!(s.side_width, side);
+        }
+    }
+    event(&mut s, &mut shared, "zoom", json!(100.));
+    assert_eq!(s.zoom, 2.);
+    event(&mut s, &mut shared, "zoom", json!(0.01));
+    assert_eq!(s.zoom, 0.75);
+    s.event(
+        &json!({"action":["key"],"ctrl":true,"key":"0"}),
+        &mut shared,
+    );
+    assert_eq!(s.zoom, 1.);
+}
+
+#[test]
+fn zoom_preferences_are_debounced_and_restored_for_new_windows() {
+    let h = Home::new();
+    let (mut s, mut shared) = h.session(json!({}));
+    let file = h.path(".config/axia/files.json");
+    let before = fs::read(&file).ok();
+    s.event(
+        &json!({"action":["wheel"],"ctrl":true,"deltaY":-48}),
+        &mut shared,
+    );
+    assert_eq!(
+        fs::read(&file).ok(),
+        before,
+        "a wheel event must not write preferences immediately"
+    );
+    s.flush_zoom(&shared);
+    let saved: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+    assert_eq!(saved["contentZoom"], 1.1);
+    let restored = Session::new(2, &json!({}), &mut Shared::default()).unwrap();
+    assert_eq!(restored.zoom, 1.1);
+}
+
+#[test]
+fn long_filenames_keep_full_tooltip_and_use_explicit_ellipsis() {
+    let h = Home::new();
+    let name = "Uma fotografia com um nome bastante longo e acentuação — versão final.png";
+    h.file(name, "");
+    let (mut s, mut shared) = h.session(json!({}));
+    fn tile<'a>(v: &'a Value, name: &str) -> Option<&'a Value> {
+        if v["tooltip"] == name {
+            return Some(v);
+        }
+        v["children"].as_array()?.iter().find_map(|c| tile(c, name))
+    }
+    shared.preferences["showExtensions"] = json!(false);
+    for view in ["icons", "list"] {
+        event(&mut s, &mut shared, "view", json!(view));
+        let tree = s.render(&shared);
+        let cell = tile(&tree, name).unwrap();
+        assert_eq!(cell["type"], "fileTile");
+        let label = cell["children"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["type"] == "text")
+            .unwrap();
+        assert_eq!(label["style"]["textOverflow"], "ellipsis");
+        assert_eq!(
+            label["style"]["numberOfLines"],
+            if view == "icons" { 2 } else { 1 }
+        );
+        assert!(!label["text"].as_str().unwrap().ends_with(".png"));
+    }
+}
+
+#[test]
+fn file_picker_names_and_context_menus_use_the_dialog_layer() {
+    let h = Home::new();
+    h.file("An image with a long file name.txt", "");
+    let (mut s, mut shared) = h.session(json!({"mode":"open"}));
+    event(&mut s, &mut shared, "context", Value::Null);
+    fn nodes<'a>(v: &'a Value, kind: &str, out: &mut Vec<&'a Value>) {
+        if v["type"] == kind {
+            out.push(v);
+        }
+        for c in v["children"].as_array().into_iter().flatten() {
+            nodes(c, kind, out);
+        }
+    }
+    let tree = s.render(&shared);
+    let mut menus = Vec::new();
+    nodes(&tree, "contextMenu", &mut menus);
+    assert_eq!(menus[0]["layer"], "system");
+    let mut tiles = Vec::new();
+    nodes(&tree, "fileTile", &mut tiles);
+    assert!(tiles.iter().all(|v| v["tooltipLayer"] == "system"));
+}

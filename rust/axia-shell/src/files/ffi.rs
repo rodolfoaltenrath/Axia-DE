@@ -112,6 +112,7 @@ impl App {
             return json!({"error":"sys.badArgument"});
         };
         if op == "close" {
+            session.flush_zoom(&self.shared);
             self.sent.remove(&id);
             session
                 .generation

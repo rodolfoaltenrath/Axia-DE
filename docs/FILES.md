@@ -70,13 +70,18 @@ Open/Save and Cancel actions. Information, previews and confirmations stay withi
 the owning window, with scrollable content and actions accessible after resizing.
 Icon columns share the available width evenly, reserving 12 pixels for the
 scrollbar. Short windows use 100-pixel rows (110 in taller views), keeping the
-56-pixel icons and readable filenames while showing more content. Rendering,
+56-pixel icons at the default zoom and readable filenames while showing more content. Rendering,
 keyboard movement, scrolling and PDF requests use the same grid geometry.
 Rust response effects are queued independently of React rendering, so batched
 snapshots cannot drop an open, preview, mount or resource-release operation.
 Visible file rows, keyboard navigation and scrollbar movement share one Rust
 layout calculation, including gallery previews, search, errors and tab height.
 Ancestor columns are virtualized too, so large folders remain fully reachable.
+
+Long file names use a two-line ellipsis in Icons and a single-line ellipsis in List,
+columns and the sidebar. Hovering a file tile (including the icon) or sidebar row
+shows its complete name after a short delay. Tooltips are drawn outside clipped
+rows, remain inside the screen and are cleared on input, resizing or unmount.
 
 ## Everyday use
 
@@ -86,6 +91,14 @@ Ancestor columns are virtualized too, so large folders remain fully reachable.
   are not silently substituted.
 - Independent tabs, back/forward/up, direct folder navigation, favorites,
   hidden files, natural sorting and per-folder view preferences.
+- Ctrl+wheel changes content zoom from 75% to 200%; forward/up enlarges it.
+  Ctrl+0 restores 100%, and Ctrl++/Ctrl+- also adjust it. Icons, names, list rows
+  and ancestor columns scale together while the sidebar, toolbar and frame keep
+  their size. Touchpad deltas accumulate into steps, scroll positions are clamped
+  using the same layout as keyboard navigation, and thumbnails are reused.
+  Zoom is independent in existing windows and becomes the default for new ones.
+  Preferences are saved after a 700 ms quiet period or when closing a window,
+  rather than on every wheel event.
 - Icons, list, Miller columns and gallery views. Large directories materialize
   only visible rows plus an overscan buffer, rather than thousands of widgets.
 - Search filters the current listing while typing; Enter searches recursively.
