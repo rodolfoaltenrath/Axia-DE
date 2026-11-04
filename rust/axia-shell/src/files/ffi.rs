@@ -26,6 +26,16 @@ thread_local! {static APP:RefCell<App>=RefCell::new(App::default());}
 impl App {
     fn request(&mut self, args: &Value) -> Value {
         let op = args["op"].as_str().unwrap_or("");
+        if op == "externalPrepare" || op == "externalUris" {
+            return match if op == "externalPrepare" {
+                super::external::prepare(args)
+            } else {
+                super::external::uris(args)
+            } {
+                Ok(value) => value,
+                Err(error) => json!({"error":error}),
+            };
+        }
         if op == "icon" {
             return ui::icon(
                 args["name"].as_str().unwrap_or("files"),

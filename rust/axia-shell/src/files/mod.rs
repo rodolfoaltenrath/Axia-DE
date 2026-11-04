@@ -1,6 +1,7 @@
 //! Arquivos: one Rust application and filesystem service for browser and dialogs.
 mod address;
 mod compat;
+mod external;
 mod ffi;
 mod model;
 pub mod operations;

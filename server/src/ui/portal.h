@@ -7,6 +7,7 @@ int  portal_fd(void);                   /* for poll; -1 if absent */
 int  portal_wants_write(void);          /* there are unsent messages (POLLOUT) */
 void portal_dispatch(void);
 /* From JS (lord.portal.set): mode, accent (0..1), GNOME accent name and GTK button order. */
+void portal_pick_result(unsigned id, const char *const *uris, unsigned count);
 void portal_set(int dark, const double rgb[3], const char *accent_name, const char *button_layout);
 
 #endif

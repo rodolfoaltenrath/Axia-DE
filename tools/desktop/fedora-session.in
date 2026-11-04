@@ -69,7 +69,7 @@ def main():
     before = sockets(runtime)
     env = dict(os.environ, XDG_CURRENT_DESKTOP='Axia', XDG_SESSION_DESKTOP='axia',
                XDG_SESSION_TYPE='wayland', GDK_BACKEND='wayland', MOZ_ENABLE_WAYLAND='1',
-               DISPLAY='')
+               DISPLAY='', GTK_USE_PORTAL='1')
     initialize_user_dirs(env)
     server = subprocess.Popen(['@BINDIR@/axia-session'], env=env)
     helpers = []
@@ -90,7 +90,7 @@ def main():
                 env['WAYLAND_DISPLAY'] = sorted(new)[0]
                 env['DISPLAY'] = display
                 names = ['DISPLAY', 'WAYLAND_DISPLAY', 'XDG_CURRENT_DESKTOP', 'XDG_SESSION_DESKTOP',
-                         'XDG_SESSION_TYPE', 'GDK_BACKEND', 'MOZ_ENABLE_WAYLAND']
+                         'XDG_SESSION_TYPE', 'GDK_BACKEND', 'MOZ_ENABLE_WAYLAND', 'GTK_USE_PORTAL']
                 subprocess.run(['dbus-update-activation-environment', '--systemd', *names],
                                env=env, check=False, timeout=10)
                 agent = '/usr/libexec/polkit-mate-authentication-agent-1'

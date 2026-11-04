@@ -1622,3 +1622,34 @@ fn natural_order_matches_people_and_ignores_case_and_leading_zeros() {
         assert_eq!(super::model::natural_cmp(a, b), order, "{a} vs {b}");
     }
 }
+
+#[test]
+fn contextual_menu_only_contains_available_actions_in_compact_groups() {
+    let h = Home::new();
+    h.file("photo.png", "");
+    let (mut s, mut shared) = h.session(json!({}));
+    fn menu(v: &Value) -> Option<&Value> {
+        if v["type"] == "contextMenu" {
+            return Some(v);
+        }
+        v["children"].as_array()?.iter().find_map(menu)
+    }
+    event(&mut s, &mut shared, "context", Value::Null);
+    let tree = s.render(&shared);
+    let items = menu(&tree).unwrap()["items"].as_array().unwrap();
+    assert!(items.len() <= 10);
+    assert!(!items.iter().any(|i| i["action"][0] == "open"
+        || i["action"][0] == "copy"
+        || i["action"][0] == "paste"));
+    assert!(items.iter().any(|i| i["submenu"].is_array()));
+    assert!(items.iter().all(|i| i["disabled"] != true));
+    select(&mut s, &mut shared, "photo.png");
+    let index = *s.tab().selected.first().unwrap();
+    event(&mut s, &mut shared, "context", json!(index));
+    let tree = s.render(&shared);
+    let items = menu(&tree).unwrap()["items"].as_array().unwrap();
+    assert!(items.iter().any(|i| i["action"][0] == "open"));
+    assert!(!items.iter().any(|i| i["action"][0] == "newFolder"));
+    assert!(items.iter().any(|i| i["label"]["key"] == "files.menu.tags"
+        && i["submenu"].as_array().is_some_and(|v| v.len() == 7)));
+}

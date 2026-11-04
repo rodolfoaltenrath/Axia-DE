@@ -7,6 +7,7 @@
  * GSETTINGS_BACKEND=keyfile and writes those same keys to ~/.config/glib-2.0/settings/keyfile, which
  * GLib watches: GTK 3 also changes live (without dconf or running gsettings). */
 #include "portal.h"
+#include "portal_files.h"
 #include "../vault/dbus.h"
 
 #include <fnmatch.h>
@@ -142,6 +143,11 @@ static const char introspect_xml[] =
     "  <signal name=\"SettingChanged\"><arg type=\"s\" name=\"namespace\"/><arg type=\"s\" name=\"key\"/><arg type=\"v\" name=\"value\"/></signal>\n"
     "  <property name=\"version\" type=\"u\" access=\"read\"/>\n"
     " </interface>\n"
+    " <interface name=\"org.freedesktop.portal.FileChooser\">\n"
+    " <method name=\"OpenFile\"><arg type=\"s\" direction=\"in\"/><arg type=\"s\" direction=\"in\"/><arg type=\"a{sv}\" direction=\"in\"/><arg type=\"o\" direction=\"out\"/></method>\n"
+    " <method name=\"SaveFile\"><arg type=\"s\" direction=\"in\"/><arg type=\"s\" direction=\"in\"/><arg type=\"a{sv}\" direction=\"in\"/><arg type=\"o\" direction=\"out\"/></method>\n"
+    " <method name=\"SaveFiles\"><arg type=\"s\" direction=\"in\"/><arg type=\"s\" direction=\"in\"/><arg type=\"a{sv}\" direction=\"in\"/><arg type=\"o\" direction=\"out\"/></method>\n"
+    " <property name=\"version\" type=\"u\" access=\"read\"/></interface>\n"
     " <interface name=\"org.freedesktop.DBus.Properties\">\n"
     "  <method name=\"Get\"><arg type=\"s\" direction=\"in\"/><arg type=\"s\" direction=\"in\"/><arg type=\"v\" direction=\"out\"/></method>\n"
     "  <method name=\"GetAll\"><arg type=\"s\" direction=\"in\"/><arg type=\"a{sv}\" direction=\"out\"/></method>\n"
@@ -151,6 +157,7 @@ static const char introspect_xml[] =
     "</node>\n";
 
 static void handle(const DMsg *m) {
+    if (portal_files_handle(&conn,m)) return;
     if (m->type != DBUS_CALL || !m->member) return;
     const char *iface = m->iface ? m->iface : "", *mem = m->member;
     if (!strcmp(iface, "org.freedesktop.DBus.Peer") || (!iface[0] && !strcmp(mem, "Ping"))) {
@@ -182,21 +189,21 @@ static void handle(const DMsg *m) {
         DRd r;
         dr_init(&r, m);
         const char *pi = dr_str(&r, NULL);
-        if (r.err || strcmp(pi, IFACE)) { dbus_error(&conn, m, "org.freedesktop.DBus.Error.UnknownInterface", "interfaz"); return; }
+        if (r.err || (strcmp(pi, IFACE) && strcmp(pi,"org.freedesktop.portal.FileChooser"))) { dbus_error(&conn, m, "org.freedesktop.DBus.Error.UnknownInterface", "interfaz"); return; }
         DBuf b;
         dw_init(&b);
         if (!strcmp(mem, "Get")) {
             const char *prop = dr_str(&r, NULL);
             if (r.err || strcmp(prop, "version")) { dw_free(&b); dbus_error(&conn, m, "org.freedesktop.DBus.Error.UnknownProperty", "propiedad"); return; }
             dw_variant(&b, "u");
-            dw_u32(&b, 2);
+            dw_u32(&b, !strcmp(pi,IFACE)?2:3);
             dbus_reply(&conn, m, "v", &b);
         } else if (!strcmp(mem, "GetAll")) {
             size_t a = dw_arr_begin(&b, 8);
             dw_struct(&b);
             dw_str(&b, "version");
             dw_variant(&b, "u");
-            dw_u32(&b, 2);
+            dw_u32(&b, !strcmp(pi,IFACE)?2:3);
             dw_arr_end(&b, a);
             dbus_reply(&conn, m, "a{sv}", &b);
         } else dbus_error(&conn, m, "org.freedesktop.DBus.Error.PropertyReadOnly", "read-only");
@@ -234,6 +241,10 @@ int portal_start(void) {
         dbus_close(&conn);
         return -1;
     }
+    dw_init(&b);
+    dw_str(&b,"type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged'");
+    DHdr match={.type=DBUS_CALL,.path="/org/freedesktop/DBus",.iface="org.freedesktop.DBus",.member="AddMatch",.dest="org.freedesktop.DBus",.sig="s"};
+    dbus_send(&conn,&match,&b);dw_free(&b);
     up = 1;
     fprintf(stderr, "portal: org.freedesktop.portal.Settings on the session bus\n");
     return 0;
@@ -377,3 +388,5 @@ void portal_set(int is_dark, const double rgb[3], const char *accent_name, const
         keyfile_write();
     }
 }
+
+void portal_pick_result(unsigned id,const char *const *uris,unsigned count) {portal_files_result(id,uris,count);}
