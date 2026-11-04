@@ -115,6 +115,7 @@ exit 0
 %{_datadir}/wayland-sessions/axia.desktop
 %{_datadir}/doc/axia-de/
 %{_datadir}/licenses/axia-de/third_party/
+%{_datadir}/licenses/axia-de/rust/
 %{_datadir}/licenses/axia-de/OFL-Noto.txt
 %{_unitdir}/axia-update.service
 %{_unitdir}/axia-update.timer
