@@ -484,14 +484,12 @@ static int ff_path_ok(const char *p) {
 
 /* Every relative profile listed in each root's profiles.ini, once. Returns how many roots exist. */
 static int ff_each(const char *cfg, const char *home, FfFn fn, void *ctx) {
-    char roots[2][64];
-    const char *base[2] = { cfg, home };
-    snprintf(roots[0], sizeof roots[0], "mozilla/firefox");
-    snprintf(roots[1], sizeof roots[1], ".mozilla/firefox");
+    const char *roots[] = { "mozilla/firefox", ".mozilla/firefox", "librewolf/librewolf", "librewolf", ".librewolf" };
+    const char *base[] = { cfg, home, cfg, cfg, home };
     dev_t devs[MAX_PROFILES];
     ino_t inos[MAX_PROFILES];
     int seen = 0, found = 0;
-    for (int ri = 0; ri < 2; ri++) {
+    for (size_t ri = 0; ri < sizeof roots / sizeof roots[0]; ri++) {
         int rfd = open_root(base[ri], roots[ri]);
         if (rfd < 0) continue;
         found++;

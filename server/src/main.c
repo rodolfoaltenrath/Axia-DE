@@ -1149,10 +1149,11 @@ static int ui_js_hold, ui_js_ran;
 static Box paint_ui(Server *s) {
     Box d = { 0, 0, 0, 0 };
     if (!ui_js_hold && js_wants_frame()) { js_frame(now_ms()); ui_js_ran = 1; }
-    if (!ui.dirty) return d;
+    int relayout = ui.dirty;
+    if (!relayout && box_empty(ui.damage)) return d;
     ui.dirty = 0;
     double t0 = now_ms();
-    layout_root(ui.root, (float)s->W, (float)s->H);
+    if (relayout) layout_root(ui.root, (float)s->W, (float)s->H);
     double t1 = now_ms();
     if (paint_damage(ui.root)) d = ui.damage;
     ui.damage = (Box){ 0, 0, 0, 0 };
@@ -1714,7 +1715,7 @@ static int any_blocked(const Server *s) {
     return 0;
 }
 /* the next frame's CPU work that can be done ahead: UI damage, layout or a JS frame callback waiting */
-static int ahead_work(const Out *o) { return ui.dirty || js_wants_frame() || o->full || !box_empty(o->pend); }
+static int ahead_work(const Out *o) { return ui.dirty || !box_empty(ui.damage) || js_wants_frame() || o->full || !box_empty(o->pend); }
 static int can_prepare(const Server *s) {
     for (int i = 0; i < OUT_MAX; i++) {
         const Out *o = &s->out[i];
@@ -2488,7 +2489,7 @@ int main(int argc, char **argv) {
             static double unseen_tick;
             double since = now_ms() - unseen_tick;
             if (since >= 1000) { wl_frame_unseen((unsigned)now_ms()); unseen_tick = now_ms(); since = 0; }
-            if (wl_wants_frame() || ui.dirty) {
+            if (wl_wants_frame() || ui.dirty || !box_empty(ui.damage)) {
                 double left = 1000 - since;
                 if (delay < 0 || left < delay) delay = left;
             }
@@ -2498,7 +2499,7 @@ int main(int argc, char **argv) {
         /* the frame pipeline (fpipe.h): a prepared frame whose flip is done is submitted, and the next one may
          * be painted while every display waits for its flip */
         int ahead = !unseen && can_prepare(&s);
-        int wants = !unseen && (ui.dirty || s.cursor_dirty || js_wants_frame() || wl_wants_frame() || media_wants_frame() ||
+        int wants = !unseen && (ui.dirty || !box_empty(ui.damage) || s.cursor_dirty || js_wants_frame() || wl_wants_frame() || media_wants_frame() ||
                                 outs_have_work(&s) || prep_ready(&s) || ahead);
         /* no monitor, no vblank: 60 frames a second, or as fast as the fastest remote viewer's screen
          * (120, 144 Hz…) */

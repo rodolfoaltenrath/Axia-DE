@@ -63,6 +63,9 @@ void gpu_set_hooks(void (*lost)(void), void (*changed)(void));
 int  gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h);
 /* Bounded Dock readback: downsample on the GPU before copying pixels to the CPU. */
 int  gpu_tex_read_scaled(const GpuTex *t, uint32_t *px, int w, int h);
+/* Glass samples only the intersecting source rectangle, already downsampled. */
+int gpu_tex_read_region(const GpuTex *t, uint32_t *px, int w, int h,
+                        float x, float y, float width, float height);
 
 /* One frame: what changed in the UI canvas is uploaded, the layers are drawn and the flip is done.
  * draw_layer(0) = app windows (below the UI), draw_layer(1) = app menus and

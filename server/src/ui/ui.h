@@ -362,5 +362,6 @@ extern int paint_preview_mode;
 uint64_t paint_preview_signature(Node *root);
 int paint_preview(Canvas *c, Node *root);
 void  paint_capture(Canvas *c, Node *root);
+int paint_external_glass_damage(Box area);
 
 #endif

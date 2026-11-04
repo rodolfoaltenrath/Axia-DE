@@ -53,6 +53,7 @@
 #include "xwayland.h"
 #include "../outputs.h"
 #include "../cursor.h"
+#include "../glass_ffi.h"
 #include "ptrlock.h"
 #include "wl_input.h"
 #include "../gpu/gpu.h"
@@ -295,7 +296,12 @@ static void damage_node(Surf *s) {
     Surf *top = s;
     while (top->parent && top->role != R_TOPLEVEL) top = top->parent;
     /* GPU path: if only the content changed, presenting again is enough */
-    if (gpu_active() && (top->role == R_POPUP || top == fs_surf || hole_sig(s) == s->hole_sig)) { need_frame = 1; return; }
+    if (gpu_active() && (top->role == R_POPUP || top == fs_surf || hole_sig(s) == s->hole_sig)) {
+        need_frame = 1;
+        Node *n = top->node ? node_get(top->node) : NULL;
+        if (top != fs_surf && top->role == R_TOPLEVEL && n) paint_external_glass_damage(n->prev_box);
+        return;
+    }
     Node *n = top->node ? node_get(top->node) : NULL;
     if (n && n->prev_box.x1 > n->prev_box.x0) damage_add(n->prev_box);
     ui.dirty = 1;
@@ -2260,13 +2266,30 @@ void wl_tf_open_holes(Canvas *c) {
 
 /* CPU path: the buffer into its logical box (x, y, lw × lh) at the display's resolution. A client
  * that rendered at exactly that size (fractional-scale) is copied 1:1; others are scaled. */
+static int capture_failed;
+int wl_capture_error(int reset) {int error=capture_failed;if(reset)capture_failed=0;return error;}
 static void blit_surface(Canvas *c, const Surf *s, float x, float y, float sxk, float syk, float op) {
+    const uint32_t *pixels = s->px;
+    uint32_t *snapshot = NULL;
+    /* DMA-BUF windows have no CPU copy while the GPU is active. Read only on
+     * capture, without changing the retained buffer or the app's lifecycle.
+     * Dock previews keep their separate, bounded downsampling path. */
+    if (paint_capture_mode && !paint_preview_mode && s->dmabuf && gpu_active()) {
+        pixels = NULL;
+        if (s->w > 0 && s->h > 0 && s->w <= 8192 && s->h <= 8192) {
+            snapshot = malloc((size_t)s->w * s->h * 4);
+            if (snapshot && !gpu_tex_read(dm_tex(s->dmabuf), snapshot, s->w, s->h)) pixels = snapshot;
+        }
+        if (!pixels) capture_failed = 1;
+    }
+    if (!pixels) { free(snapshot); return; }
     float sx, sy, sw, sh;
     source_rect(s, &sx, &sy, &sw, &sh);
     float dx = PVX(x), dy = PVY(y), dw = s->lw * paint_view.k * sxk, dh = s->lh * paint_view.k * syk;
     if (sx == 0 && sy == 0 && sw == (float)s->w && sh == (float)s->h && fabsf(dw - sw) < 0.5f && fabsf(dh - sh) < 0.5f)
-        canvas_blit(c, s->px, s->w, s->h, (int)lroundf(dx), (int)lroundf(dy), 0, op, s->opaque);
-    else canvas_blit_scaled(c, s->px, s->w, s->w, s->h, sx, sy, sw, sh, dx, dy, dw, dh, op, s->opaque);
+        canvas_blit(c, pixels, s->w, s->h, (int)lroundf(dx), (int)lroundf(dy), 0, op, s->opaque);
+    else canvas_blit_scaled(c, pixels, s->w, s->w, s->h, sx, sy, sw, sh, dx, dy, dw, dh, op, s->opaque);
+    free(snapshot);
 }
 
 static void paint_tree(Canvas *c, Surf *s, float x, float y, float op, Rect clip) {
@@ -2298,7 +2321,7 @@ static void paint_tree(Canvas *c, Surf *s, float x, float y, float op, Rect clip
             canvas_set_clip(c, old);
         }
         s->hole_sig = hole_sig(s);
-    } else if (s->px) blit_surface(c, s, x, y, 1, 1, op);
+    } else if (s->content) blit_surface(c, s, x, y, 1, 1, op);
     for (int i = 0; i < s->nkids; i++) paint_tree(c, s->kids[i], x + s->kids[i]->sx, y + s->kids[i]->sy, op, clip);
 }
 
@@ -2386,10 +2409,10 @@ void wl_preview_paint(Canvas *c,int id,float x,float y,float w,float h,float op)
 void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, float op) {
     Surf *s = find(id);
     if (!s || s->role != R_TOPLEVEL) return;
-    s->node = node;
+    if (!paint_capture_mode) s->node = node;
     int iw = (int)(w + 0.5f), ih = (int)(h + 0.5f);
     /* the theme's frame decides the size: if it changed, the app is asked (except in fullscreen) */
-    if (s->mapped && s != fs_surf && iw > 16 && ih > 16 && (iw != s->conf_w || ih != s->conf_h)) {
+    if (!paint_capture_mode && s->mapped && s != fs_surf && iw > 16 && ih > 16 && (iw != s->conf_w || ih != s->conf_h)) {
         s->conf_w = iw;
         s->conf_h = ih;
         send_toplevel_configure(s);
@@ -2429,6 +2452,53 @@ static GpuTex *surface_tex(Surf *s) {
         s->tex_dirty = 0;
     }
     return s->tex;
+}
+
+static uint64_t glass_hash(uint64_t h,const void *p,size_t n) {
+    const unsigned char *b=p;
+    for(size_t i=0;i<n;i++)h=(h^b[i])*1099511628211ull;
+    return h;
+}
+
+/* A small crop of the GPU layers below this glass node. Rust caches the result
+ * by frame/geometry and mixes it with the premultiplied UI before blurring. */
+static uint64_t glass_backdrop(int x0,int y0,int x1,int y1,int step,int w,int h,uint32_t *pixels) {
+    if (!gpu_active() || paint_capture_mode || paint_preview_mode || step<1 || w<1 || h<1 || (size_t)w*h>262144) return 0;
+    Rect area={x0,y0,x1,y1};
+    uint64_t key=1469598103934665603ull;int hits=0;
+    unsigned generation=gpu_generation();
+    key=glass_hash(key,&generation,sizeof generation);
+    key=glass_hash(key,&paint_view,sizeof paint_view);
+    Canvas under;
+    if(pixels){canvas_init(&under,pixels,w,h,w);canvas_clear(&under,0);}
+    for(int i=0;i<ndraws[0];i++) {
+        const Draw *d=&draws[0][i];Surf *s=find(d->sid);
+        if(!s || !s->content || s->w<1 || s->h<1)continue;
+        float dx=PVX(d->x),dy=PVY(d->y),dw=s->lw*d->sx*paint_view.k,dh=s->lh*d->sy*paint_view.k;
+        if(dw<=0 || dh<=0 || d->op<=0.004f)continue;
+        Rect box=rect_and(area,rect_and(phys_rect(d->clip),(Rect){(int)floorf(dx),(int)floorf(dy),(int)ceilf(dx+dw),(int)ceilf(dy+dh)}));
+        if(box.x1<=box.x0 || box.y1<=box.y0)continue;
+        hits++;
+        key=glass_hash(key,d,sizeof *d);
+        key=glass_hash(key,&s->preview_gen,sizeof s->preview_gen);
+        key=glass_hash(key,&s->w,sizeof s->w);key=glass_hash(key,&s->h,sizeof s->h);
+        if(!pixels)continue;
+        int ix0=(box.x0-x0)/step,iy0=(box.y0-y0)/step;
+        int ix1=(box.x1-x0+step-1)/step,iy1=(box.y1-y0+step-1)/step;
+        if(ix1>w)ix1=w;
+        if(iy1>h)iy1=h;
+        int rw=ix1-ix0,rh=iy1-iy0;
+        float sx,sy,sw,sh;source_rect(s,&sx,&sy,&sw,&sh);
+        uint32_t *sample=malloc((size_t)rw*rh*4);
+        GpuTex *tex=surface_tex(s);
+        int result=sample?gpu_tex_read_region(tex,sample,rw,rh,
+            sx+(x0+ix0*step-dx)*sw/dw,sy+(y0+iy0*step-dy)*sh/dh,
+            rw*step*sw/dw,rh*step*sh/dh):-1;
+        if(result){free(sample);return 0;}
+        canvas_blit(&under,sample,rw,rh,ix0,iy0,0,d->op,s->opaque);
+        free(sample);
+    }
+    return hits?(key?key:1):0;
 }
 
 static void draw_surface(Surf *s, float x, float y, float dw, float dh, Rect clip, float op) {
@@ -2488,13 +2558,20 @@ void wl_gpu_draw_layer(int layer) {
 }
 
 /* CPU path: fullscreen and its menus are copied over the already built frame. */
+static void paint_cpu_tree(Canvas *out, Surf *s, float x, float y, float sx, float sy) {
+    if (s->content) blit_surface(out,s,x,y,sx,sy,1);
+    for (int i=0;i<s->nkids;i++) {
+        Surf *child=s->kids[i];
+        paint_cpu_tree(out,child,x+child->sx*sx,y+child->sy*sy,sx,sy);
+    }
+}
 void wl_paint_fullscreen(Canvas *out) {
     if (paint_capture_mode && fs_surf && fs_surf->content && node_protected(fs_surf->node)) {
         canvas_set_clip(out, (Rect){ 0, 0, out->w, out->h });
         canvas_clear(out, 0x000000);                /* protected fullscreen: black in the capture */
         return;
     }
-    if (!fs_surf || !fs_surf->content || !fs_surf->px) return;
+    if (!fs_surf || !fs_surf->content || (!fs_surf->px && !(paint_capture_mode && fs_surf->dmabuf))) return;
     float x, y, sx, sy, fx, fy, fw, fh;
     fs_box(&x, &y, &sx, &sy);
     fs_rect(&fx, &fy, &fw, &fh);
@@ -2503,7 +2580,7 @@ void wl_paint_fullscreen(Canvas *out) {
     if (fx >= vx1 || fy >= vy1 || fx + fw <= paint_view.x || fy + fh <= paint_view.y) return;
     Rect oc = out->clip;
     canvas_set_clip(out, rect_and(oc, (Rect){ (int)floorf(PVX(fx)), (int)floorf(PVY(fy)), (int)ceilf(PVX(fx + fw)), (int)ceilf(PVY(fy + fh)) }));
-    blit_surface(out, fs_surf, x, y, sx, sy, 1);
+    paint_cpu_tree(out, fs_surf, x, y, sx, sy);
     canvas_set_clip(out, oc);
     for (int i = 0; i < npopups; i++) {
         float px, py;
@@ -3539,6 +3616,7 @@ int wl_count(void) {
 /* ---- startup and loop ---- */
 
 int wl_start(void) {
+    axia_glass_set_backdrop(glass_backdrop);
     if (!getenv("XDG_RUNTIME_DIR")) {
         char dir[64];
         snprintf(dir, sizeof dir, "/run/user/%d", (int)getuid());
@@ -3594,6 +3672,7 @@ int wl_start(void) {
 }
 
 void wl_stop(void) {
+    axia_glass_set_backdrop(NULL);
     if (!dpy) return;
     xwl_stop();
     wl_display_destroy_clients(dpy);
