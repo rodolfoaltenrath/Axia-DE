@@ -466,6 +466,7 @@ export const wm = {
   // marked node, maximized, or no button held): the theme can continue with its own JS drag.
   // edges as in xdg_toplevel.resize: 1 top, 2 bottom, 4 left, 8 right (5 = top-left…).
   frameRef,
+  previewNode: (id) => frameNodes.get(id)?.node || 0,
   beginMove: (id) => beginGrab(id, 0),
   beginResize: (id, edges) => beginGrab(id, edges & 15),
   // LordBench's desktop scene (apps/sysinfo/scene.jsx): axia-server moves the window along a figure of

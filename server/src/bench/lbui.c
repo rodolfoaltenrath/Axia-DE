@@ -533,3 +533,8 @@ double lb_shape(int threads, double secs) {
     for (int i = 0; i < threads; i++) if (j.ms[i] > 0) rate += j.runs[i] * 1000.0 / j.ms[i];
     return rate;
 }
+
+uint64_t term_preview_generation(int id) { (void)id; return 0; }
+uint64_t media_preview_generation(int id) { (void)id; return 0; }
+uint64_t wl_preview_generation(int id) { (void)id; return 0; }
+void wl_preview_paint(Canvas *c,int id,float x,float y,float w,float h,float op) { (void)c;(void)id;(void)x;(void)y;(void)w;(void)h;(void)op; }

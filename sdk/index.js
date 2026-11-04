@@ -276,3 +276,5 @@ export { windowMenuItems, moveResizeItems } from './windowmenu.js';
 
 export { RustNetworkPanel, NetworkConnectionIcon } from './network.jsx';
 export { BackgroundApps } from './tray.jsx';
+
+export { useDockPreviews } from './dockpreviews.jsx';

@@ -88,7 +88,7 @@ static int skip_ancestor(const Node *n) {
 
 static void paint_node(Canvas *c, Node *n, float opacity) {
     if (n->type == NODE_RAW || n->s.display_none) return;
-    if (layer_paint(c, n, opacity)) return;
+    if (!paint_preview_mode && layer_paint(c, n, opacity)) return;
     if (n->own_tf && n->id != tf_self && tf_paint(c, n, opacity)) return;
     const Style *s = &n->s;
     float op = n->id == tf_unit ? 1 : opacity * s->opacity;
@@ -168,7 +168,10 @@ static void paint_node(Canvas *c, Node *n, float opacity) {
         } else PROF(3, image_draw(c, n->img, ix, iy, iw, ih, (s->radius - bw) * k, s->object_fit, op));
     }
     if (n->type == NODE_TERM) term_paint(c, n->term, ix, iy, iw, ih, op);
-    if (n->type == NODE_SURFACE) wl_paint(c, n->term, n->id, lix, liy, liw, lih, op);
+    if (n->type == NODE_SURFACE) {
+        if (paint_preview_mode) wl_preview_paint(c,n->term,lix,liy,liw,lih,op);
+        else wl_paint(c, n->term, n->id, lix, liy, liw, lih, op);
+    }
     if (n->type == NODE_MEDIA) media_paint(c, n->term, n->id, ix, iy, iw, ih, (s->radius - bw) * k, op);
     /* text is clipped to its box: a label outside the clip (a list row scrolled away) isn't laid out */
     if (n->type == NODE_TEXT && (s->color >> 24) && x < c->clip.x1 && x + w > c->clip.x0 && y < c->clip.y1 && y + h > c->clip.y0) {
@@ -2112,4 +2115,33 @@ static Node *hit(Node *n, float x, float y) {
 
 Node *hit_test(Node *root, float x, float y) {
     return root ? hit(root, x, y) : NULL;
+}
+
+/* A small independent canvas, never a screen capture or a second window tree. */
+int paint_preview_mode;
+static uint64_t preview_hash(Node *n, unsigned *budget) {
+    if (!n || !*budget) return 0;
+    --*budget;
+    uint64_t h=((uint64_t)n->id << 32) ^ n->gen ^ (uint64_t)n->protect;
+    if (n->type==NODE_SURFACE) h ^= wl_preview_generation(n->term);
+    if (n->type==NODE_TERM) h ^= term_preview_generation(n->term);
+    if (n->type==NODE_MEDIA) h ^= media_preview_generation(n->term);
+    for (Node *c=n->first;c && *budget;c=c->next) h=h*1099511628211ull ^ preview_hash(c,budget);
+    return h;
+}
+uint64_t paint_preview_signature(Node *root) { unsigned budget=8192; return preview_hash(root,&budget); }
+int paint_preview(Canvas *c, Node *root) {
+    if (!root || root->w<1 || root->h<1 || root->s.display_none || paint_preview_mode) return 0;
+    PaintView keep=paint_view;
+    int ks=skip_until, kr=skip_reached, kc=paint_cull, kt=tf_self, ku=tf_unit, km=paint_capture_mode;
+    paint_view=(PaintView){root->ax,root->ay,fminf((float)c->w/root->w,(float)c->h/root->h),0,0,keep.index};
+    paint_view.dx=(c->w-root->w*paint_view.k)*0.5f;
+    paint_view.dy=(c->h-root->h*paint_view.k)*0.5f;
+    skip_until=skip_reached=0;paint_cull=0;tf_self=tf_unit=root->id;
+    paint_capture_mode=paint_preview_mode=1;
+    canvas_clear(c,0xff17171cu);
+    paint_node(c,root,1);
+    paint_preview_mode=0;paint_capture_mode=km;
+    skip_until=ks;skip_reached=kr;paint_cull=kc;tf_self=kt;tf_unit=ku;paint_view=keep;
+    return 1;
 }

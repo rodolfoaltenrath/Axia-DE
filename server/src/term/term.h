@@ -165,6 +165,7 @@ typedef struct Term {
     int view;                   /* lines scrolled back (0 = live) */
     uint8_t *dirty;
     int all_dirty;
+    uint64_t preview_gen;
     uint32_t events;
     double sync_until;
     int focused;
@@ -323,5 +324,7 @@ int      term_fallback_font(int i);                 /* -1 at the end of the list
 void     term_metrics(const TermProfile *p, float *cw, float *ch, float *baseline);
 void     term_profile_defaults(TermProfile *p);
 size_t   base64_decode(const char *in, size_t n, uint8_t *out);
+
+uint64_t term_preview_generation(int id);
 
 #endif

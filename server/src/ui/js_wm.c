@@ -17,6 +17,8 @@
 #include "js_wm.h"
 #include "grab.h"
 #include "portal.h"
+#include "ui.h"
+#include <time.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -179,12 +181,57 @@ void js_portal_close(unsigned id) {
     JS_FreeValue(c,fn);JS_FreeValue(c,g);
 }
 
+/* Rust owns hover timing, paging and the aggregate capture budget. This bridge
+ * only validates native handles and paints into a node-owned, bounded image. */
+extern char *axia_dock_preview_request(const char *, double);
+extern void axia_dock_preview_reset(void);
+extern void axia_dock_preview_free(char *);
+extern int axia_dock_preview_due(uint32_t, int, uint64_t, double, int);
+extern void axia_dock_preview_done(uint32_t, double, double);
+static double preview_now(void) { struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);return ts.tv_sec*1000.+ts.tv_nsec/1e6; }
+static JSValue f_preview(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self;if (!argc) return JS_NULL;
+    size_t len=0;const char *input=JS_ToCStringLen(c,&len,argv[0]);if (!input) return JS_EXCEPTION;
+    if (len>131072 || memchr(input,0,len)) {JS_FreeCString(c,input);return JS_ThrowRangeError(c,"invalid preview request");}
+    char *result=axia_dock_preview_request(input,preview_now());JS_FreeCString(c,input);
+    if (!result) return JS_ThrowOutOfMemory(c);
+    JSValue out=JS_ParseJSON(c,result,strlen(result),"<dock-preview>");axia_dock_preview_free(result);return out;
+}
+static JSValue f_thumbnail(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self;uint32_t handle=0;int32_t source=0,target=0,w=0,h=0;
+    if (argc<5 || JS_ToUint32(c,&handle,argv[0]) || JS_ToInt32(c,&source,argv[1]) ||
+        JS_ToInt32(c,&target,argv[2]) || JS_ToInt32(c,&w,argv[3]) || JS_ToInt32(c,&h,argv[4])) return JS_FALSE;
+    Node *n=node_get(source), *dst=node_get(target);
+    if (!n || !dst || dst->type!=NODE_IMAGE || w<1 || h<1 || w>384 || h>256 || n->s.display_none) return JS_FALSE;
+    for (Node *p=dst;p;p=p->parent) if (p==n) return JS_FALSE; /* never capture our own preview */
+    for (Node *p=n;p;p=p->parent) if (p->protect) {
+        if (dst->img) { image_release(dst->img);dst->img=NULL;dst->paint_dirty=1;dst->gen++;ui.dirty=1; } return JS_FALSE;
+    }
+    double now=preview_now();
+    uint64_t sig=paint_preview_signature(n) ^ ((uint64_t)(unsigned)w<<48) ^ ((uint64_t)(unsigned)h<<32);
+    if (!axia_dock_preview_due(handle,source,sig,now,!dst->img)) return JS_FALSE;
+    uint32_t *px=calloc((size_t)w*h,sizeof *px);
+    int ok=0;
+    if (px) {
+        Canvas canvas;canvas_init(&canvas,px,w,h,w);
+        if (paint_preview(&canvas,n)) {
+            dst->img=image_argb(dst->img,w,h,px);
+            if (dst->img) {dst->paint_dirty=1;dst->gen++;ui.dirty=1;ok=1;}
+        }
+        free(px);
+    }
+    double end=preview_now();axia_dock_preview_done(handle,end-now,end);
+    return JS_NewBool(c,ok);
+}
+
 static const JSCFunctionListEntry portal_funcs[] = {
     JS_CFUNC_DEF("set", 1, f_portal_set),
     JS_CFUNC_DEF("pickResult", 2, f_portal_pick_result),
 };
 
 static const JSCFunctionListEntry wm_funcs[] = {
+    JS_CFUNC_DEF("preview", 1, f_preview),
+    JS_CFUNC_DEF("thumbnail", 5, f_thumbnail),
     JS_CFUNC_DEF("grab", 3, f_grab),
     JS_CFUNC_DEF("cancel", 0, f_cancel),
     JS_CFUNC_DEF("pointer", 0, f_pointer),
@@ -192,6 +239,7 @@ static const JSCFunctionListEntry wm_funcs[] = {
 };
 
 void js_wm_register(JSContext *c, JSValue lord) {
+    axia_dock_preview_reset();
     wctx = c;
     JSValue o = JS_NewObject(c);
     JS_SetPropertyFunctionList(c, o, wm_funcs, sizeof wm_funcs / sizeof wm_funcs[0]);

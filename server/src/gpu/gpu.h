@@ -61,6 +61,8 @@ void gpu_set_hooks(void (*lost)(void), void (*changed)(void));
 /* Reads a texture back as premultiplied ARGB pixels (t->w × t->h, rows top to bottom), for the
  * last good frame of a dmabuf window when the GPU goes away. 0 on success. */
 int  gpu_tex_read(const GpuTex *t, uint32_t *px, int w, int h);
+/* Bounded Dock readback: downsample on the GPU before copying pixels to the CPU. */
+int  gpu_tex_read_scaled(const GpuTex *t, uint32_t *px, int w, int h);
 
 /* One frame: what changed in the UI canvas is uploaded, the layers are drawn and the flip is done.
  * draw_layer(0) = app windows (below the UI), draw_layer(1) = app menus and
