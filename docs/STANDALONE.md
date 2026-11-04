@@ -23,7 +23,7 @@ O fork incorpora o LordOS **0.8.7-beta**, até o commit `ab8afcb835422723518308e
 
 Desktops virtuais, Overview, restauração de janelas, as melhorias do compositor e os novos aplicativos acompanham essa base. A loja usa o layout atualizado, mas encaminha pacotes do sistema ao gerenciador da distribuição; o catálogo APT e seus instaladores não entram nos bundles do desktop.
 
-Os helpers de Cleaner, descoberta de rede, LordBench e informações de hardware são instalados junto ao compositor. O cliente RDP/VNC é opcional no build local: `sudo dnf install freerdp-devel` habilita sua compilação; o RPM inclui essa dependência de build. O build de LordBench também precisa de `xz` (`sudo dnf install xz`). A leitura das bibliotecas pelo sandbox contempla `/usr/lib64` e `/lib64`, usados pelo Fedora.
+Os helpers de descoberta de rede, LordBench e informações de hardware são instalados junto ao compositor. O cliente RDP/VNC é opcional no build local: `sudo dnf install freerdp-devel` habilita sua compilação; o RPM inclui essa dependência de build. O build de LordBench também precisa de `xz` (`sudo dnf install xz`). A leitura das bibliotecas pelo sandbox contempla `/usr/lib64` e `/lib64`, usados pelo Fedora.
 
 Os recursos novos que exigem o helper administrativo do LordOS continuam indisponíveis: montagem privilegiada de compartilhamentos SMB/NFS, limpeza de arquivos do sistema, download do catálogo de vídeos de fundo e alterações no login da distribuição. Vídeos próprios para o desktop conservam os requisitos de GPU e decodificação por hardware do upstream; FFmpeg continua opcional no build.
 

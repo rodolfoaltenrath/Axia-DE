@@ -26,7 +26,6 @@ const ARGS = {
   settings: { section: text, page: text },
   monitor: { tab: text, disk: text },
   disks: { disk: text },
-  cleaner: { section: text },
   help: { article: text },
   notes: { slug: text },
   files: { path, place: text, view: text },

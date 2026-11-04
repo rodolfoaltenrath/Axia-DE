@@ -7,7 +7,7 @@ import { useTheme } from './theme.js';
 import { Overlay } from './layers.js';
 const request = (value) => lord.net?.tray ? lord.net.tray(JSON.stringify(value)) : null;
 const colors = (t) => Object.fromEntries(['text', 'textDim', 'accent', 'hover', 'panelBg', 'windowBorder', 'blur'].map((k) => [k, t[k]]));
-export function BackgroundApps({ color }) {
+export function BackgroundApps({ color, onOpen }) {
   const theme = useTheme(), current = useRef({ theme, color });
   current.current = { theme, color };
   const id = useRef(null), button = useRef(null), panel = useRef(null);
@@ -20,6 +20,7 @@ export function BackgroundApps({ color }) {
   };
   const send = (action, event) => {
     event?.stopPropagation?.();
+    if (action?.[0] === 'toggle' && !latest.current?.open) onOpen?.();
     update('action', { action, screenX: event?.x || 0, screenY: event?.y || 0 });
   };
   useEffect(() => {
@@ -35,7 +36,7 @@ export function BackgroundApps({ color }) {
     const keys = addListener('keydown', (e) => { if (e.key === 'Escape') send(['dismiss']); });
     return () => { off(); keys(); };
   }, [state?.open]);
-  if (!state) return null;
+  if (!state?.button) return null;
   return h(View, { ref: button }, h(RustWidget, { node: state.button, send }),
     state.panel ? h(Overlay, { anchor: button }, h(View, { ref: panel }, h(RustWidget, { node: state.panel, send }))) : null);
 }

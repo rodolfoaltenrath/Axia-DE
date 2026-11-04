@@ -55,7 +55,6 @@ import { startVideo } from './video.js';
 export { browserFrameResult, browserFrameState, browserTabsInTitlebar, setBrowserTabsInTitlebar } from './browserframe.js';   // docs/WAYLAND.md
 import { startBrowserFrame } from './browserframe.js';
 import { startNetStatus } from './netstatus.jsx';
-import { startCleanerStatus } from './cleanerstatus.jsx';
 export { errorText, statusText, codeError, parseCode } from './errors.js';
 export { logs } from './logs.js';
 export { AxiaLogo, AxiaGlyph, AxiaWordmark } from './logo.js';
@@ -120,10 +119,6 @@ export { lan } from './lan.js';                                  // Files → Ne
 export { smart, smartSummaries, useSmartSummaries, diskTempLimit, diskAlertPrefs, setDiskAlerts } from './smart.js';
 export { parseSmartctl, prettyAttrName, ATTR_KEYS, HEALTH_RANK } from './smartparse.js';
 export { backup, useBackup, backupStatus } from './backup.js';   // Backups (docs/SYSTEM.md)
-export { cleaner } from './cleaner.js';   // Cleaner (docs/CLEANER-ARCHITECTURE.md)
-export { statusWord } from './cleanerstatus.jsx';
-export { cleanerPalette, CLEANER_THEMES } from './cleanertheme.js';
-export { oldKernels, kernelPlanOk } from './oldkernels.js';
 export { lordosUpdate, restartNeeded, updatePrefs, setUpdatePrefs, UPDATE_DEFAULTS } from './updates.js';   // updating LordOS in place (docs/UPDATES.md)
 // Store → Discover, "Suggested for your computer": packages for the detected hardware (docs/PACKAGES.md)
 export { suggestions, refreshSuggestions, reevaluate as reevaluateSuggestions, dismissSuggestion, markSuggestionsSeen, unseenSuggestions } from './suggestions.js';
@@ -223,7 +218,6 @@ export function startShell(element) {
   startDiskWatch();                     // notices when a disk gets too hot or its health gets worse
   startVideo();                         // browser video without hardware decoding (video.js, docs/VIDEO.md)
   startBrowserFrame();                  // "Browsers: tabs in the title bar" left for Chromium to quit (browserframe.js)
-  startCleanerStatus();                 // Cleaner's still item by the clock; its panel reads only while open
   startNetStatus();                     // (0.8.5) the menu bar's network item and the blocklists' daily update
   startOsk();                           // the on-screen keyboard (osk.js, docs/ON-SCREEN-KEYBOARD.md)
   registerStatusItem('osk', OskStatus, 6);
@@ -274,7 +268,9 @@ export { lordosWallpapers, wallpaperSrc, wallpaperThumb, findWallpaper, DEFAULT_
 export { appGroup, appMenuItems, runningApps, forceQuit, recentItems, storeUpdates, hideApp, hideOthers, toggleShowDesktop, appSettingsItem } from './appcontrol.js';
 export { windowMenuItems, moveResizeItems } from './windowmenu.js';
 
-export { RustNetworkPanel, NetworkConnectionIcon } from './network.jsx';
+export { RustNetworkPanel, NetworkConnectionIcon, NetworkPopover } from './network.jsx';
 export { BackgroundApps } from './tray.jsx';
 
 export { useDockPreviews } from './dockpreviews.jsx';
+
+export { SearchGlyph } from './searchglyph.jsx';

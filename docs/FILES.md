@@ -13,8 +13,8 @@ choosers share one Rust implementation in `rust/axia-shell/src/files/`.
   toolbars, file views, menus, information, previews and confirmations.
 - `operations.rs`, `policy.rs` and `trash.rs` implement copy/move/rename,
   permissions, bounded directory walks and freedesktop Trash. `compat.rs`
-  retains `fsops.h`'s C ABI for existing desktop consumers (including Cleaner
-  and backup). The previous `server/src/fsops.c` implementation was removed.
+  retains `fsops.h`'s C ABI for existing desktop consumers such as
+  backup. The previous `server/src/fsops.c` implementation was removed.
 - `thumbnails.rs` generates thumbnails lazily, outside the interface thread.
 - `udisks.rs` implements bounded, asynchronous mount/unmount/safe removal over
   the system UDisks2 D-Bus service, with polkit authorization. It unmounts all

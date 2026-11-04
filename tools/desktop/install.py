@@ -9,7 +9,7 @@ import shutil
 REPO = Path(__file__).resolve().parents[2]
 DESKTOP_BINARIES = (
     'axia-server', 'axia-vault', 'axia-maild', 'axia-doc', 'axia-media',
-    'axia-clean', 'axia-lan', 'axia-rdesk', 'axia-bench', 'axia-dl',
+    'axia-lan', 'axia-rdesk', 'axia-bench', 'axia-dl',
     'axia-sysreport', 'axia-fetch', 'axia-testbench',
 )
 
@@ -49,7 +49,7 @@ def install(prefix, libexecdir, destdir):
         src = REPO / 'server/build' / name
         if src.is_file():
             copy(src, target / 'bin' / name, 0o755)
-    for name in ['fonts', 'locales', 'shell', 'icons', 'brand', 'monitor', 'help', 'wallpapers', 'gtk', 'store', 'cleaner', 'hwreport', 'fw', 'browser']:
+    for name in ['fonts', 'locales', 'shell', 'icons', 'brand', 'monitor', 'help', 'wallpapers', 'gtk', 'store', 'hwreport', 'fw', 'browser']:
         shutil.copytree(REPO / 'assets' / name, target / 'assets' / name, dirs_exist_ok=True)
     copy(REPO / 'assets/app-host.bundle.js', target / 'assets/app-host.bundle.js')
     shutil.copytree(REPO / 'assets/sysapps', target / 'assets/sysapps', dirs_exist_ok=True)

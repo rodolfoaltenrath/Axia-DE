@@ -58,7 +58,7 @@ def main():
     for symbol in ['pkg_act_install', 'pkg_act_update', 'install_act_run', 'net_act_restore',
                    'act_langpack', 'js_pkg_register', 'js_imager_register', 'pin_load',
                    'pkg_act_source_add', 'hw_act_wallpaper_get', 'share_act_mount',
-                   'clean_act_apt', 'ssh_act_root']:
+                   'clean_act_apt', 'js_clean_register', 'clean_start', 'ssh_act_root']:
         assert symbol not in symbols, f'OS component linked: {symbol}'
     assert 'libseat_open_seat' in symbols, 'desktop must use a host seat backend'
     manifest = json.loads((REPO / 'code-manifest.json').read_text())
@@ -76,9 +76,10 @@ def main():
         staged = Path(tmp) / 'usr/libexec/axia'
         assert set(p.name for p in (staged / 'bin').iterdir()) == {
             name for name in DESKTOP_BINARIES if (REPO / 'server/build' / name).is_file()}
-        for name in ['axia-clean', 'axia-lan', 'axia-bench', 'axia-sysreport', 'axia-testbench']:
+        for name in ['axia-lan', 'axia-bench', 'axia-sysreport', 'axia-testbench']:
             assert (staged / 'bin' / name).is_file(), f'missing desktop helper: {name}'
-        assert (staged / 'assets/cleaner').is_dir()
+        assert not (staged / 'assets/cleaner').exists()
+        assert not (staged / 'bin/axia-clean').exists()
         assert (Path(tmp) / 'usr/share/licenses/axia-de/OFL-Noto.txt').is_file()
         assert not (Path(tmp) / 'etc').exists()
         assert not (Path(tmp) / 'usr/lib/systemd').exists()

@@ -129,5 +129,6 @@
   "quick.failed": "Could not connect. Check the network and try again.",
   "quick.busy": "Wait for the current operation to finish.",
   "quick.gone": "The network is out of range. Search again.",
+  "quick.allNetworks": "All networks and settings…",
   "quick.scanFailed": "Could not refresh networks. Try again shortly."
 }

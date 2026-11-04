@@ -63,7 +63,6 @@ like React Native but on top of our display server.
 | `server/src/testbench/` | **0.8.5** | Test Bench (`axia-testbench`): a Wayland client that checks the display server from the outside (frame timing, presentation, keyboard, pointer, protocols, an optional GLES 3D view) (see `BENCHMARK.md`, `RESULTS.md`) |
 | `server/src/tls/`, `server/src/pkg/sources_admin.c`, `apt/catalog.json` | **0.8.5** | The package engine's HTTPS (the sandboxed relay `lord-tls`), the signed featured banner, and vendor APT repositories from LordOS's catalog added and removed by the closed `pkg-source-add`/`pkg-source-remove` actions (Store → Artificial Intelligence and Commercial; see `PACKAGES.md`, `UPDATES.md`) |
 | `server/src/lan/`, `js_lan.c`, `sdk/lan.js`, `apps/files/network.jsx` | **0.8.7** | Files → Network: a bounded pass over the LAN (mDNS, ports 445 and 2049 at most 30 connections a second) on a thread of axia-server, its answers read by the sandboxed helper `axia-lan`; SMB and NFS shares mounted by the kernel's clients through the closed `share-mount` action (see `FILES.md`) |
-| `server/src/clean/`, `js_clean.c`, `sdk/cleaner.js`, `apps/cleaner` | **0.8.7** | Cleaner: a read-only scan in the sandboxed helper `axia-clean`, then a plan the user confirms, run by axia-server (see `CLEANER-ARCHITECTURE.md`) |
 | `server/src/rdesk/`, `js_rdesk.c`, `sdk/remotedesk.jsx`, `apps/remote-desk` | **0.8.7** | Remote Desk: RDP and VNC in the sandboxed helper `axia-rdesk`, drawn by the engine as a media node (see `FILES.md`, "Remote desktop") |
 | `server/src/mail/`, `js_mail.c`, `sdk/{mail,calendar,contacts}.js`, `apps/{mail,calendar,contacts,reminders}` | **M9** | Mail, Calendar, Contacts and Reminders (each app an isolated process since 0.8.2): the sandboxed helper `axia-maild` (IMAP with IDLE/CONDSTORE, SMTP, CalDAV/CardDAV, OpenSSL) with no sockets of its own — `axia-server` connects only to configured servers and hands it the fd; own MIME, HTML sanitizer, iCalendar, vCard and XML parsers (see `MAIL.md`) |
 | `server/src/backup/`, `js_backup.c`, `sdk/backup.js`, `apps/backup` | **M9** | Backups: hard-link snapshots in a axia-server thread (nice 19, idle I/O), hourly/daily/weekly retention, optional encryption with the vendored Monocypher; no root and no `admin.c` actions (see `SYSTEM.md`) |
@@ -98,7 +97,7 @@ Besides the kernel and libc, only these are allowed:
 | `libxkbcommon`       | XKB keyboard layouts (M5) and what Wayland apps require (M6) | system    |
 | Mesa: `libgbm`, `libEGL`, `libGLESv2` | GPU composition and dmabuf buffers from apps (games); optional: without a 3D GPU or without the `-dev` packages it builds and runs without Mesa (approved by the user on 2026-10-16, see `GPU.md`) | system |
 | QuickJS              | ES2023 JavaScript engine, ~1 MB, written in C                  | vendored|
-| `stb_truetype`, `stb_image` | fonts and images (`axia-server`, `axia-doc`, `axia-maild`, and `axia-clean` for similar images); public domain, a single header | vendored|
+| `stb_truetype`, `stb_image` | fonts and images (`axia-server`, `axia-doc`, and `axia-maild`); public domain, a single header | vendored|
 | `stb_image_write`    | PNG for the remote desktop's lossless refresh of still areas and cursor images (`lord-sessiond`), and images written by the `axia-doc` and `axia-maild` helpers; public domain | vendored|
 | OpenSSL (`libssl`, `libcrypto`) | TLS. **Only four binaries link it directly** (`axia-rdesk` also loads it, through libfreerdp): `lord-sessiond` (remote desktop on the LAN, `REMOTE.md`), `axia-maild` (IMAP/SMTP/CalDAV/CardDAV, certificates checked against the system CA store, `MAIL.md`) and, since 0.8.5, `axia-dl` (the blocklist downloads, sandboxed, no sockets of its own, `FIREWALL.md` "Blocklists") and `lord-tls` (the package engine's HTTPS, sandboxed, `PACKAGES.md` "HTTPS"). Never `axia-server` | system |
 | FreeRDP (`libfreerdp3`, `libfreerdp-client3`, `libwinpr3`) | RDP in the sandboxed `axia-rdesk` (0.8.7, `FILES.md`, "Remote desktop"); its client library only for shared folders | system |
@@ -171,12 +170,6 @@ Besides `axia-server`, these programs and helpers run (root services, then sandb
   its own); it lives for one download job, gets each list's already-connected socket, speaks TLS
   and one HTTP GET with a size limit, parses the list strictly and returns normalized lines in a
   sealed memfd. See `FIREWALL.md`, "Blocklists".
-
-- **`axia-clean`** (0.8.7): Cleaner's read-only scanner. Same rules as `axia-doc` (fixed path, no
-  arguments, minimal environment, `sandbox_apply_helper` in scope `lordos-cleaner` before reading anything, and it
-  refuses to run without Landlock). It gets each root as an opened folder over SCM_RIGHTS, walks with `openat2` and
-  `statx`, and answers with records axia-server validates. It writes nothing. For similar images it also decodes pictures
-  (`stb_image`, PNG, JPEG, GIF and BMP), the only decoding in Cleaner and never in `axia-server`. See `CLEANER-ARCHITECTURE.md`.
 
 - **`axia-lan`** (0.8.7): reads what the local network answers for Files → Network. Same rules as
   `axia-dl` (fixed path, no arguments, minimal environment, `sandbox_apply_helper` before anything is read), no

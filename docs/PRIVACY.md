@@ -250,21 +250,12 @@ sandbox-test net: 14/14      the same, but an AF_INET socket opens (network perm
 sandbox-test helper: 17/17   see "Helpers" below
 ```
 
-## Cleaner's delete
-
-Cleaner is the only place in LordOS that deletes a file outside the Trash (approved by the maintainer on 2026-10-30;
-`CLEANER-SECURITY.md`). It runs in `axia-server` as the session user, only for a file a scan found under a `regenerable`
-rule's fixed root, from a plan the user confirmed, with a confirmation that says it can't be undone. JS can't name a path,
-`lord.fs` gained nothing, and the scans stay on this machine. Its history keeps counts and sizes, never a path. Three closed
-admin actions clean the operating system's own files, for administrators (`clean-journal`, `clean-apt-cache`, `clean-var-tmp`).
-
 ## Decoding helpers: `sandbox_apply_helper`
 
 A single sandbox for all of LordOS, no copies: the helpers that decode untrusted data
 (`axia-media`: video, photos, camera; `axia-doc`: Poppler and libarchive; and the other helpers:
 `axia-maild`, `axia-vault`, since 0.8.7 the network reader `axia-lan`, since 0.8.5 the blocklist downloader `axia-dl` and the package
-engine's TLS relay `lord-tls`, since 0.8.6 LordBench's `axia-bench`, and since 0.8.7 Cleaner's
-scanner `axia-clean` and Remote Desk's `axia-rdesk`) use
+engine's TLS relay `lord-tls`, since 0.8.6 LordBench's `axia-bench`, and since 0.8.7 Remote Desk's `axia-rdesk`) use
 `sandbox_apply_helper(const SandboxHelperCfg *cfg)` from `server/src/sec/sandbox.h`:
 
 ```c
