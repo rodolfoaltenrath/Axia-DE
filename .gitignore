@@ -18,6 +18,8 @@ tests/switcher-smoke.bundle.js
 assets/sysapps/
 assets/locales/*.tgz
 logs/
+# Vendored crates must stay complete: Cargo checks every file offline.
+!rust/vendor/**/logs/
 /code-manifest.json
 /code-manifest.sig
 *.rpm
