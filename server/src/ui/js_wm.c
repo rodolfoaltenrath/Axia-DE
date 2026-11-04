@@ -128,8 +128,60 @@ static JSValue f_portal_set(JSContext *c, JSValueConst t, int argc, JSValueConst
     return JS_TRUE;
 }
 
+static JSValue f_portal_pick_result(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    uint32_t id=0, count=0;
+    if (argc<2 || JS_ToUint32(c,&id,argv[0]) || !JS_IsArray(c,argv[1])) return JS_FALSE;
+    JSValue length=JS_GetPropertyStr(c,argv[1],"length");
+    JS_ToUint32(c,&count,length); JS_FreeValue(c,length);
+    if (count>1024) return JS_FALSE;
+    const char **uris=calloc(count?count:1,sizeof *uris);
+    if (!uris) return JS_ThrowOutOfMemory(c);
+    unsigned used=0;
+    for (;used<count;used++) {
+        JSValue value=JS_GetPropertyUint32(c,argv[1],used);
+        uris[used]=JS_ToCString(c,value); JS_FreeValue(c,value);
+        if (!uris[used] || strncmp(uris[used],"file:///",8) || strlen(uris[used])>32768) break;
+    }
+    if (used==count) portal_pick_result(id,uris,count);
+    for (unsigned i=0;i<=used && i<count;i++) if (uris[i]) JS_FreeCString(c,uris[i]);
+    free(uris); return JS_NewBool(c,used==count);
+}
+
+int js_portal_pick(unsigned id, const char *mode, const char *title, const char *folder,
+                   const char *name, int multiple, const char *filters) {
+    JSContext *c=wctx; if (!c) return 0;
+    JSValue g=JS_GetGlobalObject(c), fn=JS_GetPropertyStr(c,g,"__axiaPortalPick");
+    int ok=JS_IsFunction(c,fn);
+    if (ok) {
+        JSValue v=JS_NewObject(c);
+        JS_SetPropertyStr(c,v,"id",JS_NewUint32(c,id));
+        JS_SetPropertyStr(c,v,"mode",JS_NewString(c,mode));
+        JS_SetPropertyStr(c,v,"title",JS_NewString(c,title));
+        JS_SetPropertyStr(c,v,"start",JS_NewString(c,folder));
+        JS_SetPropertyStr(c,v,"name",JS_NewString(c,name));
+        JS_SetPropertyStr(c,v,"multiple",JS_NewBool(c,multiple));
+        JS_SetPropertyStr(c,v,"patterns",JS_NewString(c,filters));
+        JSValue result=JS_Call(c,fn,g,1,&v);
+        if (JS_IsException(result)) { JSValue error=JS_GetException(c);JS_FreeValue(c,error);ok=0; }
+        JS_FreeValue(c,result);JS_FreeValue(c,v);
+    }
+    JS_FreeValue(c,fn);JS_FreeValue(c,g);return ok;
+}
+void js_portal_close(unsigned id) {
+    JSContext *c=wctx; if (!c) return;
+    JSValue g=JS_GetGlobalObject(c), fn=JS_GetPropertyStr(c,g,"__axiaPortalClose");
+    if (JS_IsFunction(c,fn)) {
+        JSValue value=JS_NewUint32(c,id),result=JS_Call(c,fn,g,1,&value);
+        if (JS_IsException(result)) { JSValue e=JS_GetException(c);JS_FreeValue(c,e); }
+        JS_FreeValue(c,result);JS_FreeValue(c,value);
+    }
+    JS_FreeValue(c,fn);JS_FreeValue(c,g);
+}
+
 static const JSCFunctionListEntry portal_funcs[] = {
     JS_CFUNC_DEF("set", 1, f_portal_set),
+    JS_CFUNC_DEF("pickResult", 2, f_portal_pick_result),
 };
 
 static const JSCFunctionListEntry wm_funcs[] = {

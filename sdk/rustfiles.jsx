@@ -18,6 +18,7 @@ import { DocImage, pdfThumb, fontSample, releaseImage } from './doc.js';
 import { media } from './media.js';
 import { lan } from './lan.js';
 import { useDisks, disks } from './disks.js';
+import { Menu } from './menu.jsx';
 const modalHandles = new Set();
 
 export function filesRequest(value) {
@@ -85,6 +86,18 @@ function expand(prev, node) {
 const FORMAT_SAMPLE = new Date(2001, 11, 31, 23, 59);
 const captionFormat = () => `${locale.get()}|${formatDate(FORMAT_SAMPLE)}|${formatTime(FORMAT_SAMPLE)}`;
 
+function FilesContextMenu({ node, send }) {
+  const origin = useRef(null), [position, setPosition] = useState(null);
+  useEffect(() => {
+    const [x, y] = lord.getLayout(origin.current.id);
+    setPosition({ x: x + node.x, y: y + node.y });
+  }, [node.x, node.y]);
+  const convert = (item) => item === '-' ? item : ({ ...item, label: caption(item.label),
+    submenu: item.submenu?.map(convert), onClick: item.action ? () => send(item.action) : undefined });
+  return h(View, { ref: origin, style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1 } },
+    position ? h(Menu, { ...position, items: node.items.map(convert), onClose: () => send(['closeContext']) }) : null);
+}
+
 const Widget = memo(function WidgetNode({ node, send }) {
   if (!node) return null;
   if (node.type === 'icon') return h(Widget, { node: iconTree(node.name, node.size), send });
@@ -92,6 +105,7 @@ const Widget = memo(function WidgetNode({ node, send }) {
   for (const event of EVENT_NAMES) if (node.events?.[event]) props[event] = (e) => send(node.events[event], e);
   const children = (node.children || []).map((child, i) => h(Widget, { key: child.key || i, node: child, send }));
   switch (node.type) {
+    case 'contextMenu': return h(FilesContextMenu, { node, send });
     case 'toolbar': return h(Toolbar, props, ...children);
     case 'toolGroup': return h(ToolbarGroup, props, ...children);
     case 'tool': return h(ToolWidget, { node, send });

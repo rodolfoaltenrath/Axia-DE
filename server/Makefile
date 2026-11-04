@@ -92,7 +92,7 @@ SRC += $(TP_SRC)
 # cursor-shape-v1 needs the tablet-v2 interfaces (they're only linked, not advertised).
 # GTK/GNOME/Qt apps: our own org.freedesktop.portal.Settings (src/ui/portal.c) with the D-Bus client from
 # Passwords (src/vault/dbus.c, docs/PASSWORDS.md).
-WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/js_switcher.c src/ui/portal.c src/vault/dbus.c
+WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/js_switcher.c src/ui/portal.c src/ui/portal_files.c src/vault/dbus.c
 SRC += $(WM_SRC)
 # Clock and Help (docs/SYSTEM.md): time zones with our own TZif reader, and the help articles
 CLOCK_SRC := src/ui/tzif.c src/ui/js_help.c
@@ -118,10 +118,11 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
-test-platform: build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/fsops-test
 	./build/battery-refresh-test
 	./build/host-power-test
+	./build/portal-files-test
 	./build/glass-renderer-test
 	./build/wallpaper-image-test
 	./build/seat-test
@@ -135,6 +136,8 @@ build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_gold
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/hw/power.c src/sec/json.c src/platform/power.h $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/hw/power.c src/sec/json.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/portal-files-test: tests/portal_files_test.c src/ui/portal_files.c src/ui/portal_files.h src/vault/dbus.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -Wl,--wrap=dbus_send,--wrap=dbus_reply,--wrap=dbus_error -o $@ $< src/ui/portal_files.c src/vault/dbus.c
 build/host-power-test: tests/host_power_test.c src/platform/power.c src/platform/power.h src/vault/dbus.c $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ $< src/platform/power.c src/vault/dbus.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/wallpaper-image-test: tests/wallpaper_image_test.c src/ui/image.c src/canvas.c src/glass_ffi.h build/obj/ui/stb.o $(RUST_LIB)

@@ -3,21 +3,40 @@ import { createElement as h } from 'react';
 import { createStore, useStore } from './store.js';
 import { useLocale, appName } from './i18n.js';
 import { getApp } from './windows.js';
-import { RustFileDialog } from './rustfiles.jsx';
+import { RustFileDialog, filesRequest } from './rustfiles.jsx';
 const queue = createStore([]);
 let sequence = 0;
 globalThis.__lordBrokerPick = (reqid, app, save, suggest) => {
   queue.set((q) => [...q, { key: ++sequence, reqid, app, save: !!save, suggest: suggest || '' }]);
 };
+globalThis.__axiaPortalPick = (request) => {
+  const native = filesRequest({ op: 'externalPrepare', ...request });
+  queue.set((q) => [...q, { key: ++sequence, external: true, request, native }]);
+};
+globalThis.__axiaPortalClose = (id) => queue.set((q) => q.filter((x) => !x.external || x.request.id !== id));
 function finish(item, path) {
   queue.set((q) => q.filter((x) => x.key !== item.key));
-  lord.broker.pickResult(item.reqid, path || '');
+  if (item.external) {
+    const paths = path ? (Array.isArray(path) ? path : [path]) : [];
+    try {
+      const { uris } = filesRequest({ op: 'externalUris', paths, save: item.request.mode === 'save', files: item.native.files });
+      lord.portal.pickResult(item.request.id, uris);
+    } catch (error) {
+      lord.portal.pickResult(item.request.id, []);
+      console.log(`File chooser: ${error.message}`);
+    }
+  } else lord.broker.pickResult(item.reqid, path || '');
 }
 export function Powerbox() {
   const q = useStore(queue);
   const { t } = useLocale();
   const item = q[0];
   if (!item) return null;
+  if (item.external) {
+    const native = item.native;
+    return h(RustFileDialog, { key: item.key, ...native, filter: native.filter ? new RegExp(native.filter) : null,
+      onPick: (path) => finish(item, path), onClose: () => finish(item, '') });
+  }
   return h(RustFileDialog, { key: item.key, mode: item.save ? 'save' : 'open', name: item.suggest,
     title: t(item.save ? 'powerbox.saveTitle' : 'powerbox.openTitle', { app: appName(getApp(item.app)) || item.app }),
     onPick: (path) => finish(item, path), onClose: () => finish(item, '') });

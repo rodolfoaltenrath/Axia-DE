@@ -884,137 +884,154 @@ impl Session {
     fn context_menu(&self, shared: &Shared) -> Option<Value> {
         let (x, y) = self.context?;
         let selected = !self.tab().selected.is_empty();
+        let single = self.tab().selected.len() == 1;
+        let file = self.selected_entries().next();
+        let item = |key: &str, command: &str| json!({"label":tr(key),"action":[command]});
         let mut choices = Vec::new();
-        let mut item = |key: &str, command: &str, disabled: bool| {
-            choices.push(button(tr(key), action(command), disabled))
-        };
-        item("files.menu.open", "open", !selected);
-        item("files.menu.quickLook", "preview", !selected);
-        item("files.menu.getInfo", "info", !selected);
-        if self.mode == Mode::Browser {
-            if self.tab().location == Location::Trash {
-                item("files.menu.restore", "restore", !selected);
-                item("files.menu.deleteNow", "delete", !selected);
-                item("files.menu.emptyTrash", "emptyTrash", false);
-            } else {
-                item("files.menu.copy", "copy", !selected);
-                item("files.menu.cut", "cut", !selected || !self.can_write);
-                item(
-                    "files.menu.paste",
-                    "paste",
-                    shared.clipboard.is_empty() || !self.can_write,
-                );
-                item(
-                    "files.menu.rename",
-                    "rename",
-                    self.tab().selected.len() != 1 || !self.can_write,
-                );
-                item(
-                    "files.menu.duplicate",
-                    "duplicate",
-                    !selected || !self.can_write,
-                );
-                item("files.menu.trash", "trash", !selected || !self.can_write);
-                item("files.menu.newFolder", "newFolder", !self.can_write);
-                item(
-                    "files.rust.compress",
-                    "compress",
-                    !selected || !self.can_write,
-                );
-                if self.selected_entries().any(|e| archive(&e.name)) {
-                    item("files.rust.extract", "extract", false);
+        let mut section = |items: Vec<Value>| {
+            if !items.is_empty() {
+                if !choices.is_empty() {
+                    choices.push(json!("-"));
                 }
+                choices.extend(items);
             }
-            item("files.menu.copyPath", "copyPath", !selected);
-            item(
-                "files.menu.openTerminal",
-                "terminal",
-                self.tab().location.path().is_none(),
-            );
-            item(
-                "files.rust.pin",
-                "pin",
-                self.tab().location.path().is_none(),
-            );
-        }
-        item("files.menu.showHidden", "hidden", false);
-        item("files.menu.goToFolder", "goTo", false);
-        if self.mode == Mode::Browser {
-            item("files.menu.connect", "connect", false);
-            item("files.settings.open", "preferences", false);
-        }
-        if self.mode == Mode::Browser && selected && self.tab().location != Location::Trash {
-            choices.push(label(
-                tr("files.menu.openWith"),
-                json!({"fontSize":11,"color":dim(self),"padding":6}),
-            ));
-            let file = self.selected_entries().next().cloned();
-            let mime = file
-                .as_ref()
-                .map(|e| match kind(&e.name) {
+        };
+        if selected {
+            let mut open = vec![item("files.menu.open", "open")];
+            if single && file.is_some_and(|e| !e.dir) {
+                open.push(item("files.menu.quickLook", "preview"));
+            }
+            if single && file.is_some_and(|e| !e.dir) {
+                let mime = match kind(&file.unwrap().name) {
                     "image" => "image/",
                     "text" => "text/",
                     "pdf" => "application/pdf",
                     "video" => "video/",
                     "audio" => "audio/",
                     _ => "",
-                })
-                .unwrap_or("");
-            for app in shared
-                .apps
-                .iter()
-                .filter(|a| {
-                    if let Some(id) = a["id"].as_str() {
-                        if matches!(
-                            (id, mime),
+                };
+                let apps: Vec<_> = shared
+                    .apps
+                    .iter()
+                    .filter(|app| {
+                        matches!(
+                            (app["id"].as_str().unwrap_or(""), mime),
                             ("editor", "text/")
                                 | ("photos", "image/")
                                 | ("pdf", "application/pdf")
                                 | ("player", "video/")
                                 | ("player", "audio/")
-                        ) {
-                            return true;
-                        }
-                    }
-                    !mime.is_empty()
-                        && a["mimeTypes"].as_array().is_some_and(|types| {
-                            types
-                                .iter()
-                                .any(|v| v.as_str().is_some_and(|t| t.starts_with(mime)))
-                        })
-                })
-                .take(8)
-            {
-                choices.push(button(
-                    app["name"].clone(),
-                    json!(["openWith", app["desktopId"]]),
-                    false,
-                ));
+                        ) || (!mime.is_empty()
+                            && app["mimeTypes"].as_array().is_some_and(|types| {
+                                types
+                                    .iter()
+                                    .any(|t| t.as_str().is_some_and(|t| t.starts_with(mime)))
+                            }))
+                    })
+                    .take(8)
+                    .map(|app| json!({"label":app["name"],"action":["openWith",app["desktopId"]]}))
+                    .collect();
+                if !apps.is_empty() {
+                    open.push(json!({"label":tr("files.menu.openWith"),"submenu":apps}));
+                }
             }
-            choices.push(label(
-                tr("files.menu.tags"),
-                json!({"fontSize":11,"color":dim(self),"padding":6}),
-            ));
-            for color in ["red", "orange", "yellow", "green", "blue", "purple", "gray"] {
-                choices.push(button(
-                    tr(&format!("files.tag.{color}")),
-                    json!(["tag", color]),
-                    false,
-                ));
+            open.push(item("files.menu.getInfo", "info"));
+            section(open);
+        }
+        if self.mode == Mode::Browser {
+            if self.tab().location == Location::Trash {
+                let mut trash = Vec::new();
+                if selected {
+                    trash.extend([
+                        item("files.menu.restore", "restore"),
+                        item("files.menu.deleteNow", "delete"),
+                    ]);
+                }
+                if !self.tab().entries.is_empty() {
+                    trash.push(item("files.menu.emptyTrash", "emptyTrash"));
+                }
+                section(trash);
+            } else {
+                let mut edit = Vec::new();
+                if selected {
+                    edit.push(item("files.menu.copy", "copy"));
+                }
+                if selected && self.can_write {
+                    edit.push(item("files.menu.cut", "cut"));
+                }
+                if !shared.clipboard.is_empty() && self.can_write {
+                    edit.push(item("files.menu.paste", "paste"));
+                }
+                if single && self.can_write {
+                    edit.push(item("files.menu.rename", "rename"));
+                }
+                if selected && self.can_write {
+                    edit.extend([
+                        item("files.menu.duplicate", "duplicate"),
+                        item("files.menu.trash", "trash"),
+                    ]);
+                }
+                if !selected && self.can_write {
+                    edit.push(item("files.menu.newFolder", "newFolder"));
+                }
+                section(edit);
+                let mut tools = Vec::new();
+                if selected && self.can_write {
+                    tools.push(item("files.rust.compress", "compress"));
+                }
+                if selected && self.can_write && self.selected_entries().any(|e| archive(&e.name)) {
+                    tools.push(item("files.rust.extract", "extract"));
+                }
+                if selected {
+                    tools.push(item("files.menu.copyPath", "copyPath"));
+                }
+                if self.tab().location.path().is_some() {
+                    tools.push(item("files.menu.openTerminal", "terminal"));
+                }
+                if !selected {
+                    if let Some(path) = self.tab().location.path().filter(|p| {
+                        **p != self.policy.home && !self.places.iter().any(|place| place.path == *p)
+                    }) {
+                        let pinned = shared.preferences["favoriteFolders"]
+                            .as_array()
+                            .is_some_and(|items| {
+                                items.iter().any(|i| i["path"].as_str() == path.to_str())
+                            });
+                        tools.push(item(
+                            if pinned {
+                                "files.pin.remove"
+                            } else {
+                                "files.pin.add"
+                            },
+                            "pin",
+                        ));
+                    }
+                }
+                section(tools);
+                if selected {
+                    let tags: Vec<_> = [
+                        "red", "orange", "yellow", "green", "blue", "purple", "gray",
+                    ]
+                    .into_iter()
+                    .map(|c| json!({"label":tr(&format!("files.tag.{c}")),"action":["tag",c]}))
+                    .collect();
+                    section(vec![json!({"label":tr("files.menu.tags"),"submenu":tags})]);
+                }
             }
         }
-        let mut panel = node(
-            "scroll",
-            json!({"position":"absolute","left":x.min(self.width-250.).max(6.),"top":y.min(self.height-(choices.len()as f64*30.+16.).min(self.height-40.)-6.).max(6.),"width":244,"height":(choices.len()as f64*30.+16.).min(self.height-40.),"padding":8,"gap":3,"borderRadius":9,"backgroundColor":color(self,"popupBg","#2c2c33"),"border":format!("1px solid {}",color(self,"separator","#44444c")),"boxShadow":"0 12px 30px rgba(0,0,0,0.4)"}),
-            choices,
-        );
-        panel["events"] = json!({"onMouseDown":["noop"]});
-        let mut overlay = view(
-            json!({"position":"absolute","left":0,"top":0,"width":self.width,"height":self.height,"zIndex":100}),
-            vec![panel],
-        );
-        overlay["events"] = json!({"onClick":["closeContext"],"onContextMenu":["closeContext"]});
-        Some(overlay)
+        if !selected {
+            let mut views: Vec<_> = ["icons","list","columns","gallery"].into_iter().map(|v|json!({"label":tr(&format!("files.view.{v}")),"checked":self.tab().view==v,"action":["view",v]})).collect();
+            views.push(json!("-"));
+            views.push(json!({"label":tr("files.menu.showHidden"),"checked":self.hidden,"action":["hidden"]}));
+            section(vec![
+                json!({"label":tr("files.menu.view"),"submenu":views}),
+                item("files.menu.goToFolder", "goTo"),
+            ]);
+        }
+        if choices.is_empty() {
+            return None;
+        }
+        Some(json!({"type":"contextMenu","x":x,"y":y,"items":choices}))
     }
     fn dialog_view(&self, shared: &Shared) -> Option<Value> {
         let dialog = self.dialog.as_ref()?;

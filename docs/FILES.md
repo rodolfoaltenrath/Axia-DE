@@ -35,9 +35,21 @@ Passwords use this shared chooser. Isolated apps retain their descriptor
 broker: they receive the selected file descriptor, never the desktop's
 filesystem API. `sdk/powerbox.jsx` only queues requests and returns results.
 
-External GTK/Qt applications may still provide their own dialogs. This change
-is not an `org.freedesktop.portal.FileChooser` backend, and does not replace
-third-party application code.
+External host applications using `org.freedesktop.portal.FileChooser` are routed
+through the same Rust open/save/folder chooser. The session's existing public
+portal now implements OpenFile, SaveFile, SaveFiles, request responses and Close.
+`portal_files.c` only transports D-Bus messages; `external.rs` validates folders,
+normalizes filters and escapes file URIs, and `Powerbox` queues the native dialogs.
+Requests are bounded, bound to their caller and cancelled when the caller exits.
+The Fedora session sets GTK_USE_PORTAL=1 for compatible GTK/Electron apps.
+
+This is a host-session portal implementation, not a replacement for Flatpak's
+document-export/grant service. Application-specific extra `choices` are explicitly
+rejected instead of silently accepting defaults. Standard glob/current filters,
+common MIME filters, multiple files, suggested folders/names and multi-file save
+locations are handled. Dialogs implemented directly by an application do not use
+this interface and retain that application's UI. Activating the session environment
+change requires a new login and restarting external applications.
 
 ## Window design
 
@@ -47,6 +59,11 @@ fonts and theme colors: a compact toolbar, neutral sidebar selection, folder pat
 bar and a tab strip shown only with multiple tabs. Narrow windows use one view
 switcher; all four modes remain available in the View menu. Long tab strips keep
 the active tab visible and provide buttons to reach the remaining tabs.
+
+Context menus use the exact shared popover component used by the default theme's
+menu bar, including backdrop blur, tint, separators, hover, keyboard navigation and
+submenus. Rust only supplies applicable actions; unavailable commands are omitted.
+Open With, tags and view choices are grouped in submenus rather than a long list.
 
 File choosers use this same content inside a modal sheet; they keep their own
 Open/Save and Cancel actions. Information, previews and confirmations stay within
@@ -195,3 +212,9 @@ reaches QuickJS is the expensive part, not building it in Rust, so:
 
 `cargo test --release --manifest-path rust/Cargo.toml large_folder -- --ignored
 --nocapture` reports the Rust side for 20,000 files.
+
+The file chooser portal was exercised on a private session bus with a real GTK 3
+FileChooserNative client on 2026-11-03: the Rust image picker appeared, and GTK
+received the selected filename. Independent GIO clients also verified OpenFile,
+SaveFile, multiple selection, SaveFiles with distinct candidates and Request.Close.
+No test installed packages or replaced the running desktop session.
