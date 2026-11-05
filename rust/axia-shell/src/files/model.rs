@@ -207,6 +207,7 @@ pub struct Session {
     pub width: f64,
     pub height: f64,
     pub theme: Value,
+    source_theme: Value,
     pub locale: String,
     pub effects: Vec<Value>,
     pub dirty: bool,
@@ -519,7 +520,8 @@ impl Session {
             context: None,
             width: 960.,
             height: 600.,
-            theme: json!({}),
+            theme: crate::native_style::files_theme(&args["theme"]),
+            source_theme: Value::Null,
             locale: String::new(),
             effects: Vec::new(),
             dirty: true,
@@ -1099,8 +1101,9 @@ impl Session {
                 self.dirty = true;
             }
         }
-        if context["theme"].is_object() && self.theme != context["theme"] {
-            self.theme = context["theme"].clone();
+        if context["theme"].is_object() && self.source_theme != context["theme"] {
+            self.source_theme = context["theme"].clone();
+            self.theme = crate::native_style::files_theme(&self.source_theme);
             self.dirty = true;
         }
         if let Some(l) = context["locale"].as_str() {

@@ -88,6 +88,11 @@ export function ThemeProvider({ tokens, children }) {
 
 export const useTheme = () => useContext(ThemeContext);
 
+// Local app styling must never publish tokens to other apps or the GTK portal.
+export function ThemeScope({ value, children }) {
+  return createElement(ThemeContext.Provider, { value }, children);
+}
+
 // A translucent line color (rgba) laid over an opaque one (#rrggbb), as one opaque color. A window of an
 // app with a transparent background (the Terminal) has nothing behind its border and title separator,
 // so those are drawn already mixed: otherwise what is behind the window shows through them.

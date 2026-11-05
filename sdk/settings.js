@@ -6,6 +6,7 @@ const DEFAULTS = {
   mode: 'dark',          // 'dark' | 'light'
   accent: 'azul',
   externalWindowStyle: true, // reversible Firefox/LibreWolf and VS Code window styling
+  filesAppearance: 'adwaita', // Rust styling pilot; other native apps keep their current theme
   effects: true,         // transparency with blur
   reduceMotion: false,   // decorative animations off (Settings → Appearance)
   browserTabsInTitlebar: true,   // 0.8.4, Settings → Appearance: Chromium and Firefox draw their own bar (browserframe.js)

@@ -150,7 +150,8 @@ impl App {
     }
     fn snapshot(&mut self, s: &mut Session) -> Value {
         let tree = s.render(&self.shared);
-        let state = json!({"menus":s.menus(&self.shared),"title":s.title_value(),"loading":s.visibly_loading(),"capture":s.drag.is_some(),"closed":s.closed});
+        let state = json!({"menus":s.menus(&self.shared),"title":s.title_value(),"loading":s.visibly_loading(),"capture":s.drag.is_some(),"closed":s.closed,
+            "appearance":s.theme,"chrome":crate::native_style::frame(&s.theme)});
         s.dirty = false;
         let sent = self.sent.get(&s.id);
         if s.effects.is_empty() && sent.is_some_and(|p| p.tree == tree && p.state == state) {
@@ -163,8 +164,10 @@ impl App {
         reply["effects"] = json!(std::mem::take(&mut s.effects));
         reply["tree"] = delta(sent.map(|p| &p.tree), &tree);
         // Absent means unchanged; the host keeps the array it already has.
-        if sent.is_some_and(|p| p.state["menus"] == state["menus"]) {
-            reply.as_object_mut().unwrap().remove("menus");
+        for key in ["menus", "appearance", "chrome"] {
+            if sent.is_some_and(|p| p.state[key] == state[key]) {
+                reply.as_object_mut().unwrap().remove(key);
+            }
         }
         self.sent.insert(s.id, Sent { tree, state });
         reply
@@ -333,6 +336,7 @@ mod tests {
         let mut app = App::default();
         let args = json!({"op":"create","mode":"browser","args":{"path":dir},"width":900,"height":540,"preferences":{},"apps":[]});
         let first = app.request(&args);
+        assert_eq!(first["appearance"]["nativeStyle"], "adwaita");
         let id = first["id"].as_u64().unwrap();
         let mut host = first["tree"].clone();
         for _ in 0..500 {
@@ -350,6 +354,10 @@ mod tests {
         let wheel = json!({"op":"event","id":id,"action":["wheel"],"deltaY":10});
         let reply = app.request(&wheel);
         assert!(
+            reply.get("appearance").is_none() && reply.get("chrome").is_none(),
+            "scrolling does not resend unchanged styling or update the shell frame"
+        );
+        assert!(
             reply["tree"].to_string().len() < full / 4,
             "a small scroll does not resend the file cells"
         );
@@ -363,6 +371,12 @@ mod tests {
         assert!(!app.request(&select).is_null());
         assert!(app.request(&select).is_null());
         assert!(app.request(&json!({"op":"poll","id":id})).is_null());
+        let legacy=app.request(&json!({"op":"poll","id":id,"theme":{"filesAppearance":"axia","mode":"dark","windowBg":"#123456"}}));
+        assert!(
+            legacy.get("chrome").is_some() && legacy["chrome"].is_null(),
+            "restoring the old style explicitly clears the custom frame"
+        );
+        assert_eq!(legacy["appearance"]["windowBg"], "#123456");
         app.request(&json!({"op":"close","id":id}));
         assert!(app.sent.is_empty());
         std::fs::remove_dir_all(home).unwrap();

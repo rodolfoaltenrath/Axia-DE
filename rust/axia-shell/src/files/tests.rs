@@ -12,6 +12,36 @@ use std::{
     time::{Duration, Instant},
 };
 static SERIAL: Mutex<()> = Mutex::new(());
+#[test]
+fn appearance_changes_preserve_location_selection_zoom_and_listing_generation() {
+    let home = Home::new();
+    home.file("keep.txt", "data");
+    let (mut s, mut shared) =
+        home.session(json!({"mode":"browser","args":{"path":home.root},"width":800,"height":500}));
+    s.event(&json!({"action":["select",0]}), &mut shared);
+    s.event(&json!({"action":["zoom",1.5]}), &mut shared);
+    let before = (
+        s.tab().location.clone(),
+        s.tab().selected.clone(),
+        s.zoom,
+        s.generation.load(std::sync::atomic::Ordering::Relaxed),
+    );
+    for style in ["adwaita", "axia", "adwaita"] {
+        s.poll(
+            &json!({"theme":{"mode":"light","filesAppearance":style}}),
+            &shared,
+        );
+        assert_eq!(
+            (
+                s.tab().location.clone(),
+                s.tab().selected.clone(),
+                s.zoom,
+                s.generation.load(std::sync::atomic::Ordering::Relaxed)
+            ),
+            before
+        );
+    }
+}
 pub(super) struct Home {
     root: PathBuf,
     _guard: MutexGuard<'static, ()>,

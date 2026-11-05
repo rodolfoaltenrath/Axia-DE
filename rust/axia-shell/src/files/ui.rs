@@ -143,13 +143,21 @@ fn entry_icon(s: &Session, e: &Entry, size: f64, thumb: bool) -> Value {
     icon_ref(if e.dir { "folder" } else { "file" }, size)
 }
 fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &str) -> Value {
+    let traditional = s.theme["nativeStyle"] == "adwaita";
+    let selected_bg = if traditional {
+        color(s, "accent", "#3584e4")
+    } else if s.theme["mode"] == "light" {
+        "rgba(0,0,0,0.08)".into()
+    } else {
+        "rgba(255,255,255,0.12)".into()
+    };
     let mut n = view(
-        json!({"height":28,"flexShrink":0,"flexDirection":"row","alignItems":"center","gap":8,"paddingHorizontal":8,"borderRadius":6,"backgroundColor":if selected{if s.theme["mode"]=="light"{"rgba(0,0,0,0.08)"}else{"rgba(255,255,255,0.12)"}}else{"transparent"}}),
+        json!({"height":28,"flexShrink":0,"flexDirection":"row","alignItems":"center","gap":8,"paddingHorizontal":8,"borderRadius":if traditional{3}else{6},"backgroundColor":if selected{selected_bg}else{"transparent".into()}}),
         vec![
             icon_ref(kind, 19.),
             label(
                 text.clone(),
-                json!({"fontSize":13,"color":txt(s),"flex":1,"minWidth":0,"whiteSpace":"nowrap","textOverflow":"ellipsis","numberOfLines":1,"overflow":"hidden"}),
+                json!({"fontSize":13,"color":if selected&&traditional{"#ffffff".into()}else{txt(s)},"flex":1,"minWidth":0,"whiteSpace":"nowrap","textOverflow":"ellipsis","numberOfLines":1,"overflow":"hidden"}),
             ),
         ],
     );
@@ -438,7 +446,15 @@ impl Session {
         let mut search = input(&self.tab().query, "query", tr("files.search"));
         search["style"] = json!({"width":if available<330.{90}else if narrow{120}else{180},"height":28,"flexShrink":0});
         controls.push(search);
-        node("toolbar", json!({"flexShrink":0}), controls)
+        node(
+            "toolbar",
+            if self.theme["nativeStyle"] == "adwaita" {
+                json!({"flexShrink":0,"backgroundColor":color(self,"titleBg","#353535")})
+            } else {
+                json!({"flexShrink":0})
+            },
+            controls,
+        )
     }
     fn search_height(&self) -> f64 {
         if self.tab().query.trim().is_empty() {
@@ -1310,7 +1326,7 @@ impl Session {
             buttons,
         ));
         let mut panel = view(
-            json!({"width":if wide{(self.width-60.).min(650.)}else{(self.width-60.).min(440.)},"maxHeight":self.height-30.,"padding":20,"gap":14,"borderRadius":12,"backgroundColor":color(self,"windowBg","#24242a"),"border":format!("1px solid {}",color(self,"separator","#45454c")),"boxShadow":"0 16px 40px rgba(0,0,0,0.5)"}),
+            json!({"width":if wide{(self.width-60.).min(650.)}else{(self.width-60.).min(440.)},"maxHeight":self.height-30.,"padding":20,"gap":14,"borderRadius":self.theme["dialogRadius"].as_f64().unwrap_or(12.),"backgroundColor":color(self,"windowBg","#24242a"),"border":format!("1px solid {}",color(self,"separator","#45454c")),"boxShadow":"0 16px 40px rgba(0,0,0,0.5)"}),
             body,
         );
         panel["events"] = json!({"onMouseDown":["noop"],"onClick":["noop"]});
