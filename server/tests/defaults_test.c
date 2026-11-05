@@ -113,7 +113,7 @@ int main(void) {
     unsetenv("XDG_CONFIG_HOME");
     unsetenv("LORDOS_SESSIOND");
     defaults_set_root(root);
-    char real[512];
+    char real[PATH_MAX];
     if (!realpath(home, real)) { perror(home); return 1; }
     fsops_init(real, "nobody-here");            /* the roots launchWith accepts */
     sysfile("/usr/share/mime/globs2", "50:text/html:*.html\n50:text/plain:*.txt\n50:image/png:*.png\n");
