@@ -1,0 +1,33 @@
+{
+  "fonts": [
+    {
+      "id": "axia-controls",
+      "src": [
+        {
+          "path": "./controls.ttf",
+          "format": "truetype"
+        }
+      ],
+      "weight": "normal",
+      "style": "normal"
+    }
+  ],
+  "iconDefinitions": {
+    "chrome-close": {
+      "fontCharacter": "\\e001",
+      "fontId": "axia-controls"
+    },
+    "chrome-minimize": {
+      "fontCharacter": "\\e002",
+      "fontId": "axia-controls"
+    },
+    "chrome-maximize": {
+      "fontCharacter": "\\e003",
+      "fontId": "axia-controls"
+    },
+    "chrome-restore": {
+      "fontCharacter": "\\e004",
+      "fontId": "axia-controls"
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { DEFAULT_WALLPAPER } from './wallpapers.js';
 const DEFAULTS = {
   mode: 'dark',          // 'dark' | 'light'
   accent: 'azul',
+  externalWindowStyle: true, // reversible Firefox/LibreWolf and VS Code window styling
   effects: true,         // transparency with blur
   reduceMotion: false,   // decorative animations off (Settings → Appearance)
   browserTabsInTitlebar: true,   // 0.8.4, Settings → Appearance: Chromium and Firefox draw their own bar (browserframe.js)

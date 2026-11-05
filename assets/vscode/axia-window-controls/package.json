@@ -1,0 +1,30 @@
+{
+  "name": "axia-window-controls",
+  "publisher": "axia-de",
+  "version": "0.1.0",
+  "displayName": "Axia Window Controls",
+  "description": "Axia window controls using the official product-icon API. No extension code.",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Themes"
+  ],
+  "contributes": {
+    "productIconThemes": [
+      {
+        "id": "axia-window-controls",
+        "label": "Axia Window Controls",
+        "path": "./icons.json"
+      }
+    ],
+    "configurationDefaults": {
+      "workbench.productIconTheme": "axia-window-controls",
+      "workbench.colorCustomizations": {
+        "titleBar.activeBackground": "#2a2a2e",
+        "titleBar.inactiveBackground": "#2a2a2e"
+      }
+    }
+  }
+}

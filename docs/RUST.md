@@ -111,6 +111,37 @@ As capturas usam leitura completa apenas sob demanda, sem guardar cópias extras
 de todas as janelas ou desligar a aceleração. Preferências de barras e temas
 internos dos navegadores e do VS Code continuam pertencendo aos aplicativos.
 
+`external_style.rs` faz a integração reversível dos controles de janela dos
+aplicativos externos. Firefox e LibreWolf recentes já não renderizam esses
+botões com o CSS GTK: um import identificado em `userChrome.css` carrega somente
+o estilo da janela do navegador. A opção de carregar esse CSS é habilitada em
+`user.js` apenas quando não existe uma recusa explícita do usuário. Os perfis
+relativos do Firefox e LibreWolf são descobertos via `profiles.ini`; caminhos
+com links simbólicos, arquivos inválidos e alterações nas partes gerenciadas
+são preservados em vez de sobrescritos. Há backup inicial dos arquivos editados.
+
+No VS Code (perfil padrão da instalação RPM), um tema de ícones de produto usa
+uma fonte COLR original de poucos KiB para os quatro controles. A extensão é
+declarativa: não tem `main`, eventos de ativação, scripts nem serviço residente.
+Se o índice de extensões do perfil padrão já existe, somente a entrada da Axia
+é acrescentada, preservando as demais entradas e metadados. Sem índice, o
+editor descobre todas as pastas normalmente na próxima abertura.
+Somente a preferência ausente `window.controlsStyle` recebe o valor `custom`,
+em bloco JSONC identificado e removível. O tema Dracula, ícones de arquivos e
+escolhas explícitas do usuário têm prioridade. Os controles mantêm a posição
+à direita, o espaçamento e o hover do VS Code; não se injeta CSS no editor.
+A cor da barra segue o modo da Axia na próxima abertura/releitura de extensões.
+
+A opção Ajustes → Aparência → Estilo Axia nos aplicativos externos desfaz os
+imports e os defaults que ainda pertencem à Axia. Os arquivos inertes do tema
+do VS Code permanecem disponíveis para não quebrar fontes de janelas abertas;
+sem os defaults, deixam de selecionar o estilo na próxima abertura. Feche e
+reabra o aplicativo para aplicar ou desfazer. Instalações com outro diretório
+de extensões, perfis externos/absolutos, Flatpak e temas de produto escolhidos
+manualmente não são forçados. O adaptador roda ao iniciar a sessão e ao mudar
+essa opção ou o modo claro/escuro, nunca por quadro. O compositor, o glass e os
+caminhos de entrada/captura permanecem iguais aos da correção anterior.
+
 `brightness.rs` identifica os controladores em `/sys/class/backlight` e aplica
 valores pela sessão do `systemd-logind` (`SetBrightness`). Não usa o helper
 administrativo antigo nem executa comandos externos. Uma thread recebe apenas

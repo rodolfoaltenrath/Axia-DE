@@ -200,6 +200,11 @@ function Appearance() {
         </SettingRow>
       </Section>
       <BrowserFrameSettings />
+      <Section footer={tr('settings.externalStyle.hint')}>
+        <SettingRow label={tr('settings.externalStyle.label')}>
+          <Toggle small on={s.externalWindowStyle !== false} onChange={(externalWindowStyle) => set({ externalWindowStyle })} />
+        </SettingRow>
+      </Section>
     </Stack>
   );
 }

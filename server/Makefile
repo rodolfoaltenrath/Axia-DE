@@ -6,6 +6,7 @@ RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
 RUST_NATIVE_LIBS := $(shell pkg-config --libs gio-2.0)
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../rust/axia-shell/src/files/*.rs) ../.cargo/config.toml
+RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
 CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)
