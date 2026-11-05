@@ -128,10 +128,10 @@ static JSValue f_portal_set(JSContext *c, JSValueConst t, int argc, JSValueConst
     }
     int has_name = get_word(c, argv[0], "accentName", name, sizeof name, "abcdefghijklmnopqrstuvwxyz");
     int has_buttons = get_word(c, argv[0], "buttons", buttons, sizeof buttons, "abcdefghijklmnopqrstuvwxyz,:");
-    portal_set(dark, rgb, has_name ? name : NULL, has_buttons ? buttons : NULL);
     JSValue ev = JS_GetPropertyStr(c, argv[0], "externalStyle");
-    int external = JS_IsUndefined(ev) || JS_ToBool(c, ev);
+    int external = !JS_IsUndefined(ev) && JS_ToBool(c, ev);
     JS_FreeValue(c, ev);
+    portal_set(dark, rgb, has_name ? name : NULL, has_buttons ? buttons : NULL, external);
     static int applied, last_external, last_dark;
     if (!applied || external != last_external || dark != last_dark) {
         axia_external_style(external, dark);

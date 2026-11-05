@@ -131,7 +131,7 @@ def main():
                           **({'args': {'section': 'wallpaper'}} if app == 'settings' else {})}
                          for app in ['store', 'settings', 'files']]
                 prefs = config / 'settings.json'
-                prefs.write_text(json.dumps({'schema': 1, 'debugTiming': True,
+                prefs.write_text(json.dumps({'schema': 1, 'debugTiming': True, 'externalWindowStyle': True,
                                              'sessionRestore': 'always',
                                              'sessionSaved': {'clean': True, 'windows': saved}}))
                 if os.geteuid() == 0:
@@ -148,8 +148,8 @@ def main():
                     raise
                 log = (home / '.cache/axia/session.log').read_text()
                 toolkit = (home / '.config/glib-2.0/settings/keyfile').read_text()
-                assert "gtk-theme='Axia" in toolkit, 'staged GTK theme was not discovered'
-                assert 'button-layout=' in toolkit, 'GTK button layout was not synchronized'
+                assert "gtk-theme='Adwaita" in toolkit, 'standard GTK theme was not selected'
+                assert "button-layout=':minimize,maximize,close'" in toolkit, 'standard GTK button order was not synchronized'
                 assert f'js: theme ../themes/{theme}/theme.bundle.js loaded' in log, log
                 for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'code refused']:
                     assert error not in log, log

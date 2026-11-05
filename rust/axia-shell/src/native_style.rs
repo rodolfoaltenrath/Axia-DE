@@ -3,7 +3,9 @@
 use serde_json::{json, Value};
 
 pub fn files_theme(source: &Value) -> Value {
-    if source["filesAppearance"] == "axia" {
+    if source["nativeAppearance"] == "axia"
+        || (source.get("nativeAppearance").is_none() && source["filesAppearance"] == "axia")
+    {
         return source.clone();
     }
     let mut out = if source.is_object() {
@@ -35,7 +37,7 @@ pub fn files_theme(source: &Value) -> Value {
             "nativeStyle":"adwaita","controlRadius":4,"controlRadiusSmall":3,
         "groupRadius":5,"dialogRadius":6,"menuRadius":4,"menuItemRadius":2,"buttonBorder":true,
             "menuHighlight":"accent","selection":"fill","inputFocus":"ring",
-            "radius":5,"contextMenuRadius":4,"contextMenuItemRadius":2,"effects":false,"blur":0,
+            "radius":5,"contextMenuRadius":4,"contextMenuItemRadius":2,
             "mode":if dark{"dark"}else{"light"}
         })
         .as_object()
@@ -45,7 +47,19 @@ pub fn files_theme(source: &Value) -> Value {
     if !out["accent"].is_string() {
         out["accent"] = json!("#3584e4");
     }
-    out["panelBg"] = out["popupBg"].clone();
+    // Visual geometry changes must never turn off the user's glass. The
+    // compositor's Rust/C backdrop path and its caches remain untouched.
+    if source["effects"] != false {
+        out["popupBg"] = json!(if dark {
+            "rgba(53,53,53,0.82)"
+        } else {
+            "rgba(246,245,244,0.84)"
+        });
+    }
+    out["panelBg"] = source
+        .get("panelBg")
+        .cloned()
+        .unwrap_or_else(|| out["popupBg"].clone());
     out
 }
 
@@ -72,6 +86,29 @@ pub fn frame(theme: &Value) -> Value {
     })
 }
 
+// Pure style transport: no filesystem/session initialization, workers or polling.
+// SAFETY: the C bridge supplies a valid NUL-terminated string for this call.
+#[no_mangle]
+pub unsafe extern "C" fn axia_native_style_request(
+    input: *const std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    use std::ffi::{CStr, CString};
+    let reply = if input.is_null() {
+        Value::Null
+    } else {
+        let bytes = CStr::from_ptr(input).to_bytes();
+        if bytes.len() > 16 * 1024 {
+            Value::Null
+        } else if let Ok(source) = serde_json::from_slice::<Value>(bytes) {
+            let tokens = files_theme(&source);
+            json!({"tokens":tokens,"chrome":frame(&tokens)})
+        } else {
+            Value::Null
+        }
+    };
+    CString::new(reply.to_string()).unwrap().into_raw()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,6 +121,22 @@ mod tests {
         assert_eq!(local["accent"], source["accent"]);
         assert_eq!(local["windowBg"], "#ffffff");
         let old = json!({"mode":"dark","filesAppearance":"axia","windowBg":"#123456"});
+        assert_eq!(files_theme(&old), old);
+        assert!(frame(&old).is_null());
+    }
+    #[test]
+    fn shared_style_preserves_glass_and_obeys_global_rollback() {
+        let source = json!({"mode":"dark","effects":true,"blur":24,"panelBg":"rgba(36,36,42,0.72)","nativeAppearance":"adwaita"});
+        let styled = files_theme(&source);
+        assert_eq!(styled["effects"], true);
+        assert_eq!(styled["blur"], 24);
+        assert_eq!(styled["panelBg"], source["panelBg"]);
+        assert!(styled["popupBg"].as_str().unwrap().starts_with("rgba("));
+        let off = files_theme(&json!({"effects":false}));
+        assert_eq!(off["effects"], false);
+        assert_eq!(off["popupBg"], "#353535");
+        let old =
+            json!({"nativeAppearance":"axia","filesAppearance":"adwaita","effects":true,"blur":18});
         assert_eq!(files_theme(&old), old);
         assert!(frame(&old).is_null());
     }
