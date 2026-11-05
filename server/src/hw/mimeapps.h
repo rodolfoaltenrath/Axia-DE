@@ -2,7 +2,7 @@
  * reading and editing mimeapps.list text and guessing a file's MIME type from shared-mime-info's
  * globs2. Pure functions over text; the files are read and written by ui/js_hw.c. Used by
  * Settings → Default Apps, Files' "Open With" and lord.apps.launchWith. See docs/SETTINGS.md.
- * Unit-tested in tests/mimeapps_test.c. */
+ * Implemented and unit-tested in rust/axia-shell/src/applications/. */
 #ifndef LORD_HW_MIMEAPPS_H
 #define LORD_HW_MIMEAPPS_H
 
