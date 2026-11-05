@@ -64,6 +64,45 @@ Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
 
+## Aplicativos Linux e associações de arquivos
+
+`applications/` substitui integralmente `apps.c`, `hw/mimeapps.c` e
+`hw/defaults.c`. A descoberta e o cache de aplicativos, parsing de `.desktop`,
+traduções, ícones PNG, ações, expansão de `Exec`, resolução do aplicativo padrão,
+edição de associações MIME e preferência do terminal passam a ser Rust.
+Os headers C continuam como ABI para QuickJS e demais consumidores existentes.
+
+O launcher continua executando o programa diretamente, sem shell, com o arquivo
+como um único argumento. A precedência de associações, os aplicativos internos
+`lordos-*.desktop`, os filtros de visibilidade e os identificadores de cgroup
+são preservados. O plano de permissões também é construído em Rust; as primitivas
+existentes de cgroup, namespaces e Landlock permanecem em `sec/`. Strings,
+argumentos e planos são preparados antes de `fork`; o filho não faz alocações
+Rust nem acessa o cache da interface.
+
+As gravações de associações e terminal agora respeitam `XDG_CONFIG_HOME`, assim
+como a leitura já fazia, com fallback para `~/.config`. A publicação usa arquivo
+temporário exclusivo, escrita completa, `fsync` e `rename`. Associações ilegíveis,
+maiores que 256 KiB ou acessadas por link simbólico são preservadas. Arquivos
+`.desktop` são limitados a 1 MiB e comandos que excedem a capacidade de argumentos
+são recusados inteiramente, em vez de executados com argumentos truncados.
+
+Todos os novos testes são Rust, incluindo parsing, buffers da ABI, comandos,
+preferências XDG e lançamento em um processo de teste isolado. Os testes C
+existentes de ações, padrões e ajustes continuam verificando a ABI e a integração
+com as implementações reais de permissões. Eles agora fazem parte de
+`test-platform`, usado por `make check` e pelo `%check` do RPM.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline applications::
+make -C server build/apps-actions-test build/defaults-test build/settings-hw-test
+make check
+```
+
+A validação headless não substitui a sessão física no Fedora 44: launcher,
+ações da Dock, “Abrir com”, associações persistentes, terminal preferido e apps
+restritos ainda devem ser conferidos antes da publicação final.
+
 ## Arquivos e seletores nativos
 
 O explorador e os seletores de abrir/salvar/pasta usam o módulo `files/`.
