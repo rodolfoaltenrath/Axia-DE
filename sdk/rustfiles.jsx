@@ -26,7 +26,7 @@ const FilesRootContext = createContext(null);
 // Rust's appearance replies and the frame metadata saved with a window.
 function appearanceContext(theme) {
   const { wallpapers, accents, ...tokens } = theme;
-  return { ...tokens, filesAppearance: settings.get().filesAppearance || 'adwaita' };
+  return { ...tokens, nativeAppearance: settings.get().nativeAppearance || 'adwaita' };
 }
 
 export function filesRequest(value) {

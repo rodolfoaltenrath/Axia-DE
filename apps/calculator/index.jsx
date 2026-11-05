@@ -81,7 +81,7 @@ export default function Calculator() {
   const big = shown.length <= 8 ? 44 : shown.length <= 11 ? 34 : 26;
   return (
     // the calculator is always left to right, also in Arabic or Hebrew
-    <View style={{ flex: 1, padding: 16, gap: 8, direction: 'ltr', backgroundColor: t.mode === 'dark' ? '#1c1c1e' : '#f5f5f7' }}>
+    <View style={{ flex: 1, padding: 16, gap: 8, direction: 'ltr', backgroundColor: t.nativeStyle === 'adwaita' ? t.windowBg : t.mode === 'dark' ? '#1c1c1e' : '#f5f5f7' }}>
       <View style={{ height: 92, justifyContent: 'flex-end', alignItems: 'flex-end', paddingHorizontal: 6, marginBottom: 4, overflow: 'hidden' }}>
         <Text style={{ fontSize: 13, color: t.textDim, whiteSpace: 'nowrap' }}>{show(expr) || ' '}</Text>
         <Text style={{ fontSize: big, fontWeight: 400, color: t.text, whiteSpace: 'nowrap' }}>{shown}</Text>
@@ -103,14 +103,15 @@ function Key({ k, label, onPress }) {
   const [down, setDown] = useState(false);
   const dark = t.mode === 'dark';
   const op = '÷×-+'.includes(k), fn = 'C()⌫'.includes(k);
-  const bg = k === '=' ? t.accent : op ? '#ff9f0a' : fn ? (dark ? '#4a4a50' : '#d4d4d9') : (dark ? '#333338' : '#ffffff');
+  const traditional = t.nativeStyle === 'adwaita';
+  const bg = k === '=' ? t.accent : traditional ? (fn ? t.inputBg : t.control) : op ? '#ff9f0a' : fn ? (dark ? '#4a4a50' : '#d4d4d9') : (dark ? '#333338' : '#ffffff');
   return (
     <View onMouseDown={() => setDown(true)} onMouseUp={() => setDown(false)} onClick={onPress}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => { setHover(false); setDown(false); }}
-      style={{ flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: bg,
+      style={{ flex: 1, borderRadius: traditional ? t.controlRadius : 12, border: traditional ? `1px solid ${t.separator}` : undefined, alignItems: 'center', justifyContent: 'center', backgroundColor: bg,
         opacity: down ? 0.7 : hover ? 0.88 : 1, boxShadow: dark ? 'none' : '0 1px 1px rgba(0,0,0,0.08)' }}>
       <Text style={{ fontSize: op || k === '=' ? 24 : 20, fontWeight: op || k === '=' ? 500 : 400,
-        color: op || k === '=' ? '#fff' : t.text }}>{label}</Text>
+        color: k === '=' || (op && !traditional) ? '#fff' : t.text }}>{label}</Text>
     </View>
   );
 }

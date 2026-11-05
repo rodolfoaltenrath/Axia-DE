@@ -707,6 +707,39 @@ mod tests {
         }
     }
     #[test]
+    fn standard_appearance_retires_both_managed_adapters_without_losing_user_settings() {
+        let tmp = Temp::new();
+        let config = tmp.0.join(".config");
+        let root = config.join("librewolf");
+        let profile = root.join("test.default");
+        fs::create_dir_all(profile.join("chrome")).unwrap();
+        fs::write(
+            root.join("profiles.ini"),
+            "[Profile0]\nIsRelative=1\nPath=test.default\n",
+        )
+        .unwrap();
+        let css = "/* personal rules */ #urlbar { color: red; }\n";
+        fs::write(profile.join("chrome/userChrome.css"), css).unwrap();
+        let user = config.join("Code/User");
+        fs::create_dir_all(&user).unwrap();
+        let settings = "{\"workbench.colorTheme\":\"Dracula Theme\",\"editor.fontSize\":15}";
+        fs::write(user.join("settings.json"), settings).unwrap();
+        assert_eq!(sync(&tmp.0, &config, true, true), 0);
+        assert!(profile.join("chrome/axia-window-controls.css").exists());
+        for dark in [true, false, true] {
+            assert_eq!(sync(&tmp.0, &config, false, dark), 0);
+            assert_eq!(text(&profile.join("chrome/userChrome.css")).unwrap(), css);
+            assert_eq!(text(&user.join("settings.json")).unwrap(), settings);
+            assert!(!profile.join("chrome/axia-window-controls.css").exists());
+            let manifest = tmp
+                .0
+                .join(".vscode/extensions/axia-de.axia-window-controls-0.1.0/package.json");
+            assert!(jsonc(&text(&manifest).unwrap()).unwrap()["contributes"]
+                .get("configurationDefaults")
+                .is_none());
+        }
+    }
+    #[test]
     fn relative_profiles_only_and_custom_code_config_stays_intact() {
         let tmp = Temp::new();
         let config = tmp.0.join(".config");

@@ -1,6 +1,6 @@
 {
-  "filesAppearance": {"label": "Traditional style in Files", "hint": "Preview the GTK/Adwaita-inspired style with window buttons on the right. Applies to Files and file pickers; other apps keep their current appearance. Turn off to restore the previous style without losing folders or preferences."},
-  "externalStyle": {"label": "Axia style in external applications", "hint": "Applies Axia buttons to Firefox and LibreWolf and a controls icon theme to VS Code. Keeps tabs and the editor color theme. VS Code keeps its controls on the right with its own spacing. Close and reopen the application to apply or undo. Your own customizations take priority."},
+  "filesAppearance": {"label": "Traditional style in native applications", "hint": "Applies GTK/Adwaita-inspired frames, controls and right-hand window buttons to all native apps. Preserves glass effects and your preferences. Turn off to restore the previous design."},
+  "externalStyle": {"label": "Use the old Axia style in external apps", "hint": "Off by default: uses GTK/Adwaita and the application’s own controls. Enable to restore colored controls in Firefox, LibreWolf and VS Code. Close and reopen the application after changing this setting. Your chosen themes and customizations are preserved."},
   "host.adminUnavailable": "System settings are managed by your distribution.",
   "admin.langpack": "Installing packages",
   "admin.locale-gen": "Generating region",

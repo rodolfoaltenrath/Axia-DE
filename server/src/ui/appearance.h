@@ -3,7 +3,7 @@
 #ifndef AXIA_APPEARANCE_H
 #define AXIA_APPEARANCE_H
 #include <stdbool.h>
-const char *axia_appearance_theme(bool dark);
+const char *axia_appearance_theme(bool dark, bool legacy);
 /* Strings are valid NUL-terminated UTF-8 for the duration of this call. */
 int axia_appearance_write(bool dark, const char *theme, const char *accent, const char *buttons);
 /* Reversible app adapters; called on style changes, never per rendered frame. */

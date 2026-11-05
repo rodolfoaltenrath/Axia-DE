@@ -202,12 +202,12 @@ function Appearance() {
       <BrowserFrameSettings />
       <Section footer={tr('settings.filesAppearance.hint')}>
         <SettingRow label={tr('settings.filesAppearance.label')}>
-          <Toggle small on={s.filesAppearance !== 'axia'} onChange={(on) => set({ filesAppearance: on ? 'adwaita' : 'axia' })} />
+          <Toggle small on={s.nativeAppearance !== 'axia'} onChange={(on) => set({ nativeAppearance: on ? 'adwaita' : 'axia', filesAppearance: on ? 'adwaita' : 'axia' })} />
         </SettingRow>
       </Section>
       <Section footer={tr('settings.externalStyle.hint')}>
         <SettingRow label={tr('settings.externalStyle.label')}>
-          <Toggle small on={s.externalWindowStyle !== false} onChange={(externalWindowStyle) => set({ externalWindowStyle })} />
+          <Toggle small on={s.externalWindowStyle === true} onChange={(externalWindowStyle) => set({ externalWindowStyle })} />
         </SettingRow>
       </Section>
     </Stack>

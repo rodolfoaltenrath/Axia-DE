@@ -5,8 +5,9 @@ import { DEFAULT_WALLPAPER } from './wallpapers.js';
 const DEFAULTS = {
   mode: 'dark',          // 'dark' | 'light'
   accent: 'azul',
-  externalWindowStyle: true, // reversible Firefox/LibreWolf and VS Code window styling
-  filesAppearance: 'adwaita', // Rust styling pilot; other native apps keep their current theme
+  externalWindowStyle: false, // opt-in legacy Axia controls; standard Adwaita by default
+  nativeAppearance: 'adwaita', // shared Rust-authored appearance across native apps
+  filesAppearance: 'adwaita', // compatibility with the earlier Files pilot
   effects: true,         // transparency with blur
   reduceMotion: false,   // decorative animations off (Settings → Appearance)
   browserTabsInTitlebar: true,   // 0.8.4, Settings → Appearance: Chromium and Firefox draw their own bar (browserframe.js)
@@ -38,9 +39,10 @@ const DEFAULTS = {
 // meaning of a setting, it appends [schema, (settings) => newSettings] here. Each runs once per user,
 // in order, when the session loads the file; "schema" records the last one applied. The system-wide
 // migrations (as root) are the lordos package's (packaging/migrations).
-export const SETTINGS_SCHEMA = 1;
+export const SETTINGS_SCHEMA = 2;
 const MIGRATIONS = [
   [1, (s) => s],          // 0.8.1: the schema number starts being recorded; nothing changes
+  [2, (s) => ({ ...s, externalWindowStyle: false, nativeAppearance: s.filesAppearance || 'adwaita' })], // retire the old mac-style adapters once
 ];
 export function migrateSettings(s) {
   let out = s;

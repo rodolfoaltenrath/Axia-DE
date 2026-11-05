@@ -3,7 +3,8 @@
 import { createElement as h, useEffect, useState } from 'react';
 import { startShell } from '../../sdk/index.js';
 import { View } from '@lordos/runtime';
-import { ThemeProvider } from '../../sdk/theme.js';
+import { ThemeProvider, appAppearance } from '../../sdk/theme.js';
+import { migrateSettings } from '../../sdk/settings.js';
 import { RustFiles } from '../../sdk/rustfiles.jsx';
 import { AppWindowContext } from '../../sdk/components.jsx';
 import { wm } from '../../sdk/windows.js';
@@ -14,6 +15,26 @@ const wait = async (test, message) => {
   while (!test()) { check(Date.now() < until, message); await new Promise((r) => setTimeout(r, 20)); }
 };
 const find = (node, test) => !node ? null : test(node) ? node : (node.children || []).map((n) => find(n, test)).find(Boolean);
+const oldPreferences = { schema: 1, externalWindowStyle: true, filesAppearance: 'axia', mode: 'light', files: { zoom: 1.5 } };
+const migrated = migrateSettings(oldPreferences);
+check(migrated.schema === 2 && migrated.externalWindowStyle === false && migrated.files === oldPreferences.files && migrated.filesAppearance === 'axia', 'upgrade retires legacy adapters and retains app preferences');
+check(migrateSettings({ ...migrated, externalWindowStyle: true }).externalWindowStyle === true, 'legacy style can be enabled explicitly after migration');
+const styleRequest = lord.appearance.request;
+let styleCalls = 0;
+lord.appearance.request = (raw) => {
+  styleCalls++;
+  check(raw.length < 512 && !raw.includes('wallpapers'), 'style transport is bounded to scalar inputs');
+  return styleRequest(raw);
+};
+const styleSource = { mode: 'dark', accent: '#3584e4', effects: true, blur: 24, panelBg: 'rgba(36,36,42,0.72)', wallpapers: new Array(1000).fill('catalog') };
+const sharedStyle = appAppearance(styleSource);
+check(sharedStyle.tokens.nativeStyle === 'adwaita' && sharedStyle.tokens.effects === true && sharedStyle.tokens.blur === 24 && sharedStyle.tokens.panelBg === styleSource.panelBg, 'shared native style preserves glass');
+for (let n = 0; n < 1000; n++) check(appAppearance(styleSource) === sharedStyle, 'stable appearance reuses the plan and token object');
+check(styleCalls === 1, '1000 repeated window renders do not call Rust again');
+check(appAppearance({ ...styleSource }).chrome === sharedStyle.chrome && styleCalls === 1, 'new theme object with equal appearance reuses Rust plan');
+const nextStyle = appAppearance({ ...styleSource, mode: 'light' });
+check(nextStyle.tokens.mode === 'light' && styleCalls === 2, 'mode change updates native style once');
+lord.appearance.request = styleRequest;
 let handle = 0, latest = null, action = null, facts = [], show, menuUpdates = 0, forcedWidth = 0;
 const setMenus = wm.setMenus;
 wm.setMenus = (...args) => { menuUpdates++; return setMenus(...args); };

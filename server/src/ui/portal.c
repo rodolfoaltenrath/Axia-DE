@@ -276,7 +276,7 @@ static void changed(int i) {
     dw_free(&b);
 }
 
-void portal_set(int is_dark, const double rgb[3], const char *accent_name, const char *button_layout) {
+void portal_set(int is_dark, const double rgb[3], const char *accent_name, const char *button_layout, int legacy_style) {
     int old_dark = dark;
     double old[3] = { acc[0], acc[1], acc[2] };
     char old_name[16], old_buttons[64], old_theme[64];
@@ -287,7 +287,7 @@ void portal_set(int is_dark, const double rgb[3], const char *accent_name, const
     for (int i = 0; i < 3; i++) acc[i] = rgb[i] < 0 ? 0 : rgb[i] > 1 ? 1 : rgb[i];
     if (accent_name) snprintf(acc_name, sizeof acc_name, "%s", accent_name);
     if (button_layout) snprintf(buttons, sizeof buttons, "%s", button_layout);
-    snprintf(gtk_theme, sizeof gtk_theme, "%s", axia_appearance_theme(dark));
+    snprintf(gtk_theme, sizeof gtk_theme, "%s", axia_appearance_theme(dark, legacy_style));
     if (old_dark != dark) { changed(0); changed(3); }
     if (memcmp(old, acc, sizeof old)) changed(1);
     if (strcmp(old_name, acc_name)) changed(4);

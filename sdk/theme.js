@@ -63,8 +63,8 @@ function syncPortal(value) {
     if (typeof lord === 'undefined' || !lord.portal) return;
     const name = settings.get().accent || '';
     const msg = { dark: value.mode !== 'light', accent: /^#[0-9a-f]{6}$/i.test(value.accent) ? value.accent : '#0a84ff',
-      accentName: GNOME_ACCENTS[name] || 'blue', buttons: value.gtkButtons || 'close,minimize,maximize:',
-      externalStyle: settings.get().externalWindowStyle !== false };
+      accentName: GNOME_ACCENTS[name] || 'blue', buttons: settings.get().externalWindowStyle === true ? (value.gtkButtons || 'close,minimize,maximize:') : ':minimize,maximize,close',
+      externalStyle: settings.get().externalWindowStyle === true };
     const json = JSON.stringify(msg);
     if (json !== portalSent) { portalSent = json; lord.portal.set(msg); }
   } catch (e) { /* no portal */ }
@@ -82,11 +82,34 @@ function settingTokens() {
 export function ThemeProvider({ tokens, children }) {
   const value = { ...DEFAULT_TOKENS, ...settingTokens(), ...tokens };
   const outermost = useContext(ThemeContext) === DEFAULT_TOKENS;
-  useEffect(() => { publishTokens(value); syncPortal(value); if (outermost) shellTokens.set(value); });
+  useEffect(() => { publishTokens(appAppearance(value).tokens); syncPortal(value); if (outermost) shellTokens.set(value); });
   return createElement(ThemeContext.Provider, { value }, children);
 }
 
 export const useTheme = () => useContext(ThemeContext);
+
+// All native apps share one Rust style plan. Only scalar appearance inputs cross
+// FFI, once per change; wallpaper catalogs and window state never enter the cache.
+let appStyleInput = null, appStylePlan = null;
+const appStyles = new WeakMap();
+export function appAppearance(source) {
+  const mode = settings.get().nativeAppearance || 'adwaita';
+  if (mode === 'axia' || typeof lord === 'undefined' || !lord.appearance) return { tokens: source, chrome: null };
+  if (!appStyleInput || appStyleInput.mode !== source.mode || appStyleInput.accent !== source.accent ||
+      appStyleInput.effects !== source.effects || appStyleInput.blur !== source.blur || appStyleInput.panelBg !== source.panelBg) {
+    const input = { mode: source.mode, accent: source.accent, effects: source.effects,
+      blur: source.blur, panelBg: source.panelBg, nativeAppearance: mode };
+    const plan = lord.appearance.request(JSON.stringify(input));
+    if (!plan?.tokens) return { tokens: source, chrome: null };
+    appStyleInput = input; appStylePlan = plan;
+  }
+  let cached = appStyles.get(source);
+  if (!cached || cached.plan !== appStylePlan) {
+    cached = { plan: appStylePlan, tokens: { ...source, ...appStylePlan.tokens }, chrome: appStylePlan.chrome };
+    appStyles.set(source, cached);
+  }
+  return cached;
+}
 
 // Local app styling must never publish tokens to other apps or the GTK portal.
 export function ThemeScope({ value, children }) {

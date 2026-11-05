@@ -277,13 +277,18 @@ What a window with its own bar still gets from LordOS (both themes, `WINDOWS.md`
     the same keys into `$XDG_CONFIG_HOME/glib-2.0/settings/keyfile` (default `~/.config`),
     without deleting what the apps store. GLib watches that
     file, so GTK 3 also changes live.
-  - The `Axia`/`Axia-dark` theme (`assets/gtk/`, installed in `PREFIX/share/themes`) is Adwaita
-    with Axia's colors, bar and traffic lights. Discovery follows XDG data directories and
-    falls back to Adwaita if the matching variant is unavailable.
+  - `Adwaita`/`Adwaita-dark` is the default. The optional legacy
+    `Axia`/`Axia-dark` themes (`assets/gtk/`, installed in `PREFIX/share/themes`)
+    add Axia's old colors and traffic lights. They are used only when the user
+    explicitly enables the old external style; discovery follows XDG directories.
   - GTK 3 has no accent: its own stays blue.
-- **The buttons** go on the left in traffic-light order (`close,minimize,maximize:`). The Lord Classic
-  theme asks for them on the right with the `gtkButtons` token (`:minimize,maximize,close`). GTK
-  apps, Chromium and Firefox move them live when the theme changes.
+- **The buttons** default to the standard right-hand order (`:minimize,maximize,close`).
+  Opting into the old external style restores the shell's `gtkButtons` order,
+  or traffic lights on the left when the shell supplies none. Custom application
+  title bars may ignore toolkit placement; VS Code keeps its own controls.
+  Settings schema 2 disables the managed browser CSS and VS Code icon-theme
+  defaults once on upgrade. Personal editor themes, CSS and unrelated settings
+  are preserved. Reopen external apps to clear cached styling.
 - **Qt/KDE.** They use the theme's frame (xdg-decoration). Qt 6 also reads `color-scheme` from the
   portal; not tested.
 - **The JS.** The SDK's `ThemeProvider` sends mode, accent and buttons with `lord.portal.set` when

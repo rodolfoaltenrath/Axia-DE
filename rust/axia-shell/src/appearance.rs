@@ -39,11 +39,12 @@ fn data_roots() -> Vec<PathBuf> {
     roots
 }
 
-fn theme_name(dark: bool, roots: &[PathBuf]) -> &'static str {
+fn theme_name(dark: bool, legacy: bool, roots: &[PathBuf]) -> &'static str {
     let name = if dark { "Axia-dark" } else { "Axia" };
-    if roots
-        .iter()
-        .any(|root| root.join(name).join("gtk-3.0/gtk.css").is_file())
+    if legacy
+        && roots
+            .iter()
+            .any(|root| root.join(name).join("gtk-3.0/gtk.css").is_file())
     {
         name
     } else if dark {
@@ -170,9 +171,9 @@ fn write_settings(
 }
 
 #[no_mangle]
-pub extern "C" fn axia_appearance_theme(dark: bool) -> *const c_char {
+pub extern "C" fn axia_appearance_theme(dark: bool, legacy: bool) -> *const c_char {
     // Only static, NUL-terminated names cross FFI; C never has to free them.
-    match theme_name(dark, &data_roots()) {
+    match theme_name(dark, legacy, &data_roots()) {
         "Axia" => c"Axia".as_ptr(),
         "Axia-dark" => c"Axia-dark".as_ptr(),
         "Adwaita" => c"Adwaita".as_ptr(),
@@ -244,15 +245,21 @@ mod tests {
     #[test]
     fn theme_discovery_handles_install_roots_and_missing_variants() {
         let temp = Temp::new();
-        assert_eq!(theme_name(true, &[temp.0.clone()]), "Adwaita-dark");
+        assert_eq!(theme_name(true, true, &[temp.0.clone()]), "Adwaita-dark");
         let css = temp.0.join("Axia/gtk-3.0/gtk.css");
         fs::create_dir_all(css.parent().unwrap()).unwrap();
         fs::write(css, "/* theme */").unwrap();
-        assert_eq!(theme_name(false, &[temp.0.clone()]), "Axia");
-        assert_eq!(theme_name(true, &[temp.0.clone()]), "Adwaita-dark");
+        assert_eq!(theme_name(false, true, &[temp.0.clone()]), "Axia");
+        assert_eq!(theme_name(true, true, &[temp.0.clone()]), "Adwaita-dark");
         let css = temp.0.join("Axia-dark/gtk-3.0/gtk.css");
+        assert_eq!(theme_name(false, false, &[temp.0.clone()]), "Adwaita");
+        fs::create_dir_all(css.parent().unwrap()).unwrap();
+        fs::write(&css, "/* legacy dark */").unwrap();
+        assert_eq!(theme_name(true, false, &[temp.0.clone()]), "Adwaita-dark");
+        assert_eq!(theme_name(true, true, &[temp.0.clone()]), "Axia-dark");
+        fs::remove_file(&css).unwrap();
         fs::create_dir_all(&css).unwrap(); // A directory is not a usable theme.
-        assert_eq!(theme_name(true, &[temp.0.clone()]), "Adwaita-dark");
+        assert_eq!(theme_name(true, true, &[temp.0.clone()]), "Adwaita-dark");
     }
 
     #[test]

@@ -4,28 +4,40 @@ The launcher name remains **Arquivos** in Portuguese (**Files** in English).
 Its description is “Axia file explorer”. The app and native open/save/folder
 choosers share one Rust implementation in `rust/axia-shell/src/files/`.
 
-## Traditional appearance pilot
+## Shared traditional appearance
 
-`native_style.rs` owns an Adwaita/GTK 3-inspired palette, control metrics and
-declarative frame plan in Rust. Files and its shared choosers use this local
-style by default. Settings → Appearance → Traditional style in Files switches
-back to the previous Axia style live, preserving location, selection, zoom,
-history and preferences. Other native apps and external-app adapters retain
-their existing behavior until this visual pilot is approved.
+`native_style.rs` owns the Adwaita/GTK 3-inspired palette, control metrics and
+frame plan in Rust. All native app content receives the shared style through
+`AppHost`, including fullscreen/PiP and auxiliary app windows. Published app
+tokens carry it to isolated native apps as well. The default shell uses the
+same Rust plan for all server-decorated frames; app-owned title bars keep their
+own structure. Classic already uses standard right-hand window controls.
 
-The default shell binds Rust's minimize/maximize/close action names to its
-existing window manager. Controls are on the right in their normal order;
-the frame keeps its 40 px title height and existing content geometry. The
-renderer, drag/resize handlers, GPU composition and shell glass are unchanged.
-The local opaque menus request no backdrop blur; shell menus still use glass.
+Settings → Appearance → Traditional style in native applications restores the
+previous style live when disabled, preserving app state. `nativeAppearance` is
+the shared preference; `filesAppearance` is retained for old settings compatibility.
+External apps default to GTK/Adwaita and their own controls. The old browser CSS
+and VS Code icon adapter are opt-in; schema 2 retires their managed overrides
+once on upgrade without removing personal CSS, editor themes or other settings.
+Reopen external apps to clear their cached title-bar styling.
 
-`ThemeScope` only provides app context. It never republishes local colors to
-the global GTK portal, isolated apps or shell. Unchanged appearance/frame
-metadata is omitted from Rust replies and retained by the adapter, so scrolling
-does not repeatedly update the frame. Shell wallpaper/accent catalogs never
-enter the appearance transport or the saved frame metadata. This is a visual implementation in Rust,
-not a replacement of the rendering engine with GTK or a claim that the entire
-C/JavaScript desktop has been migrated to Rust. No GTK dependency is added.
+The Rust plan uses smaller shadows and the existing 40 px frame/content geometry.
+App colors and control geometry change; existing glass, effect preferences and
+backdrop caches are preserved. The compositor, renderer, drag/resize/input paths
+and shell/Dock styling remain unchanged. This does not replace the renderer with
+GTK or migrate all app logic to Rust; no GTK dependency is added.
+
+`lord.appearance.request` is a pure Rust style transport, independent of Files
+sessions and workers. Only mode, accent and glass-related scalar values cross
+it. The SDK caches one plan per current appearance, compares scalar inputs
+before serialization and reuses merged token objects with a WeakMap. Opening
+or repainting another window does not invoke Rust again for the same appearance.
+Wallpaper catalogs, app state and large lists never enter this cache.
+`ThemeScope` only provides context and never changes shell tokens or the portal.
+
+Files and all native file pickers use this same Rust palette and frame. Their
+unchanged appearance/frame metadata is omitted from poll replies, so scrolling
+does not repeatedly update the frame or trigger directory scans.
 
 ## Architecture
 

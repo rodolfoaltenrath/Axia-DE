@@ -2,7 +2,7 @@
 // adapt to any theme.
 import { View, Text, addListener, displayFor, onCommit, onScreenChange } from '@lordos/runtime';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { useTheme } from './theme.js';
+import { useTheme, ThemeScope, appAppearance } from './theme.js';
 import { getApp, windows, openedAt, wm, activeDesktop, onActiveDesktop } from './windows.js';
 import { onDesktop } from './desktopmodel.js';
 import { useStore } from './store.js';
@@ -474,6 +474,7 @@ export function useWindowState(key, initial) {
 
 // The theme uses <AppHost id focused /> inside its window frame.
 export function AppHost({ id, focused }) {
+  const appearance = appAppearance(useTheme());
   const app = getApp(id);
   const args = useStore(windows, (ws) => ws.find((w) => w.id === id)?.args || null);
   const prot = useStore(windows, (ws) => !!ws.find((w) => w.id === id)?.protected);
@@ -489,12 +490,14 @@ export function AppHost({ id, focused }) {
   const C = app.Component;
   // the content goes in its own node: `protected` paints it black in screenshots (wm.setProtected)
   return (
-    <AppWindowContext.Provider value={{ id, focused, args, mode, protected: prot, overlayHost }}>
-      <View protected={prot} style={{ flex: 1, alignSelf: 'stretch' }}>
-        <C />
-        <View ref={setOverlayHost} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }} />
-      </View>
-    </AppWindowContext.Provider>
+    <ThemeScope value={appearance.tokens}>
+      <AppWindowContext.Provider value={{ id, focused, args, mode, protected: prot, overlayHost }}>
+        <View protected={prot} style={{ flex: 1, alignSelf: 'stretch' }}>
+          <C />
+          <View ref={setOverlayHost} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }} />
+        </View>
+      </AppWindowContext.Provider>
+    </ThemeScope>
   );
 }
 

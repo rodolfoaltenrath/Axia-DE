@@ -2,7 +2,7 @@
 // (the SDK's AppHost); the theme only decides how the frame looks. Moving and resizing (invisible
 // borders on all 4 sides and 4 corners, <WindowShell>) is done by axia-server in C
 // (docs/WINDOWS.md); the JS drag below is only kept for a maximized window.
-import { View, Text, addListener, wm, AppHost, windowTitle, WindowShell, moveToDesktopItems, t as tr, solidOver } from '@lordos/sdk';
+import { View, Text, addListener, wm, AppHost, windowTitle, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';
 
@@ -25,9 +25,10 @@ export function Window({ win, app, t, focused, fx }) {
   const drag = useRef(null);
   const [hover, setHover] = useState(false);
   const [hoverKey, setHoverKey] = useState(null);
-  const plan = win.app === 'files' ? win.args?.nativeChrome : null;
+  const shared = appAppearance(t);
+  const plan = win.app === 'files' && win.args?.nativeChrome ? win.args.nativeChrome : shared.chrome;
   const chrome = plan?.schema === 1 && Array.isArray(plan.buttons) ? plan : null;
-  t = chrome?.tokens || t;
+  t = chrome ? { ...t, ...chrome.tokens } : t;
   const controls = chrome ? chrome.buttons.map((b) => ({ ...b, act: LIGHTS.find((l) => l.key === b.key)?.act })).filter((b) => b.act) : LIGHTS;
   const geo = wm.frame(win);
   const fxs = fxStyle(fx, geo);
