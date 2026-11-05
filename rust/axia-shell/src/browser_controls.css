@@ -1,0 +1,42 @@
+/* Axia owns only this browser-window styling, never web content or tab layout. */
+@-moz-document url("chrome://browser/content/browser.xhtml") {
+  @media not (forced-colors: active) {
+    .titlebar-buttonbox {
+      --titlebar-button-size: 13px !important;
+      --titlebar-button-spacing: 4px !important;
+      --titlebar-button-end-spacing: 10px !important;
+      align-items: center !important;
+    }
+    .titlebar-button {
+      min-height: 28px !important;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    .titlebar-button:is(.titlebar-close, .titlebar-min, .titlebar-max, .titlebar-restore) > .toolbarbutton-icon {
+      width: 13px !important;
+      height: 13px !important;
+      border-radius: 50% !important;
+      background-size: 9px !important;
+      background-position: center !important;
+      background-repeat: no-repeat !important;
+      background-image: none !important;
+      list-style-image: none !important;
+      transition: none !important;
+    }
+    .titlebar-close > .toolbarbutton-icon { background-color: #ff5f57 !important; }
+    .titlebar-min > .toolbarbutton-icon { background-color: #febc2e !important; }
+    :is(.titlebar-max, .titlebar-restore) > .toolbarbutton-icon { background-color: #28c840 !important; }
+    .titlebar-button:-moz-window-inactive > .toolbarbutton-icon { background-color: #77777e !important; }
+    .titlebar-buttonbox:hover .toolbarbutton-icon { color: #252525 !important; stroke: #252525 !important; }
+    .titlebar-buttonbox:hover .titlebar-close > .toolbarbutton-icon {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='m2 2 6 6m0-6-6 6' stroke='%23252525' stroke-width='1.2'/%3E%3C/svg%3E") !important;
+    }
+    .titlebar-buttonbox:hover .titlebar-min > .toolbarbutton-icon {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 5h7' stroke='%23252525' stroke-width='1.2'/%3E%3C/svg%3E") !important;
+    }
+    .titlebar-buttonbox:hover :is(.titlebar-max, .titlebar-restore) > .toolbarbutton-icon {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 5h7M5 1.5v7' stroke='%23252525' stroke-width='1.2'/%3E%3C/svg%3E") !important;
+    }
+  }
+}

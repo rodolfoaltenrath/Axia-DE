@@ -1,4 +1,5 @@
 {
+  "externalStyle": {"label": "Estilo Axia nos aplicativos externos", "hint": "Aplica os botões da Axia ao Firefox e LibreWolf e um tema de controles ao VS Code. Mantém as abas e o tema de cores do editor. No VS Code, os controles ficam à direita, com o espaçamento do aplicativo. Feche e abra o aplicativo para aplicar ou desfazer. Personalizações próprias têm prioridade."},
   "host.adminUnavailable": "As configurações do sistema são gerenciadas pela sua distribuição.",
   "admin.langpack": "Instalando pacotes",
   "admin.locale-gen": "Gerando região",
