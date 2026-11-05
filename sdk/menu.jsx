@@ -27,7 +27,7 @@ function Item({ item, onClose, onSub, active, onHover }) {
   return (
     <View ref={self} onMouseEnter={enter}
       onClick={() => { if (!off && !item.submenu) { onClose(); item.onClick?.(); } }}
-      style={{ height: ROW, paddingHorizontal: 10, marginHorizontal: 5, borderRadius: 5, flexDirection: 'row', alignItems: 'center',
+      style={{ height: ROW, paddingHorizontal: 10, marginHorizontal: 5, borderRadius: t.contextMenuItemRadius ?? 5, flexDirection: 'row', alignItems: 'center',
         backgroundColor: lit ? t.accent : 'transparent' }}>
       <Text style={{ width: 16, fontSize: 12, color: lit ? '#fff' : t.text }}>{item.checked ? '✓' : ''}</Text>
       <Text style={{ flex: 1, fontSize: 13, color: lit ? '#fff' : off ? t.textDim : item.danger ? '#ff453a' : t.text, whiteSpace: 'nowrap' }}>{item.label}</Text>
@@ -132,7 +132,7 @@ export function Menu({ x, y, items, onClose, anchor, width: minWidth = 220, abov
   const body = (
     <>
     <View ref={ref} style={{
-      position: 'absolute', left: x, top: y, width, height: scrolls ? height : undefined, paddingVertical: scrolls ? 0 : 5, borderRadius: 9,
+      position: 'absolute', left: x, top: y, width, height: scrolls ? height : undefined, paddingVertical: scrolls ? 0 : 5, borderRadius: t.contextMenuRadius ?? 9,
       backgroundColor: t.panelBg || t.popupBg || (t.mode === 'dark' ? 'rgba(35,35,40,0.88)' : 'rgba(248,248,250,0.90)'), backdropFilter: `blur(${t.effects === false ? 0 : (t.blur ?? 24)}px)`, border: `1px solid ${t.windowBorder || t.separator}`,
       boxShadow: '0 12px 32px rgba(0,0,0,0.35)', overflow: 'hidden',
     }}>

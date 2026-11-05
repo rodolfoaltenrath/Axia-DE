@@ -4,6 +4,29 @@ The launcher name remains **Arquivos** in Portuguese (**Files** in English).
 Its description is “Axia file explorer”. The app and native open/save/folder
 choosers share one Rust implementation in `rust/axia-shell/src/files/`.
 
+## Traditional appearance pilot
+
+`native_style.rs` owns an Adwaita/GTK 3-inspired palette, control metrics and
+declarative frame plan in Rust. Files and its shared choosers use this local
+style by default. Settings → Appearance → Traditional style in Files switches
+back to the previous Axia style live, preserving location, selection, zoom,
+history and preferences. Other native apps and external-app adapters retain
+their existing behavior until this visual pilot is approved.
+
+The default shell binds Rust's minimize/maximize/close action names to its
+existing window manager. Controls are on the right in their normal order;
+the frame keeps its 40 px title height and existing content geometry. The
+renderer, drag/resize handlers, GPU composition and shell glass are unchanged.
+The local opaque menus request no backdrop blur; shell menus still use glass.
+
+`ThemeScope` only provides app context. It never republishes local colors to
+the global GTK portal, isolated apps or shell. Unchanged appearance/frame
+metadata is omitted from Rust replies and retained by the adapter, so scrolling
+does not repeatedly update the frame. Shell wallpaper/accent catalogs never
+enter the appearance transport or the saved frame metadata. This is a visual implementation in Rust,
+not a replacement of the rendering engine with GTK or a claim that the entire
+C/JavaScript desktop has been migrated to Rust. No GTK dependency is added.
+
 ## Architecture
 
 - `model.rs` owns each window's tabs, location/history, selection, search,

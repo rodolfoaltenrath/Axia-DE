@@ -21,6 +21,9 @@ const bound = new Set(), released = new Set(), volumeCalls = [];
 const original = { request: lord.files.request, list: lord.disks.list, bind: lord.doc.bind, release: lord.doc.release };
 lord.files.request = (raw) => {
   let request = JSON.parse(raw);
+  if (request.op === 'create' || request.op === 'poll') {
+    check(!('wallpapers' in (request.theme || {})) && !('accents' in (request.theme || {})), 'appearance transport excludes shell catalogs');
+  }
   if (request.op === 'volumeStart') {
     check((request.action === 'mount' && request.device === 'sdb1') || (request.action === 'release' && request.device === 'sdb'), 'only expected simulated disk requests');
     volumeCalls.push(request.action); facts = request.action === 'mount' ? disk(true) : [];

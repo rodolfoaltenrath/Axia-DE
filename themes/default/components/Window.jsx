@@ -24,6 +24,11 @@ function fxStyle(fx, geo) {
 export function Window({ win, app, t, focused, fx }) {
   const drag = useRef(null);
   const [hover, setHover] = useState(false);
+  const [hoverKey, setHoverKey] = useState(null);
+  const plan = win.app === 'files' ? win.args?.nativeChrome : null;
+  const chrome = plan?.schema === 1 && Array.isArray(plan.buttons) ? plan : null;
+  t = chrome?.tokens || t;
+  const controls = chrome ? chrome.buttons.map((b) => ({ ...b, act: LIGHTS.find((l) => l.key === b.key)?.act })).filter((b) => b.act) : LIGHTS;
   const geo = wm.frame(win);
   const fxs = fxStyle(fx, geo);
 
@@ -59,25 +64,26 @@ export function Window({ win, app, t, focused, fx }) {
 
   return (
     <WindowShell win={win} leaving={!!fx} onMouseDown={() => wm.focus(win.id)} style={{
-      borderRadius: win.maximized ? 0 : 12, backgroundColor: app.transparent ? 'transparent' : t.windowBg, overflow: 'hidden',
+      borderRadius: win.maximized ? 0 : chrome?.radius ?? 12, backgroundColor: app.transparent ? 'transparent' : t.windowBg, overflow: 'hidden',
       // a transparent app (the Terminal) has nothing behind its border: the border is drawn opaque
       border: `1px solid ${app.transparent ? solidOver(t.windowBorder, t.titleBg) : t.windowBorder}`,
-      boxShadow: focused ? '0 24px 56px rgba(0,0,0,0.55)' : '0 10px 28px rgba(0,0,0,0.32)',
+      boxShadow: focused ? chrome?.shadowFocused || '0 24px 56px rgba(0,0,0,0.55)' : chrome?.shadowInactive || '0 10px 28px rgba(0,0,0,0.32)',
       ...fxs,
     }}>
       <View onMouseDown={(e) => { if (!wm.beginMove(win.id)) drag.current = { dx: e.x - geo.x, dy: e.y - geo.y }; }}
         onDoubleClick={() => wm.toggleMaximize(win.id)}
-        style={{ height: TITLE_H, flexDirection: 'row', alignItems: 'center', paddingLeft: 14, backgroundColor: t.titleBg }}>
+        style={chrome?.header || { height: TITLE_H, flexDirection: 'row', alignItems: 'center', paddingLeft: 14, backgroundColor: t.titleBg }}>
         <Text style={{ position: 'absolute', left: 0, right: 0, top: 0, lineHeight: TITLE_H, textAlign: 'center',
           fontSize: 13, fontWeight: 600, color: focused ? t.text : t.textDim, pointerEvents: 'none', whiteSpace: 'nowrap',
-          paddingHorizontal: 80 }}>{windowTitle(win)}</Text>
+          paddingHorizontal: 80, ...chrome?.title }}>{windowTitle(win)}</Text>
         <View onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-          style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
-          {LIGHTS.map((l) => (
+          style={chrome?.controls || { flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
+          {controls.map((l) => (
             <View key={l.key} onMouseDown={(e) => e.stopPropagation()} onClick={() => l.act(win.id)}
-              style={{ width: 13, height: 13, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
+              onMouseEnter={chrome ? () => setHoverKey(l.key) : undefined} onMouseLeave={chrome ? () => setHoverKey(null) : undefined}
+              style={chrome ? { ...chrome.button, ...(hoverKey === l.key ? chrome.buttonHover : null) } : { width: 13, height: 13, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
                 backgroundColor: focused || hover ? l.color : t.lightOff }}>
-              {hover && <Text style={{ fontSize: 11, fontWeight: 700, lineHeight: 13, color: 'rgba(0,0,0,0.6)' }}>{l.glyph}</Text>}
+              {(chrome || hover) && <Text style={chrome ? { ...chrome.glyph, color: focused ? t.text : t.textDim } : { fontSize: 11, fontWeight: 700, lineHeight: 13, color: 'rgba(0,0,0,0.6)' }}>{l.glyph}</Text>}
             </View>
           ))}
         </View>

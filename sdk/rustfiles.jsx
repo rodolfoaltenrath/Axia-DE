@@ -1,9 +1,9 @@
 // Generic host adapter for Rust-owned widget trees and effects. There is no
 // filesystem/navigation state here: browser and every picker use lord.files.
-import { createElement as h, Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { createElement as h, createContext, useContext, Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, MediaView, mainBox, addListener, screen } from '@lordos/runtime';
 import { Button, TextInput, ScrollView, useAppWindow, useKeyboard, hasTextFocus } from './components.jsx';
-import { useTheme } from './theme.js';
+import { useTheme, ThemeScope } from './theme.js';
 import { Toolbar, ToolbarButton, ToolbarGroup } from './controls.jsx';
 import { t, locale, formatDate, formatTime } from './i18n.js';
 import { settings } from './settings.js';
@@ -20,6 +20,14 @@ import { lan } from './lan.js';
 import { useDisks, disks } from './disks.js';
 import { Menu } from './menu.jsx';
 const modalHandles = new Set();
+const FilesRootContext = createContext(null);
+
+// Catalogs belong to the shell, not app styling. Keep them out of the request,
+// Rust's appearance replies and the frame metadata saved with a window.
+function appearanceContext(theme) {
+  const { wallpapers, accents, ...tokens } = theme;
+  return { ...tokens, filesAppearance: settings.get().filesAppearance || 'adwaita' };
+}
 
 export function filesRequest(value) {
   const result = lord.files.request(JSON.stringify(value));
@@ -48,7 +56,7 @@ function ToolWidget({ node, send }) {
     send(node.action, { type: 'click', x: x + width / 2, y: y + height });
   };
   return h(View, { ref, style: { flexShrink: 0 } }, h(ToolbarButton, { small: true, icon: node.icon,
-    title: caption(node.title), active: node.active, disabled: node.disabled, onClick: press }));
+    title: caption(node.title), active: node.active, disabled: node.disabled, style: node.style, onClick: press }));
 }
 
 // A file cell repeats the same few vector icons, so the tree only names them.
@@ -87,11 +95,14 @@ const FORMAT_SAMPLE = new Date(2001, 11, 31, 23, 59);
 const captionFormat = () => `${locale.get()}|${formatDate(FORMAT_SAMPLE)}|${formatTime(FORMAT_SAMPLE)}`;
 
 function FilesContextMenu({ node, send }) {
+  const root = useContext(FilesRootContext);
   const origin = useRef(null), [position, setPosition] = useState(null);
   useEffect(() => {
-    const [x, y] = node.absolute ? [0, 0] : lord.getLayout(origin.current.id);
+    // The app root has already been laid out when a menu opens. A freshly
+    // mounted anchor still reports (0,0) during this effect, shifting the menu.
+    const [x, y] = node.absolute ? [0, 0] : lord.getLayout((root?.current || origin.current).id);
     setPosition({ x: x + node.x, y: y + node.y });
-  }, [node.x, node.y, node.absolute]);
+  }, [node.x, node.y, node.absolute, root]);
   const convert = (item) => item === '-' ? item : ({ ...item, label: caption(item.label),
     submenu: item.submenu?.map(convert), onClick: item.action ? () => send(item.action) : undefined });
   return h(View, { ref: origin, style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1 } },
@@ -227,13 +238,14 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
   const root = useRef(null), live = useRef(true), pending = useRef(new Set()), resources = useRef({ media: new Set(), images: new Set() }), capture = useRef(false), latest = useRef(null);
   const [snapshot, setSnapshot] = useState(() => filesRequest({ op: 'create', mode, args, title, start, name, multiple,
     filter: filter?.source || '', ignoreCase: !!filter?.ignoreCase, preferences: settings.get().files,
+    theme: appearanceContext(theme),
     apps: appMetadata(apps) }));
   const handle = useRef(snapshot.id).current;
   // React may batch several snapshots into one render. Preserve the effects of
   // every accepted response, including intermediate snapshots that never paint.
   const received = useRef(snapshot.serial), effectQueue = useRef(null);
   if (effectQueue.current === null) effectQueue.current = [...(snapshot.effects || [])];
-  const shown = useRef({ tree: snapshot.tree, menus: snapshot.menus, format: captionFormat() }), pace = useRef({ timer: 0, loading: !!snapshot.loading, poll: null });
+  const shown = useRef({ tree: snapshot.tree, menus: snapshot.menus, appearance: snapshot.appearance, chrome: snapshot.chrome, format: captionFormat() }), pace = useRef({ timer: 0, loading: !!snapshot.loading, poll: null });
   // Finished listings are collected promptly; an idle window stays at 10 Hz.
   const armPoll = () => {
     const state = pace.current;
@@ -249,7 +261,9 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
       // New objects render every node again, with the new captions.
       if (format !== shown.current.format) result.tree = JSON.parse(JSON.stringify(result.tree));
       result.menus ??= shown.current.menus;
-      shown.current = { tree: result.tree, menus: result.menus, format };
+      result.appearance ??= shown.current.appearance;
+      if (!Object.prototype.hasOwnProperty.call(result, 'chrome')) result.chrome = shown.current.chrome;
+      shown.current = { tree: result.tree, menus: result.menus, appearance: result.appearance, chrome: result.chrome, format };
       const loading = !!result.loading;
       if (loading && !pace.current.loading && pace.current.poll) { pace.current.loading = true; armPoll(); }
       pace.current.loading = loading;
@@ -273,7 +287,8 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     const poll = () => {
       if (!root.current) return;
       const [, , width, height] = lord.getLayout(root.current.id);
-      accept(filesRequest({ op: 'poll', id: handle, width, height, theme: latest.current.theme, locale: locale.get() }));
+      accept(filesRequest({ op: 'poll', id: handle, width, height,
+        theme: appearanceContext(latest.current.theme), locale: locale.get() }));
     };
     const move = addListener('pointermove', (e) => { if (capture.current) latest.current.send(['pointerMove'], e); });
     const up = addListener('pointerup', () => { if (capture.current) setTimeout(() => { if (live.current) latest.current.send(['dragEnd']); }, 0); });
@@ -285,6 +300,10 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
 
   const menuLocale = locale.get();
   const windowTitle = caption(snapshot.title);
+  const chromeKey = JSON.stringify(snapshot.chrome);
+  useEffect(() => {
+    if (mode === 'browser' && win?.id) wm.setArgs(win.id, { nativeChrome: snapshot.chrome || null });
+  }, [chromeKey, win?.id, mode]);
   useEffect(() => {
     if (mode !== 'browser' || !win?.id) return;
     wm.setMenus(win.id, (snapshot.menus || []).map((menu) => ({ label: caption(menu.label), items: menu.items.map((item) =>
@@ -323,7 +342,9 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     }
   }, [snapshot, handle, mode, multiple]);
 
-  return h(View, { ref: root, style: { flex: 1, overflow: 'hidden' } }, h(Widget, { node: snapshot.tree, send }));
+  return h(ThemeScope, { value: snapshot.appearance || theme },
+    h(FilesRootContext.Provider, { value: root },
+      h(View, { ref: root, style: { flex: 1, overflow: 'hidden' } }, h(Widget, { node: snapshot.tree, send }))));
 }
 
 export function RustFileDialog(props) {
