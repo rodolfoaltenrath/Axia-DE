@@ -316,7 +316,7 @@ import { RustLauncher } from '@ROOT@/sdk/rustlauncher.jsx';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { settings } from '@ROOT@/sdk/settings.js';
-import { searchEverything } from '@ROOT@/sdk/spotlight.js';
+import { searchEverything } from '@ROOT@/sdk/search.js';
 import { Menu as ClassicMenu } from '@ROOT@/themes/classic/components/Menu.jsx';
 const Launchpad = props => h(RustLauncher,{...props,mode:'flow'});
 const StartMenu = props => h(RustLauncher,{...props,mode:'classic',Menu:ClassicMenu});

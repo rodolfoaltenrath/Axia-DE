@@ -24,7 +24,7 @@ import { setKeyFilter } from '@lordos/runtime';
 import { createStore } from './store.js';
 import { t } from './i18n.js';
 import { keyboard } from './keyboard.js';
-import { spotlight, spotlightOpen } from './spotlight.js';
+import { spotlight, spotlightOpen } from './search.js';
 import { toggleClipboardPanel, clipboardPanel } from './clipboard.js';
 import { toggleEmojiPanel } from './emoji.jsx';
 import { quitFrontApp } from './dock.js';

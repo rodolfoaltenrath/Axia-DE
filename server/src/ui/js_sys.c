@@ -2291,7 +2291,7 @@ static void add_object(JSContext *c, JSValue parent, const char *name, const JSC
 }
 
 void js_sys_register_app(JSContext *c, JSValue lord) {
-    js_launcher_register(c, lord); /* pure local catalog policy, no host operations */
+    js_launcher_register(c, lord, 0); /* pure catalog/math only; no search filesystem capability */
     add_object(c, lord, "text", text_funcs, sizeof text_funcs / sizeof text_funcs[0]);
     add_object(c, lord, "image", image_funcs, sizeof image_funcs / sizeof image_funcs[0]);
     /* text measuring is local (fonts already loaded): Mail's body editor lays out lines with it */
@@ -2299,7 +2299,7 @@ void js_sys_register_app(JSContext *c, JSValue lord) {
 }
 
 void js_sys_register(JSContext *c, JSValue lord) {
-    js_launcher_register(c, lord);
+    js_launcher_register(c, lord, 1);
     js_files_register(c, lord);
     add_object(c, lord, "fs", fs_funcs, sizeof fs_funcs / sizeof fs_funcs[0]);
     add_object(c, lord, "system", system_funcs, sizeof system_funcs / sizeof system_funcs[0]);
