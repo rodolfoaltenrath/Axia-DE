@@ -1,11 +1,14 @@
 /* Transport only. Each QuickJS context owns its Rust catalog and finalizer. */
 #include "js_launcher.h"
+#include "js_sys.h"
+#include "../fsops.h"
 #include <string.h>
 typedef struct AxiaLauncher AxiaLauncher;
 extern AxiaLauncher *axia_launcher_new(void);
 extern void axia_launcher_free(AxiaLauncher *);
 extern char *axia_launcher_request(AxiaLauncher *, const char *);
 extern void axia_launcher_reply_free(char *);
+extern void axia_launcher_enable_search(AxiaLauncher *, const char *, const char *);
 static JSClassID class_id;
 static void finalize(JSRuntime *rt, JSValue value) {
     (void)rt;
@@ -29,13 +32,15 @@ static JSValue request(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     axia_launcher_reply_free(reply);
     return value;
 }
-void js_launcher_register(JSContext *ctx, JSValue lord) {
+void js_launcher_register(JSContext *ctx, JSValue lord, int session) {
     if (!class_id) JS_NewClassID(&class_id);
     JSClassDef def = { .class_name = "AxiaLauncher", .finalizer = finalize };
     JS_NewClass(JS_GetRuntime(ctx), class_id, &def);
     JSValue object = JS_NewObjectClass(ctx, class_id);
     if (JS_IsException(object)) return;
-    JS_SetOpaque(object, axia_launcher_new());
+    AxiaLauncher *state = axia_launcher_new();
+    if (session) axia_launcher_enable_search(state, fsops_home(), js_sys_assets());
+    JS_SetOpaque(object, state);
     JS_SetPropertyStr(ctx, object, "request", JS_NewCFunction(ctx, request, "request", 1));
     JS_SetPropertyStr(ctx, lord, "launcher", object);
 }

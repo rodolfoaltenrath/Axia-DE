@@ -31,6 +31,9 @@ jobs:
       - name: Rust application menu integration
         if: matrix.gpu == 1
         run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test launcher_runtime -- --ignored --nocapture
+      - name: Rust resident search integration
+        if: matrix.gpu == 1
+        run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test search_runtime -- --ignored --nocapture
       - name: Rust network, brightness and background-app contracts
         if: matrix.gpu == 1
         run: |
