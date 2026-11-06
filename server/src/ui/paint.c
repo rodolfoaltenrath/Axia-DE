@@ -1546,12 +1546,17 @@ static int blur_hidden(Node *n) {
     return h.covered;
 }
 
+/* The margins external_glass_walk marked since the last frame. See glass_only_frame. */
+#define BLUR_MAX 48
+static Box glass_refresh[BLUR_MAX];
+static int nglass_refresh, glass_refresh_over;
+
 static int external_glass_walk(Node *n, Box area) {
     if (!n || n->type == NODE_RAW || n->s.display_none) return 0;
     int hits = 0;
     if (n->s.backdrop_blur >= 1 && n->w > 0 && n->h > 0) {
         Box near = blur_near(n);
-        if (box_meets(area, near)) { damage_add(near); hits = 1; }
+        if (box_meets(area, near)) { damage_add(near); hits = 1; if (nglass_refresh < BLUR_MAX) glass_refresh[nglass_refresh++] = near; else glass_refresh_over = 1; }
     }
     for (Node *child=n->first;child;child=child->next) hits |= external_glass_walk(child,area);
     return hits;
@@ -1580,8 +1585,8 @@ static void blur_walk(Node *n, int *grew) {
  *     rectangle that touches a blurred node or the margin its blur samples grows to the whole node,
  *     and every rectangle that touches that margin joins it, so the margin is either repainted in
  *     the same pass or not repainted this frame at all (then it still holds what it showed).
- *   - Only on the CPU path and without a window being dragged (its layer and the GPU's window list
- *     are built for one paint_root per frame); otherwise one box, as before. */
+ *   - Only on the CPU path and without a window being dragged (its layer is built for one paint_root
+ *     per frame); otherwise one box, as before. The GPU path has one exception: glass_only_frame. */
 /* Off by default since the 0.8.2 release: once, out of five tries during the 0.8.2 integration
  * test, a window minimized over Monitor's animated map left a grey rectangle until it came back,
  * and the cause was not found (engine-test test_minimize_damage, a full-repaint comparison of that
@@ -1607,7 +1612,6 @@ static int ndrects;
 #define DAMAGE_PASS_PX 1024.0f          /* about what one more pass costs, in pixels (measured, docs/MONITOR.md) */
 #endif
 #define DAMAGE_COVER   0.7f             /* rectangles covering this much of their box: one box */
-#define BLUR_MAX 48
 
 static Box dl_bbox(const DamageList *l) {
     Box b = l->n ? l->r[0] : (Box){ 0, 0, 0, 0 };
@@ -1675,9 +1679,31 @@ void paint_damage_settle(DamageList *l) {
     dlist_add(l, (Box){ floorf(all.x0), floorf(all.y0), ceilf(all.x1), ceilf(all.y1) });
 }
 
+/* A frame where the only change is that an app's pixels moved under glass (0.8.7): the bar at the top
+ * and the Dock at the bottom would otherwise join into one box holding almost the whole screen, painted
+ * on the CPU and uploaded, on every commit of any app. Each margin is a complete repaint of that glass
+ * with everything it samples, so the blur rule holds by construction, and the GPU path's window list is
+ * rebuilt whole by every paint_root. Any other change this frame means one box, exactly as before: the
+ * lists below must match, which is why paint_multi_damage can stay off (see above). */
+static int glass_only_frame(void) {
+    if (!nglass_refresh || glass_refresh_over) return 0;
+    DamageList want = { .n = 0 };
+    for (int i = 0; i < nglass_refresh; i++) dlist_add(&want, glass_refresh[i]);
+    if (want.n != ui.dlist.n) return 0;
+    for (int i = 0; i < want.n; i++) {
+        int found = 0;
+        for (int j = 0; j < ui.dlist.n && !found; j++)
+            found = want.r[i].x0 == ui.dlist.r[j].x0 && want.r[i].y0 == ui.dlist.r[j].y0 &&
+                    want.r[i].x1 == ui.dlist.r[j].x1 && want.r[i].y1 == ui.dlist.r[j].y1;
+        if (!found) return 0;
+    }
+    return 1;
+}
+
 /* The list for this frame, or 0 if it has to be one box. */
 static int multi_rects(Node *root) {
-    if (!paint_multi_damage || layer.want || gpu_active() || !root) return 0;
+    if (layer.want || !root) return 0;
+    if (gpu_active() ? !glass_only_frame() : !paint_multi_damage) return 0;
     Box *d = &ui.damage;
     if (d->x0 != ui.dlast.x0 || d->y0 != ui.dlast.y0 || d->x1 != ui.dlast.x1 || d->y1 != ui.dlast.y1) return 0;   /* set directly */
     if (ui.dlist.n < 2) return 0;
@@ -1752,7 +1778,9 @@ int paint_damage(Node *root) {
     ngdrag_after = gdrag_after_over = 0;
     if (root) damage_walk(root, 0, 1, 0, (Box){ -1e9f, -1e9f, 1e9f, 1e9f }, ord);
     ndrects = 0;
-    if (multi_rects(root)) return 1;
+    int several = multi_rects(root);
+    nglass_refresh = glass_refresh_over = 0;
+    if (several) return 1;
     /* the damage is one box: growing it for a blurred node can reach another one (the bar and a menu) */
     for (int pass = 0, grew = 1; root && grew && pass < 4 && ui.damage.x1 > ui.damage.x0; pass++) { grew = 0; blur_walk(root, &grew); }
     /* esa parte, donde está ahora la ventana; not with a node's change, where the whole layer used to be
