@@ -6,7 +6,7 @@
 // pin it there. Keyboard: type to search, ↑/↓ and Enter, Escape closes.
 import {
   View, Text, ScrollView, SearchField, addListener, t as tr, tOptional, useSettings, settings, useStore,
-  useLauncherApps, launchApp, dockIdOf, dock, beginDockDrag, dockDragJustEnded, session, wm, useSystemInfo, searchEverything,
+  useLauncherApps, launcherView, launchApp, dockIdOf, dock, beginDockDrag, dockDragJustEnded, session, wm, useSystemInfo, searchEverything,
   mainDisplay, direction,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -108,7 +108,6 @@ export function StartMenu({ t, box, onClose, isOnBar }) {
   const pins = startPins(s, list).map((id) => byId.get(id)).filter(Boolean);
   const recent = (s.dockRecentApps || []).map((x) => list.find((a) => dockIdOf(a) === dockIdOf(x))).filter(Boolean)
     .filter((a, i, arr) => arr.indexOf(a) === i).slice(0, 6);
-  const sorted = useMemo(() => [...list].sort((a, b) => a.name.localeCompare(b.name)), [list]);
   const sections = useMemo(() => (query.trim() ? searchEverything.results(query, list) : []), [query, list]);
   const flat = sections.flatMap((x) => x.items.map((it) => ({ it, sec: x.id })));
 
@@ -152,21 +151,21 @@ export function StartMenu({ t, box, onClose, isOnBar }) {
       </ScrollView>
     );
   } else if (view === 'all') {
-    let letter = '';
     body = (
       <View style={{ height: bodyH }}>
         <Header t={t} title={tr('shell.classic.allApps')} action={tr('shell.classic.back')} back onAction={() => setView('home')} />
-        <ScrollView style={{ flex: 1 }}>
-          {sorted.map((a) => {
-            const l = (a.name[0] || '#').toUpperCase();
-            const head = l !== letter ? (letter = l) : null;
-            return (
-              <View key={a.id}>
-                {head ? <Text style={{ fontSize: 12, fontWeight: 600, color: t.accent, marginHorizontal: 12, marginTop: 8, marginBottom: 2, textAlign: 'start' }}>{head}</Text> : null}
-                <Row t={t} Icon={a.Icon} title={a.name} onClick={() => { if (!dockDragJustEnded()) open(a); }} onMenu={menu(a)} onDrag={drag(a)} />
-              </View>
-            );
-          })}
+        <ScrollView key="all" style={{ flex: 1 }}>
+          {({ offset, height }) => {
+            const plan = launcherView({ layout: 'list', offset, height: height || bodyH - 32 });
+            return <View style={{ height: plan.height }}>
+              {plan.items.map(({ app: a, top, heading, height: rowHeight }) => (
+                <View key={a.id} style={{ position: 'absolute', top, left: 0, width: '100%', height: rowHeight }}>
+                  {heading ? <Text style={{ fontSize: 12, fontWeight: 600, color: t.accent, marginHorizontal: 12, marginTop: 8, marginBottom: 2, textAlign: 'start' }}>{heading}</Text> : null}
+                  <Row t={t} Icon={a.Icon} title={a.name} onClick={() => { if (!dockDragJustEnded()) open(a); }} onMenu={menu(a)} onDrag={drag(a)} />
+                </View>
+              ))}
+            </View>;
+          }}
         </ScrollView>
       </View>
     );

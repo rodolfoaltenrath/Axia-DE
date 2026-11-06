@@ -7,7 +7,7 @@ RUST_LIB := build/rust/release/libaxia_shell.a
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
 RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
-RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../rust/axia-shell/src/files/*.rs ../rust/axia-shell/src/applications/*.rs) ../.cargo/config.toml
+RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../rust/axia-shell/src/files/*.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
@@ -115,7 +115,7 @@ DISK_SRC := src/disk/disk.c src/disk/smart.c src/disk/smartctl.c src/ui/js_disk.
 SRC += $(DISK_SRC)
 HDR += $(wildcard src/disk/*.h)
 SRC += src/platform/admin.c src/platform/net.c
-SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c
+SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c src/ui/js_launcher.c
 HDR += $(wildcard src/platform/*.h)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)

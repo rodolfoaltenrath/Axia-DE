@@ -103,6 +103,55 @@ A validação headless não substitui a sessão física no Fedora 44: launcher,
 ações da Dock, “Abrir com”, associações persistentes, terminal preferido e apps
 restritos ainda devem ser conferidos antes da publicação final.
 
+## Catálogo e menus de aplicativos
+
+`launcher.rs` mantém o catálogo unificado dos aplicativos internos, pacotes
+`.lpk` e aplicativos Linux. Rust ordena os índices, resolve as categorias, filtra
+a busca e calcula as linhas visíveis do Launchpad e de “Todos os aplicativos”
+do tema clássico. O SDK compartilha uma lista estável entre os consumidores;
+mudanças do registro, idioma ou atualização explícita dos aplicativos Linux
+invalidam esse catálogo. Abrir o menu, mover o ponteiro e mudar o foco não o
+reconstroem.
+
+A ponte `js_launcher.c` possui um estado Rust por contexto QuickJS, liberado
+pelo finalizador. Recebe JSON limitado a 8 MiB e até 4.096 aplicativos. Somente
+metadados são copiados; funções de ícones, eventos e objetos de aplicativos
+permanecem no SDK. O adaptador prepara NFC, caixa e cabeçalhos uma vez com as
+tabelas Unicode do próprio QuickJS, preservando a comparação e a busca existentes
+sem adicionar dependências. A busca continua ignorando a categoria selecionada;
+limpá-la restaura o filtro de categoria.
+
+O `ScrollView` aceita também uma função de conteúdo com o deslocamento e a altura
+medidos. Os menus usam a altura total para manter a barra de rolagem e montam
+somente as linhas visíveis com uma linha de margem em cada extremidade. As
+posições, tamanhos, ícones, materiais, menus de contexto e operações da Dock
+continuam nos componentes dos temas. A pesquisa geral do tema clássico
+(arquivos, notas, calculadora etc.) continua no serviço de busca existente.
+
+Os testes novos são Rust: incluem cobertura de viewport em milhares de posições,
+catálogos grandes, categorias, busca por campo, invalidação e memória da ABI.
+O teste de integração também é dirigido e verificado em Rust; seu módulo
+JavaScript embutido somente opera a interface React real e relata observações.
+Ele usa um HOME e um socket privados e não modifica a sessão do usuário.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline launcher::
+# Depois do build completo, com node_modules/esbuild disponíveis:
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test launcher_runtime -- --ignored --nocapture
+# Medição do modelo/JSON em release; não mede apresentação de frames no hardware:
+cargo test --manifest-path rust/Cargo.toml --release --locked --offline launcher::tests::measure_large_catalog -- --ignored --nocapture
+```
+
+A integração verifica os dois menus, identidade estável da lista, geometria,
+rolagem, pesquisa/Enter, categorias, contexto, início de arraste e instalação/
+remoção de pacote, mudança de idioma, Unicode, redimensionamento e touchpad.
+Opcionalmente, `AXIA_LAUNCHER_BASELINE` aponta para o `Launchpad.jsx` anterior:
+o teste compara as coordenadas visíveis e a quantidade de nós com essa versão.
+`AXIA_LAUNCHER_OBSERVATIONS` permite salvar as observações em JSON.
+Ele roda também no job Fedora com GPU habilitada; a sessão
+de teste usa composição por CPU. A avaliação de fluidez, aparência do blur e
+latência no computador físico continua necessária.
+
 ## Arquivos e seletores nativos
 
 O explorador e os seletores de abrir/salvar/pasta usam o módulo `files/`.

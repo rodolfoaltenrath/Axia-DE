@@ -7,7 +7,7 @@
 //   launchApp(list[0].id);
 //
 // Linux apps are launched with lord.apps.launch(id): the server only accepts the id of an
-// installed .desktop and runs its Exec line with no arguments and no shell (see server/src/apps.c).
+// installed .desktop and runs its Exec line with no arguments and no shell (applications/ in Rust).
 import { createElement as h } from 'react';
 import { View, Text, Image } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
@@ -55,24 +55,55 @@ export function refreshApps() { linux.set(readLinux()); }
 locale.subscribe(refreshApps);
 
 export function useLauncherApps() {
-  const lin = useStore(linux);
+  useStore(linux);
   useStore(locale);
   useStore(appRegistry);
+  return catalog().apps;
+}
+
+function launcherRequest(args) {
+  const value = lord.launcher.request(JSON.stringify(args));
+  if (value.error) throw new Error(`launcher: ${value.error}`);
+  return value;
+}
+
+// All consumers share one stable array and the same Rust catalog. Window focus,
+// clocks, pointer motion and opening the menu do not rebuild/sort the catalog.
+let cached = null;
+function catalog() {
+  const lin = linux.get(), language = locale.get(), registry = appRegistry.get();
+  if (cached && cached.lin === lin && cached.language === language && cached.registry === registry) return cached;
   const own = listApps().map((a) => ({ ...a, kind: a.package ? 'package' : 'lordos', name: appName(a) }));
-  return [...own, ...lin].sort((a, b) => a.name.localeCompare(b.name));
+  const source = [...own, ...lin];
+  const reply = launcherRequest({ op: 'catalog', items: source.map((a) => ({
+    // Match this runtime's Unicode tables exactly, once per catalog, rather
+    // than normalizing every name inside every sorting/search comparison.
+    sortKey: String(a.name || '').normalize('NFC'), heading: (Array.from(a.name || '')[0] || '#').toUpperCase(),
+    search: [appName(a), a.name, a.id, a.genericName, a.keywords, a.comment].map((v) => String(v || '').toLowerCase()),
+    category: a.category || '', categories: String(a.categories || ''),
+  })) });
+  for (let i = 0; i < source.length; i++) source[i].launcherCategory = reply.itemCategories[i];
+  cached = { lin, language, registry, source, apps: reply.order.map((i) => source[i]) };
+  return cached;
+}
+
+// Only the visible source indices cross back from Rust. Icon functions and
+// launch callbacks always remain in JS, with the original application object.
+export function launcherView(options) {
+  const current = catalog();
+  const value = launcherRequest({ ...options, op: 'view', query: String(options.query || '').trim().toLowerCase() });
+  return { ...value, first: value.first == null ? null : current.source[value.first],
+    items: value.items.map((row) => row.indices
+      ? { ...row, apps: row.indices.map((i) => current.source[i]) }
+      : { ...row, app: current.source[row.index] }) };
 }
 
 // Main freedesktop standard categories (the same as AppStream's in the Store).
 // A Linux app takes it from the Categories field of its .desktop; a LordOS one, from "category" in its
 // manifest.
 export const APP_CATEGORIES = ['AudioVideo', 'Development', 'Education', 'Game', 'Graphics', 'Network', 'Office', 'Science', 'Settings', 'System', 'Utility'];
-const ALIASES = { Audio: 'AudioVideo', Video: 'AudioVideo', TerminalEmulator: 'System', FileManager: 'System', WebBrowser: 'Network', TextEditor: 'Utility' };
 export function appCategory(a) {
-  if (a.category && APP_CATEGORIES.includes(a.category)) return a.category;
-  const list = String(a.categories || '').split(';').filter(Boolean);
-  for (const c of list) if (APP_CATEGORIES.includes(c)) return c;
-  for (const c of list) if (ALIASES[c]) return ALIASES[c];
-  return 'Utility';
+  return a.launcherCategory || launcherRequest({ op: 'category', category: a.category || '', categories: String(a.categories || '') }).category;
 }
 
 export function launchApp(id) {

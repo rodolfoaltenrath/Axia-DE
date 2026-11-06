@@ -109,6 +109,8 @@ export const SCROLL_GUTTER = 11;
 // changes height, as a window does when it shrinks for the on-screen keyboard. A wheel scroll with a
 // field focused doesn't ask.
 const ScrollReveal = createContext(null);
+// A content function receives the clamped offset and measured viewport height.
+// Native menu models can limit their children while retaining this scrollbar.
 export function ScrollView({ style, contentStyle, children, scrollRef, gutter }) {
   const t = useTheme();
   const mode = scrollbarMode(t.scrollBars);
@@ -235,7 +237,7 @@ export function ScrollView({ style, contentStyle, children, scrollRef, gutter })
       setOffset((o) => Math.max(0, Math.min(mx, Math.min(o, max) + e.deltaY)));
     }} onMouseMove={onMove} onMouseLeave={() => { st.current.ui = { ...st.current.ui, near: false, hover: false }; update({ near: false, hover: false }); schedule(); }}
       style={[{ overflow: 'hidden', flex: 1 }, style]}>
-      <View ref={inner} style={[{ translateY: -y }, pad, contentStyle]}><ScrollReveal.Provider value={reveal}>{children}</ScrollReveal.Provider></View>
+      <View ref={inner} style={[{ translateY: -y }, pad, contentStyle]}><ScrollReveal.Provider value={reveal}>{typeof children === 'function' ? children({ offset: y, height: metrics.view }) : children}</ScrollReveal.Provider></View>
       {geom && (
         <View onMouseDown={(e) => {
           if (!outer.current) return;
