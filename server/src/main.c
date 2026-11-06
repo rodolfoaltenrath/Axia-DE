@@ -1260,7 +1260,7 @@ static Rect paint_out(Server *s, Out *o, int index, int feed) {
      * own; r, what is presented, is the box around them (the scene keeps the pixels in between) */
     Box lb = o->pl.n ? o->pl.r[0] : (Box){ 0, 0, 0, 0 };
     for (int k = 1; k < o->pl.n; k++) lb = box_join(lb, o->pl.r[k]);
-    int multi = !whole && o->pl.n > 1 && !gpu_active() && lb.x0 == b.x0 && lb.y0 == b.y0 && lb.x1 == b.x1 && lb.y1 == b.y1;
+    int multi = !whole && o->pl.n > 1 && lb.x0 == b.x0 && lb.y0 == b.y0 && lb.x1 == b.x1 && lb.y1 == b.y1;
     DamageList l = { .n = 0 };
     if (multi) l = o->pl;
     else if (!whole) dlist_add(&l, b);
@@ -1271,7 +1271,7 @@ static Rect paint_out(Server *s, Out *o, int index, int feed) {
         b = l.r[0];
         for (int k = 1; k < l.n; k++) b = box_join(b, l.r[k]);
     }
-    multi = !whole && !gpu_active() && l.n > 1;
+    multi = !whole && l.n > 1;
     int nparts = multi ? l.n : 1;
     /* GPU drag (paint_root_gdrag): one box on a GPU display while a window is dragged */
     int gdrag = !whole && nparts == 1 && index < OUT_MAX && o->gpu >= 0 && gpu_active() && !(o->d.rot & 3) &&
@@ -1802,6 +1802,10 @@ static void out_present(Server *s, Out *o, int i, Rect r, const Out *feed, LbPha
             gdrag = &o->gdrag;
             nup = o->gdrag.nstrip;
             memcpy(up, o->gdrag.strip, sizeof up);
+        } else if (o->npainted > 1 && o->npainted <= 4) {   /* several glass margins (paint.c, glass_only_frame) */
+            nup = o->npainted;
+            for (int k = 0; k < nup; k++)
+                up[k] = (Rect){ (int)o->painted[k].x0, (int)o->painted[k].y0, (int)o->painted[k].x1, (int)o->painted[k].y1 };
         } else if (o->gdrag_on && r.x1 <= r.x0) {
             again = o->gdrag;
             again.lpx = again.bpx = NULL;

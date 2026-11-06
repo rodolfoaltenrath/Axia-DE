@@ -124,6 +124,8 @@ struct Surf {
     struct wl_resource *p_buf;
     struct wl_listener p_buf_destroy;
     int p_attached, p_gx, p_gy, p_gw, p_gh, p_geom;
+    AxiaSurfaceDamage p_damage, commit_damage;  /* what the app says it changed, pending and last commit */
+    int commit_attached, commit_whole;          /* last commit: a new buffer; its geometry changed */
     InputRegion *input, *p_input;     /* NULL infinite; allocated empty region rejects input */
     int p_input_set;
     struct wl_list p_frames, frames;
@@ -292,20 +294,45 @@ static Surf *find(int id) {
     return NULL;
 }
 
-static void damage_node(Surf *s) {
+static int origin(Surf *s, float *x, float *y);
+
+/* What the last commit of `from` changed, in screen coordinates. 0 if no pixels changed. Without a
+ * surface (`from` NULL), under a transform, or whenever Rust is not sure, the window's whole box. */
+static int surface_commit_area(Surf *from, const Node *n, Box *area) {
+    *area = n->prev_box;
+    float x, y;
+    if (!from || from->commit_whole || n->has_tf || !origin(from, &x, &y)) return 1;
+    AxiaSurfaceShape shape = { x, y, from->lw, from->lh, from->w, from->h,
+                               from->vsw >= 0, from->commit_attached != 0, from->nkids > 0 };
+    float out[4];
+    int kind = axia_surface_damage_box(&from->commit_damage, &shape, out);
+    if (kind == 0) return 0;
+    if (kind == 1) {
+        *area = (Box){ fmaxf(out[0], n->prev_box.x0), fmaxf(out[1], n->prev_box.y0),
+                       fminf(out[2], n->prev_box.x1), fminf(out[3], n->prev_box.y1) };
+        if (area->x1 <= area->x0 || area->y1 <= area->y0) return 0;
+    }
+    return 1;
+}
+
+/* from: the surface whose commit caused this, or NULL if it isn't a commit. */
+static void damage_node_from(Surf *s, Surf *from) {
     Surf *top = s;
     while (top->parent && top->role != R_TOPLEVEL) top = top->parent;
     /* GPU path: if only the content changed, presenting again is enough */
     if (gpu_active() && (top->role == R_POPUP || top == fs_surf || hole_sig(s) == s->hole_sig)) {
         need_frame = 1;
         Node *n = top->node ? node_get(top->node) : NULL;
-        if (top != fs_surf && top->role == R_TOPLEVEL && n) paint_external_glass_damage(n->prev_box);
+        Box area;
+        if (top != fs_surf && top->role == R_TOPLEVEL && n && surface_commit_area(from, n, &area))
+            paint_external_glass_damage(area);
         return;
     }
     Node *n = top->node ? node_get(top->node) : NULL;
     if (n && n->prev_box.x1 > n->prev_box.x0) damage_add(n->prev_box);
     ui.dirty = 1;
 }
+static void damage_node(Surf *s) { damage_node_from(s, NULL); }
 
 /* On-screen origin of a surface's buffer (window or menu). 0 if unknown. */
 static int origin(Surf *s, float *x, float *y) {
@@ -573,7 +600,12 @@ static void srf_attach(struct wl_client *c, struct wl_resource *r, struct wl_res
 }
 
 static void srf_damage(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t w, int32_t h) {
-    (void)c; (void)r; (void)x; (void)y; (void)w; (void)h;
+    (void)c;
+    axia_surface_damage_add(&((Surf *)wl_resource_get_user_data(r))->p_damage, false, x, y, w, h);
+}
+static void srf_damage_buffer(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t w, int32_t h) {
+    (void)c;
+    axia_surface_damage_add(&((Surf *)wl_resource_get_user_data(r))->p_damage, true, x, y, w, h);
 }
 
 static void callback_gone(struct wl_resource *r) { wl_list_remove(wl_resource_get_link(r)); }
@@ -613,6 +645,13 @@ static void srf_commit(struct wl_client *c, struct wl_resource *r) {
     if (keylag_enabled && key_focus && c == key_focus->client) keylag_commit();
     s->preview_gen++;
     commit_input_region(s);
+    /* the glass over this window asks what changed (surface_commit_area): moving or resizing
+     * shows pixels that no damage rectangle describes */
+    const int was_w = s->w, was_h = s->h, was_lw = s->lw, was_lh = s->lh, was_content = s->content;
+    const int was_sx = s->sx, was_sy = s->sy, was_gx = s->gx, was_gy = s->gy;
+    s->commit_attached = s->p_attached;
+    s->commit_damage = s->p_damage;
+    s->p_damage = (AxiaSurfaceDamage){ 0 };
     if (s->p_attached) {
         take_buffer(s, s->p_buf);
         if (s->p_buf) { wl_list_remove(&s->p_buf_destroy.link); wl_list_init(&s->p_buf_destroy.link); }
@@ -637,6 +676,8 @@ static void srf_commit(struct wl_client *c, struct wl_resource *r) {
         s->p_geom = 0;
     }
     if (s->role == R_SUB) { s->sx = s->p_sx; s->sy = s->p_sy; }
+    s->commit_whole = s->w != was_w || s->h != was_h || s->lw != was_lw || s->lh != was_lh || s->content != was_content ||
+                      s->sx != was_sx || s->sy != was_sy || s->gx != was_gx || s->gy != was_gy;
     surface_commit_role(s);
 }
 
@@ -652,7 +693,7 @@ static void srf_offset(struct wl_client *c, struct wl_resource *r, int32_t x, in
 static const struct wl_surface_interface surface_impl = {
     .destroy = srf_destroy, .attach = srf_attach, .damage = srf_damage, .frame = srf_frame,
     .set_opaque_region = srf_region, .set_input_region = srf_input_region, .commit = srf_commit,
-    .set_buffer_transform = srf_transform, .set_buffer_scale = srf_scale, .damage_buffer = srf_damage,
+    .set_buffer_transform = srf_transform, .set_buffer_scale = srf_scale, .damage_buffer = srf_damage_buffer,
     .offset = srf_offset,
 };
 
@@ -2143,7 +2184,7 @@ static void surface_commit_role(Surf *s) {
             s->conf_w = w;
             s->conf_h = h;
         }
-        damage_node(s);
+        damage_node_from(s, s);
     } else if (s->role == R_POPUP) {
         if (!s->sent_configure) {
             xdg_popup_send_configure(s->popup, s->pop_x, s->pop_y, s->conf_w, s->conf_h);
@@ -2158,7 +2199,7 @@ static void surface_commit_role(Surf *s) {
     } else if (s->role == R_SUB) {
         Surf *top = s;
         while (top->parent) top = top->parent;
-        if (top->role == R_POPUP) popup_box_damage(top); else damage_node(top);
+        if (top->role == R_POPUP) popup_box_damage(top); else damage_node_from(top, s);
     }
 }
 
