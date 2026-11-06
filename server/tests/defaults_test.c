@@ -1,5 +1,5 @@
-/* defaults_test.c — the default app for a MIME type (apps_default_for in src/apps.c, the files in
- * src/hw/defaults.c) and lord.apps.launchWith('', path) on top of it, over a fake XDG tree: a
+/* defaults_test.c — the default app for a MIME type (apps_default_for and preference files in
+ * rust/axia-shell/src/applications/) and lord.apps.launchWith('', path) on top of it, over a fake XDG tree: a
  * temporary folder stands for "/" (defaults_set_root) with its own /usr/share/applications,
  * /etc/xdg and /usr/share/mime/globs2, and a temporary HOME.
  *
@@ -122,24 +122,7 @@ int main(void) {
     snprintf(page, sizeof page, "%s/page.html", home);
     put(page, "<p>hi</p>\n");
 
-    /* the pure parts */
     char id[DESKTOP_ID_MAX];
-    const char *list = "[Default Applications]\ntext/html=a.desktop;../bad.desktop;b.desktop;\n[Added Associations]\ntext/html=c.desktop;\n";
-    CHECK("entry 0", mimeapps_entry(list, "Default Applications", "text/html", 0, id, sizeof id) == 0 && !strcmp(id, "a.desktop"));
-    CHECK("entry 1 skips an invalid id", mimeapps_entry(list, "Default Applications", "text/html", 1, id, sizeof id) == 0 && !strcmp(id, "b.desktop"));
-    CHECK("no entry 2", mimeapps_entry(list, "Default Applications", "text/html", 2, id, sizeof id) != 0);
-    CHECK("added group", mimeapps_entry(list, "Added Associations", "text/html", 0, id, sizeof id) == 0 && !strcmp(id, "c.desktop"));
-    char *u = mimeapps_unset_default("# mine\n[Default Applications]\ntext/plain=x.desktop;\ntext/html=a.desktop;\n\n"
-                                     "[Added Associations]\ntext/html=a.desktop;z.desktop;\nimage/png=p.desktop;\n"
-                                     "[Removed Associations]\ntext/html=r.desktop;\n", "text/html");
-    CHECK("unset drops both keys, keeps every other line",
-          u && !strcmp(u, "# mine\n[Default Applications]\ntext/plain=x.desktop;\n\n[Added Associations]\nimage/png=p.desktop;\n"
-                          "[Removed Associations]\ntext/html=r.desktop;\n"));
-    free(u);
-    u = mimeapps_unset_default("[Default Applications]\ntext/html=a.desktop;", "text/html");   /* no final newline */
-    CHECK("unset without a final newline", u && !strcmp(u, "[Default Applications]\n"));
-    free(u);
-    CHECK("unset refuses a bad type", mimeapps_unset_default("", "text/html\n[x]") == NULL);
 
     /* 1. nothing installed opens it: nothing (the old behaviour) */
     CHECK("no app: none", is("text/html", NULL, 0));
@@ -217,9 +200,6 @@ int main(void) {
     CHECK("unset", defaults_unset("text/html") == 0);
     CHECK("unset: automatic again", is("text/html", "zeta-browser.desktop", APPS_DEFAULT_DECLARED));
     CHECK("unset kept the other lines", defaults_lookup("text/plain", id, sizeof id) == 0 && !strcmp(id, "ag-other.desktop"));
-    char *t = defaults_read(strcat(strcpy(path, home), "/.config/mimeapps.list"));
-    CHECK("unset kept the comment", t && strstr(t, "# kept\n") && !strstr(t, "text/html"));
-    free(t);
     userlist(NULL);
     CHECK("unset with no file", defaults_unset("text/html") == 0);
     CHECK("unset refuses a bad type", defaults_unset("../x") != 0);

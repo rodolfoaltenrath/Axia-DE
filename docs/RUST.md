@@ -71,6 +71,9 @@ a migração do núcleo pode prosseguir por módulos.
 traduções, ícones PNG, ações, expansão de `Exec`, resolução do aplicativo padrão,
 edição de associações MIME e preferência do terminal passam a ser Rust.
 Os headers C continuam como ABI para QuickJS e demais consumidores existentes.
+Foram removidos os exports antigos de parsing MIME e alocação de texto que já
+não tinham consumidores de produção. Os buffers desses arquivos pertencem ao
+Rust; a ponte C recebe apenas os resultados necessários à interface.
 
 O launcher continua executando o programa diretamente, sem shell, com o arquivo
 como um único argumento. A precedência de associações, os aplicativos internos
@@ -161,8 +164,8 @@ A integração verifica os dois menus, identidade estável da lista, geometria,
 rolagem, pesquisa/Enter, categorias, contexto, fixar/desafixar na Dock e no
 Classic, fixados/recentes, busca geral, energia, início de arraste e instalação/
 remoção de pacote, mudança de idioma, Unicode, redimensionamento e touchpad.
-Opcionalmente, `AXIA_LAUNCHER_BASELINE` aponta para o `Launchpad.jsx` anterior:
-o teste compara as coordenadas visíveis e a quantidade de nós com essa versão.
+As coordenadas visíveis são verificadas contra valores fixos da interface validada,
+sem carregar os componentes antigos; o limite de nós montados também é verificado.
 `AXIA_LAUNCHER_OBSERVATIONS` permite salvar as observações em JSON.
 Ele roda também no job Fedora com GPU habilitada; a sessão
 de teste usa composição por CPU. A avaliação de fluidez, aparência do blur e

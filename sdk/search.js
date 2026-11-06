@@ -145,12 +145,12 @@ function bind(section, session) {
   return { id: section.id, items: section.items.map(it => ({ ...it, title: searchCaption(it.title), subtitle: searchCaption(it.subtitle), hint: searchCaption(it.hint),
     Icon: it.app ? launcherApp(it.app)?.Icon : searchSourceIcon(it.action?.source, it.action?.key),
     preview: it.preview?.kind === 'app' ? { kind: 'app', app: launcherApp(it.preview.id) } : it.preview,
-    __session: session, run: () => session.event(['run', it.key]), reveal: it.action?.type === 'file' ? () => session.event(['run', it.key], { reveal: true }) : undefined })) };
+    __session: session })) };
 }
 export const searchEverything = {
   prepare: () => createSearchSession(),
-  results(query, apps, session) { if (!session || session.closed) return []; return session.query(query).sections.map(section => bind(section, session)); },
+  results(query, session) { if (!session || session.closed) return []; return session.query(query).sections.map(section => bind(section, session)); },
   version: () => version,
-  run(item, reveal = false) { if (item?.__session) item.__session.event(['run', item.key], { reveal }); else if (item) (reveal && item.reveal ? item.reveal : item.run)?.(); },
+  run(item, reveal = false) { item?.__session?.event(['run', item.key], { reveal }); },
 };
 export function registerSpotlightSource(id, fn) { sources.set(id, { fn, callbacks: new Map() }); changed(); return () => { sources.delete(id); changed(); }; }
