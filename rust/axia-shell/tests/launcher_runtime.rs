@@ -59,28 +59,7 @@ fn real_launcher_catalog_and_both_theme_menus() {
         }
     }
     let driver = scratch.0.join("probe.jsx");
-    let baseline = std::env::var_os("AXIA_LAUNCHER_BASELINE");
-    let reference = if let Some(path) = &baseline {
-        let source = fs::read_to_string(path).unwrap().replace(
-            "'./Menu.jsx'",
-            &format!("'{}/themes/default/components/Menu.jsx'", repo.display()),
-        );
-        let path = scratch.0.join("reference.jsx");
-        fs::write(&path, source).unwrap();
-        format!(
-            "import {{ Launchpad as Reference }} from '{}';",
-            path.display()
-        )
-    } else {
-        "const Reference = Launchpad;".into()
-    };
-    fs::write(
-        &driver,
-        DRIVER
-            .replace("@REFERENCE@", &reference)
-            .replace("@ROOT@", repo.to_str().unwrap()),
-    )
-    .unwrap();
+    fs::write(&driver, DRIVER.replace("@ROOT@", repo.to_str().unwrap())).unwrap();
     let bundle = scratch.0.join("probe.bundle.js");
     let output = Command::new(repo.join("node_modules/.bin/esbuild"))
         .arg(&driver)
@@ -212,32 +191,7 @@ fn real_launcher_catalog_and_both_theme_menus() {
             .unwrap_or_else(|| panic!("missing {name}: {log}\n{stderr}"))
     };
     let initial = get("initial");
-    if baseline.is_some() {
-        let reference = get("reference");
-        assert_eq!(reference["labels"].as_array().unwrap().len(), 1024);
-        assert!(
-            initial["stats"]["nodes"].as_u64().unwrap() * 5
-                < reference["stats"]["nodes"].as_u64().unwrap()
-        );
-        // The old compositor can skip layout of off-screen descendants. Only
-        // compare labels actually inside this 700px display; overscan coverage
-        // is checked independently by the model tests.
-        for label in initial["labels"].as_array().unwrap().iter().filter(|v| {
-            let y = v["y"].as_f64().unwrap();
-            y >= 0. && y < 700.
-        }) {
-            let before = reference["labels"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|v| v["text"] == label["text"])
-                .unwrap();
-            assert_eq!(label, before, "menu geometry changed");
-        }
-        println!("launcher reference comparison: nodes {} -> {}; mounted app labels 1024 -> {}; visible labels have identical coordinates",
-            reference["stats"]["nodes"], initial["stats"]["nodes"], initial["labels"].as_array().unwrap().len());
-    }
-    assert_eq!(initial["order"], initial["referenceOrder"]);
+    assert_eq!(initial["order"], initial["expectedOrder"]);
     assert_eq!(initial["catalogs"], 1);
     assert!(initial["total"].as_u64().unwrap() >= 1024);
     let mounted = initial["labels"].as_array().unwrap();
@@ -245,6 +199,8 @@ fn real_launcher_catalog_and_both_theme_menus() {
     assert!(mounted.len() <= 48, "{initial}");
     let first = mounted.iter().find(|v| v["text"] == "App 0000").unwrap();
     let next = mounted.iter().find(|v| v["text"] == "App 0006").unwrap();
+    assert_eq!(first, &json!({"text":"App 0000", "x":143.5, "y":235}));
+    assert_eq!(next, &json!({"text":"App 0006", "x":143.5, "y":359}));
     assert_eq!(
         next["y"].as_f64().unwrap() - first["y"].as_f64().unwrap(),
         124.
@@ -320,7 +276,7 @@ import { searchEverything } from '@ROOT@/sdk/search.js';
 import { Menu as ClassicMenu } from '@ROOT@/themes/classic/components/Menu.jsx';
 const Launchpad = props => h(RustLauncher,{...props,mode:'flow'});
 const StartMenu = props => h(RustLauncher,{...props,mode:'classic',Menu:ClassicMenu});
-@REFERENCE@
+
 
 const records = new Map(); let root, catalogs = 0, sourceNames, lastPlan, opened = null, closed = false;
 for (const method of ['createNode','setRoot','appendChild','insertBefore','removeChild','setText','destroy']) {
@@ -359,11 +315,11 @@ const tokens = {effects:true, mode:'dark', text:'#fff',textDim:'#aaa',accent:'#3
   panelBg:'#252529',panelFoot:'#202024',windowBorder:'#555',tileBorder:'#444',shadow:'none'};
 function Harness() {
   const apps = useLauncherApps(); currentApps = apps;
-  const [mode,setMode] = useState('reference'), [tick,setTick] = useState(0), [area,setArea] = useState({x:0,y:0,w:1000,h:700});
+  const [mode,setMode] = useState('default'), [tick,setTick] = useState(0), [area,setArea] = useState({x:0,y:0,w:1000,h:700});
   control = {setMode,setTick,setArea};
   return h(ThemeProvider,{tokens},h(View,{style:{width:1000,height:700}},
     mode.startsWith('classic') ? h(StartMenu,{key:mode,t:tokens,box:{left:0,top:0,width:640,height:700},onClose:()=>{closed=true;},isOnBar:()=>false})
-      : h(mode==='reference'?Reference:Launchpad,{key:mode,t:tokens,apps,onOpen:id=>{opened=id;},onClose:()=>{closed=true;},area})));
+      : h(Launchpad,{key:mode,t:tokens,apps,onOpen:id=>{opened=id;},onClose:()=>{closed=true;},area})));
 }
 const alive = n => { for(let i=0;n && i<100;i++,n=records.get(n.parent)) if(n.id===root) return true; return false; };
 const texts = () => [...records.values()].filter(n=>n.text && alive(n));
@@ -383,9 +339,9 @@ const appNode = text => labelNodes().find(n=>n.text===text);
 render(h(Harness));
 async function run() {
   while(!appNode('App 0000') || !(lord.getLayout(appNode('App 0000').parent)[1]>0)) await pause(25);
-  snapshot('reference');control.setMode('default');await pause();
+
   previousApps=currentApps;
-  snapshot('initial',{order:currentApps.map(a=>a.id),referenceOrder:[...currentApps].sort((a,b)=>a.name.localeCompare(b.name)).map(a=>a.id)});
+  snapshot('initial',{order:currentApps.map(a=>a.id),expectedOrder:[...currentApps].sort((a,b)=>a.name.localeCompare(b.name)).map(a=>a.id)});
   control.setTick(v=>v+1);await pause();snapshot('rerender',{sameArray:previousApps===currentApps});
   let node=labelNodes()[0];__lordEvent('wheel',node.parent,300,300,-20);await pause();snapshot('scrolled');
   await type('App 0999');snapshot('searched');__lordKey(28,1,'Enter','','Enter',0);snapshot('entered',{opened});

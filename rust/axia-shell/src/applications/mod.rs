@@ -1,6 +1,6 @@
 //! Application discovery, MIME preferences and launch policy behind the stable C ABI.
-//! C callers use this API on the UI thread. Returned strings use libc allocation
-//! when the existing ABI transfers ownership to C (and are freed with free()).
+//! C callers use the current UI-thread ABI. MIME text and preference-file buffers
+//! stay owned by Rust; callers receive results through their own output buffers.
 mod defaults;
 mod desktop;
 mod launch;
@@ -34,15 +34,6 @@ unsafe fn output(p: *mut c_char, n: usize, value: &[u8]) -> i32 {
     std::ptr::copy_nonoverlapping(value.as_ptr(), p.cast(), value.len());
     *p.add(value.len()) = 0;
     0
-}
-fn allocated(value: &[u8]) -> *mut c_char {
-    unsafe {
-        let p: *mut c_char = libc::malloc(value.len() + 1).cast();
-        if !p.is_null() {
-            output(p, value.len() + 1, value);
-        }
-        p
-    }
 }
 fn field<const N: usize>(value: &[u8]) -> [c_char; N] {
     let mut out = [0; N];

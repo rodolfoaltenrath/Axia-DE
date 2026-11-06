@@ -7,17 +7,6 @@
 
 #include <stddef.h>
 
-/* The mimeapps.list files (and defaults.list) in the specification's order; text[i] is NULL when
- * that file is missing, user[i] says whether it is one of the user's own. */
-#define DEFAULTS_NFILES 6
-typedef struct { char *text[DEFAULTS_NFILES]; int user[DEFAULTS_NFILES]; int n; } DefaultsFiles;
-void defaults_load(DefaultsFiles *f);
-void defaults_free(DefaultsFiles *f);
-/* Is id in [Removed Associations] for mime in any of the files 0..upto? */
-int  defaults_removed(const DefaultsFiles *f, int upto, const char *mime, const char *id);
-/* A small text file (at most 256 KB, no symlink), malloc'd, or NULL. */
-char *defaults_read(const char *path);
-
 /* First [Default Applications] entry for a MIME type over those files, without checking that it is
  * installed (lord.mime.get). 0 if found ("x.desktop"). The full lookup, with installed apps and the
  * automatic choice, is apps_default_for() in the Rust applications core. */
@@ -31,7 +20,6 @@ int  defaults_unset(const char *mime);
 int  defaults_guess(const char *path, char *mime, size_t n);
 /* Tests only: a folder read in place of "/" for the system files (fake XDG trees). */
 void defaults_set_root(const char *root);
-const char *defaults_root(void);
 /* Preferred terminal ("foot.desktop", "lordos-terminal.desktop"). */
 int  defaults_terminal(char *id, size_t n);
 int  defaults_set_terminal(const char *id);
