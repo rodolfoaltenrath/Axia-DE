@@ -114,7 +114,7 @@ fn real_launcher_catalog_and_both_theme_menus() {
     );
     let mut command = Command::new(repo.join("server/build/axia-server"));
     command
-        .args(["--headless", "1000x700", "--timeout", "18", "--theme"])
+        .args(["--headless", "1000x700", "--timeout", "30", "--theme"])
         .arg(&bundle)
         .arg("--fonts")
         .arg(repo.join("assets/fonts"))
@@ -149,7 +149,7 @@ fn real_launcher_catalog_and_both_theme_menus() {
         }
     }
     let mut child = command.spawn().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + Duration::from_secs(45);
     let mut viewer = loop {
         if let Ok(viewer) = UnixStream::connect(home.join("runtime/axia/remote.sock")) {
             break viewer;
@@ -187,6 +187,7 @@ fn real_launcher_catalog_and_both_theme_menus() {
         "TypeError:",
         "SyntaxError:",
         "react (error)",
+        "launcher driver:",
         "evento:",
         "key listener:",
     ] {
@@ -263,14 +264,31 @@ fn real_launcher_catalog_and_both_theme_menus() {
         .iter()
         .any(|v| v == "Keep in Dock"));
     assert_eq!(get("drag")["closed"], true);
+    assert_eq!(get("dock-pinned")["pinned"], true);
+    assert_eq!(get("dock-pinned")["closed"], false);
+    assert_eq!(get("dock-unpinned")["pinned"], false);
+    assert_eq!(get("classic-pinned")["pinned"], true);
+    assert_eq!(get("classic-pinned")["closed"], false);
+    let home = get("classic-home")["labels"].as_array().unwrap();
+    for name in ["App 0000", "App 0001", "App 0002"] {
+        assert_eq!(home.iter().filter(|v| v["text"] == name).count(), 1);
+    }
+    assert!(get("power")["texts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v == "Log Out"));
+    assert_eq!(get("classic-search")["result"], "app:test-0007");
     assert_eq!(get("classic")["catalogs"], 1);
     assert!(get("classic")["labels"].as_array().unwrap().len() <= 20);
     assert!(!get("classic")["labels"].as_array().unwrap().is_empty());
     assert!(get("classic-scrolled")["offset"].as_f64().unwrap() > 0.);
     assert_eq!(get("installed")["catalogs"], 2);
     assert_eq!(get("installed")["found"], "new-package");
+    assert_eq!(get("installed")["searchVisible"], true);
     assert_eq!(get("removed")["catalogs"], 3);
     assert!(get("removed")["found"].is_null());
+    assert_eq!(get("removed")["searchVisible"], false);
     assert_eq!(get("unicode")["greek"], "greek");
     assert_eq!(get("unicode")["accent"], 1); // Search retains the previous accent-sensitive behavior.
     assert_eq!(get("unicode")["turkish"], "turkish");
@@ -293,11 +311,15 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js';
 import { render, View } from '@ROOT@/runtime/index.js';
 import { configureWindows, setPackageApps } from '@ROOT@/sdk/windows.js';
-import { useLauncherApps, launcherView } from '@ROOT@/sdk/apps.js';
+import { useLauncherApps } from '@ROOT@/sdk/apps.js';
+import { RustLauncher } from '@ROOT@/sdk/rustlauncher.jsx';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
-import { Launchpad } from '@ROOT@/themes/default/components/Launchpad.jsx';
-import { StartMenu } from '@ROOT@/themes/classic/components/StartMenu.jsx';
+import { settings } from '@ROOT@/sdk/settings.js';
+import { searchEverything } from '@ROOT@/sdk/spotlight.js';
+import { Menu as ClassicMenu } from '@ROOT@/themes/classic/components/Menu.jsx';
+const Launchpad = props => h(RustLauncher,{...props,mode:'flow'});
+const StartMenu = props => h(RustLauncher,{...props,mode:'classic',Menu:ClassicMenu});
 @REFERENCE@
 
 const records = new Map(); let root, catalogs = 0, sourceNames, lastPlan, opened = null, closed = false;
@@ -317,11 +339,16 @@ for (const method of ['createNode','setRoot','appendChild','insertBefore','remov
 const native = lord.launcher.request.bind(lord.launcher);
 lord.launcher.request = (raw) => {
   const input = JSON.parse(raw), result = native(raw);
-  if (input.op === 'catalog') { catalogs++; sourceNames=input.items.map(a=>a.sortKey); }
-  if (input.op === 'view') lastPlan = result;
+  if (input.op === 'sync') { catalogs++; sourceNames=result.source.map(a=>a.name); }
+  if (['view','open','event','context','scroll'].includes(input.op)) lastPlan = result;
   return result;
 };
 const Icon = ({size}) => h(View, {style:{width:size,height:size,backgroundColor:'#3489bd'}});
+const launcherView = options => {
+  const plan=native(JSON.stringify({...options,op:'view'}));
+  const catalog=native(JSON.stringify({op:'catalog'}));
+  return {...plan,first:plan.first==null?null:catalog.source[plan.first]};
+};
 const own = Array.from({length:1024}, (_,i) => ({id:`test-${String(i).padStart(4,'0')}`, name:`App ${String(i).padStart(4,'0')}`,
   category:i%2 ? 'Game':'Utility', Icon, Component:() => null}));
 for(const [id,name] of [['accent-composed','Árvore'],['accent-decomposed','A\u0301rvore'],['greek','ΟΣ'],['emoji','😀'],['turkish','İstanbul']])
@@ -335,7 +362,7 @@ function Harness() {
   const [mode,setMode] = useState('reference'), [tick,setTick] = useState(0), [area,setArea] = useState({x:0,y:0,w:1000,h:700});
   control = {setMode,setTick,setArea};
   return h(ThemeProvider,{tokens},h(View,{style:{width:1000,height:700}},
-    mode === 'classic' ? h(StartMenu,{t:tokens,box:{left:0,top:0,width:640,height:700},onClose:()=>{closed=true;},isOnBar:()=>true})
+    mode.startsWith('classic') ? h(StartMenu,{key:mode,t:tokens,box:{left:0,top:0,width:640,height:700},onClose:()=>{closed=true;},isOnBar:()=>false})
       : h(mode==='reference'?Reference:Launchpad,{key:mode,t:tokens,apps,onOpen:id=>{opened=id;},onClose:()=>{closed=true;},area})));
 }
 const alive = n => { for(let i=0;n && i<100;i++,n=records.get(n.parent)) if(n.id===root) return true; return false; };
@@ -343,96 +370,47 @@ const texts = () => [...records.values()].filter(n=>n.text && alive(n));
 const labelNodes = () => texts().filter(n=>/^App \d{4}$/.test(n.text));
 const click = (node,button=0) => {const [x,y,w,hh]=lord.getLayout(node.parent); __lordEvent('down',node.parent,x+w/2,y+hh/2,button); __lordEvent('up',node.parent,x+w/2,y+hh/2,button);};
 const word = text => texts().find(n=>n.text===text);
+// The query itself is also a text node. Result rows start below the 72px header.
+const resultVisible = title => texts().some(n=>n.text===title && lord.getLayout(n.parent)[1]>=72);
 const snapshot = (name, extra={}) => {
-  const data = {name,catalogs,stats:lord.stats(),total:lastPlan?.total,first:currentApps.find(a=>a.name===sourceNames[lastPlan?.first])?.id,
+  const data = {name,catalogs,stats:lord.stats(),total:lastPlan?.total,first:lastPlan?.first,
     offset:lastPlan?.offset,labels:labelNodes().map(n=>({text:n.text,x:lord.getLayout(n.parent)[0],y:lord.getLayout(n.parent)[1]})),...extra};
   console.log('launcher-observation '+JSON.stringify(data));
 };
-const delay = fn => setTimeout(fn,250);
-const afterLayout = fn => {
-  const n = labelNodes().find(n=>n.text==='App 0000');
-  if(n && lord.getLayout(n.parent)[1] > 0) fn();
-  else setTimeout(()=>afterLayout(fn),25);
-};
-const type = (text,done) => {
-  if (!text) { delay(done); return; }
-  const c = text[0]; __lordKey(0,1,c,c,c,0);
-  setTimeout(()=>type(text.slice(1),done),40);
-};
+const pause = (ms=250) => new Promise(resolve=>setTimeout(resolve,ms));
+const type = async text => {for(const c of text) {__lordKey(0,1,c,c,c,0);await pause(40);}await pause();};
+const appNode = text => labelNodes().find(n=>n.text===text);
 render(h(Harness));
-afterLayout(()=>{
-  snapshot('reference');control.setMode('default');delay(run);
-});
-function run() {
+async function run() {
+  while(!appNode('App 0000') || !(lord.getLayout(appNode('App 0000').parent)[1]>0)) await pause(25);
+  snapshot('reference');control.setMode('default');await pause();
   previousApps=currentApps;
   snapshot('initial',{order:currentApps.map(a=>a.id),referenceOrder:[...currentApps].sort((a,b)=>a.name.localeCompare(b.name)).map(a=>a.id)});
-  control.setTick(v=>v+1);
-  delay(()=>{
-    snapshot('rerender',{sameArray:previousApps===currentApps});
-    const n=labelNodes()[0]; __lordEvent('wheel',n.parent,300,300,-20);
-    delay(()=>{
-      snapshot('scrolled');
-      type('App 0999',()=>{
-        snapshot('searched'); __lordKey(28,1,'Enter','','Enter',0);
-        snapshot('entered',{opened}); control.setMode('fresh');
-        delay(()=>{
-          click(word('Games'));
-          delay(()=>{
-            snapshot('category'); control.setMode('context');
-            delay(()=>{
-              click(labelNodes()[0],2);
-              delay(()=>{
-                snapshot('context',{texts:texts().map(n=>n.text)}); control.setMode('drag');
-                delay(()=>{
-                  closed=false; const node=labelNodes()[0], [x,y]=lord.getLayout(node.parent);
-                  __lordEvent('down',node.parent,x+5,y+5,0); __lordEvent('move',node.parent,x+30,y+30,0);
-                  delay(()=>{
-                    snapshot('drag',{closed}); __lordEvent('up',node.parent,x+30,y+30,0);
-                    control.setMode('classic');
-                    delay(()=>{
-                      click(word('All apps'));
-                      delay(()=>{
-                        snapshot('classic'); const node=labelNodes()[0]; __lordEvent('wheel',node.parent,200,200,-20);
-                        delay(()=>{
-                          snapshot('classic-scrolled');
-                          setPackageApps([{id:'new-package',name:'New Package',package:true,Icon,Component:()=>null}]);
-                          delay(()=>{
-                            snapshot('installed',{found:currentApps.find(a=>a.id==='new-package')?.id || null});
-                            setPackageApps([]);
-                            delay(()=>{
-                              snapshot('removed',{found:currentApps.find(a=>a.id==='new-package')?.id || null});
-                              snapshot('unicode',{greek:launcherView({query:'ΟΣ'}).first?.id,
-                                accent:launcherView({query:'árvore'}).total,turkish:launcherView({query:'İSTANBUL'}).first?.id});
-                              locale.set({...locale.get(),lang:'pt'}); control.setMode('locale');
-                              delay(()=>{
-                                snapshot('locale',{texts:texts().map(n=>n.text)});
-                                control.setArea({x:0,y:0,w:800,h:600});
-                                delay(()=>{
-                                  snapshot('resized'); const n=labelNodes()[0];
-                                  __lordGesture('scroll','begin',n.parent,300,300,0,0,0,0);
-                                  __lordGesture('scroll','update',n.parent,300,300,0,900,0,0);
-                                  delay(()=>{
-                                    snapshot('touchpad');
-                                    type('nonexistent-axia-fixture',()=>{
-                                      snapshot('empty'); __lordKey(28,1,'Enter','','Enter',0);
-                                      snapshot('empty-enter',{opened});lord.quit();
-                                    });
-                                  });
-                                });
-                              });
-                            });
-                          });
-                        });
-                      });
-                    });
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-    });
-  });
+  control.setTick(v=>v+1);await pause();snapshot('rerender',{sameArray:previousApps===currentApps});
+  let node=labelNodes()[0];__lordEvent('wheel',node.parent,300,300,-20);await pause();snapshot('scrolled');
+  await type('App 0999');snapshot('searched');__lordKey(28,1,'Enter','','Enter',0);snapshot('entered',{opened});
+  control.setMode('fresh');await pause();click(word('Games'));await pause();snapshot('category');
+  control.setMode('context');await pause();click(appNode('App 0000'),2);await pause();snapshot('context',{texts:texts().map(n=>n.text)});
+  closed=false;click(word('Keep in Dock'));await pause();snapshot('dock-pinned',{pinned:settings.get().dockPinned.includes('app:test-0000'),closed});
+  click(appNode('App 0000'),2);await pause();click(word('Keep in Dock'));await pause();snapshot('dock-unpinned',{pinned:settings.get().dockPinned.includes('app:test-0000'),closed});
+  control.setMode('drag');await pause();closed=false;node=appNode('App 0000');let [x,y]=lord.getLayout(node.parent);
+  __lordEvent('down',node.parent,x+5,y+5,0);__lordEvent('move',node.parent,x+30,y+30,0);await pause();snapshot('drag',{closed});__lordEvent('up',node.parent,x+30,y+30,0);
+  control.setMode('classic');await pause();click(word('All apps'));await pause();snapshot('classic');
+  closed=false;click(appNode('App 0000'),2);await pause();click(word('Pin to Start'));await pause();snapshot('classic-pinned',{pinned:settings.get().startPinned.includes('test-0000'),closed});
+  settings.set({dockRecentApps:['app:test-0002','app:test-0001','app:test-0002']});click(word('Back'));await pause();snapshot('classic-home');
+  const power=[...records.values()].find(n=>alive(n) && lord.getLayout(n.id)[2]===40 && lord.getLayout(n.id)[3]===40);
+  click({parent:power.id});await pause();snapshot('power',{texts:texts().map(n=>n.text)});__lordKey(1,1,'Escape','','Escape',0);await pause();
+  click(word('All apps'));await pause();node=labelNodes()[0];__lordEvent('wheel',node.parent,200,200,-20);await pause();snapshot('classic-scrolled');
+  control.setMode('classic-search');await pause();const originalRun=searchEverything.run;let result;
+  searchEverything.run=it=>{result=it?.key;};await type('App 0007');__lordKey(28,1,'Enter','','Enter',0);snapshot('classic-search',{result});searchEverything.run=originalRun;
+  control.setMode('classic-install');await pause();await type('New Package');
+  setPackageApps([{id:'new-package',name:'New Package',package:true,Icon,Component:()=>null}]);await pause();snapshot('installed',{found:currentApps.find(a=>a.id==='new-package')?.id || null,searchVisible:resultVisible('New Package')});
+  setPackageApps([]);await pause();snapshot('removed',{found:currentApps.find(a=>a.id==='new-package')?.id || null,searchVisible:resultVisible('New Package')});
+  snapshot('unicode',{greek:launcherView({query:'ΟΣ'}).first?.id,accent:launcherView({query:'árvore'}).total,turkish:launcherView({query:'İSTANBUL'}).first?.id});
+  locale.set({...locale.get(),lang:'pt'});control.setMode('locale');await pause();snapshot('locale',{texts:texts().map(n=>n.text)});
+  control.setArea({x:0,y:0,w:800,h:600});await pause();snapshot('resized');node=labelNodes()[0];
+  __lordGesture('scroll','begin',node.parent,300,300,0,0,0,0);__lordGesture('scroll','update',node.parent,300,300,0,900,0,0);await pause();snapshot('touchpad');
+  await type('nonexistent-axia-fixture');snapshot('empty');__lordKey(28,1,'Enter','','Enter',0);snapshot('empty-enter',{opened});lord.quit();
 }
+run().catch(error=>console.error('launcher driver: '+error.stack));
 "#;
