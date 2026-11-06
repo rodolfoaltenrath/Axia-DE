@@ -1,5 +1,7 @@
 [workspace]
-members = ["axia-shell"]
+members = ["axia-shell", "xtask"]
+# The compositor build compiles only the library; xtask is asked for by name.
+default-members = ["axia-shell"]
 resolver = "2"
 
 [profile.release]

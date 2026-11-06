@@ -3,3 +3,7 @@ replace-with = "vendored-sources"
 
 [source.vendored-sources]
 directory = "rust/vendor"
+
+[alias]
+# Run from the repository root.
+xtask = "run --quiet --manifest-path rust/Cargo.toml --package xtask --locked --offline --"
