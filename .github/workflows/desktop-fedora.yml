@@ -28,6 +28,9 @@ jobs:
           node server/tests/shortcut_profile_test.mjs
           node server/tests/motion_model_test.mjs
       - run: make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
+      - name: Rust application menu integration
+        if: matrix.gpu == 1
+        run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test launcher_runtime -- --ignored --nocapture
       - name: Rust network, brightness and background-app contracts
         if: matrix.gpu == 1
         run: |

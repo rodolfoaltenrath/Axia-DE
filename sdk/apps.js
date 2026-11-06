@@ -7,14 +7,14 @@
 //   launchApp(list[0].id);
 //
 // Linux apps are launched with lord.apps.launch(id): the server only accepts the id of an
-// installed .desktop and runs its Exec line with no arguments and no shell (see server/src/apps.c).
+// installed .desktop and runs its Exec line with no arguments and no shell (applications/ in Rust).
 import { createElement as h } from 'react';
 import { View, Text, Image } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { locale, appName } from './i18n.js';
 import { errorText } from './errors.js';
 import { notify } from './notify.js';
-import { listApps, wm, windows, appRegistry, getApp as registryApp } from './windows.js';
+import { appCatalogSource, isLiveSystem, wm, windows, appRegistry, getApp as registryApp } from './windows.js';
 
 const DESKTOP = 'desktop:';
 export const isLinuxApp = (id) => String(id).startsWith(DESKTOP);
@@ -44,35 +44,49 @@ const linux = createStore([]);
 
 function readLinux() {
   if (typeof lord.apps === 'undefined' || typeof lord.apps.linux !== 'function') return [];   // not in app mode
-  return lord.apps.linux(locale.get().lang).map((a) => ({
-    ...a, id: DESKTOP + a.id, desktopId: a.id, kind: 'linux', Icon: iconFromFile(a.icon, a.name),
-  }));
+  return lord.apps.linux(locale.get().lang);
 }
 
 // Re-reads the .desktop files (after installing or removing packages; it's cheap: the server
 // only re-reads if the folders changed).
 export function refreshApps() { linux.set(readLinux()); }
-locale.subscribe(refreshApps);
-
 export function useLauncherApps() {
-  const lin = useStore(linux);
-  useStore(locale);
-  useStore(appRegistry);
-  const own = listApps().map((a) => ({ ...a, kind: a.package ? 'package' : 'lordos', name: appName(a) }));
-  return [...own, ...lin].sort((a, b) => a.name.localeCompare(b.name));
+  return useStore(launcherCatalog).apps;
+}
+
+export function launcherRequest(args) {
+  const value = lord.launcher.request(JSON.stringify(args));
+  if (value?.error) throw new Error(`launcher: ${value.error}`);
+  return value;
+}
+
+// This store mirrors Rust's reply so React can subscribe and bind callable icon
+// components. Catalog assembly, Unicode, categories and ordering belong to Rust.
+const launcherCatalog = createStore({ apps: [], byId: new Map() });
+export const launcherApp = (id) => launcherCatalog.get().byId.get(id);
+function syncLauncher() {
+  const catalogText = (language) => typeof lord.locale?.catalog === 'function' ? lord.locale.catalog(language, 'apps') || '' : '';
+  const reply = launcherRequest({ op: 'sync', native: appCatalogSource(), linux: linux.get(), live: isLiveSystem(),
+    names: catalogText(locale.get().lang), fallbackNames: catalogText('en') });
+  const source = reply.source.map((a) => ({ ...registryApp(a.id), ...a,
+    Icon: a.kind === 'linux' ? iconFromFile(a.icon, a.name) : registryApp(a.id)?.Icon || iconFromFile(a.icon, a.name) }));
+  launcherCatalog.set({ apps: reply.order.map((i) => source[i]), byId: new Map(source.map((a) => [a.id, a])) });
+}
+// One host turn may deliver both package and locale facts. Forward the final
+// facts together, without preparing intermediate copies of the Rust catalog.
+let syncQueued = false;
+function scheduleSync() {
+  if (syncQueued) return;
+  syncQueued = true;
+  queueMicrotask(() => { syncQueued = false; syncLauncher(); });
 }
 
 // Main freedesktop standard categories (the same as AppStream's in the Store).
 // A Linux app takes it from the Categories field of its .desktop; a LordOS one, from "category" in its
 // manifest.
-export const APP_CATEGORIES = ['AudioVideo', 'Development', 'Education', 'Game', 'Graphics', 'Network', 'Office', 'Science', 'Settings', 'System', 'Utility'];
-const ALIASES = { Audio: 'AudioVideo', Video: 'AudioVideo', TerminalEmulator: 'System', FileManager: 'System', WebBrowser: 'Network', TextEditor: 'Utility' };
+export const APP_CATEGORIES = launcherRequest({ op: 'categories' }).categories;
 export function appCategory(a) {
-  if (a.category && APP_CATEGORIES.includes(a.category)) return a.category;
-  const list = String(a.categories || '').split(';').filter(Boolean);
-  for (const c of list) if (APP_CATEGORIES.includes(c)) return c;
-  for (const c of list) if (ALIASES[c]) return ALIASES[c];
-  return 'Utility';
+  return a.launcherCategory || launcherRequest({ op: 'category', category: a.category || '', categories: String(a.categories || '') }).category;
 }
 
 export function launchApp(id) {
@@ -102,10 +116,7 @@ export function launchApp(id) {
 // Linux app of a Wayland window (by its app_id: the .desktop name or StartupWMClass).
 export function linuxAppFor(appId) {
   if (!appId) return null;
-  const want = String(appId).toLowerCase();
-  if (!linux.get().length) refreshApps();
-  return linux.get().find((a) => a.desktopId.toLowerCase() === want || a.wmClass.toLowerCase() === want ||
-    a.desktopId.toLowerCase().endsWith(`.${want}`)) || null;
+  return launcherApp(launcherRequest({ op: 'window', id: String(appId) }).id) || null;
 }
 
 // Short label of a Linux app, for the shell (menu bar, Dock, notifications). If the (translated)
@@ -159,4 +170,7 @@ export function windowIcon(w, getApp) {
   return getApp(w?.id)?.Icon || (({ size }) => h(LetterIcon, { size, name: w?.id }));
 }
 
+linux.subscribe(scheduleSync);
+appRegistry.subscribe(scheduleSync);
+locale.subscribe(refreshApps);
 refreshApps();

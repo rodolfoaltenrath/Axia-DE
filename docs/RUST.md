@@ -64,6 +64,110 @@ Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
 
+## Aplicativos Linux e associações de arquivos
+
+`applications/` substitui integralmente `apps.c`, `hw/mimeapps.c` e
+`hw/defaults.c`. A descoberta e o cache de aplicativos, parsing de `.desktop`,
+traduções, ícones PNG, ações, expansão de `Exec`, resolução do aplicativo padrão,
+edição de associações MIME e preferência do terminal passam a ser Rust.
+Os headers C continuam como ABI para QuickJS e demais consumidores existentes.
+
+O launcher continua executando o programa diretamente, sem shell, com o arquivo
+como um único argumento. A precedência de associações, os aplicativos internos
+`lordos-*.desktop`, os filtros de visibilidade e os identificadores de cgroup
+são preservados. O plano de permissões também é construído em Rust; as primitivas
+existentes de cgroup, namespaces e Landlock permanecem em `sec/`. Strings,
+argumentos e planos são preparados antes de `fork`; o filho não faz alocações
+Rust nem acessa o cache da interface.
+
+As gravações de associações e terminal agora respeitam `XDG_CONFIG_HOME`, assim
+como a leitura já fazia, com fallback para `~/.config`. A publicação usa arquivo
+temporário exclusivo, escrita completa, `fsync` e `rename`. Associações ilegíveis,
+maiores que 256 KiB ou acessadas por link simbólico são preservadas. Arquivos
+`.desktop` são limitados a 1 MiB e comandos que excedem a capacidade de argumentos
+são recusados inteiramente, em vez de executados com argumentos truncados.
+
+Todos os novos testes são Rust, incluindo parsing, buffers da ABI, comandos,
+preferências XDG e lançamento em um processo de teste isolado. Os testes C
+existentes de ações, padrões e ajustes continuam verificando a ABI e a integração
+com as implementações reais de permissões. Eles agora fazem parte de
+`test-platform`, usado por `make check` e pelo `%check` do RPM.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline applications::
+make -C server build/apps-actions-test build/defaults-test build/settings-hw-test
+make check
+```
+
+A validação headless não substitui a sessão física no Fedora 44: launcher,
+ações da Dock, “Abrir com”, associações persistentes, terminal preferido e apps
+restritos ainda devem ser conferidos antes da publicação final.
+
+## Catálogo e menus de aplicativos
+
+`launcher.rs` e `launcher/` mantêm o catálogo e a implementação dos menus Flow
+e Classic. Rust recebe os metadados brutos do registro e dos aplicativos Linux,
+aplica traduções e visibilidade, prepara Unicode, ordena, categoriza e filtra.
+Também possui o estado da pesquisa, categoria, seleção, fixados/recentes,
+menus de contexto e energia, atalhos e descrições de widgets dos dois temas.
+O posicionamento do painel Classic, inclusive em múltiplos monitores e RTL,
+é calculado em Rust.
+
+Os arquivos `themes/default/components/Launchpad.jsx` e
+`themes/classic/components/StartMenu.jsx` foram removidos. `sdk/rustlauncher.jsx`
+interpreta os widgets e liga eventos e efeitos aos serviços existentes. O SDK
+mantém apenas uma cópia dos metadados retornados para assinaturas React e
+vinculação dos ícones. Mudanças do registro, idioma ou atualização explícita
+dos aplicativos Linux invalidam o catálogo; notificações do mesmo turno são
+agrupadas. Abrir o menu, mover o ponteiro e mudar o foco não o reconstroem.
+
+A ponte `js_launcher.c` possui um estado Rust por contexto QuickJS, liberado
+pelo finalizador. Recebe JSON limitado a 8 MiB e até 4.096 aplicativos. Somente
+metadados são copiados; funções de ícones, eventos e objetos de aplicativos
+permanecem no SDK. NFC usa a GLib já ligada ao servidor; caixa, cabeçalhos e
+normalização da consulta são preparados em Rust, preservando o contrato de
+Unicode e espaços do runtime. Não há dependência nova. A busca Flow continua
+ignorando a categoria selecionada; limpá-la restaura o filtro de categoria.
+Cada menu tem um identificador isolado e liberado ao desmontar; há um limite
+de 16 menus simultâneos por contexto.
+
+O `ScrollView` aceita também uma função de conteúdo com o deslocamento e a altura
+medidos. Os menus usam a altura total para manter a barra de rolagem e montam
+somente as linhas visíveis com uma linha de margem em cada extremidade. As
+posições, tamanhos, materiais e conteúdo dos menus são descritos em Rust.
+Os controles compartilhados continuam desenhando inputs, ícones e popups no
+runtime existente. Os efeitos acionam os serviços ativos da Dock, preferências,
+gerenciador de janelas e sessão. A pesquisa geral do tema clássico (pontuação
+de resultados, arquivos, notas, calculadora etc.) continua no serviço de busca
+compartilhado; Rust recebe seus resultados e decide seleção e apresentação.
+Esses serviços e os controles comuns continuam usados em outras partes da DE.
+
+Os testes novos são Rust: incluem cobertura de viewport em milhares de posições,
+catálogos grandes, categorias, busca por campo, invalidação, memória da ABI,
+transições de estado, isolamento dos menus e permissões das ações de sessão.
+O teste de integração também é dirigido e verificado em Rust; seu módulo
+JavaScript embutido somente opera a interface React real e relata observações.
+Ele usa um HOME e um socket privados e não modifica a sessão do usuário.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline launcher::
+# Depois do build completo, com node_modules/esbuild disponíveis:
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test launcher_runtime -- --ignored --nocapture
+# Medição do modelo/JSON em release; não mede apresentação de frames no hardware:
+cargo test --manifest-path rust/Cargo.toml --release --locked --offline launcher::tests::measure_large_catalog -- --ignored --nocapture
+```
+
+A integração verifica os dois menus, identidade estável da lista, geometria,
+rolagem, pesquisa/Enter, categorias, contexto, fixar/desafixar na Dock e no
+Classic, fixados/recentes, busca geral, energia, início de arraste e instalação/
+remoção de pacote, mudança de idioma, Unicode, redimensionamento e touchpad.
+Opcionalmente, `AXIA_LAUNCHER_BASELINE` aponta para o `Launchpad.jsx` anterior:
+o teste compara as coordenadas visíveis e a quantidade de nós com essa versão.
+`AXIA_LAUNCHER_OBSERVATIONS` permite salvar as observações em JSON.
+Ele roda também no job Fedora com GPU habilitada; a sessão
+de teste usa composição por CPU. A avaliação de fluidez, aparência do blur e
+latência no computador físico continua necessária.
+
 ## Arquivos e seletores nativos
 
 O explorador e os seletores de abrir/salvar/pasta usam o módulo `files/`.
