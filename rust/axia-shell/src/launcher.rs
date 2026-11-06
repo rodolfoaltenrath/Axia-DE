@@ -1,7 +1,10 @@
-//! Cached application-menu policy. React owns icons/events; Rust returns only
-//! source indices and the geometry of visible rows, never window/node pointers.
-use serde::Deserialize;
+//! Application catalog and complete menu state/widget descriptions. The host
+//! retains only rendering, callback objects and access to shared shell services.
+mod session;
+mod ui;
+mod unicode;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::ffi::{c_char, CStr, CString};
 
 const MAX_APPS: usize = 4096;
@@ -41,24 +44,12 @@ fn category(explicit: &str, list: &str) -> &'static str {
     "Utility"
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Input {
-    // Prepared once by the host using the same Unicode tables as QuickJS's
-    // localeCompare (NFC), toLowerCase and toUpperCase. No extra Unicode crate.
-    sort_key: String,
-    heading: String,
-    search: Vec<String>,
-    #[serde(default)]
-    category: String,
-    #[serde(default)]
-    categories: String,
-}
 struct Entry {
     sort_key: String,
     heading: String,
     search: Vec<String>,
     category: &'static str,
+    metadata: Value,
 }
 struct ListRow {
     index: usize,
@@ -76,32 +67,56 @@ pub struct AxiaLauncher {
     list_geometry: Option<(f64, f64)>,
     list_rows: Vec<ListRow>,
     list_height: f64,
+    generation: u64,
+    menus: HashMap<u64, session::Menu>,
+    sequence: u64,
 }
 
 impl AxiaLauncher {
     fn replace(&mut self, value: &Value) -> Result<Value, &'static str> {
-        let inputs: Vec<Input> =
-            serde_json::from_value(value.clone()).map_err(|_| "invalid catalog")?;
-        if inputs.len() > MAX_APPS
-            || inputs.iter().any(|a| {
-                a.search.len() > 6
-                    || [&a.sort_key, &a.heading, &a.category, &a.categories]
-                        .into_iter()
-                        .chain(a.search.iter())
-                        .any(|s| s.len() > 16384)
-            })
-        {
+        let inputs = value.as_array().ok_or("invalid catalog")?;
+        if inputs.len() > MAX_APPS {
             return Err("catalog limit exceeded");
         }
-        let entries: Vec<_> = inputs
-            .into_iter()
-            .map(|a| Entry {
-                category: category(&a.category, &a.categories),
-                sort_key: a.sort_key,
-                heading: a.heading,
-                search: a.search,
-            })
-            .collect();
+        let mut entries = Vec::with_capacity(inputs.len());
+        for raw in inputs {
+            let name = raw["name"].as_str().ok_or("invalid application name")?;
+            let id = raw["id"].as_str().ok_or("invalid application id")?;
+            if id.is_empty() || id.len() > 256 || !raw.is_object() {
+                return Err("invalid application id");
+            }
+            let fields = [
+                name,
+                id,
+                string(raw, "genericName"),
+                string(raw, "keywords"),
+                string(raw, "comment"),
+                string(raw, "displayName"),
+            ];
+            if fields
+                .iter()
+                .chain([string(raw, "category"), string(raw, "categories")].iter())
+                .any(|s| s.len() > 16384)
+            {
+                return Err("catalog limit exceeded");
+            }
+            let cat = category(string(raw, "category"), string(raw, "categories"));
+            let mut metadata = raw.clone();
+            metadata["launcherCategory"] = json!(cat);
+            metadata["dockId"] = json!(session::dock_id(&metadata));
+            entries.push(Entry {
+                sort_key: unicode::nfc(name),
+                heading: name
+                    .chars()
+                    .next()
+                    .unwrap_or('#')
+                    .to_uppercase()
+                    .to_string(),
+                search: fields.iter().map(|s| s.to_lowercase()).collect(),
+                category: cat,
+                metadata,
+            });
+        }
         let mut order: Vec<_> = (0..entries.len()).collect();
         // UTF-8 byte order equals Unicode scalar order for valid strings;
         // QuickJS's localeCompare compares NFC Unicode scalars. Stable ties.
@@ -110,8 +125,6 @@ impl AxiaLauncher {
             .into_iter()
             .filter(|c| entries.iter().any(|a| a.category == *c))
             .collect();
-        let reply = json!({"order":order,"categories":categories,
-            "itemCategories":entries.iter().map(|a| a.category).collect::<Vec<_>>()});
         self.entries = entries;
         self.order = order;
         self.categories = categories;
@@ -119,7 +132,65 @@ impl AxiaLauncher {
         self.matches.clear();
         self.list_geometry = None;
         self.list_rows.clear();
-        Ok(reply)
+        self.generation = self.generation.wrapping_add(1);
+        Ok(self.catalog())
+    }
+
+    fn catalog(&self) -> Value {
+        json!({"order":self.order,"categories":self.categories,"generation":self.generation,
+            "source":self.entries.iter().map(|a| &a.metadata).collect::<Vec<_>>()})
+    }
+
+    fn sync(&mut self, args: &Value) -> Result<Value, &'static str> {
+        let own = args["native"].as_array().ok_or("invalid native catalog")?;
+        let linux = args["linux"].as_array().ok_or("invalid Linux catalog")?;
+        if own.len() + linux.len() > MAX_APPS {
+            return Err("catalog limit exceeded");
+        }
+        let mut source = Vec::with_capacity(own.len() + linux.len());
+        let names: Value = serde_json::from_str(string(args, "names")).unwrap_or(Value::Null);
+        let fallback: Value =
+            serde_json::from_str(string(args, "fallbackNames")).unwrap_or(Value::Null);
+        for original in own {
+            if !original.is_object() {
+                return Err("invalid native application");
+            }
+            if truthy(&original["builtin"])
+                || truthy(&original["hidden"])
+                || (truthy(&original["live"]) && !truthy(&args["live"]))
+            {
+                continue;
+            }
+            let mut a = original.clone();
+            let id = string(&a, "id");
+            if let Some(name) = names[id].as_str().or_else(|| fallback[id].as_str()) {
+                a["name"] = json!(name);
+            }
+            a["kind"] = json!(if truthy(&a["package"]) {
+                "package"
+            } else {
+                "lordos"
+            });
+            source.push(a);
+        }
+        for original in linux {
+            if !original.is_object() {
+                return Err("invalid Linux application");
+            }
+            let mut a = original.clone();
+            let id = string(&a, "id").to_owned();
+            a["desktopId"] = json!(id);
+            a["id"] = json!(format!("desktop:{id}"));
+            a["kind"] = json!("linux");
+            let key = string(&a, "id");
+            a["displayName"] = names[key]
+                .as_str()
+                .or_else(|| fallback[key].as_str())
+                .map(|name| json!(name))
+                .unwrap_or_else(|| a["name"].clone());
+            source.push(a);
+        }
+        self.replace(&json!(source))
     }
 
     fn select(&mut self, query: &str, cat: &str) {
@@ -143,7 +214,8 @@ impl AxiaLauncher {
     }
 
     fn view(&mut self, args: &Value) -> Result<Value, &'static str> {
-        let query = args["query"].as_str().unwrap_or("");
+        let normalized = unicode::query(args["query"].as_str().unwrap_or(""));
+        let query = normalized.as_str();
         let cat = args["category"].as_str().unwrap_or("");
         if query.len() > 16384 {
             return Err("query limit exceeded");
@@ -217,14 +289,39 @@ impl AxiaLauncher {
 
     fn request(&mut self, args: &Value) -> Result<Value, &'static str> {
         match args["op"].as_str().unwrap_or("") {
-            "catalog" => self.replace(&args["items"]),
+            "sync" => self.sync(args),
+            "catalog" => Ok(self.catalog()),
+            "categories" => Ok(json!({"categories":CATEGORIES})),
             "view" => self.view(args),
+            "placement" => Ok(session::placement(args)),
+            "open" | "context" | "event" | "scroll" | "close" => self.menu_request(args),
+            "window" => {
+                let want = string(args, "id").to_lowercase();
+                Ok(
+                    json!({"id": self.entries.iter().find(|a| string(&a.metadata,"kind")=="linux" && !want.is_empty() &&
+                    (string(&a.metadata,"desktopId").to_lowercase()==want || string(&a.metadata,"wmClass").to_lowercase()==want ||
+                        string(&a.metadata,"desktopId").to_lowercase().ends_with(&format!(".{want}")))).map(|a| string(&a.metadata,"id"))}),
+                )
+            }
             "category" => Ok(
                 json!({"category":category(args["category"].as_str().unwrap_or(""),
                 args["categories"].as_str().unwrap_or(""))}),
             ),
             _ => Err("unknown launcher operation"),
         }
+    }
+}
+
+fn string<'a>(value: &'a Value, key: &str) -> &'a str {
+    value[key].as_str().unwrap_or("")
+}
+fn truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::String(s) => !s.is_empty(),
+        Value::Number(n) => n.as_f64() != Some(0.),
+        _ => true,
     }
 }
 

@@ -1,8 +1,7 @@
 use super::*;
 
 fn app(name: &str, categories: &str) -> Value {
-    json!({"sortKey":name,"heading":name.chars().next().unwrap_or('#').to_uppercase().to_string(),
-        "search":[name.to_lowercase()],"categories":categories})
+    json!({"id":name,"name":name,"categories":categories,"kind":"lordos"})
 }
 fn model(items: Vec<Value>) -> AxiaLauncher {
     let mut state = AxiaLauncher::default();
@@ -64,8 +63,8 @@ fn stable_unicode_order_and_category_presence() {
 
 #[test]
 fn search_matches_each_field_without_cross_field_false_positives() {
-    let item = json!({"sortKey":"Editor","heading":"E", "search":["editor","editor original",
-        "desktop:org.editor","texto simples","código;programação","editar documentos"],"category":"Utility"});
+    let item = json!({"id":"desktop:org.editor","name":"Editor original","displayName":"Editor","genericName":"texto simples",
+        "keywords":"código;programação","comment":"editar documentos","category":"Utility"});
     let mut s = model(vec![item, app("Navegador", "Network")]);
     for q in [
         "editor original",
@@ -221,8 +220,8 @@ fn invalid_catalog_preserves_previous_snapshot() {
     for bad in [
         json!(null),
         json!([{}]),
-        json!([{"sortKey":"bad","heading":"B","search":123}]),
-        json!([{"sortKey":"bad","heading":"B","search":vec!["x";7]}]),
+        json!([{"id":"bad","name":123}]),
+        json!([{"id":"","name":"bad"}]),
         json!([app(&"x".repeat(16385), "")]),
         json!(vec![app("x", ""); 4097]),
     ] {
@@ -262,7 +261,7 @@ fn ffi_replies_own_their_memory_and_contexts_are_independent() {
     unsafe {
         let a = axia_launcher_new();
         let b = axia_launcher_new();
-        let input = json!({"op":"catalog","items":[app("A\0B", "Network")]}).to_string();
+        let input = json!({"op":"sync","native":[app("A\0B", "Network")],"linux":[]}).to_string();
         assert!(call(a, &input).get("error").is_none());
         assert_eq!(call(a, r#"{"op":"view","query":"\u0000"}"#)["total"], 1);
         assert_eq!(call(b, r#"{"op":"view"}"#)["total"], 0);
@@ -304,4 +303,262 @@ fn measure_large_catalog() {
         let r = s.view(&json!({"height":510,"offset":900})).unwrap();
         println!("launcher: {count} apps; prepare={preparation:?}; view incl JSON={avg:.3} ms; mounted={}", indices(&r).len());
     }
+}
+
+fn shell() -> AxiaLauncher {
+    let mut s = AxiaLauncher::default();
+    s.request(&json!({"op":"sync","native":[
+        {"id":"files","name":"Files","category":"System"},
+        {"id":"terminal","name":"Terminal","category":"System"},
+        {"id":"other","name":"Other","category":"Utility"},
+        {"id":"package","name":"Package","package":true}],"linux":[
+        {"id":"org.example.Editor","name":"Text editor","wmClass":"ExampleEditor","mimeTypes":"text/plain;","icon":"/icon.png"}]})).unwrap();
+    s
+}
+fn context() -> Value {
+    json!({"theme":{"mode":"dark","effects":true,"text":"#fff","windowBorder":"#444","tileBorder":"#444"},
+    "area":{"x":0,"y":0,"w":1000,"h":700,"left":0,"top":0,"width":640,"height":700},"settings":{},"session":{}})
+}
+fn open_menu(s: &mut AxiaLauncher, mode: &str) -> u64 {
+    s.request(&json!({"op":"open","mode":mode,"context":context()}))
+        .unwrap()["id"]
+        .as_u64()
+        .unwrap()
+}
+fn event(s: &mut AxiaLauncher, id: u64, action: Value) -> Value {
+    s.request(&json!({"op":"event","id":id,"action":action}))
+        .unwrap()
+}
+fn effect(reply: &Value, name: &str) -> Option<Value> {
+    reply["effects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["type"] == name)
+        .cloned()
+}
+
+#[test]
+fn raw_catalog_owns_translation_visibility_and_linux_identity() {
+    let mut s = AxiaLauncher::default();
+    let r=s.request(&json!({"op":"sync","native":[
+        {"id":"files","name":"Files"},{"id":"terminal","name":"Console"},
+        {"id":"hidden","name":"Hidden","hidden":true},{"id":"linux","name":"Internal","builtin":true},
+        {"id":"installer","name":"Install","live":true},{"id":"pack","name":"Package","package":true}],
+        "linux":[{"id":"org.example.App","name":"External","mimeTypes":"application/pdf;"}],
+        "names":"{\"files\":\"Arquivos\",\"desktop:org.example.App\":\"Externo\"}","fallbackNames":"{\"terminal\":\"Terminal\"}"})).unwrap();
+    assert_eq!(r["source"].as_array().unwrap().len(), 4);
+    assert_eq!(r["source"][0]["name"], "Arquivos");
+    assert_eq!(r["source"][1]["name"], "Terminal");
+    assert_eq!(r["source"][2]["kind"], "package");
+    assert_eq!(r["source"][2]["dockId"], "lpk:pack");
+    assert_eq!(r["source"][3]["id"], "desktop:org.example.App");
+    assert_eq!(r["source"][3]["desktopId"], "org.example.App");
+    assert_eq!(r["source"][3]["mimeTypes"], "application/pdf;");
+    assert_eq!(r["source"][3]["name"], "External");
+    assert_eq!(r["source"][3]["displayName"], "Externo");
+    let live=s.request(&json!({"op":"sync","native":[{"id":"installer","name":"Install","live":true}],"linux":[],"live":true})).unwrap();
+    assert_eq!(live["source"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn rust_unicode_matches_search_and_canonical_sort_contracts() {
+    assert_eq!(unicode::nfc("A\u{301}rvore"), "Árvore");
+    assert_eq!(unicode::nfc("a\u{301}\0o\u{308}"), "á\0ö");
+    assert_eq!(unicode::query("\u{feff}\u{a0}ΟΣ \n"), "ος");
+    assert_eq!(unicode::query("\u{85}A\u{85}"), "\u{85}a\u{85}");
+    let mut s = model(vec![app("Árvore", ""), app("A\u{301}rvore", "")]);
+    assert_eq!(s.entries[0].sort_key, s.entries[1].sort_key);
+    assert_eq!(indices(&s.view(&json!({})).unwrap()), [0, 1]);
+    assert_eq!(s.view(&json!({"query":"ÁRVORE"})).unwrap()["total"], 1);
+}
+
+#[test]
+fn window_identity_uses_canonical_catalog_metadata() {
+    let mut s = shell();
+    for id in ["org.example.editor", "ExampleEditor", "EDITOR"] {
+        assert_eq!(
+            s.request(&json!({"op":"window","id":id})).unwrap()["id"],
+            "desktop:org.example.Editor"
+        );
+    }
+    assert!(s.request(&json!({"op":"window","id":""})).unwrap()["id"].is_null());
+}
+
+#[test]
+fn flow_state_restores_category_and_submits_only_real_results() {
+    let mut s = shell();
+    let id = open_menu(&mut s, "flow");
+    assert_eq!(event(&mut s, id, json!(["category", "System"]))["total"], 2);
+    assert_eq!(
+        event(&mut s, id, json!(["query", "editor"]))["first"],
+        "desktop:org.example.Editor"
+    );
+    let open = event(&mut s, id, json!(["submit"]));
+    assert_eq!(
+        effect(&open, "open").unwrap()["id"],
+        "desktop:org.example.Editor"
+    );
+    assert!(effect(&open, "close").is_some());
+    assert_eq!(event(&mut s, id, json!(["query", ""]))["total"], 2);
+    assert_eq!(event(&mut s, id, json!(["query", "missing"]))["total"], 0);
+    assert!(effect(&event(&mut s, id, json!(["submit"])), "open").is_none());
+}
+
+#[test]
+fn menu_handles_are_isolated_bounded_and_released() {
+    let mut s = shell();
+    let a = open_menu(&mut s, "flow");
+    let b = open_menu(&mut s, "classic");
+    event(&mut s, a, json!(["query", "Files"]));
+    assert_eq!(event(&mut s, b, json!(["noop"]))["query"], "");
+    for _ in 0..14 {
+        open_menu(&mut s, "flow");
+    }
+    assert!(s
+        .request(&json!({"op":"open","mode":"flow","context":context()}))
+        .is_err());
+    s.request(&json!({"op":"close","id":a})).unwrap();
+    assert!(s
+        .request(&json!({"op":"event","id":a,"action":["submit"]}))
+        .is_err());
+    let c = open_menu(&mut s, "flow");
+    assert!(c > b);
+    assert!(s
+        .request(&json!({"op":"scroll","id":b,"key":"invalid"}))
+        .is_err());
+    assert!(s.menus.contains_key(&b));
+}
+
+#[test]
+fn classic_keyboard_uses_latest_service_results_and_clamps_selection() {
+    let mut s = shell();
+    let id = open_menu(&mut s, "classic");
+    let query = event(&mut s, id, json!(["query", "term"]));
+    assert_eq!(effect(&query, "search").unwrap()["query"], "term");
+    s.request(&json!({"op":"event","id":id,"action":["results"],"query":"term","sections":[{"id":"apps","items":[{"key":"app:terminal","title":"Terminal"},{"key":"app:files","title":"Files"}]}]})).unwrap();
+    assert_eq!(
+        event(&mut s, id, json!(["key", "ArrowDown"]))["handled"],
+        true
+    );
+    let enter = event(&mut s, id, json!(["key", "Enter"]));
+    assert_eq!(effect(&enter, "runSearch").unwrap()["key"], "app:files");
+    event(&mut s, id, json!(["query", "next"]));
+    s.request(&json!({"op":"event","id":id,"action":["results"],"query":"term","sections":[{"id":"apps","items":[{"key":"stale"}]}]})).unwrap();
+    assert!(effect(&event(&mut s, id, json!(["key", "Enter"])), "runSearch").is_none());
+    event(&mut s, id, json!(["key", "ArrowDown"]));
+    assert_eq!(s.menus[&id].selected, 0);
+}
+
+#[test]
+fn popup_actions_work_after_the_material_closes_the_popup() {
+    let mut s = shell();
+    let id = open_menu(&mut s, "classic");
+    event(&mut s, id, json!(["context", "other"]));
+    event(&mut s, id, json!(["closeContext"]));
+    let pinned = event(&mut s, id, json!(["pinStart", "other"]));
+    let patch = effect(&pinned, "settings").unwrap()["patch"].clone();
+    assert!(patch["startPinned"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("other")));
+    let mut ctx = context();
+    ctx["settings"] = patch;
+    s.request(&json!({"op":"context","id":id,"context":ctx}))
+        .unwrap();
+    let unpin = event(&mut s, id, json!(["pinStart", "other"]));
+    assert!(!effect(&unpin, "settings").unwrap()["patch"]["startPinned"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("other")));
+    let dock=s.request(&json!({"op":"event","id":id,"action":["dock","other"],"dock":{"id":"app:other","pinned":false,"removable":true}})).unwrap();
+    assert_eq!(effect(&dock, "dock").unwrap()["pin"], true);
+    let locked=s.request(&json!({"op":"event","id":id,"action":["dock","files"],"dock":{"id":"app:files","pinned":true,"removable":false}})).unwrap();
+    assert!(effect(&locked, "dock").is_none());
+}
+
+#[test]
+fn classic_pins_recents_and_drag_are_catalog_validated() {
+    let mut s = shell();
+    let id = open_menu(&mut s, "classic");
+    let mut ctx = context();
+    ctx["settings"] = json!({"startPinned":["other","removed","files"],"dockRecentApps":["desktop:org.example.Editor","app:files","files","lpk:package","unknown"]});
+    s.request(&json!({"op":"context","id":id,"context":ctx}))
+        .unwrap();
+    assert_eq!(s.menus[&id].pins(&s), ["other", "files"]);
+    assert_eq!(
+        s.menus[&id].recent(&s),
+        ["desktop:org.example.Editor", "files", "package"]
+    );
+    let left = s
+        .request(&json!({"op":"event","id":id,"action":["drag","files"],"button":0,"x":12,"y":34}))
+        .unwrap();
+    assert_eq!(effect(&left, "drag").unwrap()["x"], 12);
+    assert!(effect(
+        &s.request(&json!({"op":"event","id":id,"action":["drag","files"],"button":2}))
+            .unwrap(),
+        "drag"
+    )
+    .is_none());
+    let click = s
+        .request(&json!({"op":"event","id":id,"action":["open","files"],"dragJustEnded":true}))
+        .unwrap();
+    assert!(effect(&click, "open").is_none());
+}
+
+#[test]
+fn outside_cancel_and_power_follow_menu_mode_and_capabilities() {
+    let mut s = shell();
+    let id = open_menu(&mut s, "classic");
+    let popup = s
+        .request(&json!({"op":"event","id":id,"action":["close"],"insidePopup":true}))
+        .unwrap();
+    assert!(effect(&popup, "close").is_none());
+    assert!(effect(&event(&mut s, id, json!(["close"])), "close").is_some());
+    event(&mut s, id, json!(["query", "something"]));
+    event(&mut s, id, json!(["query", ""]));
+    assert!(effect(&event(&mut s, id, json!(["cancel", "something"])), "close").is_none());
+    assert!(effect(&event(&mut s, id, json!(["cancel", ""])), "close").is_some());
+    for facts in [
+        json!({"inside":true,"onBar":false}),
+        json!({"inside":false,"onBar":true}),
+    ] {
+        let mut args = facts;
+        args["op"] = json!("event");
+        args["id"] = json!(id);
+        args["action"] = json!(["outside"]);
+        assert!(effect(&s.request(&args).unwrap(), "close").is_none());
+    }
+    assert!(effect(&event(&mut s, id, json!(["outside"])), "close").is_some());
+    assert!(effect(
+        &event(&mut s, id, json!(["session", "shutdown"])),
+        "session"
+    )
+    .is_none());
+    assert!(effect(&event(&mut s, id, json!(["session", "quit"])), "session").is_some());
+    let mut ctx = context();
+    ctx["session"] = json!({"managed":true,"canPower":true});
+    s.request(&json!({"op":"context","id":id,"context":ctx}))
+        .unwrap();
+    assert_eq!(
+        effect(&event(&mut s, id, json!(["session", "restart"])), "session").unwrap()["action"],
+        "restart"
+    );
+}
+
+#[test]
+fn classic_placement_matches_bars_multimonitor_and_rtl() {
+    let d = json!({"x":1920,"y":-200,"w":1280,"h":720});
+    let bottom = session::placement(&json!({"display":d,"position":"bottom","alignment":"center"}));
+    assert_eq!(
+        bottom,
+        json!({"left":2240.,"top":-188.,"width":640.,"height":648.})
+    );
+    let rtl =
+        session::placement(&json!({"display":d,"position":"top","alignment":"start","rtl":true}));
+    assert_eq!(rtl["left"], 2548.);
+    assert_eq!(rtl["top"], -140.);
+    let side = session::placement(&json!({"display":d,"position":"left"}));
+    assert_eq!(side["left"], 1988.);
+    assert_eq!(side["height"], 696.);
 }

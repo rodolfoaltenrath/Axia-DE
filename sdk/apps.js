@@ -14,7 +14,7 @@ import { createStore, useStore } from './store.js';
 import { locale, appName } from './i18n.js';
 import { errorText } from './errors.js';
 import { notify } from './notify.js';
-import { listApps, wm, windows, appRegistry, getApp as registryApp } from './windows.js';
+import { appCatalogSource, isLiveSystem, wm, windows, appRegistry, getApp as registryApp } from './windows.js';
 
 const DESKTOP = 'desktop:';
 export const isLinuxApp = (id) => String(id).startsWith(DESKTOP);
@@ -44,64 +44,47 @@ const linux = createStore([]);
 
 function readLinux() {
   if (typeof lord.apps === 'undefined' || typeof lord.apps.linux !== 'function') return [];   // not in app mode
-  return lord.apps.linux(locale.get().lang).map((a) => ({
-    ...a, id: DESKTOP + a.id, desktopId: a.id, kind: 'linux', Icon: iconFromFile(a.icon, a.name),
-  }));
+  return lord.apps.linux(locale.get().lang);
 }
 
 // Re-reads the .desktop files (after installing or removing packages; it's cheap: the server
 // only re-reads if the folders changed).
 export function refreshApps() { linux.set(readLinux()); }
-locale.subscribe(refreshApps);
-
 export function useLauncherApps() {
-  useStore(linux);
-  useStore(locale);
-  useStore(appRegistry);
-  return catalog().apps;
+  return useStore(launcherCatalog).apps;
 }
 
-function launcherRequest(args) {
+export function launcherRequest(args) {
   const value = lord.launcher.request(JSON.stringify(args));
-  if (value.error) throw new Error(`launcher: ${value.error}`);
+  if (value?.error) throw new Error(`launcher: ${value.error}`);
   return value;
 }
 
-// All consumers share one stable array and the same Rust catalog. Window focus,
-// clocks, pointer motion and opening the menu do not rebuild/sort the catalog.
-let cached = null;
-function catalog() {
-  const lin = linux.get(), language = locale.get(), registry = appRegistry.get();
-  if (cached && cached.lin === lin && cached.language === language && cached.registry === registry) return cached;
-  const own = listApps().map((a) => ({ ...a, kind: a.package ? 'package' : 'lordos', name: appName(a) }));
-  const source = [...own, ...lin];
-  const reply = launcherRequest({ op: 'catalog', items: source.map((a) => ({
-    // Match this runtime's Unicode tables exactly, once per catalog, rather
-    // than normalizing every name inside every sorting/search comparison.
-    sortKey: String(a.name || '').normalize('NFC'), heading: (Array.from(a.name || '')[0] || '#').toUpperCase(),
-    search: [appName(a), a.name, a.id, a.genericName, a.keywords, a.comment].map((v) => String(v || '').toLowerCase()),
-    category: a.category || '', categories: String(a.categories || ''),
-  })) });
-  for (let i = 0; i < source.length; i++) source[i].launcherCategory = reply.itemCategories[i];
-  cached = { lin, language, registry, source, apps: reply.order.map((i) => source[i]) };
-  return cached;
+// This store mirrors Rust's reply so React can subscribe and bind callable icon
+// components. Catalog assembly, Unicode, categories and ordering belong to Rust.
+const launcherCatalog = createStore({ apps: [], byId: new Map() });
+export const launcherApp = (id) => launcherCatalog.get().byId.get(id);
+function syncLauncher() {
+  const catalogText = (language) => typeof lord.locale?.catalog === 'function' ? lord.locale.catalog(language, 'apps') || '' : '';
+  const reply = launcherRequest({ op: 'sync', native: appCatalogSource(), linux: linux.get(), live: isLiveSystem(),
+    names: catalogText(locale.get().lang), fallbackNames: catalogText('en') });
+  const source = reply.source.map((a) => ({ ...registryApp(a.id), ...a,
+    Icon: a.kind === 'linux' ? iconFromFile(a.icon, a.name) : registryApp(a.id)?.Icon || iconFromFile(a.icon, a.name) }));
+  launcherCatalog.set({ apps: reply.order.map((i) => source[i]), byId: new Map(source.map((a) => [a.id, a])) });
 }
-
-// Only the visible source indices cross back from Rust. Icon functions and
-// launch callbacks always remain in JS, with the original application object.
-export function launcherView(options) {
-  const current = catalog();
-  const value = launcherRequest({ ...options, op: 'view', query: String(options.query || '').trim().toLowerCase() });
-  return { ...value, first: value.first == null ? null : current.source[value.first],
-    items: value.items.map((row) => row.indices
-      ? { ...row, apps: row.indices.map((i) => current.source[i]) }
-      : { ...row, app: current.source[row.index] }) };
+// One host turn may deliver both package and locale facts. Forward the final
+// facts together, without preparing intermediate copies of the Rust catalog.
+let syncQueued = false;
+function scheduleSync() {
+  if (syncQueued) return;
+  syncQueued = true;
+  queueMicrotask(() => { syncQueued = false; syncLauncher(); });
 }
 
 // Main freedesktop standard categories (the same as AppStream's in the Store).
 // A Linux app takes it from the Categories field of its .desktop; a LordOS one, from "category" in its
 // manifest.
-export const APP_CATEGORIES = ['AudioVideo', 'Development', 'Education', 'Game', 'Graphics', 'Network', 'Office', 'Science', 'Settings', 'System', 'Utility'];
+export const APP_CATEGORIES = launcherRequest({ op: 'categories' }).categories;
 export function appCategory(a) {
   return a.launcherCategory || launcherRequest({ op: 'category', category: a.category || '', categories: String(a.categories || '') }).category;
 }
@@ -133,10 +116,7 @@ export function launchApp(id) {
 // Linux app of a Wayland window (by its app_id: the .desktop name or StartupWMClass).
 export function linuxAppFor(appId) {
   if (!appId) return null;
-  const want = String(appId).toLowerCase();
-  if (!linux.get().length) refreshApps();
-  return linux.get().find((a) => a.desktopId.toLowerCase() === want || a.wmClass.toLowerCase() === want ||
-    a.desktopId.toLowerCase().endsWith(`.${want}`)) || null;
+  return launcherApp(launcherRequest({ op: 'window', id: String(appId) }).id) || null;
 }
 
 // Short label of a Linux app, for the shell (menu bar, Dock, notifications). If the (translated)
@@ -190,4 +170,7 @@ export function windowIcon(w, getApp) {
   return getApp(w?.id)?.Icon || (({ size }) => h(LetterIcon, { size, name: w?.id }));
 }
 
+linux.subscribe(scheduleSync);
+appRegistry.subscribe(scheduleSync);
+locale.subscribe(refreshApps);
 refreshApps();

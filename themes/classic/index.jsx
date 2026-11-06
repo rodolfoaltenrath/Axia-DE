@@ -8,21 +8,20 @@
 //   glyphs.jsx                  drawn icons (window buttons, tray, quick settings)
 //   components/Window.jsx       the frame: title at the start, buttons at the end, snap layouts
 //   components/Taskbar.jsx      start, search, overview, apps, Trash, tray
-//   components/StartMenu.jsx    search, pinned, recent, all apps, user and power
+//   RustLauncher                Rust-owned search, pinned/recent, all apps, user and power
 //   components/QuickSettings.jsx, NotificationCenter.jsx, Menu.jsx
 import {
   startShell, settings, View, Image, Layer, screen, addListener, ThemeProvider, useSettings, useWindows, useStore, configureWindows,
   getApp, wm, t as tr, DesktopWidgets, registerGestureActions, dockPrefs, mainDisplay, screenDisplays, dockDrag, dockPoof,
   emptyTrash, ConfirmDialog, PowerDialog, findWallpaper, wallpaperSrc, MotionWallpaper, snapPreview, notifyHistory, setBannerPlacement, Text, direction,
   useShortcuts, runShortcut, AppSwitcher, toggleShowDesktop, spotlight, launchApp, dockActivate,
-  classicDesktopKeys, desktopSwipe, DesktopHud, OverviewBackdrop, OverviewChrome, openOverview, closeOverview, toggleOverview, overview,
+  classicDesktopKeys, desktopSwipe, DesktopHud, OverviewBackdrop, OverviewChrome, openOverview, closeOverview, toggleOverview, overview, RustLauncher, launcherPlacement,
 } from '@lordos/sdk';
 import { apps } from '@lordos/apps';
 import { useEffect, useRef, useState, Fragment } from 'react';
 import { makeTheme } from './tokens.js';
 import { Window, TITLE_H, MENU_H } from './components/Window.jsx';
 import { Taskbar, BAR_H, barSize, taskbarEntries } from './components/Taskbar.jsx';
-import { StartMenu, startBox } from './components/StartMenu.jsx';
 import { QuickSettings } from './components/QuickSettings.jsx';
 import { NotificationCenter } from './components/NotificationCenter.jsx';
 import { Menu } from './components/Menu.jsx';
@@ -215,7 +214,7 @@ function App() {
               onEmptyTrash={() => setAskEmpty(true)} />
           </View>
         </Layer>
-        {panel === 'start' && <Layer name="overlay"><StartMenu t={t} box={startBox(pos, align, m)} onClose={close} isOnBar={isOnBar} /></Layer>}
+        {panel === 'start' && <Layer name="overlay"><RustLauncher mode="classic" t={t} box={launcherPlacement(pos, align, m)} onClose={close} isOnBar={isOnBar} Menu={Menu} /></Layer>}
         {panel === 'quick' && <Layer name="popover"><QuickSettings t={t} at={qsAt} onClose={close} isOnBar={isOnBar} /></Layer>}
         {panel === 'notif' && <Layer name="popover"><NotificationCenter t={t} at={ncAt} onClose={close} isOnBar={isOnBar} /></Layer>}
         {desk && (
