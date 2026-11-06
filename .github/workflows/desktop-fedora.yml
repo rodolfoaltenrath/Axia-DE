@@ -55,7 +55,7 @@ jobs:
           dnf install -y dnf5-plugins rpm-build nodejs npm
           dnf builddep -y packaging/rpm/axia-de.spec
       - name: Build source RPM
-        run: python3 tools/desktop/srpm.py --outdir "$GITHUB_WORKSPACE/build/srpm"
+        run: cargo xtask srpm --outdir "$GITHUB_WORKSPACE/build/srpm"
       - name: Build and check the binary RPM
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/rpmbuild"

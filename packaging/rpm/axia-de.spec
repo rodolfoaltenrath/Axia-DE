@@ -72,7 +72,7 @@ It does not replace the display manager or enable system services.
 %autosetup
 
 %build
-# dist.sh includes the frontend built from package-lock.json. No network access
+# cargo xtask dist includes the frontend built from package-lock.json. No network access
 # or Node.js runtime is needed to compile or run this local RPM.
 %set_build_flags
 # Include the accelerated compositor; runtime detection retains CPU fallback.
@@ -81,7 +81,7 @@ test -x server/build/axia-media
 test -x server/build/axia-doc
 
 %install
-python3 tools/desktop/install.py --prefix %{_prefix} --libexecdir %{_libexecdir} --destdir %{buildroot}
+cargo xtask install --prefix %{_prefix} --libexecdir %{_libexecdir} --destdir %{buildroot}
 install -Dpm 644 packaging/systemd/axia-update.service %{buildroot}%{_unitdir}/axia-update.service
 install -Dpm 644 packaging/systemd/axia-update.timer %{buildroot}%{_unitdir}/axia-update.timer
 
