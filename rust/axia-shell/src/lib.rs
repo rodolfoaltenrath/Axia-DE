@@ -3,6 +3,7 @@
 mod files;
 mod applications;
 mod launcher;
+mod search;
 mod glass;
 mod glass_render;
 mod wallpaper;

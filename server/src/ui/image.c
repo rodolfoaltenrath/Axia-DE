@@ -23,6 +23,16 @@ struct Image {
 
 static struct Image *images;
 
+uint64_t image_managed_bytes(void) {
+    uint64_t bytes = 0;
+    for (const Image *i = images; i; i = i->next) if (i->managed) {
+        if (i->px) bytes += (uint64_t)i->w * i->h * 4;
+        if (i->scaled) bytes += (uint64_t)i->sw * i->sh * 4;
+        if (i->scaled2) bytes += (uint64_t)i->sw2 * i->sh2 * 4;
+    }
+    return bytes;
+}
+
 Image *image_get(const char *path) {
     for (Image *i = images; i; i = i->next)
         if (!strcmp(i->path, path)) { i->refs++; return i; }
@@ -33,7 +43,7 @@ Image *image_get(const char *path) {
     if (!img) { stbi_image_free(rgba); return NULL; }
     img->path = strdup(path);
     img->refs = 1;
-    img->managed = strstr(path, "/axia/wallpapers/") != NULL || strstr(path, "/axia/tray/") != NULL;
+    img->managed = strstr(path, "/axia/wallpapers/") != NULL || strstr(path, "/axia/tray/") != NULL || strstr(path, "/axia/search/") != NULL;
     img->w = w; img->h = h; img->opaque = 1;
     img->px = malloc((size_t)w * h * 4);
     if (!img->path || !img->px) { free(img->path); free(img->px); free(img); stbi_image_free(rgba); return NULL; }

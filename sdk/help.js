@@ -20,12 +20,11 @@
 //   keywords: alarm, timer
 //   ---
 // Special links in the text: [Open Settings → Network](settings:network), [Files](app:files)
-// and [another article](help:spotlight). Search indexes the articles (registerSpotlightSource).
+// and [another article](help:spotlight). Global search reads articles on its Rust worker.
 // They are read by lord.help (server/src/ui/js_help.c), only from LordOS's assets/help folder.
 import { locale, t } from './i18n.js';
 import { settings } from './settings.js';
 import { wm, getApp, isLiveSystem } from './windows.js';
-import { registerSpotlightSource } from './spotlight.js';
 
 const DEFAULT_LANG = 'en';
 const has = () => typeof lord.help !== 'undefined';
@@ -130,14 +129,8 @@ export const help = {
   },
 };
 
-// Search: the Help articles
-registerSpotlightSource('help', (q, query) => {
-  if (!getApp('help') || q.length < 2) return [];
-  return help.search(query).slice(0, 4).map((r) => ({
-    key: `help:${r.id}`, score: r.score * 0.6, title: r.title, subtitle: t('shell.spotlight.inHelp'), glyph: '?',
-    preview: { kind: 'text', text: r.snippet }, run: () => help.open(r.id),
-  }));
-});
+// Global search reads and ranks articles on its Rust worker. The Help app keeps
+// its own list/read/search interface above.
 
 // First login: "Welcome to LordOS", only once (settings.welcomeShown). On the live system the
 // installer opens instead.

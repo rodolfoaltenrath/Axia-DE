@@ -10,7 +10,7 @@ import { locale, t, tOptional, direction } from './i18n.js';
 import { useStore } from './store.js';
 import { Menu as DefaultMenu } from './menu.jsx';
 import { dock, dockIdOf, beginDockDrag, dockDragJustEnded } from './dock.js';
-import { searchEverything } from './spotlight.js';
+import { searchEverything } from './search.js';
 import { session } from './index.js';
 import { wm } from './windows.js';
 import { useSystemInfo } from './system.js';
@@ -64,6 +64,7 @@ export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = laun
   const version = useStore(searchEverything.version());
   const info = useSystemInfo(60000);
   const root = useRef(null), live = useRef(true), id = useRef(0), results = useRef(new Map()), popups = useRef(new Map()), latest = useRef(null), themeRef = useRef(theme);
+  const searchLease = useRef(null);
   themeRef.current = theme;
   const { wallpapers, accents, ...tokens } = theme;
   const context = { theme: tokens, area: box || area,
@@ -93,10 +94,10 @@ export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = laun
       case 'userSettings': wm.open('settings', { args: { section: 'users' } }); break;
       case 'session': ({ quit: session.quit, lock: session.lock, switchUser: session.switchUser,
         restart: session.restart, shutdown: session.shutdown })[effect.action]?.(); break;
-      case 'prepareSearch': searchEverything.prepare(); break;
+      case 'prepareSearch': searchLease.current = searchEverything.prepare(); break;
       case 'runSearch': searchEverything.run(results.current.get(effect.key)); break;
       case 'search': {
-        const sections = searchEverything.results(effect.query, latest.current.apps);
+        const sections = searchEverything.results(effect.query, latest.current.apps, searchLease.current);
         results.current = new Map(sections.flatMap((section) => section.items.map((it) => [it.key, it])));
         send(['results'], { query: effect.query, sections: sections.map((section) => ({ id: section.id,
           title: tOptional(`shell.spotlight.section.${section.id}`) || section.id,
@@ -116,6 +117,6 @@ export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = laun
     const roots = [root.current, ...[...popups.current.values()].map((ref) => ref.current)];
     send(['outside'], { inside: contains(e.target, roots), onBar: latest.current.isOnBar(e.x, e.y) });
   }), []);
-  useEffect(() => () => { live.current = false; launcherRequest({ op: 'close', id: id.current }); }, []);
+  useEffect(() => () => { live.current = false; searchLease.current?.close(); searchLease.current = null; launcherRequest({ op: 'close', id: id.current }); }, []);
   return h(Widget, { node: snapshot.tree, host: { send, root, live, id, results, popups, Menu, theme: themeRef } });
 }

@@ -70,6 +70,7 @@ pub struct AxiaLauncher {
     generation: u64,
     menus: HashMap<u64, session::Menu>,
     sequence: u64,
+    search: crate::search::Search,
 }
 
 impl AxiaLauncher {
@@ -133,6 +134,7 @@ impl AxiaLauncher {
         self.list_geometry = None;
         self.list_rows.clear();
         self.generation = self.generation.wrapping_add(1);
+        self.search.apps(self.order.iter().map(|i| self.entries[*i].metadata.clone()));
         Ok(self.catalog())
     }
 
@@ -289,6 +291,7 @@ impl AxiaLauncher {
 
     fn request(&mut self, args: &Value) -> Result<Value, &'static str> {
         match args["op"].as_str().unwrap_or("") {
+            "search" => self.search.request(args),
             "sync" => self.sync(args),
             "catalog" => Ok(self.catalog()),
             "categories" => Ok(json!({"categories":CATEGORIES})),
@@ -336,6 +339,26 @@ fn number(args: &Value, name: &str, default: f64, min: f64, max: f64) -> f64 {
 #[no_mangle]
 pub extern "C" fn axia_launcher_new() -> *mut AxiaLauncher {
     Box::into_raw(Box::new(AxiaLauncher::default()))
+}
+
+/// Session-only capability, set by the C registrar, never by JSON requests.
+/// # Safety
+/// State is null or a live UI-thread handle; roots are readable NUL-terminated
+/// strings for the duration of this call. No caller pointers are retained.
+#[no_mangle]
+pub unsafe extern "C" fn axia_launcher_enable_search(
+    state: *mut AxiaLauncher,
+    home: *const c_char,
+    assets: *const c_char,
+) {
+    if let Some(state) = state.as_mut() {
+        if !home.is_null() && !assets.is_null() {
+            state.search.configure(
+                CStr::from_ptr(home).to_string_lossy().as_ref().into(),
+                CStr::from_ptr(assets).to_string_lossy().as_ref().into(),
+            );
+        }
+    }
 }
 
 /// # Safety

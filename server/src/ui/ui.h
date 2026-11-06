@@ -276,6 +276,7 @@ void   image_size(const Image *img, int *w, int *h);
 Image *image_pixels(Image *img, int w, int h, const uint8_t *rgba);
 Image *image_argb(Image *img, int w, int h, const uint32_t *argb);   /* premultiplied ARGB (doc/doc.c) */
 void   image_release(Image *img);
+uint64_t image_managed_bytes(void); /* live generated images, including scaled buffers */
 void   image_draw(Canvas *c, Image *img, float x, float y, float w, float h, float r, int fit, float opacity);
 
 /* paint.c */

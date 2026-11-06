@@ -310,6 +310,7 @@ static JSValue f_stats(JSContext *c, JSValueConst this_val, int argc, JSValueCon
     JS_SetPropertyStr(c, o, "rssKB", JS_NewInt64(c, rss * 4));
     JS_SetPropertyStr(c, o, "jsKB", JS_NewInt64(c, (int64_t)(JS_GetMallocSize(rt) / 1024)));
     JS_SetPropertyStr(c, o, "nodes", JS_NewInt32(c, node_count()));
+    JS_SetPropertyStr(c, o, "managedImageKB", JS_NewInt64(c, (int64_t)(image_managed_bytes() / 1024)));
     JS_SetPropertyStr(c, o, "layoutMs", JS_NewFloat64(c, ui.layout_ms));
     JS_SetPropertyStr(c, o, "paintMs", JS_NewFloat64(c, ui.paint_ms));
     return o;
