@@ -61,7 +61,7 @@ This mode does not open a window inside GNOME/KDE. `Ctrl+Alt+Backspace` ends the
 
 ```sh
 sudo dnf install rpm-build
-sh tools/desktop/dist.sh
+cargo xtask dist
 mkdir -p build/rpmbuild/SOURCES
 cp dist/axia-de-*.tar.gz build/rpmbuild/SOURCES/
 rpmbuild -ba --define "_topdir $PWD/build/rpmbuild" packaging/rpm/axia-de.spec
@@ -152,7 +152,7 @@ Esse modo não abre uma janela dentro do GNOME/KDE. `Ctrl+Alt+Backspace` encerra
 
 ```sh
 sudo dnf install rpm-build
-sh tools/desktop/dist.sh
+cargo xtask dist
 mkdir -p build/rpmbuild/SOURCES
 cp dist/axia-de-*.tar.gz build/rpmbuild/SOURCES/
 rpmbuild -ba --define "_topdir $PWD/build/rpmbuild" packaging/rpm/axia-de.spec
@@ -243,7 +243,7 @@ Este modo no abre una ventana dentro de GNOME/KDE. `Ctrl+Alt+Backspace` termina 
 
 ```sh
 sudo dnf install rpm-build
-sh tools/desktop/dist.sh
+cargo xtask dist
 mkdir -p build/rpmbuild/SOURCES
 cp dist/axia-de-*.tar.gz build/rpmbuild/SOURCES/
 rpmbuild -ba --define "_topdir $PWD/build/rpmbuild" packaging/rpm/axia-de.spec

@@ -157,3 +157,18 @@ retidas no compositor, mesmo com a janela minimizada. Os limites de captura e
 a adaptação ao custo real continuam ativos, sem forçar o aplicativo a produzir
 novos quadros. Os testes privados de rede/bandeja também simulam o logind para
 validar o brilho e a recusa de permissões sem alterar o monitor real.
+
+## Ferramentas de build (`rust/xtask`)
+
+`rust/xtask` reúne os comandos de empacotamento, rodados a partir da raiz do
+repositório e nunca instalados com a DE:
+
+```sh
+cargo xtask install --prefix /usr --libexecdir /usr/libexec --destdir "$PWD/stage"
+cargo xtask dist
+cargo xtask srpm --outdir "$PWD/build/srpm"
+```
+
+O crate fica fora dos `default-members`, então o build do `axia-shell` não o
+compila. Não acrescente crates novos sem necessidade: cada um entra em
+`rust/vendor` e no arquivo-fonte do RPM. `make check` roda os testes do crate.

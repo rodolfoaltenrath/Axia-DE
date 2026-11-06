@@ -13,7 +13,7 @@ import sys
 import socket
 import time
 
-from install import install, REPO, DESKTOP_BINARIES
+REPO = Path(__file__).resolve().parents[2]
 
 
 def run(*args, **kwargs):
@@ -78,10 +78,11 @@ def main():
         assert 'pkg-install-file' not in bundle, 'Debian store bundled into desktop'
         assert 'install-run' not in bundle, 'OS installer bundled into desktop'
     with tempfile.TemporaryDirectory(prefix='axia-stage-') as tmp:
-        install('/usr', '/usr/libexec', tmp)
+        run('cargo', 'xtask', 'install', '--prefix', '/usr', '--libexecdir', '/usr/libexec',
+            '--destdir', tmp, cwd=REPO)
         staged = Path(tmp) / 'usr/libexec/axia'
         assert set(p.name for p in (staged / 'bin').iterdir()) == {
-            name for name in DESKTOP_BINARIES if (REPO / 'server/build' / name).is_file()}
+            name for name in run('cargo', 'xtask', 'desktop-binaries', cwd=REPO).split() if (REPO / 'server/build' / name).is_file()}
         for name in ['axia-lan', 'axia-bench', 'axia-sysreport', 'axia-testbench']:
             assert (staged / 'bin' / name).is_file(), f'missing desktop helper: {name}'
         assert not (staged / 'assets/cleaner').exists()

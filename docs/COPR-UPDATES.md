@@ -95,7 +95,7 @@ sudo systemctl disable --now axia-update.timer
 Em uma máquina de desenvolvimento Fedora com Node, npm, git, rpm-build, Cargo e rustc:
 
 ```sh
-python3 tools/desktop/srpm.py --outdir "$PWD/build/srpm"
+cargo xtask srpm --outdir "$PWD/build/srpm"
 sudo dnf builddep packaging/rpm/axia-de.spec
 rpmbuild --rebuild --define "_topdir $PWD/build/rpmbuild" build/srpm/*.src.rpm
 ```
