@@ -1,0 +1,10 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Axia build and packaging commands; never installed with the desktop"
+publish = false
+
+[dependencies]
+serde_json = "1"
