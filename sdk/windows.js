@@ -163,6 +163,8 @@ export const isLiveSystem = () => {
   return live;
 };
 export const listApps = () => [...registry.values()].filter((a) => !a.builtin && !a.hidden && (!a.live || isLiveSystem()));
+// Raw registry facts for Rust-owned catalogs; visibility is decided there.
+export const appCatalogSource = () => [...registry.values()];
 export const workArea = (d) => workAreaOf(d);
 
 function place(appId, count, frame) {

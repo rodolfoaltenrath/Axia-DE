@@ -18,9 +18,10 @@ export function flatten(items) {
   return out.filter((it, i) => !(it === '-' && out[i - 1] === '-'));
 }
 
-export function Menu({ t, items: raw, x, y, above, onClose, width = 240 }) {
+export function Menu({ t, items: raw, x, y, above, onClose, width = 240, nodeRef }) {
   const items = flatten(raw);
-  const ref = useRef(null);
+  const own = useRef(null);
+  const ref = nodeRef || own;
   const [active, setActive] = useState(-1);
   const st = useRef({});
   st.current = { items, active };

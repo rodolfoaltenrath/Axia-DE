@@ -3,7 +3,7 @@
 // window frames. Apps come from apps/ through the SDK.
 import {
   startShell, View, Text, Image, screen, ThemeProvider, useSettings, useWindows, configureWindows, getApp, wm, addListener, t as tr,
-  useLauncherApps, launchApp, useDockEntries, dockActivate, dockMenu, dockPrefs, DOCK_LAUNCHER,
+  RustLauncher, launchApp, useDockEntries, dockActivate, dockMenu, dockPrefs, DOCK_LAUNCHER,
   useTrash, openTrash, emptyTrash, trashMenu, ConfirmDialog,
   DesktopWidgets, registerGestureActions, screenDisplays, mainDisplay, settings, Layer, PowerDialog,
   findWallpaper, wallpaperSrc, MotionWallpaper, useShortcuts, AppSwitcher, hideApp, hideOthers,
@@ -16,7 +16,6 @@ import { makeTheme } from './tokens.js';
 import { MenuBar } from './components/MenuBar.jsx';
 import { Dock, LaunchpadIcon, dockThickness } from './components/Dock.jsx';
 import { Window } from './components/Window.jsx';
-import { Launchpad } from './components/Launchpad.jsx';
 import { ControlCenter } from './components/ControlCenter.jsx';
 import { Menu } from './components/Menu.jsx';
 
@@ -117,7 +116,6 @@ function App() {
   const [trashCtx, setTrashCtx] = useState(null);         // where the Trash's menu opens
   const [askEmpty, setAskEmpty] = useState(false);
   const trash = useTrash();
-  const launcherApps = useLauncherApps();
   const dp = dockPrefs(s);
   // the work area follows the Dock live (position, size, auto-hide, another screen)
   useEffect(() => { configureWindows({ apps, workArea: areaFn }); },
@@ -200,7 +198,7 @@ function App() {
             { label: tr('shell.menu.about'), onClick: () => wm.open('about') },
           ]} />
         )}
-        {launchpad && <Layer name="overlay"><Launchpad t={t} apps={launcherApps} onOpen={launchApp} onClose={() => setLaunchpad(false)} area={main} /></Layer>}
+        {launchpad && <Layer name="overlay"><RustLauncher mode="flow" t={t} onOpen={launchApp} onClose={() => setLaunchpad(false)} area={main} /></Layer>}
       </View>
     </ThemeProvider>
   );

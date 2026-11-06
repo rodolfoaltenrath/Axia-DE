@@ -4,8 +4,10 @@ CC      ?= cc
 CARGO   ?= cargo
 RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
-RUST_NATIVE_LIBS := $(shell pkg-config --libs gio-2.0)
-RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../rust/axia-shell/src/files/*.rs) ../.cargo/config.toml
+# The Rust archive also contains launcher callbacks into the host sandbox.
+# Helpers using only MIME/filesystem functions must discard unreachable sections.
+RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
+RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../rust/axia-shell/src/files/*.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
@@ -66,7 +68,7 @@ MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/cap
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
-SRC := src/hw/wallpaper_find.c src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/apps.c src/lpk.c src/remote/mirror.c src/remote/ipnet.c src/remote/rtcwire.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
+SRC := src/hw/wallpaper_find.c src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/lpk.c src/remote/mirror.c src/remote/ipnet.c src/remote/rtcwire.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
        src/ui/node.c src/ui/style.c src/ui/layout.c src/ui/transform.c src/ui/text.c src/ui/image.c \
        src/ui/paint.c src/ui/js.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
@@ -113,12 +115,14 @@ DISK_SRC := src/disk/disk.c src/disk/smart.c src/disk/smartctl.c src/ui/js_disk.
 SRC += $(DISK_SRC)
 HDR += $(wildcard src/disk/*.h)
 SRC += src/platform/admin.c src/platform/net.c
-SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c
+SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c src/ui/js_launcher.c
 HDR += $(wildcard src/platform/*.h)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
+test-platform: build/apps-actions-test build/defaults-test build/settings-hw-test
+
 test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/ui-damage-test
 	./build/glass-damage-test
@@ -138,6 +142,9 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 	./build/wl-input-region-test
 	./build/cpu-cursor-test
 	./build/kms-cursor-test
+	./build/apps-actions-test
+	./build/defaults-test
+	./build/settings-hw-test
 build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_golden.h src/canvas.c src/canvas.h src/glass_ffi.h src/par.c $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/glass-damage-test: tests/glass_damage_test.c src/ui/paint.c $(HDR)
@@ -347,7 +354,7 @@ build/brokermail-test: tests/brokermail_test.c src/sec/brokermail.c src/sec/json
 	./$@ || { rm -f $@; exit 1; }
 # tests/launch_cli.c: the real Linux app launcher outside the desktop, for tests/fwlinux/files.sh
 # (built by `make test`, run by that script in the VM)
-LAUNCH_CLI_SRC := src/apps.c src/hw/defaults.c src/hw/mimeapps.c src/sec/cgroup.c src/sec/sandbox.c \
+LAUNCH_CLI_SRC := src/sec/cgroup.c src/sec/sandbox.c \
                   src/sec/restrict.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
 test: build/launch-cli
 build/launch-cli: tests/launch_cli.c $(LAUNCH_CLI_SRC) src/apps.h $(wildcard src/sec/*.h src/fw/*.h src/hw/*.h)

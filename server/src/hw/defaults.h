@@ -20,9 +20,9 @@ char *defaults_read(const char *path);
 
 /* First [Default Applications] entry for a MIME type over those files, without checking that it is
  * installed (lord.mime.get). 0 if found ("x.desktop"). The full lookup, with installed apps and the
- * automatic choice, is apps_default_for() in apps.c. */
+ * automatic choice, is apps_default_for() in the Rust applications core. */
 int  defaults_lookup(const char *mime, char *id, size_t n);
-/* Sets it in ~/.config/mimeapps.list (atomic write, other lines kept). 0 if written. */
+/* Sets it in $XDG_CONFIG_HOME/mimeapps.list (~/.config fallback; atomic write). */
 int  defaults_set(const char *mime, const char *id);
 /* Removes the user's choice for mime from ~/.config/mimeapps.list ([Default Applications] and
  * [Added Associations]; back to automatic). 0 if done or nothing was there. */
