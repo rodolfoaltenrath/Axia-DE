@@ -1,8 +1,9 @@
 # Search and the advanced clipboard
 
 Both are mounted by the SDK, so **every theme has them** without doing anything:
-`startShell` adds `<SpotlightPanel />` and `<ClipboardPanel />`. Code: `sdk/spotlight.js` and
-`sdk/clipboard.js`.
+`startShell` adds `<SpotlightPanel />` and `<ClipboardPanel />`. Search is owned by
+`rust/axia-shell/src/search/`; `sdk/rustsearch.jsx` draws its widgets and `sdk/search.js`
+connects shared shell services. Clipboard code remains in `sdk/clipboard.js`.
 
 ## Search
 
@@ -11,7 +12,7 @@ Both are mounted by the SDK, so **every theme has them** without doing anything:
 | ![apps](search-apps.png) | ![files](search-files.png) |
 | «term»: apps first, then folders | «budget»: a file with a text preview; Enter opens it in the Editor |
 | ![calc](search-calculator.png) | ![store](search-store.png) |
-| «15% of 2400» → 360 (Enter copies it) | «gimp»: Store apps that aren't installed |
+| «15% of 2400» → 360 (Enter copies it) | Historical LordOS Store integration; unavailable in the standalone Fedora build |
 | ![notes](search-notes.png) | |
 | «apples» finds the note by its content | |
 
@@ -40,11 +41,10 @@ Sections are ordered by their best result; the calculator always goes on top.
 | Apps | `useLauncherApps()`: LordOS, `.lpk` packages and Linux apps | `launchApp` |
 | Settings | the Settings sections and their translated keywords (`settings.keywords.*`) | `wm.open('settings', { args: { section } })` |
 | Actions | dark or light mode; log out | the action |
-| Files | name in the home folder: the server's `lord.fs.search` (up to 6 levels); if unavailable, our own walk in chunks (4 levels, 5000 entries, no hidden files) | folders in Files, text in the Editor, the rest in Files with the file selected |
+| Files | names in the home folder, indexed on a Rust worker (up to 6 levels, no hidden files or symlink traversal) | folders in Files, text in the Editor, the rest in Files with the file selected |
 | Notes | `~/Notes/*/nota.md` (title from the Notes app's YAML header, and the content); the section only appears if the Notes app is present | `wm.open('notes', { args: { slug } })` |
-| Clipboard | texts from the history | copies again |
-| Store | `lord.pkg.search`: only AppStream apps that aren't installed, up to 5 | `wm.open('store', { args: { search } })` |
-| Help | the Help articles, through `registerSpotlightSource` (`sdk/help.js`; see `SYSTEM.md`, "Help") | the article in Help |
+| Clipboard | bounded mirror of text history, released after the last search client closes | copies again |
+| Help | localized Help articles read by the Rust worker (see `SYSTEM.md`, "Help") | the article in Help |
 
 **Relevance:**
 - For the name: prefix > word > substring > fuzzy (the letters in order).
@@ -52,6 +52,71 @@ Sections are ordered by their best result; the calculator always goes on top.
 - Files are compared without the extension.
 - What is opened often moves up, and usage loses weight after 30 days. It is stored in
   `~/.local/share/axia/spotlight.json` (the last 300 entries).
+
+### Resident Rust search
+
+The search core shares the desktop process. Opening a panel creates a small client;
+closing it drops its results, selection, preview and clipboard mirror. There is no
+separate search daemon. The single I/O thread starts on first use and sleeps on a
+condition variable when idle. The UI only polls while work is outstanding; closing
+the last client cancels polling. Typing, ranking apps, calculations, keyboard selection
+and widget geometry are Rust operations. Filesystem scans and previews never run on
+the UI thread. Superseded queries and previews carry cancellation generations, so
+late replies cannot replace the current query or selection.
+
+Resource limits:
+
+- Eight simultaneous search clients; sixteen replaceable worker jobs/replies.
+- File index streamed from `$XDG_CACHE_HOME/axia/search/files.jsonl` (fallback
+  `~/.cache/axia/search`): at most 16 MiB, 100,000 entries, six levels and a three-second
+  scan budget. The index is not retained as an in-memory filename collection.
+  Inotify watches up to 512 directories and invalidates on the next query; the maximum
+  age is 120 seconds, or ten seconds when the watch limit is reached.
+- Six app/file results, four settings/clipboard/help results and five notes.
+  Notes scan at most 400 directories and read at most 64 KiB per note; Help reads at
+  most 500 articles per language, each at most 256 KiB.
+- Text preview reads at most 9,600 bytes and displays at most 2,400 characters.
+  Directory previews keep twelve entries from at most 10,000 examined entries.
+- Images are decoded on the worker from regular files up to 32 MiB, with dimension
+  and decoder allocation limits (10,000 pixels per axis, 64 MiB). This is a decoder
+  budget, not a hard process RSS ceiling. Only thumbnails up to 232 × 160 pixels reach
+  the renderer. Changing selection/closing removes temporary thumbnails and releases
+  their reference-counted native pixels.
+- Clipboard transport copies at most 500 texts and one million UTF-16 code units;
+  the native mirror accepts at most 2 MiB of original UTF-8 text. Very large histories
+  can therefore be only partially searchable. Copying a result uses the original
+  clipboard entry. The mirror is discarded on last close.
+- Usage history retains at most 300 keys and 64 KiB of key text; writes remain atomic.
+
+`sdk/spotlight.js` has been physically removed. The active JavaScript adapters retain
+rendering, localization and callable app/service objects; they contain no duplicate
+calculator, ranking engine, filesystem index or panel layout. Shared controls and
+the C compositor remain active parts of the DE.
+
+Extensions can still use `registerSpotlightSource(id, fn)`, returning a disposer.
+Provider callbacks are deferred until after the immediate input update; they should
+remain fast, since JavaScript callbacks still run on the UI thread. Built-in Help
+does not use such a callback. The Classic menu uses `searchEverything.prepare()` to
+acquire an explicit lease, passes it to `results(query, apps, lease)` and calls
+`lease.close()` on unmount; its async results share the same Rust search core.
+
+After building the desktop and installing the locked frontend dependencies:
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline search::
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test search_runtime -- --ignored --nocapture
+```
+
+The integration test is orchestrated and asserted in Rust. Its temporary embedded
+module drives the existing React/QuickJS UI. It checks the real shortcut and button,
+Enter/reveal, calculator/conversion, apps/files/images/notes/help/clipboard/providers,
+160 open/search/close cycles, released native pixels and absence of closed-panel
+polling. `AXIA_SEARCH_OBSERVATIONS` saves JSON; `AXIA_SEARCH_BASELINE` optionally points
+to the historical `sdk/spotlight.js` for visible text/geometry and math comparisons.
+The `activeBytes` diagnostic measures serialized active result/query/preview payload,
+not allocator usage; process RSS and managed image bytes are checked separately.
+Headless timing measures key dispatch to a native text update, not presented-frame
+latency. Appearance, blur, typing and RAM still need validation on the Fedora machine.
 
 **Preview (on the right):**
 - the app's icon;

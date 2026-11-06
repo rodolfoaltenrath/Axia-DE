@@ -137,9 +137,9 @@ somente as linhas visíveis com uma linha de margem em cada extremidade. As
 posições, tamanhos, materiais e conteúdo dos menus são descritos em Rust.
 Os controles compartilhados continuam desenhando inputs, ícones e popups no
 runtime existente. Os efeitos acionam os serviços ativos da Dock, preferências,
-gerenciador de janelas e sessão. A pesquisa geral do tema clássico (pontuação
-de resultados, arquivos, notas, calculadora etc.) continua no serviço de busca
-compartilhado; Rust recebe seus resultados e decide seleção e apresentação.
+gerenciador de janelas e sessão. A pesquisa geral do tema clássico usa o serviço
+compartilhado `search/`, também em Rust, incluindo pontuação, arquivos, notas e
+calculadora. O menu recebe suas seções e decide seleção e apresentação.
 Esses serviços e os controles comuns continuam usados em outras partes da DE.
 
 Os testes novos são Rust: incluem cobertura de viewport em milhares de posições,
@@ -167,6 +167,32 @@ o teste compara as coordenadas visíveis e a quantidade de nós com essa versão
 Ele roda também no job Fedora com GPU habilitada; a sessão
 de teste usa composição por CPU. A avaliação de fluidez, aparência do blur e
 latência no computador físico continua necessária.
+
+## Pesquisa global residente
+
+`search/` possui o motor, normalização, relevância, calculadora/conversões,
+estado por cliente, teclado, previews e descrições de widgets da pesquisa global.
+`sdk/spotlight.js` foi removido fisicamente. `sdk/search.js` transporta fatos e
+executa efeitos nos serviços compartilhados; `sdk/rustsearch.jsx` interpreta
+widgets usando os controles e o renderer existentes. O botão da barra e os
+atalhos continuam usando a mesma API pública.
+
+Uma thread adormecida por condição executa arquivos, notas, ajuda, previews e
+persistência. Consultas substituídas invalidam resultados por geração; fechar
+libera o estado visual e cancela a consulta. O catálogo de apps é preparado nas
+invalidações, com resultados limitados durante a classificação. O índice de
+arquivos fica em disco (até 16 MiB), lido em fluxo; não há lista permanente de
+100 mil caminhos na RAM. Miniaturas de até 232 × 160 usam o ciclo de vida
+gerenciado do renderer para liberar pixels ao fechar. Não há daemon adicional
+nem polling da busca fechada.
+
+A ponte C habilita acesso ao HOME/assets apenas no contexto da sessão; contextos
+de aplicativos isolados conservam somente operações puras de busca/calculadora.
+O JSON não pode configurar raízes de leitura. Os testes novos são Rust,
+incluindo cancelamento determinístico com I/O bloqueado e integração real com
+QuickJS/React: botão/atalho, geometria histórica, ações, previews e 160 ciclos
+de abertura/busca/fechamento. Limites, comandos de teste e restrições da medição
+estão em [SPOTLIGHT.md](SPOTLIGHT.md). A validação física permanece necessária.
 
 ## Arquivos e seletores nativos
 

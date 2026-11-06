@@ -779,9 +779,11 @@ slashes), so nothing outside `<assets>/help/` can be reached; `O_NOFOLLOW`, regu
 
 ### Search
 
-`sdk/spotlight.js` now has a source registry, `registerSpotlightSource(id, fn)`. Help registers
-its own: articles appear in the "Help" section with a snippet in the preview, and Enter opens the
-article. The section title comes from `shell.spotlight.section.<id>`.
+The Rust search worker (`rust/axia-shell/src/search/`) reads localized Help articles
+off the UI thread. They appear in the "Help" section with a snippet in the preview;
+Enter opens the article. The section title comes from `shell.spotlight.section.<id>`.
+`sdk/search.js` retains `registerSpotlightSource(id, fn)` for custom sources; built-in
+Help no longer needs a JavaScript search callback. See [SPOTLIGHT.md](SPOTLIGHT.md).
 
 ### "Welcome to LordOS"
 
