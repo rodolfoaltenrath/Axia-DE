@@ -5,6 +5,7 @@
 int axia_flip_soft(void) { return 0; }   /* rust/axia-shell/src/flip_pacing.rs, not linked here */
 int js_anim_active(void) { return 0; }   /* ui/js_anim.c, not linked here */
 void js_anim_step(double now) { (void)now; }
+void axia_stall_note(unsigned phase, double ms) { (void)phase; (void)ms; }
 int axia_flip_observe(uint64_t s, uint64_t f, uint64_t p) { (void)s; (void)f; (void)p; return 0; }
 #include <assert.h>
 Ui ui;
