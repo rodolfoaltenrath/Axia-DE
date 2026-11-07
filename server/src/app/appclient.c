@@ -1,7 +1,7 @@
 /* appclient.c — «modo app»: `axia-server --app <id>` corre una app .lpk instalada como su propio
  * proceso, aislado (server/src/sec/sandbox.c), y se dibuja como un CLIENTE Wayland del compositor
  * de LordOS. El tema le pone su marco (pide decoración del servidor, como las apps Qt), aparece
- * en el Dock y se ve por el escritorio remoto, igual que cualquier app.
+ * en el Dock, igual que cualquier app.
  *
  * Reusa el motor de interfaz propio (ui/: nodos, layout, pintado, texto) y QuickJS (js.c), igual
  * que el compositor, pero sin KMS ni evdev: dibuja en un búfer de memoria compartida (wl_shm) y
