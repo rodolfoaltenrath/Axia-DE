@@ -141,7 +141,10 @@ static int layout_pure(const Node *n, int *budget) {
  * is read only by text nodes (none on the way up) and n's own layout pass is a pure one (layout_pure). */
 static int transform_only(const Node *n, const Style *before, const StyleExt *xb) {
     if (!xb || !n->s.ext || n->type == NODE_RAW || n->type == NODE_TEXT) return 0;
-    if (memcmp(before, &n->s, sizeof *before)) return 0;        /* the same StyleExt, too */
+    /* opacity only changes how the node's pixels are blended: like scale, no layout (native animations) */
+    Style b = *before;
+    b.opacity = n->s.opacity;
+    if (memcmp(&b, &n->s, sizeof b)) return 0;                  /* the same StyleExt, too */
     StyleExt x;
     const StyleExt *now = n->s.ext;
     memcpy(&x, now, STYLE_EXT_VALUES);
@@ -207,8 +210,10 @@ void node_insert_before(Node *p, Node *c, Node *before) {
 }
 
 /* Destroys the node and the children still hanging from it. */
+void (*node_destroy_hook)(int id);
 void node_destroy(Node *n) {
     if (!n) return;
+    if (node_destroy_hook) node_destroy_hook(n->id);
     node_detach(n);
     while (n->first) node_destroy(n->first);
     if (ui.root == n) ui.root = NULL;

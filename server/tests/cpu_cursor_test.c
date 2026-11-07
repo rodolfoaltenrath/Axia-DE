@@ -13,6 +13,10 @@ Ui ui;
 #define CHECK(c) do { checks++; if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); return 1; } } while (0)
 
 int gpu_active(void) { return gpu_on; }
+int axia_flip_soft(void) { return 0; }   /* rust/axia-shell/src/flip_pacing.rs, not linked here */
+int js_anim_active(void) { return 0; }   /* ui/js_anim.c, not linked here */
+void js_anim_step(double now) { (void)now; }
+int axia_flip_observe(uint64_t s, uint64_t f, uint64_t p) { (void)s; (void)f; (void)p; return 0; }
 int media_needs_cpu(void) { return recording; }
 GpuTex *gpu_tex_pixels(GpuTex *t, const uint32_t *p, int w, int h, int opaque) {
     (void)t; (void)p; (void)w; (void)h; (void)opaque;

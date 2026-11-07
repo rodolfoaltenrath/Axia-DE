@@ -1587,6 +1587,18 @@ static const JSCFunctionListEntry wayland_funcs[] = {
 /* ---- lord.apps: installed Linux apps (.desktop, Rust applications module) ---- */
 
 /* lord.apps.linux(language) → [{ id, name, genericName, comment, keywords, categories, wmClass, icon, user }] */
+/* lord.apps.generation(lang): changes only when the installed apps changed (Rust, applications/desktop.rs). */
+static JSValue f_apps_generation(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    const char *lang = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    char l[32] = "en";
+    if (lang) {
+        if (strlen(lang) < sizeof l && valid_id_dot(lang)) snprintf(l, sizeof l, "%s", lang);
+        JS_FreeCString(c, lang);
+    }
+    return JS_NewFloat64(c, (double)apps_generation(l));
+}
+
 static JSValue f_apps_linux(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
     const char *lang = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
@@ -1985,7 +1997,18 @@ static JSValue f_session_host_power(JSContext *c, JSValueConst self, int argc, J
     (void)self; (void)argc; (void)argv;
     return JS_NewBool(c, !greeter_mode && host_power_available());
 }
+/* Locking and switching user went through lord-sessiond over the removed remote-desktop socket. Axia on
+ * Fedora has no session manager to go back to, so the shell hides those items (managed() is false)
+ * and the calls do nothing: the same as before for a session without LORDOS_SESSIOND. */
+static JSValue f_session_managed(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)c; (void)this_val; (void)argc; (void)argv;
+    return JS_FALSE;
+}
+
 static const JSCFunctionListEntry session_funcs[] = {
+    JS_CFUNC_DEF("managed", 0, f_session_managed),
+    JS_CFUNC_DEF("lock", 0, f_session_managed),
+    JS_CFUNC_DEF("switchUser", 0, f_session_managed),
     JS_CFUNC_DEF("power", 1, f_session_power),
     JS_CFUNC_DEF("hostPower", 0, f_session_host_power),
 };
@@ -2002,6 +2025,7 @@ static JSValue f_apps_launch_package(JSContext *c, JSValueConst this_val, int ar
 
 static const JSCFunctionListEntry apps_funcs[] = {
     JS_CFUNC_DEF("linux", 1, f_apps_linux),
+    JS_CFUNC_DEF("generation", 1, f_apps_generation),
     JS_CFUNC_DEF("launch", 1, f_apps_launch),
     JS_CFUNC_DEF("launchWith", 2, f_apps_launch_with),
     JS_CFUNC_DEF("launchUri", 2, f_apps_launch_uri),

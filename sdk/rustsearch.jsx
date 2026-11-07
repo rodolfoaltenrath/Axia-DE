@@ -6,7 +6,7 @@ import { SearchGlyph } from './searchglyph.jsx';
 import { useTheme } from './theme.js';
 import { dockGlass } from './glass.js';
 import { useStore } from './store.js';
-import { useLauncherApps, launcherApp } from './apps.js';
+import { useLauncherApps, launcherApp, refreshApps } from './apps.js';
 import { locale } from './i18n.js';
 import { createSearchSession, searchCaption, searchSourceIcon, spotlightOpen } from './search.js';
 function Widget({ node, session }) {
@@ -26,6 +26,7 @@ function Widget({ node, session }) {
   }
 }
 function Panel() {
+  useState(refreshApps);                // apps installed since the last look show up at once
   const theme = useTheme(), apps = useLauncherApps(), language = useStore(locale);
   const context = { theme, glass: dockGlass(theme), area: mainBox() };
   const [session] = useState(() => createSearchSession(true, context));

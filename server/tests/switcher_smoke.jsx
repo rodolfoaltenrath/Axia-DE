@@ -3,7 +3,7 @@ import { createElement as h, useEffect } from 'react';
 import { render, View } from '@lordos/runtime';
 import { configureWindows, wm } from '../../sdk/windows.js';
 import { openSwitcher, switcherKey, switcherState, cancelSwitcher, AppSwitcher } from '../../sdk/appswitcher.jsx';
-import { useShortcuts, shortcutList } from '../../sdk/shortcuts.js';
+import { useShortcuts, shortcutList, resetShortcuts } from '../../sdk/shortcuts.js';
 import { findWallpaper } from '../../sdk/wallpapers.js';
 import { settings } from '../../sdk/settings.js';
 import { askPower, canPower, powerAsk, PowerDialog } from '../../sdk/power.jsx';
@@ -14,6 +14,7 @@ function Harness() {
   useEffect(() => { const timer = setTimeout(runTests, 100); return () => clearTimeout(timer); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#487383' } }, h(AppSwitcher), h(PowerDialog));
 }
+resetShortcuts();                       // the dispatcher, as startShell installs it in a session
 render(h(Harness));
 function runTests() {
   check(!!lord.switcher, 'Rust bridge exists');
@@ -31,10 +32,9 @@ function runTests() {
       globalThis.__lordHw('session-power', { ok: false, why });
       check(powerAsk.get()?.state === why, 'host refusal reaches the dialog: ' + why);
     }
-    lord.session = { managed: () => true, onMonitor: () => false, power: () => false };
-    check(!canPower(), 'legacy remote-only sessions keep their existing restriction');
-    lord.session.onMonitor = () => true;
-    check(canPower(), 'legacy local sessions remain supported');
+    // The LordOS session daemon's channel is gone with the remote desktop: only the host (logind) powers off.
+    lord.session = { managed: () => true, onMonitor: () => true, power: () => false };
+    check(!canPower(), 'without host power there is no restart or shut down');
   } finally {
     lord.session = nativeSession;
     powerAsk.set(null);
