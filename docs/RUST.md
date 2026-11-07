@@ -337,3 +337,47 @@ O SDK liga os widgets compartilhados às árvores e ações produzidas em Rust,
 sem manter um segundo desenho ou controlador do painel. O renderizador e o
 glass existentes continuam sendo usados. Os testes de protocolo rodam em uma
 sessão privada, nunca na DE em uso.
+
+## Temporizadores e quadros da interface
+
+`rust/axia-shell/src/scheduler.rs` mantém uma fila por contexto QuickJS. O mesmo
+modelo atende o tema do compositor e os aplicativos isolados. Rust possui os
+identificadores, os prazos ordenados, os intervalos, os cancelamentos e os lotes
+de `requestAnimationFrame`. `server/src/ui/js_timers.c` converte os argumentos e
+expõe um objeto com finalizador; nenhum valor QuickJS é guardado em Rust.
+
+O pequeno preâmbulo em `server/src/ui/js_prelude.h` conserva apenas as referências
+às funções JS e seus argumentos, para que o coletor do QuickJS continue enxergando
+seu ciclo de vida. As políticas de agendamento saíram do JavaScript:
+
+- callbacks vencidos são ordenados por prazo e depois pelo identificador;
+- o lote é uma fotografia: um callback pode cancelar outro ainda não executado;
+  um temporizador criado durante o lote só entra na próxima passagem;
+- intervalos são reagendados antes da chamada, a partir do tempo daquela passagem,
+  com pelo menos 1 ms, permitindo cancelar o próprio intervalo;
+- callbacks de quadro agendados durante um quadro ficam para o próximo; cancelar
+  durante a execução não altera a fotografia que já foi entregue;
+- prazos não são varridos quando nada vence, e a consulta ociosa não aloca arrays JS;
+- cada contexto possui um limite de 65.536 temporizadores e 65.536 quadros pendentes;
+- atrasos inválidos não produzem um tempo de espera fora do intervalo de `poll()`.
+
+A fila também informa se JS criou trabalho durante a pintura. O laço consulta
+esse aviso antes de dormir, evitando perder um `setImmediate` criado por um
+callback de animação. Nos apps isolados, a política Rust espera a apresentação
+Wayland; só utiliza a cadência de 60 Hz quando não existe um quadro submetido.
+Um evento real de apresentação libera o quadro seguinte imediatamente, inclusive
+em monitores acima de 60 Hz. Isso impede que atualizações React com quadros ainda
+pendentes criem um laço de CPU.
+
+`server/tests/timer_order_test.c` compara 400 roteiros aleatórios com a fila JS
+congelada do commit `7628f771`, incluindo ordem, argumentos, cancelamentos,
+exceções, leituras de relógio e tempos retornados. Também compara fotografias de
+quadros com cancelamentos e novos pedidos durante o callback. O teste participa
+de `make check`. O modo `bench` inclui uma chamada nula, a implementação JS
+recente e uma versão histórica que varria a fila; esta última não representa a
+versão instalada antes desta migração.
+
+O teste headless real verifica a cadência dos quadros e uma atualização agendada
+durante a pintura. Uma segunda sessão inicia um app isolado de teste usando o
+host real, React e callbacks Wayland, para detectar quadros travados ou sem limite
+de frequência. Só o pacote temporário de teste é alterado.

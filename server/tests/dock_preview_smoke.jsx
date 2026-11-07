@@ -138,6 +138,20 @@ async function checkNativeDockAnimations() {
   console.log('dock native animation integration: passed');
 }
 
+async function checkScheduler() {
+  let count = 0, frame = 0;
+  const step = () => { count++; frame = requestAnimationFrame(step); };
+  frame = requestAnimationFrame(step);
+  await sleep(350); cancelAnimationFrame(frame);
+  check(count >= 5 && count <= 30, 'headless RAF follows software cadence: ' + count);
+  const began = lord.now();
+  await new Promise((resolve) => requestAnimationFrame(() => setImmediate(resolve)));
+  check(lord.now() - began < 120, 'JS work queued while painting wakes without an unrelated timer');
+  __lordClearTimers();
+  check(lord.timers.next(lord.now()) === -1 && !lord.timers.hasFrames(), 'context reset releases timers and frames');
+  console.log('scheduler compositor integration: passed');
+}
+
 async function run() {
   check(source?.id && lord.wm.preview, 'native source and bridge exist');
   check(calls === 0, 'no capture work at rest');
@@ -157,5 +171,6 @@ async function run() {
   console.log('dock preview integration: passed');
   await checkFeedback();
   await checkNativeDockAnimations();
+  await checkScheduler();
 }
 render(h(Harness));

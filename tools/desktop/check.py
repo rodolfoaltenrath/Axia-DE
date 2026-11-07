@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -236,8 +237,39 @@ def main():
             assert 'dock preview integration: passed' in log, log
             assert 'dock feedback integration: passed' in log, log
             assert 'dock native animation integration: passed' in log, log
+            assert 'scheduler compositor integration: passed' in log, log
             for error in ['dock preview smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
+            # Real isolated app using the same Rust scheduler, driven by actual Wayland callbacks.
+            # Mutate only this disposable install's calendar package and its code manifest.
+            fixture_app = (REPO / 'server/tests/scheduler_app.js').read_bytes()
+            (staged / 'assets/sysapps/calendar/app.js').write_bytes(fixture_app)
+            actual_theme = (REPO / 'themes/default/theme.bundle.js').read_bytes()
+            actual_theme += b"\nsetTimeout(() => { if (!lord.apps.launchPackage('calendar')) console.error('scheduler app: launch failed'); }, 400);\n"
+            target.write_bytes(actual_theme)
+            for entry in staged_manifest['files']:
+                if entry['path'] == 'assets/sysapps/calendar/app.js':
+                    entry.update(size=len(fixture_app), sha256=hashlib.sha256(fixture_app).hexdigest())
+                if entry['path'] == 'themes/default/theme.bundle.js':
+                    entry.update(size=len(actual_theme), sha256=hashlib.sha256(actual_theme).hexdigest())
+            (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
+            prefs.write_text(json.dumps({'schema': 3, 'sessionRestore': 'off', 'welcomeShown': True}))
+            if os.geteuid() == 0:
+                os.chown(prefs, 65534, 65534)
+            run(str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '6',
+                '--theme', '../themes/default/theme.bundle.js', cwd=staged / 'bin', env=env, timeout=25, **opts)
+            log = (home / '.cache/axia/session.log').read_text()
+            assert 'scheduler isolated integration: passed' in log, log
+            for error in ['scheduler app:', '[error]', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
+                assert error not in log, log
+            child = re.search(r"app 'calendar' started as an isolated process \(pid (\d+)\)", log)
+            assert child, log
+            try:
+                status = (Path('/proc') / child[1] / 'stat').read_text().rsplit(') ', 1)[1].split()
+            except FileNotFoundError:
+                pass  # Reaped by the host.
+            else:
+                assert status[0] == 'Z' and int(status[49]) == 0, 'scheduler app did not exit cleanly: ' + log
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')
 
 

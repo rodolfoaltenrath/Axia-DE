@@ -277,3 +277,5 @@ mod tests {
         assert_eq!(s.recent, vec!["999"]);
     }
 }
+
+mod scheduler;

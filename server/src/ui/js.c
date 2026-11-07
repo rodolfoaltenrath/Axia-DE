@@ -51,6 +51,7 @@ static JSRuntime *rt;
 static JSContext *ctx;
 static void set_screen_displays(JSValue screen);
 
+#include "js_timers.h"
 #include "js_prelude.h"         /* the polyfills: console, timers, animation frames */
 
 static double now_ms(void) {
@@ -401,6 +402,7 @@ static void session_context(void) {
     JSValue g = JS_GetGlobalObject(ctx);
     JSValue lord = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, lord, lord_funcs, sizeof lord_funcs / sizeof lord_funcs[0]);
+    js_timers_register(ctx, lord);
     JSValue screen = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, screen, "width", JS_NewFloat64(ctx, ui.width));
     JS_SetPropertyStr(ctx, screen, "height", JS_NewFloat64(ctx, ui.height));
@@ -527,7 +529,7 @@ static int run_recovery(const char *kind, int inplace) {
     JS_SetPropertyStr(ctx, o, "refused", arr);
     JS_SetPropertyStr(ctx, g, "__lordRecovery", o);
     JS_FreeValue(ctx, g);
-    static const char stop[] = "globalThis.__lordTick = () => -1; globalThis.__lordWantsFrame = () => false; globalThis.__lordFrame = () => {};";
+    static const char stop[] = "globalThis.__lordClearTimers?.(); globalThis.__lordTick = () => -1; globalThis.__lordWantsFrame = () => false; globalThis.__lordFrame = () => {};";
     int r = inplace ? eval(stop, sizeof stop - 1, "<recovery>") : eval(prelude, sizeof prelude - 1, "<prelude>");
     if (!r) r = eval(recovery_js, sizeof recovery_js - 1, "<recovery>");
     fprintf(stderr, "js: recovery screen (%s): %d component(s) refused\n", kind, codesig_refused_count());
@@ -550,6 +552,7 @@ static void app_context(const char *app_id) {
     JSValue g = JS_GetGlobalObject(ctx);
     JSValue lord = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, lord, lord_funcs, sizeof lord_funcs / sizeof lord_funcs[0]);
+    js_timers_register(ctx, lord);
     JSValue screen = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, screen, "width", JS_NewFloat64(ctx, ui.width));
     JS_SetPropertyStr(ctx, screen, "height", JS_NewFloat64(ctx, ui.height));
@@ -631,6 +634,26 @@ double js_tick(double now) {
     JS_ToFloat64(ctx, &next, r);
     JS_FreeValue(ctx, r);
     return next;
+}
+
+int js_timers_changed(void) {
+    JSValue value = call_global("__lordTimerChanged", 0, NULL);
+    int changed = JS_ToBool(ctx, value);
+    JS_FreeValue(ctx, value);
+    return changed;
+}
+
+int js_frame_ready(double now, int waiting, unsigned epoch) {
+    JSValueConst args[] = { JS_NewFloat64(ctx, now), JS_NewBool(ctx, waiting), JS_NewUint32(ctx, epoch) };
+    JSValue value = call_global("__lordFrameReady", 3, args);
+    int ready = JS_ToBool(ctx, value); JS_FreeValue(ctx, value);
+    return ready;
+}
+double js_frame_wait(double now, int waiting, unsigned epoch) {
+    JSValueConst args[] = { JS_NewFloat64(ctx, now), JS_NewBool(ctx, waiting), JS_NewUint32(ctx, epoch) };
+    JSValue value = call_global("__lordFrameWait", 3, args);
+    double wait = -1; JS_ToFloat64(ctx, &wait, value); JS_FreeValue(ctx, value);
+    return wait;
 }
 
 int js_wants_frame(void) {
