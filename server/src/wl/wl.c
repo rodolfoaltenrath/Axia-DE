@@ -476,7 +476,7 @@ static Dmabuf *dmabuf_of(struct wl_resource *buf) {
 }
 
 /* The buffer's texture in the live GPU context. The import is cached per wl_buffer, but only for
- * one context: after the GPU is re-created (the session back on the monitor, a remote viewer
+ * one context: after the GPU is re-created (the session back on the monitor, a recording
  * leaving, a display change) the old texture is dropped and the buffer imported again. */
 static GpuTex *dm_tex(Dmabuf *d) {
     if (!gpu_active()) return NULL;
@@ -550,7 +550,7 @@ static void take_buffer(Surf *s, struct wl_resource *buf) {
         s->tex_dirty = 1;
         wl_buffer_send_release(buf);
     } else if (dm && !gpu_active() && s->role != R_CURSOR) {
-        /* Off the GPU (the session left the monitor, or a remote viewer) with a buffer the CPU
+        /* Off the GPU (the session left the monitor, or a recording) with a buffer the CPU
          * can't read (tiled, or a driver that doesn't map it): keep showing the last good frame
          * (px, read back from the GPU) and hold the buffer, so it is imported as soon as the GPU
          * is back without waiting for the app's next frame. */

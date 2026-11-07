@@ -13,10 +13,6 @@ const DEFAULTS = {
   browserTabsInTitlebar: true,   // 0.8.4, Settings → Appearance: Chromium and Firefox draw their own bar (browserframe.js)
   browserFramePending: false,    // that switch is still waiting for Chromium to quit
   scrollBars: 'auto',    // 0.8.3, Settings → Appearance → Show scroll bars: 'auto' | 'scrolling' | 'always'
-  motion: {},            // moving wallpaper per display: { '*': id, <display id>: id } (sdk/motion.jsx)
-  motionPaths: {},       // catalog videos downloaded into the user profile by Rust
-  motionFiles: {},       // id → the variant on disk
-  motionUser: [],        // added videos: [{ id: 'user:…', name, path }]
   wallpaperUser: [],     // managed still images imported by the Rust wallpaper service
   wallpaper: DEFAULT_WALLPAPER,  // Infinite Galaxy
   keyboard: 'latam',     // before M5; now keyboards (see keyboard.js)
@@ -30,7 +26,6 @@ const DEFAULTS = {
   desktopArrows: true,        // 0.8.7, Settings → Keyboard: Lord Flow's ⌃ arrows are the Desktops keys
   sessionRestore: 'always',   // 0.8.7, Settings → Session: 'off' | 'ask' | 'always' (sessionrestore.jsx)
   sessionBrowsers: true,      // browsers reopen their tabs too (the browser-restore admin action)
-  remoteDesks: null,          // 0.8.7, the RDP and VNC apps' saved computers (no passwords)
   files: null,                // 0.8.7, Files → Settings (rust/axia-shell/src/files/model.rs)
   sessionSaved: null,         // { clean, windows } what was open; written by sessionrestore.jsx only
 };
@@ -39,10 +34,15 @@ const DEFAULTS = {
 // meaning of a setting, it appends [schema, (settings) => newSettings] here. Each runs once per user,
 // in order, when the session loads the file; "schema" records the last one applied. The system-wide
 // migrations (as root) are the lordos package's (packaging/migrations).
-export const SETTINGS_SCHEMA = 2;
+export const SETTINGS_SCHEMA = 3;
 const MIGRATIONS = [
+  // Remove preferences for retired desktop features; user source files remain untouched.
+
   [1, (s) => s],          // 0.8.1: the schema number starts being recorded; nothing changes
   [2, (s) => ({ ...s, externalWindowStyle: false, nativeAppearance: s.filesAppearance || 'adwaita' })], // retire the old mac-style adapters once
+  [3, (s) => Object.fromEntries(Object.entries(s).filter(([key]) => ![
+    'motion', 'motionPaths', 'motionFiles', 'motionUser', 'motionRate', 'remoteDesks', 'loginWallpaper',
+  ].includes(key)))],
 ];
 export function migrateSettings(s) {
   let out = s;

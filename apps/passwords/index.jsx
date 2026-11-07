@@ -2,7 +2,7 @@
 // tags, favorites, archived, trash, history, 2FA codes, Wi-Fi with QR, secure notes, cards, the
 // security report, the generator, import/export and the session keyring. Everything decrypted is
 // handled by axia-vault, sandboxed and without network; this window is protected (black in
-// screenshots, recordings and the remote desktop). See docs/PASSWORDS.md.
+// screenshots and recordings). See docs/PASSWORDS.md.
 // Layout (docs/DESIGN.md): a source list (search, sections, categories, tags), the item list and
 // the detail pane; under 960 px the columns get narrower so nothing is clipped.
 import {
@@ -174,7 +174,7 @@ export default function Passwords() {
   const rootRef = useRef(null);
   const winW = useWidth(rootRef, 1040);
 
-  // protected: black in screenshots, recordings, the remote desktop and thumbnails
+  // protected: black in screenshots, recordings and thumbnails
   useEffect(() => { if (win?.id) wm.setProtected(win.id, true); }, [win?.id]);
   useEffect(() => { wireEvents(); refreshStatus(); }, []);
   useEffect(() => {

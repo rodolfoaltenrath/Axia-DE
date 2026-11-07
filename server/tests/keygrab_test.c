@@ -83,7 +83,7 @@ int main(void) {
     /* Keyboard conventions can change without switching the visual theme. */
     CHECK(keygrab_set("linux"));
     CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_HOLD);
-    CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_PASS);
+    CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_HOLD);
     CHECK(keygrab_match(KEY_TAB, 0, KG_CTRL) == KG_PASS);
     CHECK(keygrab_match(KEY_GRAVE, 0, KG_ALT) == KG_TAKE);
     CHECK(keygrab_match(KEY_H, 'h', KG_META) == KG_TAKE);
@@ -100,6 +100,17 @@ int main(void) {
 
     CHECK(keygrab_set(""));
     CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_PASS);
+    CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_PASS);
+    CHECK(keygrab_match(KEY_SPACE, 0, KG_META) == KG_PASS);
+    const char *profiles[] = { "macos", "macos-desktops", "linux", "flow", "flow-desktops", "classic" };
+    for (unsigned i = 0; i < sizeof profiles / sizeof profiles[0]; i++) {
+        CHECK(keygrab_set(profiles[i]));
+        CHECK(keygrab_match(KEY_SPACE, 0, KG_META) == KG_TAKE);
+        CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_HOLD);
+        CHECK(keygrab_match(KEY_TAB, 0, KG_META | KG_SHIFT) == KG_HOLD);
+        CHECK(keygrab_match(KEY_SPACE, 0, KG_CTRL) == KG_PASS);
+        CHECK(keygrab_match(KEY_TAB, 0, KG_CTRL) == KG_PASS);
+    }
     printf(fails ? "keygrab: %d failed\n" : "keygrab: ok\n", fails);
     return fails != 0;
 }

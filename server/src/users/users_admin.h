@@ -13,7 +13,7 @@ void users_act_autologin(const AdminReq *r, const char *arg, size_t len);
 void users_act_rescue_status(const AdminReq *r, const char *arg, size_t len);
 void users_act_rescue(const AdminReq *r, const char *arg, size_t len);
 
-/* The user's own password against /etc/shadow, as root (also ssh_root.c: re-authorization). 1 if it matches. */
+/* The user's own password against /etc/shadow, as root. 1 if it matches. */
 int users_check_password(const char *user, const char *pass);
 
 /* user-passwd and user-avatar: everyone can change their own (validated inside).

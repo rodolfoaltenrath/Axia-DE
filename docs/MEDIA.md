@@ -46,10 +46,10 @@ We took the way the apps of popular desktop systems work, never their logos or t
 
 ### Protected windows
 
-| On screen | In the screenshot | On remote desktop |
-|---|---|---|
-| ![screen](protected-window-screen.png) | ![screenshot](protected-window-capture.png) | ![remote](protected-window-remote.png) |
-| Protected Notes looks normal on the local screen | The saved PNG: the Notes content is black | What the browser receives from the remote desktop (0.8.3; since 0.8.4 the same, as WebRTC video) |
+| On screen | In the screenshot |
+|---|---|
+| ![screen](protected-window-screen.png) | ![screenshot](protected-window-capture.png) |
+| Protected Notes looks normal on the local screen | The saved PNG: the Notes content is black |
 
 ## Architecture
 

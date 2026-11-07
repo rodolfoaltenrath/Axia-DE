@@ -82,9 +82,6 @@ typedef struct {
     int hw_active;
     LmHwFall hwf;                   /* consecutive decoding failures (lm_hwfall.h) */
     int hw_resume;                  /* it went to software: seek to the clock */
-    int rate;                       /* percent of normal speed, moving wallpapers only: fewer frames to decode */
-    int wallpaper, max_fps, decoder_threads;
-    int hw_only;                    /* a moving wallpaper: no software decoding, the still image stays */
     SwrContext *swr;
     int out_ch;
     int64_t start_ms, dur_ms;
@@ -119,7 +116,7 @@ static Player P;
 static int64_t frame_ms(AVStream *st, const AVFrame *f) {
     int64_t ts = f->best_effort_timestamp != AV_NOPTS_VALUE ? f->best_effort_timestamp : f->pts;
     if (ts == AV_NOPTS_VALUE) return AV_NOPTS_VALUE;
-    return (av_rescale_q(ts, st->time_base, (AVRational){ 1, 1000 }) - P.start_ms) * 100 / P.rate;
+    return (av_rescale_q(ts, st->time_base, (AVRational){ 1, 1000 }) - P.start_ms);
 }
 
 /* ---- decoders ---- */
@@ -141,7 +138,7 @@ static AVCodecContext *open_dec(int idx, int video) {
     avcodec_parameters_to_context(c, st->codecpar);
     c->pkt_timebase = st->time_base;
     if (video) {
-        c->thread_count = P.wallpaper ? P.decoder_threads : 0;
+        c->thread_count = 0;
         c->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
         if (P.hw && !P.cover) {
             for (int i = 0;; i++) {
@@ -231,7 +228,6 @@ static void pq_push_front(PktQ *q, AVPacket *p) {
 static int hwf_tested;              /* build/axia-media-hwfall: the failure was faked once */
 #endif
 static void hw_to_software(void) {
-    if (P.hw_only) { LM_LOG("hardware decoder failed: stopping, this video is hardware only"); _exit(0); }
     AVCodecContext *old = P.vdec;
     AVBufferRef *hw = P.hw;
     int active = P.hw_active;
@@ -279,7 +275,6 @@ static int decode_video(void) {
             break;
         }
         lm_hwfall_note(&P.hwf, 0);
-        if (P.hw_only && f->format != AV_PIX_FMT_DRM_PRIME && f->format != AV_PIX_FMT_VAAPI) { LM_LOG("no hardware decoder: stopping, this video is hardware only"); _exit(0); }
         progress = 1;
         P.dec_ms += dt;
         P.decoded++;
@@ -569,18 +564,6 @@ void lm_player(const char *params, int fd, int pulse, int render) {
     int loop = (int)mp_param_int(params, "loop", 0);
     int autoplay = (int)mp_param_int(params, "autoplay", 1);
     int want_audio = (int)mp_param_int(params, "audio", 1);
-    P.wallpaper = (int)mp_param_int(params, "wallpaper", 0) == 1;
-    P.max_fps = (int)mp_param_int(params, "maxfps", 15);
-    if (P.max_fps < 5 || P.max_fps > 30) P.max_fps = 15;
-    P.decoder_threads = (int)mp_param_int(params, "threads", 2);
-    if (P.decoder_threads < 1 || P.decoder_threads > 2) P.decoder_threads = 2;
-    if (P.wallpaper) {
-        int mw = (int)mp_param_int(params, "maxwidth", 1280), mh = (int)mp_param_int(params, "maxheight", 720);
-        lm_out_limit(mw >= 320 && mw <= 1920 ? mw : 1280, mh >= 180 && mh <= 1080 ? mh : 720);
-    }
-    P.hw_only = (int)mp_param_int(params, "hwonly", 0);
-    P.rate = (int)mp_param_int(params, "rate", 100);
-    if (P.rate < 10 || P.rate > 100) P.rate = 100;
 
     /* VA-API before seccomp (it loads the driver from /usr/lib) */
     char accel[24];
@@ -611,11 +594,6 @@ void lm_player(const char *params, int fd, int pulse, int render) {
     P.track_req_a = P.track_req_s = -2;
     for (unsigned i = 0; i < P.fmt->nb_streams; i++) P.fmt->streams[i]->discard = AVDISCARD_ALL;
     if (P.vi >= 0) {
-        AVStream *video = P.fmt->streams[P.vi];
-        double source_fps = video->avg_frame_rate.den ? av_q2d(video->avg_frame_rate) : 0;
-        if (P.wallpaper && (video->codecpar->width > 1920 || video->codecpar->height > 1080 || source_fps > 30.1 || P.dur_ms <= 0 || P.dur_ms > 10050)) {
-            lm_error("media.invalidArguments"); avformat_close_input(&P.fmt); return;
-        }
         P.fmt->streams[P.vi]->discard = AVDISCARD_DEFAULT;
         P.vdec = open_dec(P.vi, 1);
         if (!P.vdec && P.hw) { av_buffer_unref(&P.hw); P.vdec = open_dec(P.vi, 1); }   /* without VA-API */
@@ -642,7 +620,7 @@ void lm_player(const char *params, int fd, int pulse, int render) {
 
     static char payload[MP_PAYLOAD_MAX + 1];
     double last_pos = 0, last_stats = 0, last_shown_ms = lm_now_ms();
-    int64_t seek_wait = 0, last_background_pts = AV_NOPTS_VALUE;
+    int64_t seek_wait = 0;
     int ended = 0;
     if (autoplay) set_playing(1); else mp_sendv(LM_SOCK, MM_STATE, 0, MS_PAUSED, 0, 0, 0);
     for (;;) {
@@ -737,10 +715,6 @@ void lm_player(const char *params, int fd, int pulse, int render) {
             pthread_cond_broadcast(&P.cv);
             pthread_mutex_unlock(&P.mu);
             if (late && !seek_wait) { P.dropped++; av_frame_free(&vf.f); continue; }
-            if (P.wallpaper && !seek_wait && last_background_pts != AV_NOPTS_VALUE && vf.pts >= last_background_pts && vf.pts - last_background_pts < 1000 / P.max_fps) {
-                P.dropped++; av_frame_free(&vf.f); continue;
-            }
-            last_background_pts = vf.pts;
             int64_t clk = clock_ms();
             int r = lm_out_present(vf.f, vf.pts);
             int hwframe = vf.f->format == AV_PIX_FMT_VAAPI || vf.f->format == AV_PIX_FMT_DRM_PRIME;

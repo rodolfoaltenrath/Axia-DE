@@ -6017,17 +6017,6 @@
     }
   },
   {
-    "file": "docs/protected-window-remote.png",
-    "category": "privacy",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Protected window hidden remotely",
-      "es": "Ventana protegida oculta en remoto",
-      "pt": "Janela protegida oculta no acesso remoto"
-    }
-  },
-  {
     "file": "docs/protected-window-screen.png",
     "category": "privacy",
     "theme": "light",
@@ -6476,17 +6465,6 @@
       "en": "Reminders app",
       "es": "App Recordatorios",
       "pt": "App Lembretes"
-    }
-  },
-  {
-    "file": "docs/remote-desktop-settings.png",
-    "category": "privacy",
-    "theme": "light",
-    "variant": "normal",
-    "caption": {
-      "en": "Remote desktop sharing settings",
-      "es": "Ajustes de escritorio remoto",
-      "pt": "Configurações de área de trabalho remota"
     }
   },
   {
@@ -7315,17 +7293,6 @@
     }
   },
   {
-    "file": "docs/trackpad-remote-pinch.png",
-    "category": "hardware",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Pinch zoom over remote desktop",
-      "es": "Zoom con pellizco en escritorio remoto",
-      "pt": "Zoom de pinça na área remota"
-    }
-  },
-  {
     "file": "docs/trackpad-settings.png",
     "category": "hardware",
     "theme": "dark",
@@ -7829,28 +7796,6 @@
       "en": "Window → Move & Resize: halves, quarters, thirds and arrangements",
       "es": "Ventana → Mover y redimensionar: mitades, cuartos, tercios y disposiciones",
       "pt": "Janela → Mover e redimensionar: metades, quartos, terços e arranjos"
-    }
-  },
-  {
-    "file": "docs/remote-desk-computers.png",
-    "category": "apps",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Remote Desk: saved computers, RDP and VNC",
-      "es": "Remote Desk: computadoras guardadas, RDP y VNC",
-      "pt": "Remote Desk: computadores salvos, RDP e VNC"
-    }
-  },
-  {
-    "file": "docs/remote-desk-settings.png",
-    "category": "apps",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Remote Desk: a computer's settings and shared folders",
-      "es": "Remote Desk: ajustes de una computadora y carpetas compartidas",
-      "pt": "Remote Desk: ajustes de um computador e pastas compartilhadas"
     }
   }
 ]

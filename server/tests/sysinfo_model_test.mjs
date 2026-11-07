@@ -141,26 +141,24 @@ const st = (rows) => Object.fromEntries(rows.map((r) => [r.id, r.state]));
 const good = {
   report: { software: { landlockAbi: 6, bpfLsm: true, kernelConfig: { CONFIG_CGROUP_BPF: 'y' }, services: { 'axia-netperm': true } },
     session: { composition: 'gpu', renderer: 'AMD Radeon RX 580' } },
-  facts: { uid: 1000, euid: 1000, cgroup: '/system.slice/lordos.service/lordos-session-1000/server', leafRoot: true, parentRoot: true, appScopes: 3, remoteListening: false },
-  code: { state: 'verified', files: 9, refused: [] }, remote: { enabled: false }, stats: { rssKB: 71680 },
+  facts: { uid: 1000, euid: 1000, cgroup: '/system.slice/lordos.service/lordos-session-1000/server', leafRoot: true, parentRoot: true, appScopes: 3 },
+  code: { state: 'verified', files: 9, refused: [] }, stats: { rssKB: 71680 },
 };
-eq('a healthy system', st(evaluate(good)), { serverUser: 'pass', landlock: 'pass', netperm: 'pass', code: 'pass', remoteClosed: 'pass', cgroups: 'pass', gpu: 'pass', memory: 'info' });
-eq('levels', evaluate(good).map((r) => r.level), ['configured', 'configured', 'configured', 'effective', 'effective', 'configured', 'configured', 'measured']);
+eq('a healthy system', st(evaluate(good)), { serverUser: 'pass', landlock: 'pass', netperm: 'pass', code: 'pass', cgroups: 'pass', gpu: 'pass', memory: 'info' });
+eq('levels', evaluate(good).map((r) => r.level), ['configured', 'configured', 'configured', 'effective', 'configured', 'configured', 'measured']);
 const broken = {
   report: { software: { landlockAbi: 3, bpfLsm: false, kernelConfig: {}, services: { 'axia-netperm': false } }, session: { composition: 'gpu-off', gpuInit: 'no-3d' } },
-  facts: { uid: 0, euid: 0, cgroup: '/system.slice/lordos.service/lordos-session-0/server', leafRoot: false, parentRoot: true, appScopes: 0, remoteListening: true },
-  code: { state: 'verified', files: 9, refused: [{ path: 'x' }] }, remote: { enabled: false },
+  facts: { uid: 0, euid: 0, cgroup: '/system.slice/lordos.service/lordos-session-0/server', leafRoot: false, parentRoot: true, appScopes: 0 },
+  code: { state: 'verified', files: 9, refused: [{ path: 'x' }] },
 };
-eq('a broken system', st(evaluate(broken)), { serverUser: 'fail', landlock: 'warn', netperm: 'fail', code: 'fail', remoteClosed: 'fail', cgroups: 'fail', gpu: 'warn' });
-eq('broken notes', evaluate(broken).map((r) => r.note), ['serverUserRoot', 'landlockOld', 'netpermOff', 'codeRefused', 'remoteOffListening', 'cgroupsUser', 'gpuNot.no-3d']);
-eq('remote on by choice is information', evaluate({ ...good, remote: { enabled: true }, facts: { ...good.facts, remoteListening: true } }).find((r) => r.id === 'remoteClosed'),
-  { id: 'remoteClosed', paper: '§11.4', level: 'effective', state: 'info', note: 'remoteOnListening', vars: { port: LIMITS.remotePort } });
+eq('a broken system', st(evaluate(broken)), { serverUser: 'fail', landlock: 'warn', netperm: 'fail', code: 'fail', cgroups: 'fail', gpu: 'warn' });
+eq('broken notes', evaluate(broken).map((r) => r.note), ['serverUserRoot', 'landlockOld', 'netpermOff', 'codeRefused', 'cgroupsUser', 'gpuNot.no-3d']);
 eq('no BPF LSM is a warning', evaluate({ ...good, report: { ...good.report, software: { ...good.report.software, bpfLsm: false } } }).find((r) => r.id === 'netperm').note, 'netpermNoLsm');
 eq('headless is information', evaluate({ ...good, report: { ...good.report, session: { composition: 'headless' } } }).find((r) => r.id === 'gpu').state, 'info');
 eq('development code is a warning', evaluate({ ...good, code: { state: 'development' } }).find((r) => r.id === 'code').state, 'warn');
 eq('outside LordOS\'s session tree it is only information', evaluate({ ...good, facts: { ...good.facts, cgroup: '/user.slice/user-1000.slice/session-3.scope' } }).find((r) => r.id === 'cgroups'),
   { id: 'cgroups', paper: '§11.4', level: 'configured', state: 'info', note: 'cgroupsNotSession', vars: {} });
-eq('nothing known', st(evaluate({})), { serverUser: 'unknown', landlock: 'unknown', netperm: 'unknown', code: 'unknown', remoteClosed: 'unknown', cgroups: 'unknown', gpu: 'warn' });
+eq('nothing known', st(evaluate({})), { serverUser: 'unknown', landlock: 'unknown', netperm: 'unknown', code: 'unknown', cgroups: 'unknown', gpu: 'warn' });
 
 // ---- the Sandbox Probe ----
 const tr_ = (ids, denied = true) => ids.map((id) => ({ id, denied, errno: denied ? 13 : 0 }));

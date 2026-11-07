@@ -9,8 +9,6 @@ mod glass;
 mod glass_render;
 mod surface_damage;
 mod wallpaper;
-mod motion;
-mod motion_store;
 mod power;
 mod brightness;
 mod network;

@@ -16,14 +16,13 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use worker::{Config, Job, Usage, Work, Worker};
-pub const SETTINGS: [&str; 13] = [
+pub const SETTINGS: [&str; 12] = [
     "general",
     "appearance",
     "wallpaper",
     "network",
     "sound",
     "clipboard",
-    "sharing",
     "language",
     "keyboard",
     "users",

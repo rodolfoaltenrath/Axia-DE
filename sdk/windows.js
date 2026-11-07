@@ -448,7 +448,7 @@ export const wm = {
   // The window in front of the showing desktop.
   focused: () => focusedOn(windows.get(), activeDesktop.get())?.id ?? null,
   // Protected window (capture protection): it looks normal on screen, but
-  // comes out black in screenshots, recordings and remote desktop (docs/MEDIA.md). Used, for
+  // comes out black in screenshots and recordings (docs/MEDIA.md). Used, for
   // example, by a password app.
   setProtected: (id, on = true) => patch(id, { protected: !!on }),
   // Merges into a window's args (a Linux app switching between the theme's frame and its own, args.csd).

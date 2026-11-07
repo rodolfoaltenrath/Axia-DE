@@ -1,6 +1,5 @@
 /* tp_route.h — splits what the driver (tp.c) produces between the LordOS UI (JS) and the
- * Wayland apps (wl/wl_input.c). main.c gives it the pointer; the remote desktop injects the browser's scroll and
- * pinch through here. */
+ * Wayland apps (wl/wl_input.c). main.c gives it the pointer. */
 #ifndef LORD_TP_ROUTE_H
 #define LORD_TP_ROUTE_H
 
@@ -16,7 +15,7 @@ void tp_route_init(const TpHost *h);
 
 /* sources for tp_route_scroll */
 enum { TPR_FINGER = 0, TPR_WHEEL = 1, TPR_CONTINUOUS = 2 };
-/* Scroll in pixels (positive = move the content down) with phase TP_*; also from the browser. */
+/* Scroll in pixels (positive = move the content down) with phase TP_*. */
 void tp_route_scroll(int phase, double dx, double dy, int source);
 /* Pinch: scale relative to the start and accumulated rotation (degrees). */
 void tp_route_pinch(int phase, int fingers, double dx, double dy, double scale, double rotation);

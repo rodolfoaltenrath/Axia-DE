@@ -16,7 +16,7 @@ double js_tick(double now);        /* runs expired timers; ms until the next one
 int    js_wants_frame(void);       /* there are pending requestAnimationFrame callbacks */
 void   js_frame(double now);
 void   js_pointer(const char *type, int target, float x, float y, int button);
-/* Touchpad and remote desktop (tp/tp_route.c) → __lordGesture(kind, phase, id, x, y, a, b, c, d):
+/* Touchpad (tp/tp_route.c) → __lordGesture(kind, phase, id, x, y, a, b, c, d):
  * "scroll" (dx, dy, source), "pinch" (scale, rotation, dx, dy), "swipe" (dx, dy, fingers, system). */
 void   js_gesture(const char *kind, const char *phase, int target, float x, float y, double a, double b, double c, double d);
 void   js_key(int code, int value);
@@ -33,7 +33,6 @@ void   js_admin_event(int id, const char *kind, const char *text);
 void   js_logs_event(const char *kind, int id, const char *name);   /* app Registros */
 void   js_clipboard_poll(void);
 void   js_remote_event(const char *json);
-void   js_remote_notice(const char *json);   /* RP_NOTICE from lord-sessiond → __lordRemoteNotice */
 void   js_greeter_event(const char *json);
 void   js_screen_resized(void);
 /* lord.screen.displays / .mirror: {"mirror":…,"displays":[{id,name,x,y,w,h,pw,ph,scale,main}]} (main.c) */

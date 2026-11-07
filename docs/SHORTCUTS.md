@@ -14,7 +14,8 @@ macOS for the default theme, Linux / Windows for Classic.
 
 | Action | macOS | Linux / Windows |
 |---|---|---|
-| Switch apps | Super+Tab, Super+Shift+Tab | Alt+Tab, Alt+Shift+Tab |
+| Search | Super+Space | Super+Space |
+| Switch apps | Super+Tab, Super+Shift+Tab | Super+Tab, Super+Shift+Tab; Alt+Tab, Alt+Shift+Tab |
 | Cycle this app's windows | Super+grave, Super+Shift+grave | Alt+grave, Alt+Shift+grave |
 | Minimize | Super+M | Super+H |
 | Close a window | Handled by the app | Alt+F4 |
@@ -28,6 +29,12 @@ applications. In the macOS profile, Super editing shortcuts for Linux apps are
 translated into Ctrl as before; this translation is disabled for Linux / Windows.
 Native apps retain their own Ctrl aliases. This setting configures desktop
 bindings; it cannot rewrite the shortcut settings of external applications.
+
+Search and Super+Tab are active by default in both profiles. The switcher
+commits when the modifier that opened it is released (Super or Alt).
+If Super alone and all Super shortcuts stop responding together, check the
+keyboard's hardware Win Lock/game mode; the desktop cannot enable a key that
+the keyboard firmware suppresses.
 
 `sdk/shortcutprofile.js` defines the bindings and `sdk/shortcuts.js`
 composes them with the theme and optional modules. Desktop navigation uses the

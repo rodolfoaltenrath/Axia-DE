@@ -3,7 +3,7 @@
 // user-admin, user-avatar, user-autologin. Passwords travel only in the action's argument
 // (never in argv) and with quiet, so they do not end up in the "in progress" notice.
 import {
-  View, Text, Image, Button, Toggle, TextInput, useTheme, useLocale, admin, useSystemInfo, remote, fs, spacing, typeScale,
+  View, Text, Image, Button, Toggle, TextInput, useTheme, useLocale, admin, useSystemInfo, fs, spacing, typeScale,
 } from '@lordos/sdk';
 import { useEffect, useState } from 'react';
 import { Stack, Section, SettingRow, FieldRow, Note, Message, Actions } from './ui.jsx';
@@ -48,8 +48,6 @@ export function UsersSettings() {
   const [busy, setBusy] = useState(false);
   const isAdmin = admin.available() && info.admin;
   const reload = () => setData(listUsers());
-  const st = remote.status();
-  const open = new Set((st.sessions || []).map((s) => s.user));
   const users = isAdmin ? data.users : data.users.filter((u) => u.self);
   const cur = users.find((u) => u.name === sel) || users.find((u) => u.self) || users[0];
 
@@ -70,7 +68,7 @@ export function UsersSettings() {
           return (
             <SettingRow key={u.name} icon={<UserAvatar user={u} size={32} />} onClick={() => { setSel(u.name); setAdding(false); setMsg(null); }}
               label={`${u.full || u.name}${u.self ? ` · ${tr('settings.users.you')}` : ''}`} labelStyle={{ fontWeight: on ? 600 : 400 }}
-              hint={[u.name, u.admin ? tr('settings.users.admin') : tr('settings.users.standard'), open.has(u.name) ? tr('settings.users.sessionOpen') : '']
+              hint={[u.name, u.admin ? tr('settings.users.admin') : tr('settings.users.standard')]
                 .filter(Boolean).join(' · ')}>
               {on ? <Text style={{ fontSize: 14, fontWeight: 600, color: t.accent }}>✓</Text> : null}
             </SettingRow>

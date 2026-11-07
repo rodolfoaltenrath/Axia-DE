@@ -51,7 +51,7 @@ void    gpu_tex_free(GpuTex *t);
 /* GPU context lifetime. Each gpu_init that succeeds starts a new context ("generation"); a
  * texture made in an earlier one is stale: its GL name and EGLImage died with that context, so it
  * must never be drawn and gpu_tex_free only frees its memory. The session leaving and coming back
- * to the monitor, a remote viewer, a display change or a failed frame all re-create the context. */
+ * to the monitor, a recording, a display change or a failed frame all re-create the context. */
 int      gpu_tex_current(const GpuTex *t);  /* 1 if t belongs to the live context */
 unsigned gpu_generation(void);              /* 0 while there is no GPU */
 /* Hooks for the compositor: lost() runs inside gpu_shutdown with the old context still current
@@ -141,12 +141,6 @@ void gpu_gdrag_stats(long *below_px, long *layer_px, long *quads);
 int  gpu_add_output(Kms *k);
 void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh,
               float sx, float sy, float sw, float sh, Rect clip, float opacity);
-
-/* The remote desktop's copy of the next composed frame (docs/REMOTE.md, "Video (WebRTC)"): the
- * next gpu_frame of a w×h display reads the whole frame back into px (0xAARRGGBB, rows top to
- * bottom) before showing it; gpu_read_done says whether it did. */
-void gpu_read_next(uint32_t *px, int w, int h);
-int  gpu_read_done(void);
 
 /* Direct scanout of a fullscreen dmabuf (without composing). done(data) is called when
  * the buffer leaves the screen. 0 if the flip was sent. */

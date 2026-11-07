@@ -120,7 +120,7 @@ globalThis.__lordKey = (code, value, key, chr, base, flags) => {
   });
 };
 
-// Touchpad, touchscreen and remote-desktop trackpad (server/src/tp, docs/TRACKPAD.md):
+// Touchpad and touchscreen (server/src/tp, docs/TRACKPAD.md):
 //   scroll: onWheel with deltaX/deltaY in exact pixels, precise: true and phase ('begin', 'update',
 //           'end', 'momentum' while it keeps going by inertia, 'momentum-end'). notches counts whole
 //           48 px steps (like a wheel) for views that advance one line at a time.

@@ -110,7 +110,7 @@ function applyProps(inst, prev, next) {
   if (prev.session !== next.session) lord.setProp(inst.id, 'session', next.session ?? 0);
   if (prev.surface !== next.surface) lord.setProp(inst.id, 'surface', next.surface ?? 0);
   if (prev.media !== next.media) lord.setProp(inst.id, 'media', next.media ?? 0);
-  // protected: the node (and what's inside) comes out black in screenshots, recordings and remote desktop
+  // protected: the node (and what's inside) comes out black in screenshots and recordings
   if (!!prev.protected !== !!next.protected) lord.setProp(inst.id, 'protected', !!next.protected);
   // <Image pixels={{ width, height, data }} />: RGBA canvas (a new object for each frame)
   if (prev.pixels !== next.pixels && next.pixels) lord.setProp(inst.id, 'pixels', next.pixels);

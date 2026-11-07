@@ -11,8 +11,8 @@ Phase 1 was read-only. Since then the Network tab holds per-app firewall rules (
 0.8.1, the Processes tab can stop a process and show its details ("Process actions"). In 0.8.2
 each destination of an app has its own allow/block switch, the traffic chart reaches back 30 days
 ("Traffic history"), the Disks tab shows each disk's temperature and health, and the session can
-notify when a disk gets too hot or less healthy ("Disk temperature and health"). In 0.8.3 the
-remote desktop is a row of its own and blocking an app cuts the connections it had open. In 0.8.5
+notify when a disk gets too hot or less healthy ("Disk temperature and health"). In 0.8.3
+blocking an app cuts the connections it had open. In 0.8.5
 (0.8.5-beta, released 2026-10-27) the Network tab became a tree with a view menu and search chips, LordOS's own
 components and the system's services got rows of their own, and the menu bar network item and the
 blocklists arrived ("Network, second generation").
@@ -57,9 +57,7 @@ the rest of the tab, and the first generation of the list.
   VRRP…); and packet sockets from `/proc/net/packet`, with the ethertype (ALL, IPv4, ARP, IPv6, EAPOL,
   LLDP…) and the interface. Raw and packet sockets need `CAP_NET_RAW` and can see or forge traffic, so
   the row says so. `build/conn-dump` prints one reading for checking it by hand (on VM 116: a ping, a raw
-  ICMP socket and an ARP packet socket on eth0, the last two from a process given `CAP_NET_RAW`). The remote desktop's bridge runs as the user but isn't dumpable, so
-  its sockets can't be traced to a pid; `conn.c` gives the sockets in `lordos.service`'s root-owned
-  `supervisor` group to Remote Desktop (its WebRTC UDP ports), instead of an unknown "?". At the bottom,
+  ICMP socket and an ARP packet socket on eth0, the last two from a process given `CAP_NET_RAW`).At the bottom,
   the machine's traffic:
   - the current download and upload speed;
   - two pills with what was sent (↑, orange) and received (↓, green) in the visible minute;
@@ -264,36 +262,6 @@ axia-server 142 MB with the Monitor open (131 MB on main). The per-packet cost i
 **Before** (main, no lists: the scam site connects) **and after:**
 
 ![Before](monitor-net2-before.png) ![After, light](monitor-net2-tree-light.png)
-
-### Remote desktop (0.8.3)
-
-While the remote desktop is on (Settings → Sharing), it is one more row in the app list, **Remote
-desktop**, with the Sharing icon: its traffic bar and bytes, the number of browsers connected and,
-in the red badge, the failed sign-ins of the last 24 hours. `lord-sessiond` serves it as root,
-outside the session's apps, so its sockets never appear among them (they are counted in "From other
-users"); the row is built from `lord-sessiond`'s own state (`apps/monitor/RemoteDesktop.jsx`). Its
-Rule switch is fixed: the per-app firewall doesn't apply to it; its own lists do.
-
-The detail panel, in the same folding sections:
-
-- **Connected:** each browser's address, user, how long, and its traffic (bytes each way and the
-  current rate, reported by the bridge to its root parent every 2 s), with **Block**;
-- **Failed sign-ins:** address, the name that was typed (cleaned to printable ASCII), how many times
-  and when, with **Block**. Administrators only: it comes from the admin action `remote-failures`,
-  which re-validates every row; passwords are never kept anywhere;
-- **Temporarily blocked:** the lockout's blocks with the time left, **Unblock** and **Block
-  permanently**;
-- **Address lists:** the mode, the blocklist (with Unblock), the allowlist, and a field to block a
-  typed address or network.
-
-Every action is one of the fixed admin actions Settings uses (`remote-block`, `remote-unblock`;
-`sdk/remote.js` `remoteAccess`), validated again on the root side. Everything else is read-only:
-`/run/lordos/status.json` (clients, blocks, lists; no user names typed by strangers) through
-`lord.remote.status()`. See [REMOTE.md](REMOTE.md), "Blocked and allowed addresses".
-
-![Monitor → Network: the remote desktop (dark)](monitor-remote-desktop-dark.png)
-
-![The same in light mode](monitor-remote-desktop-light.png)
 
 ### Blocking cuts what is open (0.8.3)
 
@@ -634,7 +602,6 @@ server/src/monitor/procctl.c the protected list, proc_signal() (pidfd) and the G
 server/src/monitor/proc_admin.c  the root helper's proc-signal / proc-info (administrators)
 assets/monitor/          land.bin (Natural Earth 1:50m), geoip-country.mmdb.xz (DB-IP Lite)
 tools/gen-monitor-data.py    generates that data, countries.js and the country names
-apps/monitor/RemoteDesktop.jsx  (0.8.3) the remote desktop row and its detail
 apps/monitor/Cooling.jsx     the Cooling tab (lord.fan, see FANS.md)
 apps/monitor/Voltage.jsx, voltmodel.js   (0.8.7) the Voltage tab and its pure model
 server/src/monitor/voltage.c  hwmon, batteries and adapters, read on the Monitor's thread

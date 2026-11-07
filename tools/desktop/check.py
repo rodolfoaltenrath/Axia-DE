@@ -10,7 +10,6 @@ import tempfile
 import struct
 import zlib
 import sys
-import socket
 import time
 from clipboard_native_check import check_native
 
@@ -22,31 +21,13 @@ def run(*args, **kwargs):
 
 
 def run_viewed(args, runtime, **kwargs):
-    """Enable headless painting through a private viewer and drain its output."""
+    """Run a private headless session (it paints on its own) until it exits."""
     with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **kwargs) as proc:
         try:
-            with socket.socket(socket.AF_UNIX) as viewer:
-                deadline = time.monotonic() + 20
-                while True:
-                    try:
-                        viewer.connect(str(runtime / 'axia/remote.sock'))
-                        break
-                    except (FileNotFoundError, ConnectionRefusedError):
-                        if proc.poll() is not None or time.monotonic() >= deadline:
-                            raise RuntimeError('Dock smoke viewer could not connect')
-                        time.sleep(0.02)
-                payload = struct.pack('<BBHI', 2, 0, 24, 300)
-                viewer.sendall(struct.pack('<IB', len(payload) + 1, 32) + payload)
-                viewer.settimeout(0.2)
-                while proc.poll() is None:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError('Dock smoke session did not finish')
-                    try:
-                        if not viewer.recv(65536):
-                            break
-                    except socket.timeout:
-                        pass
-            stdout, stderr = proc.communicate(timeout=5)
+            try:
+                stdout, stderr = proc.communicate(timeout=20)
+            except subprocess.TimeoutExpired:
+                raise TimeoutError('Dock smoke session did not finish')
             if proc.returncode:
                 raise subprocess.CalledProcessError(proc.returncode, args, stdout, stderr)
         finally:
@@ -64,7 +45,7 @@ def main():
         assert ' U eglInitialize' in symbols, 'RPM compositor was built without GPU support'
     for symbol in ['pkg_act_install', 'pkg_act_update', 'install_act_run', 'net_act_restore',
                    'act_langpack', 'js_pkg_register', 'js_imager_register', 'pin_load',
-                   'pkg_act_source_add', 'hw_act_wallpaper_get', 'share_act_mount',
+                   'pkg_act_source_add', 'share_act_mount',
                    'clean_act_apt', 'js_clean_register', 'clean_start', 'ssh_act_root']:
         assert symbol not in symbols, f'OS component linked: {symbol}'
     assert 'libseat_open_seat' in symbols, 'desktop must use a host seat backend'
@@ -170,20 +151,6 @@ def main():
                       'huge image.png': png(8192, 8192, b'')}
             for name, data in inputs.items():
                 (home / name).write_bytes(data)
-            # Offline catalog fixture: exercise Rust's asynchronous store and the real
-            # SHA-256 callback, without depending on GitHub/network availability in CI.
-            video = (REPO / 'server/tests/fixtures/motion-h264.mp4').read_bytes()
-            sha = hashlib.sha256(video).hexdigest()
-            cached = home / '.local/share/axia/motion' / f'{sha}.mp4'
-            cached.parent.mkdir(parents=True, exist_ok=True)
-            cached.write_bytes(video)
-            cached.chmod(0o600)
-            if os.geteuid() == 0:
-                for path in [home / '.local', home / '.local/share', home / '.local/share/axia', cached.parent, cached]:
-                    os.chown(path, 65534, 65534)
-            catalog = {'format': 1, 'base': 'https://raw.githubusercontent.com/lordbasex/LordOS-wallpapers/main', 'items': [{'id': 'testclip', 'variants': [
-                {'name': '1080.h264', 'file': 'testclip/1080.h264.mp4', 'sha256': sha, 'size': len(video)}]}]}
-            (staged / 'assets/wallpapers/motion.json').write_text(json.dumps(catalog))
             # Exercise the real Rust -> C -> QuickJS -> SDK path, not a JS mock.
             fixture = (REPO / 'tests/switcher-smoke.bundle.js').read_bytes()
             target = staged / 'themes/default/theme.bundle.js'
@@ -203,7 +170,6 @@ def main():
             assert 'session power integration: passed' in log, log
             assert 'host power dialog rendering: passed' in log, log
             assert 'wallpaper integration: passed' in log, log
-            assert 'motion storage integration: passed' in log, log
             selected = json.loads(prefs.read_text())
             image = selected['wallpaperUser'][0]
             assert selected['wallpaper'] == image['id']
@@ -263,16 +229,14 @@ def main():
                     entry['size'] = len(fixture)
                     entry['sha256'] = hashlib.sha256(fixture).hexdigest()
             (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
-            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '6',
+            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '8',
                         '--theme', '../themes/default/theme.bundle.js'], home / 'runtime',
                        cwd=staged / 'bin', env=env, **opts)
             log = (home / '.cache/axia/session.log').read_text()
             assert 'dock preview integration: passed' in log, log
+            assert 'dock feedback integration: passed' in log, log
             for error in ['dock preview smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
-    if (REPO / 'server/build/axia-media').is_file():
-        # Keep helper diagnostics visible in RPM/Copr logs when a check fails.
-        subprocess.run([sys.executable, str(REPO / 'server/tests/motion_playback_test.py')], check=True)
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')
 
 

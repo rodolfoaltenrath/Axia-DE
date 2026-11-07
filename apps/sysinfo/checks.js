@@ -10,12 +10,11 @@
 //
 // evaluate(ctx) → rows { id, paper, level, state, note, vars }, state 'pass' | 'warn' | 'fail' |
 // 'info' | 'unknown'. ctx: { report: lord.sysinfo.report(), facts: lord.sysinfo.facts(),
-// code: codeStatus(), remote: remote.status() or null, stats: lord.stats() or null }. Pure: tested
+// code: codeStatus(), stats: lord.stats() or null }. Pure: tested
 // by server/tests/sysinfo_model_test.mjs.
 
 export const LIMITS = {
   landlockAbi: 6,               // scoping of abstract sockets and signals (docs/FIREWALL.md)
-  remotePort: 5673,
 };
 
 const row = (id, paper, level, state, note = null, vars = {}) => ({ id, paper, level, state, note, vars });
@@ -50,13 +49,6 @@ export function evaluate(ctx) {
   else if (code.state === 'verified') out.push(row('code', '§6.9', 'effective', 'pass', 'codeVerified', { count: code.files || 0 }));
   else if (code.state === 'development') out.push(row('code', '§6.9', 'effective', 'warn', 'codeDevelopment'));
   else out.push(row('code', '§6.9', 'effective', 'unknown'));
-
-  // the remote desktop (§11.4): off means nothing listens on its port (read from /proc/net)
-  const listening = f.remoteListening;
-  const on = c.remote ? !!c.remote.enabled : null;
-  if (listening == null) out.push(row('remoteClosed', '§11.4', 'effective', 'unknown'));
-  else if (on === true) out.push(row('remoteClosed', '§11.4', 'effective', 'info', listening ? 'remoteOnListening' : 'remoteOnNotListening', { port: LIMITS.remotePort }));
-  else out.push(row('remoteClosed', '§11.4', 'effective', listening ? 'fail' : 'pass', listening ? 'remoteOffListening' : 'remoteOffClosed', { port: LIMITS.remotePort }));
 
   // the session's cgroup tree belongs to root (§11.4): an app can't leave its scope
   // (only LordOS's own tree counts: a axia-server started from a terminal sits in that terminal's cgroup)

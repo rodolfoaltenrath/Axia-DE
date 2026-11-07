@@ -1,5 +1,10 @@
 # Dock and taskbar
 
+Magnification is off by default; an explicit saved preference is preserved.
+Hover highlights an icon and a left press dims it with a stronger highlight,
+even with magnification off. Rust's `native_style::dock_feedback` supplies the
+colors and opacity. These states add no blur, animation timer or icon resizing.
+
 In **Settings → Desktop & Dock** you choose:
 
 - where the Dock goes (bottom, left or right);

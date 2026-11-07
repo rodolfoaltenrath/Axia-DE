@@ -20,5 +20,5 @@ Screenshots and screen recording.
 - **Record the screen:** to MP4, with the microphone if you want. ❖⇧5 stops it.
 - The first time, the system asks for **screen permission**.
 
-Protected windows (for example password windows) come out black in screenshots, recordings and
-remote desktop.
+Protected windows (for example password windows) come out black in screenshots and
+recordings.

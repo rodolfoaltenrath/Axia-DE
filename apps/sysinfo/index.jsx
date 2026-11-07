@@ -8,7 +8,7 @@
 import {
   View, Text, ScrollView, Button, useTheme, useLocale, AxiaLogo, systemReport, systemInfo, lordosVersion, formatBytes, formatNumber,
   Toolbar, ToolbarSpacer, ToolbarButton, Segmented, SidebarItem, GroupBox, FormRow, EmptyState, Hairline, spacing, typeScale,
-  fs, userDirs, clipboard, wm, admin, remote, codeStatus, launchApp, useAppWindow, useBluetooth, formatDate,
+  fs, userDirs, clipboard, wm, admin, codeStatus, launchApp, useAppWindow, useBluetooth, formatDate,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useState } from 'react';
 import { evaluate as evaluateChecks, evaluateProbe, evaluateBench, PENDING as PENDING_CHECKS, PROBE_CHECKS } from './checks.js';
@@ -340,7 +340,7 @@ function Computer({ r }) {
 
 // The serial numbers, on this screen and on request only. They aren't in the report and can't reach it: they come from
 // hw-serial-numbers (no arguments, read-only, administrators), stay in this component while shown, are gone when it
-// closes, and the window is protected meanwhile, so screenshots, recordings and remote desktop see black. No copy button.
+// closes, and the window is protected meanwhile, so screenshots and recordings see black. No copy button.
 function SerialNumbers() {
   const t = useTheme();
   const { t: tr } = useLocale();
@@ -583,11 +583,10 @@ function Checks({ r }) {
   const t = useTheme();
   const { t: tr } = useLocale();
   const rows = useMemo(() => {
-    let facts = null, rem = null, stats = null;
+    let facts = null, stats = null;
     try { facts = lord.sysinfo.facts(); } catch (e) { /* older server */ }
-    try { rem = remote.status(); } catch (e) { /* no remote desktop */ }
     try { stats = lord.stats(); } catch (e) { /* no stats */ }
-    return evaluateChecks({ report: r, facts, code: codeStatus(), remote: rem, stats });
+    return evaluateChecks({ report: r, facts, code: codeStatus(), stats });
   }, [r]);
   const [probe, runProbe] = useProbe();
   const probeRows = useMemo(() => (probe.result ? evaluateProbe(probe.result) : null), [probe.result]);

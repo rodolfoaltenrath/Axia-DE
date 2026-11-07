@@ -5,7 +5,7 @@
  *   - the helpers (player, camera, recordings and two «workers» for short jobs);
  *   - the image «sources» that a `media` node (<MediaView>) draws: video frames over
  *     shared memory, decoded photos, screenshots;
- *   - the captures: screen, recording and remote desktop, always with the protected
+ *   - the captures: screen and recording, always with the protected
  *     windows (`protected`) in black. */
 #ifndef LORD_MEDIA_H
 #define LORD_MEDIA_H
@@ -22,7 +22,7 @@ void media_dispatch(const struct pollfd *p, int n);
 typedef void (*MediaEventFn)(int id, const char *type, const char *json);
 void media_events(MediaEventFn fn);
 int  media_wants_frame(void);           /* a recording is waiting for the next frame */
-int  media_needs_cpu(void);             /* recording the screen: composite on the CPU (like the remote desktop) */
+int  media_needs_cpu(void);             /* recording the screen: composite on the CPU */
 void media_shutdown(void);              /* close everything (theme change or exit) */
 
 /* drawing of a media node (paint.c) */
@@ -34,9 +34,9 @@ int  media_cover_node(float x0, float y0, float x1, float y1);
 /* captures (main.c): after painting the scene and after assembling each frame. */
 void media_scene_painted(const Canvas *scene);
 typedef struct { int x, y, mode; const uint32_t *px; int w, h, hx, hy; } MediaCursor;
-/* Returns what the remote desktop sees (protected windows in black) and feeds the
+/* Returns what the recording sees (protected windows in black) and feeds the
  * recording. out = the frame already composited (without cursor). */
-const Canvas *media_composed(const Canvas *out, int remote, const MediaCursor *cur);
+const Canvas *media_composed(const Canvas *out, const MediaCursor *cur);
 
 /* Protected windows present in the tree (counted at the moment). */
 int media_protected_count(void);

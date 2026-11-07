@@ -4,7 +4,7 @@
  * blocks and a little noise, the same every time) is encoded with this system's FFmpeg into H.264, HEVC,
  * VP9 and AV1 at streaming bit rates, and each clip is then decoded in software the way the player does
  * (lm_play.c: every core, frame and slice threads) over and over for at least a second, three times; the
- * result is the median of frames decoded per second. Then the remote desktop's own encoders (lm_stream.c, its settings) encode
+ * result is the median of frames decoded per second. Then the H.264 and VP8 software encoders (low-latency settings) encode
  * 1920×1080 frames as fast as they can. An encoder or decoder this FFmpeg lacks is reported as skipped.
  * Quick measures only H.264 at 1080p and the H.264 encoder. Answers MM_BENCH records only (proto.h). */
 #include "lm.h"
@@ -199,7 +199,23 @@ static void measure_decode(const Clip *c) {
     avcodec_parameters_free(&par);
 }
 
-/* the remote desktop's encoder (lm_stream.c) on 1920×1080 frames as fast as it goes, three times */
+/* Local software encoding throughput, independent of screen capture. */
+static AVCodecContext *bench_encoder(int vp8) {
+    const AVCodec *codec = avcodec_find_encoder_by_name(vp8 ? "libvpx" : "libx264");
+    if (!codec) return NULL;
+    AVCodecContext *c = avcodec_alloc_context3(codec);
+    if (!c) return NULL;
+    c->width = 1920; c->height = 1080; c->pix_fmt = AV_PIX_FMT_YUV420P;
+    c->time_base = (AVRational){1, 1000}; c->framerate = (AVRational){30, 1};
+    c->bit_rate = 8000000; c->thread_count = 2;
+    AVDictionary *opts = NULL;
+    if (vp8) { av_dict_set(&opts, "deadline", "realtime", 0); av_dict_set(&opts, "cpu-used", "8", 0); }
+    else { av_dict_set(&opts, "preset", "ultrafast", 0); av_dict_set(&opts, "tune", "zerolatency", 0); }
+    int result = avcodec_open2(c, codec, &opts);
+    av_dict_free(&opts);
+    if (result < 0) avcodec_free_context(&c);
+    return c;
+}
 static void measure_encode(int id, int vp8) {
     report(id, VBR_STEP, 0, 0, 0);
     enum { NF = 8, PER = 60 };
@@ -209,7 +225,7 @@ static void measure_encode(int id, int vp8) {
     double v[3];
     int why = bad ? VBS_FAILED : 0;
     for (int r = 0; !why && r < 3; r++) {
-        AVCodecContext *e = lm_stream_sw_encoder(vp8, 1920, 1080, 30, 8000);
+        AVCodecContext *e = bench_encoder(vp8);
         AVPacket *p = av_packet_alloc();
         if (!e || !p) { why = e ? VBS_FAILED : VBS_NOCODEC; avcodec_free_context(&e); av_packet_free(&p); break; }
         double t0 = lm_now_ms();

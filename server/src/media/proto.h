@@ -33,8 +33,6 @@ enum {
     MK_AUDIOREC,        /* audio recorder: fds = wav output, microphone ring */
     MK_HWPROBE,         /* which video codecs VA-API decodes: fds = render node → one MM_RESULT
                            with JSON {"vaapi":bool,"vendor":"…","vp9":bool,"av1":bool,"h264":bool,"hevc":bool} */
-    MK_STREAM,          /* remote desktop live encoder (docs/REMOTE.md, "Video (WebRTC)"): fds = audio ring
-                           (or -1), render node (or -1); params codec=h264|vp8, width, height, fps, kbps */
     MK_VBENCH,          /* LordBench's video measurement (lm_vbench.c, docs/BENCHMARK.md): no fds; params full=0|1.
                            Clips generated in memory; answers MM_BENCH records, then MM_STATE MS_DONE */
 };

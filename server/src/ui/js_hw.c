@@ -28,8 +28,7 @@
  *                                               session: how this session composes the screen and its
  *                                               GPU context (gpu/gpu.h gpu_info, lord_composition)
  *   lord.sysinfo.facts()                        the Checks tab's facts (sysreport/facts.c): axia-server's
- *                                               uid/euid, its cgroup and who owns it, app scopes, and
- *                                               whether anything listens on the remote desktop's port
+ *                                               uid/euid, its cgroup and who owns it, and app scopes
  *   lord.sysinfo.probe()                        the last sandbox probe's result (sec/brokersrv.c, BOP_PROBE:
  *                                               the system package `sysprobe`, app/probe.c), or null
  *   lord.sysinfo.markdown()                     the same report as Markdown, as axia-sysreport prints it,
@@ -517,8 +516,6 @@ static JSValue f_sysinfo_facts(JSContext *c, JSValueConst t, int argc, JSValueCo
     JS_SetPropertyStr(c, o, "leafRoot", f.leaf_root < 0 ? JS_NULL : JS_NewBool(c, f.leaf_root));
     JS_SetPropertyStr(c, o, "parentRoot", f.parent_root < 0 ? JS_NULL : JS_NewBool(c, f.parent_root));
     JS_SetPropertyStr(c, o, "appScopes", JS_NewInt32(c, f.app_scopes));
-    int l = sr_tcp_listening(root, 5673);   /* the remote desktop's port (docs/REMOTE.md) */
-    JS_SetPropertyStr(c, o, "remoteListening", l < 0 ? JS_NULL : JS_NewBool(c, l));
     JS_SetPropertyStr(c, o, "fixture", JS_NewBool(c, root[0] != 0));
     return o;
 }

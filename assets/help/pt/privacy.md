@@ -16,8 +16,8 @@ keywords: privacidade, permissões, câmera, microfone, tela, isolamento, segura
 - **Assinaturas:** cada app instalado é verificado pela assinatura antes de abrir.
 - **Arquivos de fora:** os PDFs, compactados, imagens e vídeos são abertos em processos separados
   e isolados.
-- **Janelas protegidas:** as que mostram senhas saem pretas nas capturas, gravações e no desktop
-  remoto.
+- **Janelas protegidas:** as que mostram senhas saem pretas nas capturas e
+  gravações.
 
 O [Monitor](help:monitor) mostra com quem cada app se conecta e quais apps usaram a câmera ou o
 microfone.

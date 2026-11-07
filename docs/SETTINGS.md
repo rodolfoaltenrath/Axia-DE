@@ -148,8 +148,8 @@ timer that sleeps until the next change (30 s steps only during the 30-minute fa
   the browsers are asked for H.264 (`Video.jsx`, `sdk/video.js`, the closed admin action
   `video-optimize`). See [VIDEO.md](VIDEO.md).
 - **Multiple displays** (`DISPLAYS.md`): extend or mirror, the arrangement edited by dragging the
-  displays (they snap next to each other), "Show menu bar on all displays", and what screenshots,
-  recording and the remote desktop see (main display or all). Each display has its own CRTC,
+  displays (they snap next to each other), "Show menu bar on all displays", and what screenshots
+  and recording see (main display or all). Each display has its own CRTC,
   frame, page flips and scale. Since 0.8.5 each display has a number (the main one is 1); a click on
   a display in the arrangement, or **Identify**, shows that number big on the monitor for a moment;
   a dragged display snaps edge to edge and aligns with the others, and a drop never leaves two
@@ -426,8 +426,6 @@ Not hardware pages, listed here so this document points to them:
   separate Themes page is gone (an old link to it opens Appearance). The two LordOS themes are now
   called **Lord Flow** (menu bar and Dock) and **Lord Classic** (taskbar and start menu); the choice
   is kept (`THEMES-GUIDE.md`).
-- **Sharing → Advanced: root over SSH**, off by default, administrators only, every change confirmed
-  with the administrator's own password (`REMOTE.md`, "Root over SSH").
 - **Privacy → Blocklists** and the **Deny silently** firewall mode, plus the optional network item in
   the menu bar (`FIREWALL.md`, "Blocklists" and "The modes"; `MONITOR.md`).
 

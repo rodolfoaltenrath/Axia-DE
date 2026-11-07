@@ -109,7 +109,7 @@ export const dock = {
 export const DOCK_DEFAULTS = {
   dockPosition: 'bottom',     // 'bottom' | 'left' | 'right' (Lord Flow theme)
   dockSize: 54,               // px of each icon (36–80)
-  dockMagnify: true,          // magnification
+  dockMagnify: false,         // opt-in; hover and press feedback work at a fixed size
   dockMagnifySize: 86,        // px of the largest icon when magnified (more than dockSize)
   dockAutohide: false,        // hides and comes back when the edge is touched
   dockRecents: false,         // shows the most recently used apps that aren't pinned

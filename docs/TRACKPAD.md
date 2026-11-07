@@ -35,8 +35,8 @@ but badly.
 | Settings → Trackpad (only appears if there is a touchpad) | Swiping up with three fingers opens the theme's app launcher |
 | ![chromium before](trackpad-browser-before.png) | ![chromium](trackpad-browser-pinch.png) |
 | Chromium 155 (Wayland) before | Pinch: Chromium zooms the page via `zwp_pointer_gestures_v1` |
-| ![windows](trackpad-swipe-windows.png) | ![remote](trackpad-remote-pinch.png) |
-| Three fingers to the left: the window behind (Files) comes to the front | Remote desktop pinch (`RP_PINCH`, as the browser sends it): ×2.2 zoom on the map |
+| ![windows](trackpad-swipe-windows.png) | |
+| Three fingers to the left: the window behind (Files) comes to the front | |
 
 ## Pieces
 

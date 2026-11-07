@@ -68,6 +68,19 @@ Durante a atualização, o compositor em execução conserva o código já carre
 mas helpers e recursos no disco podem mudar; a validação de uma versão nova deve
 ser feita após abrir uma sessão nova.
 
+O wrapper de sessão detecta quando o executável em uso foi substituído e avisa
+para sair e entrar novamente. A detecção é local, a cada 30 segundos, e não
+interrompe a sessão. O aviso visual usa `notify-send`, quando disponível; o
+evento também fica no log da sessão. Isso vale a partir da primeira sessão
+iniciada com o wrapper atualizado.
+
+As sessões físicas agora salvam a saída do compositor em
+`${XDG_CACHE_HOME:-$HOME/.cache}/axia/session.log`, com permissão `0600`.
+O início seguinte preserva o log anterior em `session.previous.log`.
+Procure `js: theme ... loaded in` para medir o carregamento do tema e `gpu:`
+para identificar a composição utilizada. O tempo do tema não inclui toda a
+inicialização nem a apresentação do primeiro quadro.
+
 O pacote inclui `axia-update.timer`, **desabilitado por padrão**. Para instalar
 automaticamente as atualizações da Axia a cada aproximadamente 30 minutos:
 

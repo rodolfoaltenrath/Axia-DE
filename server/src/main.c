@@ -37,8 +37,6 @@
 #include "ui/ui.h"
 #include "wl/wl.h"
 #include "gpu/gpu.h"
-#include "remote/mirror.h"
-#include "remote/proto.h"
 #include "tp/tp.h"
 #include "tp/tp_route.h"
 #include "wl/wl_input.h"
@@ -187,7 +185,7 @@ typedef struct {
 typedef struct {
     Out out[OUT_MAX];
     int main_out;               /* index of the main display */
-    Out cap;                    /* "all displays" for the remote desktop and recording (capture view) */
+    Out cap;                    /* "all displays" for recording (capture view) */
     Input input;
     int W, H;                   /* the global logical space */
     int cx, cy, ctrl, alt;
@@ -205,11 +203,10 @@ typedef struct {
     int cursor_mode, cursor_hx, cursor_hy, hw_cursor;
     GpuTex *cursor_tex;
     int cursor_tex_w, cursor_tex_h;
-    /* session without a monitor (lord-sessiond shows it on the monitor or the remote desktop): it is
-     * drawn in memory, without DRM or evdev; greeter = the login screen */
+    /* session without a monitor: it is drawn in memory, without DRM or evdev; greeter = the login screen */
     int headless, greeter;
     double last_render;
-    /* GPU paused because someone is watching over the network: it comes back when nobody is left */
+    /* GPU paused while the screen is recorded (CPU path): it comes back when recording stops */
     int gpu_paused;
     /* pointer motion gathered until the next frame; buttons held (mask); cursor shape from the
      * node under the pointer (`cursor` style, docs/WINDOWS.md) */
@@ -378,7 +375,7 @@ static void hw_cursor_move(Server *s) {
 static void cursor_motion(Server *s) {
     if (s->hw_cursor) hw_cursor_move(s);
     /* Capture viewers still need cursor position/image notifications in frames. */
-    if (!s->hw_cursor || mirror_watchers() || media_needs_cpu()) s->cursor_dirty = 1;
+    if (!s->hw_cursor || media_needs_cpu()) s->cursor_dirty = 1;
 }
 static const char *const cursor_arrow[] = {
     "X", "XX", "XoX", "XooX", "XoooX", "XooooX", "XoooooX", "XooooooX", "XoooooooX",
@@ -522,11 +519,11 @@ static void dispatch_pointer(Server *s) {
     s->moved = s->wheel = s->nbuttons = 0;
 }
 
-/* ---- remote desktop: the browser's input, as if it were local (remote/mirror.c) ---- */
+/* ---- local input and screen recording ---- */
 
-static Server *remote_server;
+static Server *active_server;
 
-/* What the remote desktop and the screen recording see: the main display at its resolution, or
+/* What the screen recording captures: the main display at its resolution, or
  * every display (Settings → Displays, "capture all": the capture view, the global space at 100 %). */
 static Out *feed_out(Server *s) {
     if (s->headless) return &s->out[0];
@@ -534,70 +531,19 @@ static Out *feed_out(Server *s) {
     return main_out(s);
 }
 
-static void remote_settle(Server *s) {
-    display_activity(now_ms());             /* idle timers (Settings → Battery) */
-    clamp_pointer(s);
-    wl_pointer_confine(&s->cx, &s->cy);
-    s->lx = s->cx;
-    s->ly = s->cy;
-    cursor_motion(s);
-    dispatch_pointer(s);
-}
-
-static void remote_pointer(int fx, int fy) {
-    Server *s = remote_server;
-    double lx, ly;                          /* frame pixels of the feed → logical */
-    out_to_logical(&feed_out(s)->v, fx, fy, &lx, &ly);
-    int x = (int)lround(lx), y = (int)lround(ly);
-    if (x == s->cx && y == s->cy) return;
-    s->rdx += x - s->cx;
-    s->rdy += y - s->cy;
-    s->cx = x;
-    s->cy = y;
-    s->moved = 1;
-    wl_pointer_relative(s->rdx, s->rdy);
-    s->rdx = s->rdy = 0;
-    remote_settle(s);
-}
-
-static void remote_button(int button, int down) {
-    Server *s = remote_server;
-    if (s->nbuttons < MAX_BUTTONS) s->buttons[s->nbuttons++] = (ButtonEvent){ down, button };
-    remote_settle(s);
-}
-
-static void remote_wheel(int steps) {
-    Server *s = remote_server;
-    s->wheel += steps;
-    remote_settle(s);
-}
-
-/* Is there a keyboard to type on (the on-screen keyboard's Automatic mode)? A viewer who typed on the
- * remote desktop has one too, until the session is back on the monitor. */
-static int remote_typed;
 static void keyboards_check(Server *s) {
     static int last = -1;
-    int now = input_has_keyboard(&s->input) || remote_typed;
+    int now = input_has_keyboard(&s->input);
     js_input_set_keyboard(now);
     if (now != last) { last = now; js_keyboards_event(now); }
 }
 
-static void remote_key(int code, int value) {
-    Server *s = remote_server;
-    if (value == 1 && code >= KEY_Q && code <= KEY_M && !remote_typed) { remote_typed = 1; keyboards_check(s); }
-    if (code == KEY_LEFTCTRL || code == KEY_RIGHTCTRL) s->ctrl = value != 0;
-    if (code == KEY_LEFTALT || code == KEY_RIGHTALT) s->alt = value != 0;
-    js_key(code, value);
-}
-static void remote_clip(const char *text, unsigned len) { term_set_clipboard(text, len); }
-static void remote_clients(const char *json) { js_remote_event(json); }
 static void full_damage(Server *s) {
     for (int i = 0; i < OUT_MAX; i++) if (s->out[i].on) { s->out[i].full = 1; s->out[i].full_copy = 2; }
     s->cap.full = 1;
     damage_add((Box){ 0, 0, (float)s->W, (float)s->H });
     ui.dirty = 1;
 }
-static void remote_refresh(void) { full_damage(remote_server); }
 
 /* The displays for JS (lord.screen.displays) and the Wayland apps (one wl_output each). */
 static void publish_displays(Server *s) {
@@ -663,32 +609,11 @@ static void set_size(Server *s, int w, int h) {
     full_damage(s);
 }
 
-/* Request from the browser: only if the session is not on the monitor (there the monitor rules). */
-static void remote_resize(int w, int h) {
-    Server *s = remote_server;
-    w &= ~1;
-    h &= ~1;
-    if (!s->headless || w < 640 || h < 480 || w > 3840 || h > 2400) return;
-    set_size(s, w, h);
-}
-
-static void remote_greeter(const char *json) { js_greeter_event(json); }
-static void remote_notice(const char *json) { js_remote_notice(json); }
-
 /* ---- applying the display plan (Settings → Displays, hotplug; hw/display.c) ---- */
 
 static int gpu_start(Server *s);
 
-/* Does someone need the frame in memory, composed by the CPU? Recording the screen does. The remote
- * desktop doesn't any more (docs/REMOTE.md, "Video (WebRTC)"): with the GPU composing, the frame is
- * read back once (gpu_read_next) for every viewer. Only protected windows still need the CPU path
- * (they are painted black in a CPU copy of the scene, media/capture.c); LORD_REMOTE_GPU=0 forces it. */
-static int remote_needs_cpu(void) {
-    if (!mirror_watchers()) return 0;
-    const char *e = getenv("LORD_REMOTE_GPU");
-    return (e && !strcmp(e, "0")) || media_protected_count() > 0;
-}
-static int need_cpu(void) { return remote_needs_cpu() || media_needs_cpu(); }
+static int need_cpu(void) { return media_needs_cpu(); }
 
 /* The GPU composes one display, upright; several displays or a rotated one go by the CPU. */
 static int gpu_allowed(const Server *s) {
@@ -871,100 +796,10 @@ static void outputs_apply(Server *s) {
     s->cursor_dirty = 1;
 }
 
-/* ---- the monitor, lent by lord-sessiond (docs/SESSIONS.md) ----
- * fds[0] is the card (lord-sessiond already made it master), the rest keyboards and mice. The
- * session draws on the card like a plain axia-server: with GPU if there is one, direct scanout of
- * fullscreen and hardware cursor. When switching user, lord-sessiond takes the master away and
- * revokes the input (EVIOCREVOKE); before that it sends RP_UNDISPLAY. */
-/* lord-sessiond: a keyboard, mouse or touchpad plugged in while the session is on the monitor */
-static void remote_input_add(const int *fds, int n) {
-    Server *s = remote_server;
-    if (s->headless) { for (int i = 0; i < n; i++) seat_device_close(fds[i]); return; }
-    if (input_add_fds(&s->input, fds, n)) wl_input_devices_changed();
-    keyboards_check(s);
-}
-
-/* A lent card with no monitor connected (a Raspberry Pi booted headless, a laptop lid closed on a
- * dock): the fds are kept and display_attach is tried again on the next DRM uevent, so plugging in the
- * monitor later shows the session without restarting anything. RP_UNDISPLAY drops them. */
-#define PARK_MAX 40
-static int parked_fd[PARK_MAX], parked_n, parked_flags;
-static unsigned parked_seq;
-static void parked_drop(void) {
-    for (int i = 0; i < parked_n; i++) seat_device_close(parked_fd[i]);
-    parked_n = 0;
-}
-
-/* Boot splash hand-off: lord-sessiond lent the card with RP_DISPLAY_KEEP; RP_SHOWN goes back once
- * the first frame is on the screen (docs/SESSIONS.md, "Boot splash"). */
-static int splash_wait;
-
 static char local_card[PATH_MAX];
 
-static void display_attach(const int *fds, int n, int flags) {
-    Server *s = remote_server;
-    parked_drop();                      /* a new RP_DISPLAY replaces what was waiting */
-    if (!s->headless || n < 1) { for (int i = 0; i < n; i++) seat_device_close(fds[i]); return; }
-    Out *o0 = &s->out[0];
-    out_free(o0);
-    memset(o0, 0, sizeof *o0);
-    o0->gpu = -1;
-    int card = dup(fds[0]);             /* kms_attach closes its fd when it fails */
-    int keep = (flags & RP_DISPLAY_KEEP) != 0;
-    if (kms_attach(&o0->kms, fds[0], keep)) {
-        o0->kms.fd = -1;
-        if (card >= 0 && n <= PARK_MAX) {
-            fprintf(stderr, "monitor: nothing connected to the card; waiting for a monitor (hotplug)\n");
-            parked_fd[0] = card;
-            for (int i = 1; i < n; i++) parked_fd[i] = fds[i];
-            parked_n = n;
-            parked_flags = flags;
-            parked_seq = display_hotplug_seq();
-        } else {
-            fprintf(stderr, "monitor: could not use the card\n");
-            if (card >= 0) close(card);
-            for (int i = 1; i < n; i++) seat_device_close(fds[i]);
-        }
-        set_size(s, s->W, s->H);            /* back to the frame in memory */
-        return;
-    }
-    if (card >= 0) close(card);
-    splash_wait = keep;
-    if (input_open_fds(&s->input, fds + 1, n - 1)) fprintf(stderr, "monitor: no keyboard or mouse\n");
-    wl_input_devices_changed();         /* is there a touch screen? (wl_seat touch) */
-    s->headless = 0;
-    s->gpu_paused = need_cpu();
-    o0->on = 1;
-    struct stat st;
-    if (fstat(o0->kms.fd, &st) == 0) wl_set_drm_device(st.st_rdev);
-    display_attached();                 /* Night Light, idle timers, the list in Settings; queues a resync */
-    remote_typed = 0;
-    keyboards_check(s);
-    display_take_resync();
-    outputs_apply(s);                   /* the other displays, saved modes, scales and arrangement */
-    /* the pointer where it is (an absolute tablet does not report if it does not move) or in the middle of the main display */
-    Out *m = main_out(s);
-    s->cx = m->v.x + m->v.w / 2;
-    s->cy = m->v.y + m->v.h / 2;
-    for (int i = 0; i < s->input.count; i++) {
-        const InputDevice *d = &s->input.dev[i];
-        int rx = d->ax.maximum - d->ax.minimum, ry = d->ay.maximum - d->ay.minimum;
-        if (!d->has_abs || rx <= 0 || ry <= 0) continue;
-        s->cx = (int)((long)(d->ax.value - d->ax.minimum) * (s->W - 1) / rx);
-        s->cy = (int)((long)(d->ay.value - d->ay.minimum) * (s->H - 1) / ry);
-        break;
-    }
-    clamp_pointer(s);
-    s->lx = s->cx;
-    s->ly = s->cy;
-    full_damage(s);
-    fprintf(stderr, "monitor: the session is shown (%d display(s), %dx%d, %s)\n", out_count(s), s->W, s->H, gpu_active() ? "GPU" : "CPU");
-}
-
 static void display_detach(void) {
-    Server *s = remote_server;
-    parked_drop();
-    splash_wait = 0;
+    Server *s = active_server;
     if (s->headless) return;
     prep_undo_all(s);                           /* a prepared frame is dropped with its display */
     gpu_tex_free(s->cursor_tex);
@@ -1098,7 +933,7 @@ static void on_input(void *ud, const InputDevice *d, const struct input_event *e
 
 static void tp_move(double dx, double dy, double rx, double ry) {
     static double fx, fy;               /* fracciones de píxel que quedan para el próximo */
-    Server *s = remote_server;
+    Server *s = active_server;
     fx += dx;
     fy += dy;
     int ix = (int)fx, iy = (int)fy;
@@ -1111,7 +946,7 @@ static void tp_move(double dx, double dy, double rx, double ry) {
     s->moved = 1;
 }
 static void tp_warp(double x, double y) {
-    Server *s = remote_server;
+    Server *s = active_server;
     int ix = (int)(x + 0.5), iy = (int)(y + 0.5);
     s->rdx += ix - s->cx;
     s->rdy += iy - s->cy;
@@ -1120,11 +955,11 @@ static void tp_warp(double x, double y) {
     s->moved = 1;
 }
 static void tp_button(int button, int down) {
-    Server *s = remote_server;
+    Server *s = active_server;
     if (s->nbuttons < MAX_BUTTONS) s->buttons[s->nbuttons++] = (ButtonEvent){ down, button };
 }
 static void tp_position(double *x, double *y, int *w, int *h) {
-    Server *s = remote_server;
+    Server *s = active_server;
     *x = s->cx;
     *y = s->cy;
     *w = s->W;
@@ -1135,13 +970,11 @@ static void tp_position(double *x, double *y, int *w, int *h) {
 static void tp_flush(void) {
     static const InputDevice none = { .fd = -1 };
     struct input_event syn = { .type = EV_SYN, .code = SYN_REPORT };
-    on_input(remote_server, &none, &syn);
+    on_input(active_server, &none, &syn);
 }
 static const TpHost tp_host = { tp_move, tp_warp, tp_button, tp_position, tp_flush };
 
 /* escritorio remoto: scroll fino del trackpad del navegador y pellizco (ctrl+rueda) */
-static void remote_scroll(int phase, double dx, double dy) { tp_route_scroll(phase, dx, dy, TPR_FINGER); }
-static void remote_pinch(int phase, double scale, double rotation) { tp_route_pinch(phase, 2, 0, 0, scale, rotation); }
 
 /* Layout and damage of the UI (once per frame, logical px). The damage goes to every display; each
  * one paints it when its flip is not pending (paint_out), at its own scale. */
@@ -1300,7 +1133,7 @@ static Rect paint_out(Server *s, Out *o, int index, int feed) {
         canvas_set_clip(&o->scene, pr);
         if (gdrag) o->gdragtaken = paint_root_gdrag(&o->scene, ui.root, &o->gdrag);
         else paint_root_clear(&o->scene, ui.root, 0x000000);
-        if (feed) media_scene_painted(&o->scene);     /* recording/remote desktop with protected windows */
+        if (feed) media_scene_painted(&o->scene);     /* recording with protected windows */
         r = rect_join(r, pr);
         if (o->gdragtaken) {                             /* only the strips around the window were painted */
             for (int i = 0; i < o->gdrag.nstrip; i++) {
@@ -1585,17 +1418,13 @@ static void present_cpu(Server *s, Out *o, int index, Rect r, int feed) {
     int px_, py_;
     pointer_phys(s, o, &px_, &py_);
     if (feed) {
-        /* remote desktop (without the cursor) and recording: with protected windows in black */
+        /* recording: with protected windows in black */
         MediaCursor mc = { px_, py_, k.mode, k.px, k.w, k.h, k.hx, k.hy };
         view_of(o, index);
-        const Canvas *seen = media_composed(&out, mirror_watchers() > 0, &mc);
+        media_composed(&out, &mc);
         view_reset();
-        mirror_composed_on_gpu(0);        /* this frame was painted on the CPU */
         /* only what went into this buffer can differ from the last frame (not with a fullscreen app
          * painted over it, nor when the frame is the copy with protected windows in black) */
-        int dmg[4] = { need.x0, need.y0, need.x1, need.y1 };
-        mirror_frame(seen->px, seen->stride, W, H, seen == &out && !wl_fullscreen_active() ? dmg : NULL);
-        mirror_cursor(px_, py_, k.mode, k.px, k.w, k.h, k.hx, k.hy, k.gen);
     }
     cursor_local(s, &k, out_scale(o));      /* the arrow is also an image (cursor.c) */
     int plane = s->hw_cursor && (!gpu_active() || o->gpu >= 0);
@@ -1634,7 +1463,7 @@ static void present_cpu(Server *s, Out *o, int index, Rect r, int feed) {
     kms_flip(&o->kms);
 }
 
-/* Memory frames (headless session, the capture view): scene + fullscreen, then the remote desktop. */
+/* Memory frames (headless session, the capture view): scene + fullscreen. */
 static void present_memory(Server *s, Out *o, int index, int feed, Rect drawn) {
     if (!o->frame) return;
     /* Without a fullscreen app the frame is the scene itself: read it there, no copy. A fullscreen app
@@ -1660,11 +1489,7 @@ static void present_memory(Server *s, Out *o, int index, int feed, Rect drawn) {
     if (feed) {
         /* what the browser sees and what is recorded: with the protected windows in black */
         MediaCursor mc = { x, y, k.mode, k.px, k.w, k.h, k.hx, k.hy };
-        const Canvas *seen = media_composed(&out, mirror_watchers() > 0, &mc);
-        mirror_composed_on_gpu(0);        /* this frame was painted on the CPU */
-        int dmg[4] = { drawn.x0, drawn.y0, drawn.x1, drawn.y1 };
-        mirror_frame(seen->px, seen->stride, o->scene.w, o->scene.h, seen == &out && !whole ? dmg : NULL);
-        mirror_cursor(x, y, k.mode, k.px, k.w, k.h, k.hx, k.hy, k.gen);
+        media_composed(&out, &mc);
     }
     view_reset();
     o->cdirty = 0;
@@ -1739,11 +1564,11 @@ static int prep_valid(const Out *o) {
 
 static int par_on, par_light;           /* the paint threads (render_frame) */
 
-/* Recording the screen, or a remote viewer with protected windows: the screen must be in memory (CPU path).
+/* Recording the screen: the screen must be in memory (CPU path).
  * 1 if the GPU was stopped now (every display is painted whole next). */
 static int cpu_switch(Server *s) {
     if (!gpu_active() || !need_cpu()) return 0;
-    fprintf(stderr, "remote: composing by CPU (%s)\n", media_needs_cpu() ? "screen recording" : "protected windows on screen");
+    fprintf(stderr, "capture: composing by CPU (screen recording)\n");
     gpu_tex_free(s->cursor_tex);
     s->cursor_tex = NULL;
     gpu_shutdown();
@@ -1781,18 +1606,6 @@ static void out_present(Server *s, Out *o, int i, Rect r, const Out *feed, LbPha
         gpu_server = s;
         gpu_out = o;
         view_of(o, i);
-        /* the remote desktop watches: the composed frame is read back once for every viewer */
-        static uint32_t *rb;
-        static size_t rb_n;
-        int readback = o == feed && mirror_watchers() > 0;
-        if (readback) {
-            size_t need = (size_t)o->scene.w * o->scene.h;
-            if (need > rb_n) { free(rb); rb = malloc(need * 4); rb_n = rb ? need : 0; }
-            if (rb) gpu_read_next(rb, o->scene.w, o->scene.h);
-            else readback = 0;
-        }
-        /* compatible fullscreen (one display): straight to the card; otherwise composed (always
-         * composed while the remote desktop reads it back) */
         /* GPU drag: the strips around the window, and the window from its textures (gpu_frame_ex); a frame
          * with nothing painted while the last one had it draws it again (its rectangle is stale) */
         Rect up[4] = { r };
@@ -1814,7 +1627,7 @@ static void out_present(Server *s, Out *o, int i, Rect r, const Out *feed, LbPha
             again.ref = NULL;
             gdrag = &again;
         }
-        int scanned = !readback && out_count(s) == 1 && wl_try_scanout(s->hw_cursor || s->cursor_mode == 2);
+        int scanned = !0 && out_count(s) == 1 && wl_try_scanout(s->hw_cursor || s->cursor_mode == 2);
         if (!scanned) gpu_scissor_quiet(o->gpu, wl_gpu_layers_empty() && (s->hw_cursor || s->cursor_mode == 2 || !s->cursor_tex));
         int res = scanned ? 0 : gpu_frame_ex(o->gpu, &o->scene, up, nup, gdrag, &gdragdrawn, gpu_layer);
         int failed = res == -1, unshown = res == -2;
@@ -1853,17 +1666,6 @@ static void out_present(Server *s, Out *o, int i, Rect r, const Out *feed, LbPha
             if (gdragdrawn) o->gdragw = gdrag->w;
         }
         o->gdragtaken = 0;
-        if (readback && !res && gpu_read_done()) {
-            static int said;
-            if (!said++) fprintf(stderr, "remote: composing on the GPU; frames read back for the remote desktop\n");
-            Cur k;
-            cursor_now(s, &k, out_scale(o));
-            int cx, cy;
-            pointer_phys(s, o, &cx, &cy);
-            mirror_composed_on_gpu(1);
-            mirror_frame(rb, o->scene.w, o->scene.w, o->scene.h, NULL);
-            mirror_cursor(cx, cy, k.mode, k.px, k.w, k.h, k.hx, k.hy, k.gen);
-        }
         view_reset();
         gpu_out = NULL;
         if (!unshown) {                        /* else they are presented with the next frame */
@@ -2030,9 +1832,9 @@ static int render_frame(Server *s) {
             if (fpipe_step(pipe_on(s, o), o->kms.flip_pending, o->prep, 0, work) == FPIPE_PREPARE)
                 out_prepare(s, o, i, feed, o == mo, ui0, ui0_ns);
         }
-        /* every display in one frame for the remote desktop and recording (capture view) */
+        /* every display in one frame for recording (capture view) */
         Out *c = &s->cap;
-        if (feed == c && (mirror_watchers() || media_needs_cpu())) {
+        if (feed == c && media_needs_cpu()) {
             if (!c->on || c->v.w != s->W || c->v.h != s->H) {
                 c->on = 1;
                 c->v = out_view(0, 0, s->W, s->H, 100);
@@ -2049,11 +1851,11 @@ static int render_frame(Server *s) {
     if (!prep_only) s->frames++;
     /* The pool only while frames are heavy: it costs CPU to wake (a light frame painted on one thread
      * spends less), so it turns on when painting takes more than 70 % of a frame at the target rate (the
-     * monitor's refresh, or the fastest remote viewer's without a monitor) and off after 60 light frames
+     * monitor's refresh, or 60 Hz without a monitor) and off after 60 light frames
      * in a row (with the pool a heavy frame paints fast, so not at once: it would flap).
      * A 1080p video under blurred windows: 45 → 57 frames a second on VM 116. */
     Out *pm = main_out(s);
-    int hz = s->headless ? (mirror_fps() > 60 ? mirror_fps() : 60) : pm && pm->kms.mode.vrefresh ? (int)pm->kms.mode.vrefresh : 60;
+    int hz = s->headless ? 60 : pm && pm->kms.mode.vrefresh ? (int)pm->kms.mode.vrefresh : 60;
     double frame_ms = 1000.0 / hz;
     fph.paint_ms = ui.layout_ms + ui.paint_ms;
     fph.par = par_on;
@@ -2216,7 +2018,7 @@ const char *lord_composition(void) {
     return "gpu-off";
 }
 
-/* A client that hangs up mid-write (remote desktop, Wayland, a helper) must not kill the
+/* A client that hangs up mid-write (Wayland, a helper) must not kill the
  * session: writes get EPIPE instead. Caught, not SIG_IGN, so exec'd children (shells, Linux
  * apps) get the default SIGPIPE back, as execve resets caught signals. */
 static void on_sigpipe(int sig) { (void)sig; }
@@ -2268,7 +2070,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--shell") && i + 1 < argc) shell = argv[++i];
         else if (!strcmp(argv[i], "--user") && i + 1 < argc) user = argv[++i];
         else if (!strcmp(argv[i], "--headless") && i + 1 < argc) {
-            /* sesión sin monitor para el escritorio remoto (la lanza lord-sessiond) */
+            /* session without a monitor, drawn in memory (tests) */
             int w = 0, h = 0;
             if (sscanf(argv[++i], "%dx%d", &w, &h) != 2 || w < 640 || h < 480 || w > 3840 || h > 2400) { usage(argv[0]); return 2; }
             s.headless = 1;
@@ -2342,8 +2144,8 @@ int main(int argc, char **argv) {
         if (!freopen(log, "w", stderr)) { /* carries on without a log */ }
         setvbuf(stderr, NULL, _IOLBF, 0);
     }
-    /* the CPU path's pixel loops on a pool (par.h): blur, blits, gradients, the remote desktop's
-     * comparison and copies; same pixels as one thread. Its threads sleep between jobs, and jobs only
+    /* the CPU path's pixel loops on a pool (par.h): blur, blits, gradients
+     * and copies; same pixels as one thread. Its threads sleep between jobs, and jobs only
      * run inside a frame on this thread, so the processes this server forks never inherit a busy one.
      * Here, before this server starts any process or thread: it takes the real-time priority
      * lord-sessiond allows and lowers that limit to 0, so nothing started later inherits it. */
@@ -2372,12 +2174,8 @@ int main(int argc, char **argv) {
     if (ok && !s.greeter) term_restore();   /* shells still alive from the previous start */
     netrec_init(ok && !s.greeter && session_user != NULL);   /* the Monitor's traffic history (monitor/netrec.c) */
     if (getenv("LORD_DAMAGE") && !strcmp(getenv("LORD_DAMAGE"), "multi")) paint_multi_damage = 1;   /* several damaged rectangles (paint.c; off by default) */
-    remote_server = &s;
+    active_server = &s;
     tp_route_init(&tp_host);
-    static const MirrorInput mirror_in = { remote_pointer, remote_button, remote_wheel, remote_key, remote_clip, remote_clients,
-                                           remote_refresh, remote_resize, remote_greeter, display_attach, display_detach,
-                                           remote_scroll, remote_pinch, remote_input_add, remote_notice };
-    if (ok && mirror_start(s.W, s.H, &mirror_in)) fprintf(stderr, "axia-server: no remote desktop (socket)\n");
     char current[sizeof ui.theme_request];
     if (ok) ok = start_theme(theme, s.greeter, current, sizeof current) == 0;
     if (ok && !s.greeter) {                  /* the app host as bytecode for isolated apps (app/apphost_bc.c) */
@@ -2481,12 +2279,7 @@ int main(int argc, char **argv) {
         if (nrd >= 0 && (delay < 0 || nrd < delay)) delay = nrd;
         double tpd = tp_timeout(now_ms());
         if (tpd >= 0 && (delay < 0 || tpd < delay)) delay = tpd;
-        mirror_tick();                      /* remote desktop video: lossless tiles once still, the encoder */
-        double mrd = mirror_timeout();
-        if (mrd >= 0 && (delay < 0 || mrd < delay)) delay = mrd;
-        /* sin monitor y sin nadie mirando no se dibuja (al conectarse alguien llega un cuadro entero) */
-        int unseen = s.headless && !mirror_watchers() && !media_needs_cpu();   /* recording the screen: yes */
-        if (!s.headless && display_is_off()) unseen = 1;     /* screen off after idle (DPMS): nothing to draw */
+        int unseen = !s.headless && display_is_off();
         /* nothing is drawn: the Linux apps waiting for a frame get it at most once a second (wl.c) */
         if (unseen) {
             /* a frame prepared before the screen went off would be shown stale when it comes back */
@@ -2506,9 +2299,8 @@ int main(int argc, char **argv) {
         int ahead = !unseen && can_prepare(&s);
         int wants = !unseen && (ui.dirty || !box_empty(ui.damage) || s.cursor_dirty || js_wants_frame() || wl_wants_frame() || media_wants_frame() ||
                                 outs_have_work(&s) || prep_ready(&s) || ahead);
-        /* no monitor, no vblank: 60 frames a second, or as fast as the fastest remote viewer's screen
-         * (120, 144 Hz…) */
-        int hz = mirror_fps() > 60 ? mirror_fps() : 60;
+        /* no monitor, no vblank: 60 frames a second */
+        int hz = 60;
         /* a driver that completes page flips at once instead of on vblank (vmwgfx, some virtual cards)
          * is paced to the mode's refresh, or the compositor and every app draw hundreds of frames a second */
         int soft = !s.headless && flip_instant >= 3;
@@ -2536,7 +2328,6 @@ int main(int argc, char **argv) {
         }
 
         wl_flush();
-        mirror_clipboard(term_clipboard(), term_clipboard_gen());
         struct pollfd pfd[128 + INPUT_MAX_DEVICES + TERM_MAX];     /* +32 para los brokers de apps aisladas, +40 medios */
         int term_ids[TERM_MAX];
         int n = 0;
@@ -2567,8 +2358,6 @@ int main(int argc, char **argv) {
         if (lgbase >= 0) pfd[n++] = (struct pollfd){ logs_fd(), POLLIN, 0 };
         int lbibase = lbi_fd() >= 0 ? n : -1;                    /* LordBench's synthetic pointer, like a device */
         if (lbibase >= 0) pfd[n++] = (struct pollfd){ lbi_fd(), POLLIN, 0 };
-        int mbase = n, nm = mirror_pollfds(pfd + n, 12);
-        n += nm;
         int brkbase = n, nbrk = brokersrv_pollfds(pfd + n, 32);   /* apps .lpk aisladas (broker) */
         n += nbrk;
         int abr = n, nabr = brokersrv_audio_pollfds(pfd + n, 16);  /* micrófono de las apps aisladas (PipeWire) */
@@ -2619,7 +2408,7 @@ int main(int argc, char **argv) {
         for (int k = nlost - 1; k >= 0; k--) input_remove(&s.input, lost[k]);
         if (nlost) wl_input_devices_changed();
         if (s.input.count || nlost) keyboards_check(&s);
-        /* la GPU vuelve cuando ya nadie mira desde la red */
+        /* the GPU comes back when the recording stops */
         if (s.gpu_paused && !s.headless && !any_flip_pending(&s) && gpu_allowed(&s)) {
             s.gpu_paused = 0;
             gpu_start(&s);
@@ -2635,7 +2424,6 @@ int main(int argc, char **argv) {
         if (bkbase >= 0 && pfd[bkbase].revents) backup_dispatch(js_backup_event);
         if (lgbase >= 0 && pfd[lgbase].revents) logs_dispatch(js_logs_event);
         if (lbibase >= 0 && pfd[lbibase].revents) lbi_drain();  /* taken once per frame by grab_script_tick */
-        if (nm) mirror_dispatch(pfd + mbase, nm);
         if (nbrk) brokersrv_dispatch(pfd + brkbase, nbrk);
         if (nabr) brokersrv_audio_dispatch(pfd + abr, nabr);
         if (nmed) media_dispatch(pfd + medbase, nmed);
@@ -2643,16 +2431,6 @@ int main(int argc, char **argv) {
         /* Dispatch after input: a seat switch can replace the entire device list. */
         if (seatbase >= 0 && pfd[seatbase].revents && seat_dispatch() < 0) break;
         if (inputbase >= 0 && pfd[inputbase].revents && input_watch_dispatch(&s.input, !s.headless)) wl_input_devices_changed();
-        if (parked_n && s.headless && display_hotplug_seq() != parked_seq) {   /* a monitor may have appeared */
-            int f[PARK_MAX], fn = parked_n;
-            memcpy(f, parked_fd, sizeof(int) * (size_t)fn);
-            parked_n = 0;
-            display_attach(f, fn, parked_flags);
-        }
-        if (splash_wait && !s.headless && main_out(&s)->kms.presented) {
-            splash_wait = 0;
-            mirror_shown();                 /* lord-sessiond: the boot splash can go */
-        }
         hw_events();
         media_events(js_media_event);
         brokersrv_events(js_broker_event);        /* avisos de permiso e indicadores → tema */
@@ -2670,7 +2448,6 @@ int main(int argc, char **argv) {
                 s.frames, s.renders, s.layout_total / s.renders, s.paint_total / s.renders);
     seat_callbacks(NULL, NULL);
     input_close(&s.input);
-    mirror_stop();
     gpu_tex_free(s.cursor_tex);
     gpu_shutdown();
     for (int i = OUT_MAX - 1; i >= 0; i--) if (!s.headless && (s.out[i].on || i == 0)) kms_close(&s.out[i].kms);   /* out[0] (the fd) last */

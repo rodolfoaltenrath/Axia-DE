@@ -16,8 +16,8 @@ keywords: privacidad, permisos, cámara, micrófono, pantalla, aislamiento, segu
 - **Firmas:** cada app instalada se verifica con su firma antes de abrirse.
 - **Archivos de afuera:** los PDF, comprimidos, imágenes y videos se abren en procesos aparte y
   encerrados.
-- **Ventanas protegidas:** las que muestran contraseñas salen en negro en capturas, grabaciones y
-  el escritorio remoto.
+- **Ventanas protegidas:** las que muestran contraseñas salen en negro en capturas y
+  grabaciones.
 
 El [Monitor](help:monitor) muestra con quién se conecta cada app y qué apps usaron la cámara o el
 micrófono.

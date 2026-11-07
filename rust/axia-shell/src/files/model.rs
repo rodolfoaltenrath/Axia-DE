@@ -2475,24 +2475,7 @@ impl Session {
             }
             "connect" => {
                 let address = super::network::parse(&value)?;
-                if ["rdp", "vnc"].contains(&address.scheme.as_str()) {
-                    let authority = address
-                        .uri
-                        .split("://")
-                        .nth(1)
-                        .unwrap_or("")
-                        .split('/')
-                        .next()
-                        .unwrap_or("");
-                    let host_port = authority.rsplit('@').next().unwrap_or("");
-                    let (host, port) = host_port
-                        .split_once(':')
-                        .map(|(h, p)| (h, p.parse::<u16>().unwrap_or(0)))
-                        .unwrap_or((host_port, 0));
-                    self.effects.push(json!({"kind":"remoteDesktop","args":{"proto":address.scheme,"host":host,"port":port,"user":address.user}}));
-                    self.close_dialog();
-                    return Ok(());
-                }
+
                 if ["http", "https"].contains(&address.scheme.as_str()) {
                     let mime = format!("x-scheme-handler/{}", address.scheme);
                     let app = shared

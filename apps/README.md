@@ -86,7 +86,7 @@ Store (see `docs/NATIVE-APPS.md`).
 | WebAssembly | the standard `WebAssembly` global (`docs/WASM.md`); in installed apps, `loadWasm(id, path)` |
 | Canvas | `<Image pixels={{ width, height, data }} />`: RGBA pixels (for example, computed in WASM) |
 | Media | `media.play/image/thumb/probe/poster/edit/transcode/screenshot/annotate/saveImage/copyImage/screenRecord/audioRecord/camera/photo/cameraRecord`, `usePlayer(id)`, `<MediaView media={id} />`, `nowPlaying`, `NowPlayingTile`, `useThumb(path)`, `userDirs()` — decoded by `axia-media`, sandboxed (see `docs/MEDIA.md`) |
-| Windows (media) | `wm.setProtected(id, on)` (black in screenshots, recordings and remote desktop), `wm.setFullscreen(id, on)`, `wm.setPip(id, frame)`, `useWindowState(key, initial)`, `useAppWindow().mode` (`'window'`, `'fullscreen'` or `'pip'`) |
+| Windows (media) | `wm.setProtected(id, on)` (black in screenshots and recordings), `wm.setFullscreen(id, on)`, `wm.setPip(id, frame)`, `useWindowState(key, initial)`, `useAppWindow().mode` (`'window'`, `'fullscreen'` or `'pip'`) |
 | Markdown | `<Markdown source base width onLink onToggleTask />`, `markdownHeadings(text)`, `toggleTask` — see `docs/NOTES.md` |
 | Desktop | `registerWidgetType(type, Component)`, `setWidgets(type, [{ id, x, y, w, h, pinned }])`: widgets between the wallpaper and the windows |
 | Notifications (M9) | `notify({ app, title, body, actions: [{ id, label, primary, run }], sound, sticky, timeout, onClose })` → id, `dismissNotification(id)`, `useNotifications()`, `notifyHistory`; `registerStatusItem(id, Component)` (status icons in the theme's bar) — see `docs/SYSTEM.md` |
