@@ -22,7 +22,7 @@
 // Special links in the text: [Open Settings → Network](settings:network), [Files](app:files)
 // and [another article](help:spotlight). Global search reads articles on its Rust worker.
 // They are read by lord.help (server/src/ui/js_help.c), only from LordOS's assets/help folder.
-import { locale, t } from './i18n.js';
+import { locale } from './i18n.js';
 import { settings } from './settings.js';
 import { wm, getApp, isLiveSystem } from './windows.js';
 

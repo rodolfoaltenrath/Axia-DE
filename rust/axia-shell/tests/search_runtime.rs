@@ -90,25 +90,8 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
         .save(home.join("Documents/photo-fixture.png"))
         .unwrap();
     own(&home.join("Documents/photo-fixture.png"));
-    let baseline = std::env::var_os("AXIA_SEARCH_BASELINE");
-    let reference = if let Some(source) = &baseline {
-        let source = fs::read_to_string(source)
-            .unwrap()
-            .replace("'./", &format!("'{}/sdk/", repo.display()));
-        let path = scratch.0.join("reference.js");
-        fs::write(&path, source).unwrap();
-        format!("import * as Reference from '{}';", path.display())
-    } else {
-        "const Reference=null;".into()
-    };
     let driver = scratch.0.join("probe.jsx");
-    fs::write(
-        &driver,
-        DRIVER
-            .replace("@ROOT@", repo.to_str().unwrap())
-            .replace("@REFERENCE@", &reference),
-    )
-    .unwrap();
+    fs::write(&driver, DRIVER.replace("@ROOT@", repo.to_str().unwrap())).unwrap();
     let bundle = scratch.0.join("probe.bundle.js");
     let output = Command::new(repo.join("node_modules/.bin/esbuild"))
         .arg(&driver)
@@ -267,15 +250,24 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
         assert_eq!(get(stage)["stats"]["managedImageKB"], 0);
     }
     assert_eq!(get("idle")["polls"], get("cycles")["polls"]);
-    if baseline.is_some() {
-        assert_eq!(
-            get("reference")["layout"],
-            get("app")["layout"],
-            "visible UI geometry changed"
+    // Coordinates captured from the validated 1000x700 UI. Keep this contract
+    // independent of renderer allocation order and of the removed JS engine.
+    let expected = json!([
+        {"h":13,"text":"↑↓ select · Enter open · ❖Enter show in Files · Tab section · Esc close","w":332,"x":155,"y":358},
+        {"h":25,"text":"App 0042","w":95,"x":199,"y":128},
+        {"h":21,"text":"APPS","w":460,"x":141,"y":175},
+        {"h":16,"text":"App 0042","w":62,"x":187,"y":205},
+        {"h":14,"text":"Axia DE app","w":328,"x":259,"y":206},
+        {"h":18,"text":"App 0042","w":69,"x":697,"y":273},
+        {"h":15,"text":"Axia DE app","w":231,"x":616,"y":322}
+    ]);
+    let actual = get("app")["layout"].as_array().unwrap();
+    assert_eq!(actual.len(), expected.as_array().unwrap().len());
+    for node in expected.as_array().unwrap() {
+        assert!(
+            actual.contains(node),
+            "visible UI geometry changed: missing {node}; got {actual:?}"
         );
-        for case in get("math-parity")["cases"].as_array().unwrap() {
-            assert_eq!(case["reference"], case["rust"], "{case}");
-        }
     }
     let warm = get("cycles-warm")["stats"]["rssKB"].as_u64().unwrap();
     let late = get("cycles")["stats"]["rssKB"].as_u64().unwrap();
@@ -287,16 +279,16 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
 }
 
 const DRIVER: &str = r#"
-import {createElement as h,useState} from '@ROOT@/node_modules/react/index.js';
+import {createElement as h} from '@ROOT@/node_modules/react/index.js';
 import {render,View} from '@ROOT@/runtime/index.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {configureWindows,wm} from '@ROOT@/sdk/windows.js';
-import {spotlight,spotlightOpen,calc,convert,registerSpotlightSource} from '@ROOT@/sdk/search.js';
+import {spotlight,spotlightOpen,registerSpotlightSource} from '@ROOT@/sdk/search.js';
 import {SpotlightPanel} from '@ROOT@/sdk/rustsearch.jsx';
 import {MenuBar} from '@ROOT@/themes/default/components/MenuBar.jsx';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {clipboard,clipboardHistory} from '@ROOT@/sdk/clipboard.js';
-@REFERENCE@
+
 const records=new Map();let root, pendingInput, keyTimes=[], polls=0,lastReply;
 for(const method of ['createNode','setRoot','appendChild','insertBefore','removeChild','setText','setStyle','setProp','destroy']){
  const original=lord[method];lord[method]=(...a)=>{const result=original(...a);
@@ -325,18 +317,15 @@ const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#348
 const apps=Array.from({length:512},(_,i)=>({id:`test-${String(i).padStart(4,'0')}`,name:`App ${String(i).padStart(4,'0')}`,Icon,Component:()=>null}));
 configureWindows({apps:[...apps,{id:'editor',name:'Editor',Icon,Component:()=>null}]});
 const theme={effects:true,mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3489bd',separator:'#555',control:'#333',menuText:'#fff',menuHover:'#444',menuBg:'#222',blur:24};
-let setMode;
-function Harness(){useShortcuts({grabs:'flow'});const [mode,set]=useState('new');setMode=set;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:1000,height:700}},h(MenuBar,{t:theme,height:28,focused:null,onLaunchpad:()=>{},onControlCenter:()=>{},area:{x:0,y:0,w:1000,h:700}}),mode==='reference'?h(Reference.SpotlightPanel):h(SpotlightPanel)));}
+
+function Harness(){useShortcuts({grabs:'flow'});return h(ThemeProvider,{tokens:theme},h(View,{style:{width:1000,height:700}},h(MenuBar,{t:theme,height:28,focused:null,onLaunchpad:()=>{},onControlCenter:()=>{},area:{x:0,y:0,w:1000,h:700}}),h(SpotlightPanel)));}
 resetShortcuts();render(h(Harness));
 let opened,args,copied,used;const oldOpen=wm.open,oldCopy=clipboard.set,oldUse=clipboard.use;
 wm.open=(id,options)=>{opened=id;args=options;return 'probe-window';};clipboard.set=text=>{copied=text;};clipboard.use=it=>{used=it.id;};
 async function fresh(query){spotlight.close();await pause(30);spotlight.open();await pause(40);if(query)await type(query);await waitReady();await pause(60);}
 async function run(){
  await pause(250);
- if(Reference){
-  const cases=['2*(3+4)','15% de 2400','15% of 2400','2^3^2','-2^2','2**3','sqrt(2)','1,5+2','1/0','10 km to mi','72 f to c','1,5 gb to mb'].map(text=>({text,reference:{calc:Reference.calc(text),convert:Reference.convert(text)},rust:{calc:calc(text),convert:convert(text)}}));snapshot('math-parity',{cases});
-  setMode('reference');await pause();Reference.spotlight.open();await pause();keyTimes=[];await type('App 0042');snapshot('reference',{layout:layout(),keyToNodeMs:keyTimes});Reference.spotlight.close();await pause();setMode('new');await pause();
- }
+
  key(57,'Space',' ',16);await pause();snapshot('shortcut',{open:spotlightOpen.get()});key(1,'Escape');await pause();
  const circle=[...records.values()].find(n=>alive(n)&&Math.abs(Number(n.style.width)-11.7)<0.001&&Math.abs(Number(n.style.height)-11.7)<0.001);
  if(!circle)throw Error('search button circle not found');const button=records.get(records.get(circle.parent).parent);const [x,y,w,hh]=lord.getLayout(button.id);__lordEvent('down',button.id,x+w/2,y+hh/2,0);__lordEvent('up',button.id,x+w/2,y+hh/2,0);await pause();snapshot('button',{open:spotlightOpen.get()});
