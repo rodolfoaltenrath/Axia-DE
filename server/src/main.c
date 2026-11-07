@@ -32,6 +32,7 @@
 #include "drmcard.h"
 #include "term/term.h"
 #include "ui/js.h"
+#include "ui/clipboard_ffi.h"
 #include "ui/js_input.h"
 #include "ui/ui.h"
 #include "wl/wl.h"
@@ -2576,6 +2577,8 @@ int main(int argc, char **argv) {
         n += nmed;
         int hwbase = n, nhw = hw_pollfds(pfd + n, 4);            /* uevents and the system bus (src/hw) */
         n += nhw;
+        int clipboard_fd = axia_clipboard_fd();
+        if (clipboard_fd >= 0) pfd[n++] = (struct pollfd){ clipboard_fd, POLLIN, 0 };
         if (poll(pfd, n, wait) < 0 && errno != EINTR) { perror("poll"); break; }
         loop_wake = mono_ns();                  /* LordBench's frame phases: the next frame starts from here */
         loop_wake_flip = 0;

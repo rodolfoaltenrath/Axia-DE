@@ -4,6 +4,7 @@
  * (fs, portapapeles, permisos, dispositivos) va por el broker a axia-server, que verifica el
  * permiso de cada llamada. Así la API del SDK para quien escribe la app no cambia. */
 #include "js_broker.h"
+#include "clipboard_ffi.h"
 #include "../sec/broker.h"
 #include "../sec/perms.h"
 #include "../sec/json.h"
@@ -726,7 +727,15 @@ static const JSCFunctionListEntry fs_funcs[] = {
     JS_CFUNC_DEF("home", 0, f_fs_home), JS_CFUNC_DEF("read", 2, f_fs_read),
     JS_CFUNC_DEF("write", 2, f_fs_write), JS_CFUNC_DEF("list", 1, f_fs_list),
 };
-static const JSCFunctionListEntry clip_funcs[] = { JS_CFUNC_DEF("get", 0, f_clip_get), JS_CFUNC_DEF("set", 1, f_clip_set) };
+/* Pure Rust classifier: available without filesystem/clipboard permission. */
+static JSValue f_clip_kind(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (!argc) return JS_NewString(c, "text");
+    const char *text = JS_ToCString(c, argv[0]); if (!text) return JS_EXCEPTION;
+    const char *kind = axia_clipboard_kind(text, argc > 1 && JS_ToBool(c, argv[1]));
+    JSValue result = JS_NewString(c, kind); JS_FreeCString(c, text); return result;
+}
+static const JSCFunctionListEntry clip_funcs[] = { JS_CFUNC_DEF("historyKind", 2, f_clip_kind), JS_CFUNC_DEF("get", 0, f_clip_get), JS_CFUNC_DEF("set", 1, f_clip_set) };
 static const JSCFunctionListEntry broker_funcs[] = {
     JS_CFUNC_DEF("request", 1, f_broker_request), JS_CFUNC_DEF("device", 2, f_broker_device), JS_CFUNC_DEF("state", 0, f_broker_state),
     JS_CFUNC_DEF("pick", 2, f_broker_pick), JS_CFUNC_DEF("fdRead", 1, f_fd_read), JS_CFUNC_DEF("fdWrite", 2, f_fd_write), JS_CFUNC_DEF("fdClose", 1, f_fd_close), JS_CFUNC_DEF("fdSize", 1, f_fd_size),

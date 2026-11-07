@@ -1,3 +1,4 @@
+#include "clipboard_ffi.h"
 /* js_term.c — lord.term.* and lord.clipboard for the Terminal app.
  *
  * lord.term.create() is the only API that starts a process: always the login shell of the
@@ -699,37 +700,6 @@ static JSValue f_clip_state(JSContext *c, JSValueConst this_val, int argc, JSVal
     return o;
 }
 
-/* lord.clipboard.saveImage(path): saves the copied image (if the last thing copied is an
- * image) as PNG to a path in the home folder (same rules as lord.fs.write). For the
- * persistent history and for notes. */
-static JSValue f_clip_save_image(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
-    (void)this_val; (void)argc;
-    const char *src = wl_clip_image_path();
-    if (!wl_clip_is_image() || !src[0]) return JS_FALSE;
-    const char *p = JS_ToCString(c, argv[0]);
-    if (!p) return JS_EXCEPTION;
-    char dst[PATH_MAX + 300];
-    int r = js_sys_resolve_target(p, dst, sizeof dst);
-    JS_FreeCString(c, p);
-    if (r) return js_throw_code(c, "fs.outsideHome", NULL);
-    size_t n = 0;
-    FILE *in = fopen(src, "rb");
-    if (!in) return JS_FALSE;
-    char tmp[PATH_MAX + 320];
-    snprintf(tmp, sizeof tmp, "%s.lordos-tmp", dst);
-    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
-    FILE *out = fd >= 0 ? fdopen(fd, "wb") : NULL;
-    int ok = out != NULL;
-    char buf[65536];
-    while (ok && (n = fread(buf, 1, sizeof buf, in)) > 0) if (fwrite(buf, 1, n, out) != n) ok = 0;
-    fclose(in);
-    if (out && fclose(out)) ok = 0;
-    if (!out && fd >= 0) close(fd);
-    if (ok && rename(tmp, dst)) ok = 0;
-    if (!ok) unlink(tmp);
-    return JS_NewBool(c, ok);
-}
-
 /* lord.clipboard.useImage(path): copies an image from the history again (only the
  * previews the compositor saved in $XDG_RUNTIME_DIR/axia). */
 static JSValue f_clip_use_image(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -749,31 +719,60 @@ static JSValue f_clip_image_data(JSContext *c, JSValueConst this_val, int argc, 
     return png ? JS_NewArrayBufferCopy(c, png, n) : JS_NULL;
 }
 
-/* lord.clipboard.deleteSaved(name): deletes an image from the saved history. Only names
- * img-<letters, numbers, hyphens>.png inside ~/.local/share/axia/clipboard (there is no general
- * file deletion). */
-static JSValue f_clip_delete_saved(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
-    (void)this_val; (void)argc;
-    const char *n = JS_ToCString(c, argv[0]);
-    if (!n) return JS_EXCEPTION;
-    size_t len = strlen(n);
-    int ok = len > 8 && len < 80 && !strncmp(n, "img-", 4) && !strcmp(n + len - 4, ".png");
-    for (size_t i = 4; ok && i < len - 4; i++) ok = (n[i] >= 'a' && n[i] <= 'z') || (n[i] >= '0' && n[i] <= '9') || n[i] == '-';
-    char path[PATH_MAX];
-    const char *home = getenv("HOME");
-    if (ok && home) snprintf(path, sizeof path, "%s/.local/share/axia/clipboard/%s", home, n);
-    JS_FreeCString(c, n);
-    return JS_NewBool(c, ok && home && unlink(path) == 0);
+/* Successful re-copying suppresses exactly this pair of generations, never
+ * the next unrelated copy. Password rejection is enforced again in Rust. */
+static unsigned suppressed_text, suppressed_image;
+static int suppress_active;
+static JSValue f_clip_suppress(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)c; (void)self; (void)argc; (void)argv;
+    suppressed_text = term_clipboard_gen(); suppressed_image = wl_clip_image_gen(); suppress_active = 1;
+    return JS_UNDEFINED;
+}
+static JSValue f_clip_history(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (!argc || !JS_IsString(argv[0])) return JS_ThrowTypeError(c, "clipboard history requires JSON");
+    size_t n; const char *input = JS_ToCStringLen(c, &n, argv[0]);
+    if (!input) return JS_EXCEPTION;
+    if (n > (8u << 20) || memchr(input, 0, n)) { JS_FreeCString(c, input); return JS_ThrowRangeError(c, "clipboard history request limit"); }
+    char *reply = axia_clipboard_request(input); JS_FreeCString(c, input);
+    if (!reply) return JS_ThrowOutOfMemory(c);
+    JSValue result = JS_ParseJSON(c, reply, strlen(reply), "<clipboard-history>");
+    axia_clipboard_free(reply); return result;
+}
+void js_clip_history_capture(void) {
+    unsigned text_gen = term_clipboard_gen(), image_gen = wl_clip_image_gen();
+    if (suppress_active) {
+        suppress_active = 0;
+        if (text_gen == suppressed_text && image_gen == suppressed_image) return;
+    }
+    if (wl_clip_is_image()) {
+        if (wl_clip_image_sensitive()) return;
+        const char *path = wl_clip_image_path();
+        if (!path || !path[0]) return;
+        int fd = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+        if (fd >= 0) axia_clipboard_capture(NULL, 0, wl_clip_image_origin(), false, fd, path);
+    } else {
+        const char *text = term_clipboard();
+        axia_clipboard_capture(text, strnlen(text, 1u << 20), term_clipboard_origin(), term_clipboard_sensitive(), -1, NULL);
+    }
 }
 
-static const JSCFunctionListEntry clip_funcs[] = {
+/* Pure Rust classifier: available without filesystem/clipboard permission. */
+static JSValue f_clip_kind(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (!argc) return JS_NewString(c, "text");
+    const char *text = JS_ToCString(c, argv[0]); if (!text) return JS_EXCEPTION;
+    const char *kind = axia_clipboard_kind(text, argc > 1 && JS_ToBool(c, argv[1]));
+    JSValue result = JS_NewString(c, kind); JS_FreeCString(c, text); return result;
+}
+static const JSCFunctionListEntry clip_funcs[] = { JS_CFUNC_DEF("historyKind", 2, f_clip_kind),
     JS_CFUNC_DEF("get", 0, f_clip_get),
     JS_CFUNC_DEF("set", 1, f_clip_set),
     JS_CFUNC_DEF("state", 0, f_clip_state),
     JS_CFUNC_DEF("imageData", 0, f_clip_image_data),
     JS_CFUNC_DEF("useImage", 1, f_clip_use_image),
-    JS_CFUNC_DEF("saveImage", 1, f_clip_save_image),
-    JS_CFUNC_DEF("deleteSaved", 1, f_clip_delete_saved),
+    JS_CFUNC_DEF("historyRequest", 1, f_clip_history),
+    JS_CFUNC_DEF("historySuppress", 0, f_clip_suppress),
 };
 
 void js_term_register(JSContext *c, JSValue lord) {

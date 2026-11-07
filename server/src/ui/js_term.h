@@ -4,6 +4,7 @@
 
 #include "quickjs.h"
 
+void js_clip_history_capture(void);
 void js_term_register(JSContext *c, JSValue lord);
 
 #endif

@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PATHS: [&str; 32] = [
+const PATHS: [&str; 33] = [
     ".cargo",
     "server",
     "rust",
@@ -38,6 +38,7 @@ const PATHS: [&str; 32] = [
     "docs/FILES.md",
     "docs/FEDORA-NETWORK-TRAY.md",
     "docs/DOCK-PREVIEWS.md",
+    "docs/CLIPBOARD.md",
 ];
 
 /// Matched by GNU tar against each whole path component, at any depth.

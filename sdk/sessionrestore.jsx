@@ -125,6 +125,7 @@ export function resumeSession() {
 // (systemctl, the login screen's Restart) the apps may be going down at the same moment, so a shorter
 // list than the saved one doesn't replace it.
 globalThis.__lordBeforeExit = () => {
+  clipboard.beforeLogout();
   if (!armed || frozen || restoreMode() === 'off') return;
   frozen = true;
   const list = hold ? savedList() : snapshot();

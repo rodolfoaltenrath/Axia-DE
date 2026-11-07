@@ -8,6 +8,7 @@
 #include "../keyboard.h"
 #include "js_sys.h"
 #include "js_term.h"
+#include "clipboard_ffi.h"
 #include "js_pkg.h"
 #include "js_sound.h"
 #include "js_monitor.h"
@@ -838,11 +839,19 @@ void js_admin_event(int id, const char *kind, const char *text) {
 void js_clipboard_poll(void) {
     static unsigned seen_text, seen_img;
     unsigned g = term_clipboard_gen(), gi = wl_clip_image_gen();
-    if (!ctx || (g == seen_text && gi == seen_img)) return;
-    seen_text = g;
-    seen_img = gi;
-    JS_FreeValue(ctx, call_global("__lordClipboard", 0, NULL));
-    drain_jobs();
+    if (!ctx) return;
+    if (g != seen_text || gi != seen_img) {
+        seen_text = g; seen_img = gi;
+        js_clip_history_capture();
+    }
+    char *reply = axia_clipboard_take();
+    if (reply) {
+        JSValue value = JS_ParseJSON(ctx, reply, strlen(reply), "<clipboard-history>");
+        axia_clipboard_free(reply);
+        if (!JS_IsException(value)) JS_FreeValue(ctx, call_global("__axiaClipboardHistory", 1, &value));
+        JS_FreeValue(ctx, value);
+        drain_jobs();
+    }
 }
 
 /* Remote desktop: who is watching this session from the network (JSON [{ip, user}]). */
