@@ -35,8 +35,6 @@ void   js_backup_event(const char *json);    /* Backups → __lordBackup */
 void   js_admin_event(int id, const char *kind, const char *text);
 void   js_logs_event(const char *kind, int id, const char *name);   /* app Registros */
 void   js_clipboard_poll(void);
-void   js_remote_event(const char *json);
-void   js_greeter_event(const char *json);
 void   js_screen_resized(void);
 /* lord.screen.displays / .mirror: {"mirror":…,"displays":[{id,name,x,y,w,h,pw,ph,scale,main}]} (main.c) */
 void   js_set_displays(const char *json);
