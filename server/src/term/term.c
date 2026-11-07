@@ -1,3 +1,4 @@
+#include "../wl/clipboard_native.h"
 /* term.c — terminal sessions: PTY ↔ emulator, keyboard, mouse, clipboard, events
  * for the app (title, directory, bell, process exit) and cursor blinking. */
 #include "term.h"
@@ -25,7 +26,6 @@
 
 static Session sessions[TERM_MAX];
 static int next_id = 1;
-static char *clip;
 static int mono[4] = { -1, -1, -1, -1 };
 static pid_t orphans[TERM_MAX * 2];
 static int norphans;
@@ -173,33 +173,13 @@ void term_metrics(const TermProfile *p, float *cw, float *ch, float *baseline) {
 
 /* ---- session clipboard ---- */
 
-static unsigned clip_gen;
-
-const char *term_clipboard(void) { return clip ? clip : ""; }
-unsigned term_clipboard_gen(void) { return clip_gen; }      /* changes with each copy (Wayland) */
-
-static char clip_origin[64] = "terminal";
-static int clip_sensitive;
-
-void term_set_clipboard(const char *s, size_t n) {
-    char *c = malloc(n + 1);
-    if (!c) return;
-    memcpy(c, s, n);
-    c[n] = 0;
-    if (clip) explicit_bzero(clip, strlen(clip));     /* the previous copy may have been a password */
-    free(clip);
-    clip = c;
-    clip_gen++;
-    snprintf(clip_origin, sizeof clip_origin, "terminal");
-    clip_sensitive = 0;
-}
-
-void term_clipboard_mark(const char *origin, int sensitive) {
-    snprintf(clip_origin, sizeof clip_origin, "%s", origin && origin[0] ? origin : "lordos");
-    clip_sensitive = sensitive != 0;
-}
-const char *term_clipboard_origin(void) { return clip_origin; }
-int term_clipboard_sensitive(void) { return clip_sensitive; }
+/* The public terminal ABI remains stable; Rust owns the session payload. */
+const char *term_clipboard(void) { return axia_native_text(); }
+unsigned term_clipboard_gen(void) { return axia_native_text_gen(); }
+void term_set_clipboard(const char *s, size_t n) { axia_native_set_text((const unsigned char *)s, n); }
+void term_clipboard_mark(const char *origin, int sensitive) { axia_native_mark(origin, sensitive != 0); }
+const char *term_clipboard_origin(void) { return axia_native_origin(); }
+int term_clipboard_sensitive(void) { return axia_native_sensitive(); }
 
 /* ---- sessions ---- */
 
@@ -329,8 +309,7 @@ void term_shutdown(int keep) {
             memset(s, 0, sizeof *s);
         } else term_close(s);
     }
-    free(clip);
-    clip = NULL;
+    axia_native_reset();
 }
 
 static char *read_all(const char *path, size_t *len) {

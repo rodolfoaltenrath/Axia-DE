@@ -1,3 +1,4 @@
+#include "clipboard_native.h"
 /* xwm.c — LordOS's X window manager for Xwayland (see xwm.h).
  *
  * It speaks the X11 protocol itself (x11wire.c), on the connection Xwayland opened for it with
@@ -101,7 +102,7 @@ typedef struct { uint32_t seq; ReplyFn fn; uint32_t a, b; } Pend;
 /* a selection being sent to an X app in chunks (INCR) */
 typedef struct Xfer {
     uint32_t win, prop, type;
-    uint8_t *buf;
+    NativeSnapshot *payload;
     size_t len, off;
     time_t t0;
     struct Xfer *next;
@@ -115,8 +116,7 @@ typedef struct {
     int stage;                          /* import: 0 idle, 1 TARGETS, 2 data, 3 INCR chunks */
     uint32_t owner, target;
     int image, latin1;
-    uint8_t *buf;
-    size_t len, cap;
+    NativeAccumulator *payload;
 } Sel;
 
 static struct {
@@ -401,7 +401,7 @@ static unsigned lord_gen(int k) {
 }
 static int lord_has(int k) {
     if (k == SEL_PRIM) { size_t n; unsigned g; return wlx_primary(&n, &g) && n > 0; }
-    if (wl_clip_is_image()) return 1;
+    if (wl_clip_is_image()) return !wl_clip_image_sensitive();
     /* a secret (Passwords, password fields) never goes to X: any X client can read the property the
      * text is written to while it's pasted */
     return term_clipboard()[0] && !term_clipboard_sensitive();
@@ -426,42 +426,19 @@ static void clip_sync(void) {
     }
 }
 
-static void sel_reset(Sel *s) { free(s->buf); s->buf = NULL; s->len = s->cap = 0; s->stage = 0; }
-
+static void sel_reset(Sel *s) { axia_native_acc_free(s->payload); s->payload = NULL; s->stage = 0; }
 static int sel_append(Sel *s, const uint8_t *p, size_t n) {
-    if (s->len + n > CLIP_MAX) return -1;
-    if (s->len + n + 1 > s->cap) {
-        size_t cap = s->cap ? s->cap : 4096;
-        while (cap < s->len + n + 1) cap *= 2;
-        uint8_t *nb = realloc(s->buf, cap);
-        if (!nb) return -1;
-        s->buf = nb;
-        s->cap = cap;
-    }
-    memcpy(s->buf + s->len, p, n);
-    s->len += n;
-    return 0;
+    return axia_native_acc_append(s->payload, p, n) ? 0 : -1;
 }
-
 static void sel_finish(int k) {
     Sel *s = &X.sel[k];
-    if (s->len) {
-        const char *origin = origin_of(s->owner);
-        if (s->latin1) {                    /* STRING is Latin-1 */
-            uint8_t *u = malloc(s->len * 2 + 1);
-            size_t o = 0;
-            for (size_t i = 0; u && i < s->len; i++) {
-                if (s->buf[i] < 0x80) u[o++] = s->buf[i];
-                else { u[o++] = (uint8_t)(0xc0 | s->buf[i] >> 6); u[o++] = (uint8_t)(0x80 | (s->buf[i] & 0x3f)); }
-            }
-            if (u) { free(s->buf); s->buf = u; s->len = o; s->cap = s->len * 2 + 1; }
-        }
-        if (k == SEL_PRIM) wlx_primary_text((const char *)s->buf, s->len);
-        else if (s->image) wlx_clip_png(s->buf, s->len, origin);
-        else wlx_clip_text((const char *)s->buf, s->len, origin);
-        s->x_gen = lord_gen(k);             /* this one is the X app's: not offered back */
-        if (X.debug) fprintf(stderr, "xwm: %s copied %zu bytes (%s) from %s\n", k ? "PRIMARY" : "CLIPBOARD", s->len,
-                             s->image ? "image/png" : "text", origin);
+    const char *origin = origin_of(s->owner);
+    int kind = k == SEL_PRIM ? 2 : s->image ? 1 : 0;
+    size_t len = axia_native_acc_finish(s->payload, kind, s->latin1 != 0, origin);
+    if (len) {
+        wlx_native_changed(kind);
+        s->x_gen = lord_gen(k);
+        if (X.debug) fprintf(stderr, "xwm: %s copied %zu bytes (%s) from %s\n", k ? "PRIMARY" : "CLIPBOARD", len, s->image ? "image/png" : "text", origin);
     }
     sel_reset(s);
 }
@@ -500,6 +477,8 @@ static void sel_reply(const uint8_t *r, size_t n, uint32_t k, uint32_t stage) {
 static void sel_start(int k, uint32_t owner) {
     Sel *s = &X.sel[k];
     sel_reset(s);
+    s->payload = axia_native_acc_new(k == SEL_PRIM);
+    if (!s->payload) return;
     s->owner = owner;
     s->image = s->latin1 = 0;
     s->stage = 1;
@@ -542,28 +521,30 @@ static void notify_requestor(uint32_t time, uint32_t requestor, uint32_t selecti
     send_event(requestor, ev);
 }
 
-static void write_data(uint32_t win, uint32_t prop, uint32_t type, const uint8_t *data, size_t len) {
-    if (len + 64 <= X.su.max_req_bytes) { change_prop(win, prop, type, 8, data, (uint32_t)len); return; }
+static int write_data(uint32_t win, uint32_t prop, uint32_t type, int kind, int latin1) {
+    NativeSnapshot *payload = axia_native_snapshot_new(kind, latin1 != 0);
+    if (!payload) return 0;
+    size_t len;
+    const unsigned char *data = axia_native_snapshot_data(payload, &len);
+    if (len + 64 <= X.su.max_req_bytes) {
+        change_prop(win, prop, type, 8, data, (uint32_t)len);
+        axia_native_snapshot_free(payload); return 1;
+    }
     Xfer *t = calloc(1, sizeof *t);
-    if (!t || !(t->buf = malloc(len))) { free(t); return; }
-    memcpy(t->buf, data, len);
-    t->len = len;
-    t->win = win;
-    t->prop = prop;
-    t->type = type;
-    t->t0 = time(NULL);
-    t->next = X.xfers;
-    X.xfers = t;
+    if (!t) { axia_native_snapshot_free(payload); return 0; }
+    t->payload = payload; t->len = len;
+    t->win = win; t->prop = prop; t->type = type; t->t0 = time(NULL);
+    t->next = X.xfers; X.xfers = t;
     XWin *known = find(win);
     change_attrs(win, XCW_EventMask, XM_PropertyChange | (known ? XM_FocusChange : 0));
     uint32_t total = (uint32_t)len;
     change_prop(win, prop, AT(INCR), 32, &total, 1);
+    return 1;
 }
 
 static void xfer_free(Xfer *t) {
     for (Xfer **p = &X.xfers; *p; p = &(*p)->next) if (*p == t) { *p = t->next; break; }
-    explicit_bzero(t->buf, t->len);                         /* may be a password copied in Passwords */
-    free(t->buf);
+    axia_native_snapshot_free(t->payload);
     free(t);
 }
 
@@ -573,7 +554,9 @@ static int xfer_step(uint32_t win, uint32_t prop) {
         size_t chunk = X.su.max_req_bytes > 1024 ? X.su.max_req_bytes - 64 : 960;
         if (chunk > 65536) chunk = 65536;
         size_t n = t->len - t->off < chunk ? t->len - t->off : chunk;
-        change_prop(win, prop, t->type, 8, t->buf + t->off, (uint32_t)n);
+        size_t length;
+        const unsigned char *bytes = axia_native_snapshot_data(t->payload, &length);
+        change_prop(win, prop, t->type, 8, bytes + t->off, (uint32_t)n);
         t->off += n;
         if (!n) xfer_free(t);                               /* the empty chunk ends it */
         return 1;
@@ -595,11 +578,7 @@ static void sel_request(const uint8_t *p) {
         return;
     }
     int image = k == SEL_CLIP && wl_clip_is_image();
-    const char *text = "";
-    size_t tlen = 0;
-    unsigned g;
-    if (k == SEL_PRIM) text = wlx_primary(&tlen, &g);
-    else if (!image) { text = term_clipboard(); tlen = strlen(text); }
+    int kind = k == SEL_PRIM ? 2 : image ? 1 : 0;
     if (target == AT(TARGETS)) {
         uint32_t list[10];
         uint32_t nl = 0;
@@ -611,27 +590,10 @@ static void sel_request(const uint8_t *p) {
     } else if (target == AT(TIMESTAMP)) {
         uint32_t t = 0;
         change_prop(requestor, prop, XA_CARDINAL, 32, &t, 1);
-    } else if (image && target == AT(MIME_PNG)) {
-        size_t n = 0;
-        const unsigned char *png = wl_clip_png(&n);
-        if (!png) { notify_requestor(time_, requestor, selection, target, 0); return; }
-        write_data(requestor, prop, target, png, n);
-    } else if (!image && target == XA_STRING) {             /* Latin-1 (what can't be said becomes '?') */
-        uint8_t *l = malloc(tlen + 1);
-        size_t o = 0;
-        for (size_t i = 0; l && i < tlen;) {
-            unsigned char c = (unsigned char)text[i];
-            uint32_t cp;
-            int k2 = c < 0x80 ? 1 : (c & 0xe0) == 0xc0 ? 2 : (c & 0xf0) == 0xe0 ? 3 : (c & 0xf8) == 0xf0 ? 4 : 1;
-            if (k2 == 2 && i + 1 < tlen) cp = (uint32_t)(c & 0x1f) << 6 | ((unsigned char)text[i + 1] & 0x3f);
-            else cp = c < 0x80 ? c : 0x3f;
-            l[o++] = cp <= 0xff ? (uint8_t)cp : '?';
-            i += (size_t)k2;
+    } else if ((image && target == AT(MIME_PNG)) || (!image && (target == XA_STRING || target == AT(UTF8_STRING) || target == AT(MIME_UTF8) || target == AT(MIME_TEXT) || target == AT(TEXT)))) {
+        if (!write_data(requestor, prop, target == AT(TEXT) ? AT(UTF8_STRING) : target, kind, target == XA_STRING)) {
+            notify_requestor(time_, requestor, selection, target, 0); return;
         }
-        if (l) write_data(requestor, prop, XA_STRING, l, o);
-        free(l);
-    } else if (!image && (target == AT(UTF8_STRING) || target == AT(MIME_UTF8) || target == AT(MIME_TEXT) || target == AT(TEXT))) {
-        write_data(requestor, prop, target == AT(TEXT) ? AT(UTF8_STRING) : target, (const uint8_t *)text, tlen);
     } else {
         notify_requestor(time_, requestor, selection, target, 0);
         return;

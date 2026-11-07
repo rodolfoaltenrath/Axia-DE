@@ -327,3 +327,13 @@ API pública e os painéis existentes. Escrita, leitura, classificação, limite
 fixados e limpeza saíram do JavaScript. Mudanças chegam por eventfd e deltas,
 sem polling em repouso. A seleção nativa do Wayland continua no compositor.
 Veja [CLIPBOARD.md](CLIPBOARD.md) para compatibilidade, limites e validação.
+
+
+A transferência nativa e os painéis da área de transferência também passaram
+para `clipboard/native.rs` e `clipboard/ui.rs`. Rust possui texto, PNG, seleção
+primária, leitura/escrita parcial, snapshots compartilhados e conversão Latin-1
+do XWayland. O C mantém recursos/eventos do protocolo e validações de foco.
+O SDK liga os widgets compartilhados às árvores e ações produzidas em Rust,
+sem manter um segundo desenho ou controlador do painel. O renderizador e o
+glass existentes continuam sendo usados. Os testes de protocolo rodam em uma
+sessão privada, nunca na DE em uso.

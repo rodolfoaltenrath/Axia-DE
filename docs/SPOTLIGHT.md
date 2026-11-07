@@ -3,7 +3,8 @@
 Both are mounted by the SDK, so **every theme has them** without doing anything:
 `startShell` adds `<SpotlightPanel />` and `<ClipboardPanel />`. Search is owned by
 `rust/axia-shell/src/search/`; `sdk/rustsearch.jsx` draws its widgets and `sdk/search.js`
-connects shared shell services. Clipboard code remains in `sdk/clipboard.js`.
+connects shared shell services. Clipboard transfers, history and panel trees live in Rust;
+`sdk/clipboard.js` is their host adapter (see [CLIPBOARD.md](CLIPBOARD.md)).
 
 ## Search
 
@@ -170,7 +171,8 @@ and the time.
   `$XDG_RUNTIME_DIR/axia/clip-N.png`. The Rust history worker receives an opened
   descriptor and streams the PNG into the private history directory. Temporary
   history images use `clip-rust-*.png` under the same runtime directory when saving
-  is off. There is no synchronous image-copy operation in the SDK.
+  is off. The native Rust store writes its runtime preview; the history copy remains on
+  the worker. There is no synchronous history image-copy operation in the SDK.
 - **Copying an image again:** `lord.clipboard.useImage(path)` remains the native
   transfer bridge, restricted to the compositor's previews and managed history.
 - **Deleting:** the Rust worker removes only generated image names in the owned

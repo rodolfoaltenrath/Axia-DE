@@ -11,6 +11,14 @@ const wait = async (test, message) => {
 let lastView = null, historyUpdates = 0;
 const receive = globalThis.__axiaClipboardHistory;
 globalThis.__axiaClipboardHistory = (reply) => { if (reply.view) lastView = reply.view; receive(reply); };
+let panelReply = null;
+const historyRequest = lord.clipboard.historyRequest;
+lord.clipboard.historyRequest = (raw) => {
+  const input = JSON.parse(raw), reply = historyRequest(raw);
+  if (input.op === 'panel' && input.cmd === 'render') panelReply = reply;
+  return reply;
+};
+const key = (code, name, char = '') => { __lordKey(code, 1, name, char, name, 0); __lordKey(code, 0, name, '', name, 0); };
 clipboardHistory.subscribe(() => historyUpdates++);
 const find = (text) => clipboardHistory.get().find((i) => i.text === text);
 async function copy(text, options) { clipboard.set(text, options); await wait(() => find(text), 'native copy reaches worker'); }
@@ -48,6 +56,22 @@ async function exercise() {
   check(find(link.text)?.pinned && find(original.text)?.pinned, 'limits preserve pinned items');
   check(!find('A'), 'old ordinary items evicted');
   clipboard.clear(); await wait(() => clipboardHistory.get().every((i) => i.pinned), 'clear retains pins');
+  toggleClipboardPanel('quick');
+  await wait(() => panelReply?.mode === 'quick' && panelReply.visible.length === 2, 'Rust quick panel renders pinned entries');
+  const firstId = panelReply.selected;
+  key(108, 'ArrowDown');
+  await wait(() => panelReply.selected && panelReply.selected !== firstId, 'real TextInput arrow event reaches Rust controller');
+  key(103, 'ArrowUp'); await wait(() => panelReply.selected === firstId, 'up arrow restores selection');
+  key(0, 'h', 'h');
+  await wait(() => panelReply.tree?.children?.[0]?.children?.[0]?.children?.[1]?.value === 'h', 'actual typing updates Rust-owned query');
+  closeClipboardPanel(); await pause();
+  toggleClipboardPanel('full');
+  await wait(() => panelReply?.mode === 'full' && panelReply.visible.length === 2, 'full mode resets query and restores entries');
+  if (panelReply.selected === original.id) { key(108, 'ArrowDown'); await wait(() => panelReply.selected !== original.id, 'choose second pin for Delete'); }
+  const deleteId = panelReply.selected;
+  key(111, 'Delete');
+  await wait(() => !clipboardHistory.get().some((item) => item.id === deleteId), 'Delete uses Rust selection and existing history effect');
+  closeClipboardPanel(); await pause();
   for (let i = 0; i < 12; i++) { toggleClipboardPanel(i % 2 ? 'full' : 'quick'); await pause(5); closeClipboardPanel(); }
   clipboard.beforeLogout();
   let disk = JSON.parse(lord.fs.read('.local/share/axia/clipboard/history.json'));
