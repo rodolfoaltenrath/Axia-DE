@@ -3,6 +3,7 @@
 mod anim;
 mod files;
 mod flip_pacing;
+mod stall;
 mod clipboard;
 mod applications;
 mod launcher;

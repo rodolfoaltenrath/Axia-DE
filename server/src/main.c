@@ -55,6 +55,7 @@
 #include "ui/js_hw.h"
 #include "outputs.h"
 #include "flip_ffi.h"
+#include "stall_ffi.h"
 #include "apps.h"
 #include "ui/js_anim.h"
 #include "monitor/netrec.h"
@@ -99,7 +100,7 @@ typedef struct { int down, button; } ButtonEvent;
  * release a "drag: …" line is written to the session log. */
 typedef struct {
     int held, active;
-    double t0, last, js, work_js, work, work_max, gap_max, paint, present, layout;
+    double t0, last, js, wl, work_js, work, work_max, gap_max, paint, present, layout;   /* js: all pointer input; wl: its Wayland part */
     long frames, moves;
 } DragStats;
 static DragStats dstat;
@@ -482,6 +483,7 @@ static void dispatch_pointer(Server *s) {
     int over = 0;
     if (grabbing && !ended) wl_pointer_grab(s->nbuttons, down);
     else over = wl_pointer(x, y, target, s->moved, s->nbuttons, down, button, s->wheel);
+    double t_wl = now_ms();                 /* the drag line splits Wayland delivery from the theme's JS */
     if (over == 2) id = 0;                  /* sobre un menú de una app Linux: el árbol no lo ve */
     if (ended) js_wm_end(gnode, gedges, gdx, gdy, gdw, gdh);
     int shape = over == 2 ? CUR_DEFAULT : node_cursor(target);
@@ -495,6 +497,7 @@ static void dispatch_pointer(Server *s) {
         if (!dstat.active) { dstat.active = 1; dstat.t0 = dstat.last = t0; }
         dstat.moves++;
         dstat.js += now_ms() - t0;
+        dstat.wl += t_wl - t0;
     }
     for (int i = 0; i < s->nbuttons; i++) {      /* máscara: dos dispositivos pueden repetir el mismo botón */
         if (s->buttons[i].down) dstat.held |= 1 << s->buttons[i].button;
@@ -509,10 +512,10 @@ static void dispatch_pointer(Server *s) {
             below_stats_text(bs, sizeof bs);
             gdrag_stats_text(gs, sizeof gs);
             fprintf(stderr, "drag: %ld frames in %.0f ms = %.1f FPS (%ld moves); per frame: work %.2f ms "
-                            "(max %.2f; JS %.2f, layout %.2f, paint %.2f, present %.2f), max gap %.1f ms; "
+                            "(max %.2f; input %.2f [Wayland %.2f], layout %.2f, paint %.2f, present %.2f), max gap %.1f ms; "
                             "layer: %ld painted (%ld of them a part), %ld copied (%s); %s; %s\n",
                     dstat.frames, span, 1000.0 * dstat.frames / span, dstat.moves, dstat.work / dstat.frames, dstat.work_max,
-                    dstat.js / dstat.frames, dstat.layout / dstat.frames, (dstat.paint - dstat.layout) / dstat.frames,
+                    dstat.js / dstat.frames, dstat.wl / dstat.frames, dstat.layout / dstat.frames, (dstat.paint - dstat.layout) / dstat.frames,
                     dstat.present / dstat.frames, dstat.gap_max, lr, lp, lb, gpu_active() ? "GPU" : "CPU", bs, gs);
         }
         dstat = (DragStats){ 0 };
@@ -2330,6 +2333,7 @@ int main(int argc, char **argv) {
             if (delay != 0) break;
         }
         if (dstat.active) dstat.js += now_ms() - tick0;     /* React agenda su trabajo en timers */
+        axia_stall_note(0, now_ms() - tick0);
         /* Terminales: parpadeo del cursor y región que cambió con la salida de los shells. */
         double now = now_ms();
         term_tick(now);
@@ -2385,7 +2389,9 @@ int main(int argc, char **argv) {
             pace = pace_next - tnow;
         }
         if (wants && (!all_busy(&s) || ahead) && pace <= 0) {
+            double render0 = now_ms();
             render(&s);
+            axia_stall_note(1, now_ms() - render0);
             wants = 0;
             if (s.headless || soft) pace_next += period;
         }
@@ -2443,6 +2449,7 @@ int main(int argc, char **argv) {
         if (poll(pfd, n, wait) < 0 && errno != EINTR) { perror("poll"); break; }
         loop_wake = mono_ns();                  /* LordBench's frame phases: the next frame starts from here */
         loop_wake_flip = 0;
+        double dispatch0 = now_ms();            /* the stall watch: what poll() woke us for */
         if (pfd[0].revents & POLLIN) {
             Kms *heads[OUT_MAX], *mk = &main_out(&s)->kms;
             int nh = 0, was = mk->flip_pending;
@@ -2505,6 +2512,8 @@ int main(int argc, char **argv) {
             parked_n = 0;
             display_attach(f, fn);
         }
+        axia_stall_note(2, now_ms() - dispatch0);
+        double events0 = now_ms();
         hw_events();
         media_events(js_media_event);
         brokersrv_events(js_broker_event);        /* avisos de permiso e indicadores → tema */
@@ -2513,6 +2522,7 @@ int main(int argc, char **argv) {
         wl_events(js_wl_event);
         js_clipboard_poll();
         term_events(js_term_event);
+        axia_stall_note(3, now_ms() - events0);
     }
 
     js_before_exit();                     /* what is open goes to settings.json, marked clean */
