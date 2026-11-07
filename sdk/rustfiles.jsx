@@ -332,7 +332,6 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
         continue;
       }
       if (effect.kind === 'openUri') { lord.apps.launchUri(effect.app || '', effect.uri); continue; }
-      if (effect.kind === 'remoteDesktop') { wm.open('remote-desk', { new: true, args: effect.args }); continue; }
       const task = hostEffect(effect).then((result) => {
         if (live.current && result) { if (effect.kind === 'mediaPreview' && result.result) resources.current.media.add(result.result); if (['documentPreview', 'pdfThumbnail'].includes(effect.kind) && result.result?.id) resources.current.images.add(result.result.id); if (result.disks) latest.current.send(['disks'], null, { disks: result.disks }); accept(filesRequest({ op: 'event', id: handle, action: ['service'], kind: effect.kind, generation: effect.generation, ...result })); }
         else if (effect.kind === 'mediaPreview' && result?.result) media.close(result.result);

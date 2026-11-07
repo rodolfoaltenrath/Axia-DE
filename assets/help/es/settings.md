@@ -19,7 +19,6 @@ Todo lo que se configura de Axia DE está en Ajustes. El campo de arriba busca e
 | [Sonido](settings:sound) | Salidas, entradas, volumen por app (ver [Sonido](help:sound)) |
 | [Impresoras y escáneres](settings:printers) | Ver [Imprimir](help:printing) |
 | [Portapapeles](settings:clipboard) | Historial y privacidad (ver [Portapapeles](help:clipboard)) |
-| [Compartir](settings:sharing) | Escritorio remoto (ver [Escritorio remoto](help:remote-desktop)) |
 | [Idioma y región](settings:language) | Idioma, formatos, zona horaria (ver [Idioma y región](help:language)) |
 | [Teclado](settings:keyboard) | Distribuciones y métodos de entrada (ver [Teclado](help:keyboard)) |
 | [Trackpad](settings:trackpad) | Si hay touchpad (ver [Touchpad](help:trackpad)) |

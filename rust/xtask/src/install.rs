@@ -6,14 +6,13 @@ use std::fs::{self, File, FileTimes, Metadata, Permissions};
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 
-pub const DESKTOP_BINARIES: [&str; 12] = [
+pub const DESKTOP_BINARIES: [&str; 11] = [
     "axia-server",
     "axia-vault",
     "axia-maild",
     "axia-doc",
     "axia-media",
     "axia-lan",
-    "axia-rdesk",
     "axia-bench",
     "axia-dl",
     "axia-sysreport",

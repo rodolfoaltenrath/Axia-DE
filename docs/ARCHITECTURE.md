@@ -49,7 +49,7 @@ like React Native but on top of our display server.
 | `server/src/tp/`, `wl/wl_input.c`, `js_input.c`, `sdk/trackpad.js` | **done (VM, uinput)** | Our own touchpad and touchscreen driver on evdev (no libinput): pointer acceleration, tap, finger clicks, palm rejection, kinetic scrolling, pinch, swipe; gestures and touches for Wayland apps (see `TRACKPAD.md`) |
 | `server/src/doc/`, `js_doc.c`, `apps/pdf`, `apps/fonts`, `apps/characters` | **M9** | Documents: the sandboxed helper `axia-doc` (Poppler, libarchive, FreeType) and its apps: PDF Viewer, archives and Quick Preview in Files, Fonts, Emoji & Symbols (see `DOCUMENTS.md`) |
 | `server/src/print/`, `js_print.c`, `sdk/printdialog.jsx`, `apps/scanner` | **M9** | Printing: our own IPP client against CUPS, our own mDNS, eSCL scanners, the system print dialog (see `PRINTING.md`) |
-| `server/src/media/`, `js_media.c`, `sdk/media.js`, `apps/{photos,player,screenshots,camera,recorder}` | **M9** | Media: the sandboxed helper `axia-media` (FFmpeg, libva) and the Photos, Player, Screenshots, Camera and Recorder apps; `media` node, audio over shared memory with the PipeWire stream in axia-server, protected windows in screenshots, recording and remote desktop (see `MEDIA.md`) |
+| `server/src/media/`, `js_media.c`, `sdk/media.js`, `apps/{photos,player,screenshots,camera,recorder}` | **M9** | Media: the sandboxed helper `axia-media` (FFmpeg, libva) and the Photos, Player, Screenshots, Camera and Recorder apps; `media` node, audio over shared memory with the PipeWire stream in axia-server, protected windows in screenshots and recording (see `MEDIA.md`) |
 | `server/src/netperm/`, `server/src/fw/`, `js_fw.c` | **M8** | Per-app firewall: the root service `axia-netperm` enforces the rules with cgroup BPF in the sessions; Rule column in the Monitor and Trusted / Restricted apps in Settings (see `FIREWALL.md`) |
 | `server/src/media/hwdec.c`, `sdk/video.js`, `assets/browser/video/` | **0.8.2** | Video in the browser without hardware decoding: per-boot VP9/AV1 decoding probe, the closed admin action `video-optimize` and LordOS's own Chromium extension that asks YouTube for H.264 and offers a lower quality when video stutters (see `VIDEO.md`) |
 | `server/src/fan/`, `js_fan.c`, `sdk/cooling.jsx` | **M8** | Fans: the root service `axia-fand` drives them by temperature; Settings → Cooling and Monitor → Cooling (see `FANS.md`) |
@@ -63,7 +63,6 @@ like React Native but on top of our display server.
 | `server/src/testbench/` | **0.8.5** | Test Bench (`axia-testbench`): a Wayland client that checks the display server from the outside (frame timing, presentation, keyboard, pointer, protocols, an optional GLES 3D view) (see `BENCHMARK.md`, `RESULTS.md`) |
 | `server/src/tls/`, `server/src/pkg/sources_admin.c`, `apt/catalog.json` | **0.8.5** | The package engine's HTTPS (the sandboxed relay `lord-tls`), the signed featured banner, and vendor APT repositories from LordOS's catalog added and removed by the closed `pkg-source-add`/`pkg-source-remove` actions (Store → Artificial Intelligence and Commercial; see `PACKAGES.md`, `UPDATES.md`) |
 | `server/src/lan/`, `js_lan.c`, `sdk/lan.js`, `apps/files/network.jsx` | **0.8.7** | Files → Network: a bounded pass over the LAN (mDNS, ports 445 and 2049 at most 30 connections a second) on a thread of axia-server, its answers read by the sandboxed helper `axia-lan`; SMB and NFS shares mounted by the kernel's clients through the closed `share-mount` action (see `FILES.md`) |
-| `server/src/rdesk/`, `js_rdesk.c`, `sdk/remotedesk.jsx`, `apps/remote-desk` | **0.8.7** | Remote Desk: RDP and VNC in the sandboxed helper `axia-rdesk`, drawn by the engine as a media node (see `FILES.md`, "Remote desktop") |
 | `server/src/mail/`, `js_mail.c`, `sdk/{mail,calendar,contacts}.js`, `apps/{mail,calendar,contacts,reminders}` | **M9** | Mail, Calendar, Contacts and Reminders (each app an isolated process since 0.8.2): the sandboxed helper `axia-maild` (IMAP with IDLE/CONDSTORE, SMTP, CalDAV/CardDAV, OpenSSL) with no sockets of its own — `axia-server` connects only to configured servers and hands it the fd; own MIME, HTML sanitizer, iCalendar, vCard and XML parsers (see `MAIL.md`) |
 | `server/src/backup/`, `js_backup.c`, `sdk/backup.js`, `apps/backup` | **M9** | Backups: hard-link snapshots in a axia-server thread (nice 19, idle I/O), hourly/daily/weekly retention, optional encryption with the vendored Monocypher; no root and no `admin.c` actions (see `SYSTEM.md`) |
 | `server/src/logs/`, `js_logs.c`, `sdk/logs.js`, `apps/logs` | **M9** | Logs: our own systemd journal reader (no libsystemd), LordOS logs, system logs for admins through a closed action, live follow with inotify (see `SYSTEM.md`) |
@@ -98,11 +97,9 @@ Besides the kernel and libc, only these are allowed:
 | Mesa: `libgbm`, `libEGL`, `libGLESv2` | GPU composition and dmabuf buffers from apps (games); optional: without a 3D GPU or without the `-dev` packages it builds and runs without Mesa (approved by the user on 2026-10-16, see `GPU.md`) | system |
 | QuickJS              | ES2023 JavaScript engine, ~1 MB, written in C                  | vendored|
 | `stb_truetype`, `stb_image` | fonts and images (`axia-server`, `axia-doc`, and `axia-maild`); public domain, a single header | vendored|
-| `stb_image_write`    | PNG for the remote desktop's lossless refresh of still areas and cursor images (`lord-sessiond`), and images written by the `axia-doc` and `axia-maild` helpers; public domain | vendored|
-| OpenSSL (`libssl`, `libcrypto`) | TLS. **Only four binaries link it directly** (`axia-rdesk` also loads it, through libfreerdp): `lord-sessiond` (remote desktop on the LAN, `REMOTE.md`), `axia-maild` (IMAP/SMTP/CalDAV/CardDAV, certificates checked against the system CA store, `MAIL.md`) and, since 0.8.5, `axia-dl` (the blocklist downloads, sandboxed, no sockets of its own, `FIREWALL.md` "Blocklists") and `lord-tls` (the package engine's HTTPS, sandboxed, `PACKAGES.md` "HTTPS"). Never `axia-server` | system |
-| FreeRDP (`libfreerdp3`, `libfreerdp-client3`, `libwinpr3`) | RDP in the sandboxed `axia-rdesk` (0.8.7, `FILES.md`, "Remote desktop"); its client library only for shared folders | system |
+| `stb_image_write`    | PNG images written by the `axia-doc` and `axia-maild` helpers; public domain | vendored|
+| OpenSSL (`libssl`, `libcrypto`) | TLS. Linked directly only by `axia-maild` (IMAP/SMTP/CalDAV/CardDAV, certificates checked against the system CA store, `MAIL.md`) and, since 0.8.5, `axia-dl` (the blocklist downloads, sandboxed, no sockets of its own, `FIREWALL.md` "Blocklists") and `lord-tls` (the package engine's HTTPS, sandboxed, `PACKAGES.md` "HTTPS"). Never `axia-server` | system |
 | `libcrypt`           | verifying passwords against `/etc/shadow` (`lord-sessiond`, `admin.c`) | system |
-| `libsrtp2`, `usrsctp` | the remote desktop's video (WebRTC, 0.8.4): SRTP and the data channels' SCTP, in `lord-sessiond`'s bridge only (as the user, after it dropped root); with OpenSSL's DTLS and our own ICE-lite, SDP and RTP code (`remote/rtc.c`, `remote/rtcwire.c`) because Debian 13 packages no libdatachannel. Required for `lord-sessiond` since the remote desktop shows the screen only over WebRTC (the image path was removed in 0.8.4). Never `axia-server` | system |
 | FFmpeg (`libavcodec`, `libavformat`, `libavutil`, `libswscale`, `libswresample`) and `libva` (+ `libva-drm`) | Decoding and encoding video, audio and images; VA-API for hardware decoding (M9, approved by the user). **Only `axia-media` links them**, the sandboxed helper; the player, synchronization and interface are our own. Never `axia-server` (`MEDIA.md`) | system |
 | Poppler (`libpoppler-glib`) and libarchive | PDF and archives (M9, approved by the user). **Only `axia-doc` links them**, the sandboxed helper; Poppler brings cairo, FreeType and fontconfig, which `axia-doc` also uses for font samples and for building PDFs. Never `axia-server` (`DOCUMENTS.md`) | system |
 | `clang` (build time only) | the BPF programs of `axia-netperm` (`np.bpf.c`, `clang -target bpf`); they are embedded in the binary. Without clang (`BPF=0`) the service runs without BPF. Neither libbpf nor bcc is used | build machine |
@@ -126,13 +123,10 @@ Besides `axia-server`, these programs and helpers run (root services, then sandb
 - **`lord-netd`** (M9, root): the system network, started and supervised by `lord-sessiond` at boot;
   only the `net-*` actions of `admin.c`. libc only. See `NETWORK.md`.
 
-- **`lord-sessiond`** (root, `lordos.service`): the login screen, the session list, the
-  monitor and the remote desktop. See `SESSIONS.md` and `REMOTE.md`. The remote desktop shows the
-  screen only as WebRTC video, from a bridge process that runs as the signed-in user: ICE over UDP
-  and over TCP on the remote desktop port (the root connection child only routes an ICE-TCP socket
-  to its bridge over `/run/lordos/rtc`), TURN over UDP, TCP or TLS, ICE restarts and reconnection.
+- **`lord-sessiond`** (root, `lordos.service`): the login screen, the session list and the
+  monitor. See `SESSIONS.md`.
 - **`axia-server`**: one session per user, always without a monitor of its own (`--headless`); the
-  monitor and the browsers look at it through its socket.
+  monitor looks at it through its socket.
 - **`axia-netperm`** (root, `axia-netperm.service`): per-app network permissions. It attaches its
   cgroup BPF programs to `lordos.service` and reads each user's rules. No network of its own and no
   execution. See `FIREWALL.md`.
@@ -176,11 +170,6 @@ Besides `axia-server`, these programs and helpers run (root services, then sandb
   sockets or files; libc only. It gets mDNS datagrams and sockets axia-server already connected (SMB2 negotiate and an
   anonymous share list, portmapper and mountd), with our own parsers, and answers with text axia-server validates. See
   `FILES.md`, "Network".
-
-- **`axia-rdesk`** (0.8.7): one RDP or VNC connection for Remote Desk, in a scope of its own (firewall app
-  `desktop:lordos-rdesk`). It connects, applies `sandbox_apply_helper` (no new sockets, no exec) and paints into a memfd
-  axia-server shows, with no window or toolkit: our own RFB client for VNC, libfreerdp for RDP. See `FILES.md`, "Remote
-  desktop".
 
 - **`lord-tls`** (0.8.5): the package engine's HTTPS. The Store's download child (as `nobody`, in
   `lordos-net-store.scope`) connects the TCP socket itself and execs only `<axia-server dir>/lord-tls`
@@ -335,8 +324,8 @@ other bundle; settings persist on disk.
   without leaving the folder»).
 - Media (videos, music, photos, the camera) are decoded only in `axia-media`, sandboxed and
   without the PipeWire socket. Screen, microphone and camera ask for permission (`sec/perms.c`, checked
-  in C), and protected windows (`wm.setProtected`) come out black in screenshots, recordings and the
-  remote desktop (`MEDIA.md`).
+  in C), and protected windows (`wm.setProtected`) come out black in screenshots and recordings
+  (`MEDIA.md`).
 - Printers: managing queues (add, remove, default) is authorized by CUPS. Only
   users in the `lpadmin` group (the administrators) can do it, identified with PeerCred over
   the unix socket. There is no new root action in `admin.c` (`PRINTING.md`).

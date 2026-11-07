@@ -33,12 +33,6 @@ updated. Nothing else in `third_party/` differs from upstream.
 |---|---|---|---|---|
 | QuickJS 2025-04-26 (`third_party/quickjs/VERSION`) | Adds `size_t JS_GetMallocSize(JSRuntime *rt)`, which returns `rt->malloc_state.malloc_size`: the same `malloc_size` that `JS_ComputeMemoryUsage` reports, without walking every object, string and shape of the runtime. No existing function or structure changes. | `quickjs.c` (7 lines, just before `JS_ComputeMemoryUsage`), `quickjs.h` (its prototype, after `JS_ComputeMemoryUsage`'s) | `lord.stats()` (`f_stats` in `server/src/ui/js.c`) gives `jsKB` from it in O(1); About, Settings → General and System Information poll it while open, and the full walk grew with the number of objects. Checked equal to `JS_ComputeMemoryUsage`'s `malloc_size` on a runtime with 100,000 objects, a 50,000-entry Map and after GC | 0.8.6 |
 
-## Moving wallpapers
-
-Downloaded on demand, not in this repository; each clip's author, license and source are in Settings → Wallpaper → Credits
-and in the README of the `LordOS-wallpapers` repository. NASA material (public domain), CC0, CC BY 3.0 and CC BY-SA 4.0
-works; see `docs/WALLPAPERS.md`. The built-in clip is the project's own.
-
 ## npm packages (bundled into the theme JavaScript at build time)
 
 | Package | License |
@@ -65,7 +59,7 @@ LordOS source they are built from is GPL-compatible. `axia-server` itself does n
 On the Raspberry Pi image, and on a Pi updated to 0.8.7, `axia-media` runs on Raspberry Pi's build of FFmpeg (`+rpt`, the
 same package names), pinned from its archive for the Pi 5's hardware HEVC (`docs/WALLPAPERS.md`).
 
-These come with `lordos` for Files and the remote apps (0.8.7): **FreeRDP** (`libfreerdp3-3`, `libfreerdp-client3-3`, `libwinpr3-3`, Apache-2.0), **rclone** (MIT), **fuse3** (LGPL-2.1, GPL-2.0) and openssh-client (BSD). The Store's Disk Formats item, not preinstalled, brings **ntfs-3g** (GPL-2.0), **exfatprogs** (GPL-2.0), dosfstools (GPL-3.0) and, on amd64, **apfs-dkms** (GPL-2.0).
+These come with `lordos` for Files (0.8.7): **rclone** (MIT), **fuse3** (LGPL-2.1, GPL-2.0) and openssh-client (BSD). The Store's Disk Formats item, not preinstalled, brings **ntfs-3g** (GPL-2.0), **exfatprogs** (GPL-2.0), dosfstools (GPL-3.0) and, on amd64, **apfs-dkms** (GPL-2.0).
 
 ## Tools used to make website media (not shipped in LordOS)
 

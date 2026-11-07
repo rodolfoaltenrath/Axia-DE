@@ -14,7 +14,7 @@
 
 typedef struct MAudio MAudio;
 
-enum { SK_NONE = 0, SK_PLAYER, SK_CAMERA, SK_IMAGE, SK_CAPTURE, SK_SCREENREC, SK_AUDIOREC, SK_STREAM };
+enum { SK_NONE = 0, SK_PLAYER, SK_CAMERA, SK_IMAGE, SK_CAPTURE, SK_SCREENREC, SK_AUDIOREC };
 
 /* How a source is shown in its node. */
 typedef struct {
@@ -121,7 +121,7 @@ void media_view_reset(MediaSrc *s);
 
 /* capture.c */
 MediaSrc *media_screenshot(const char *app, int x, int y, int w, int h);
-void media_capture_size(int *w, int *h);     /* recording / remote desktop frame size (docs/DISPLAYS.md) */
+void media_capture_size(int *w, int *h);     /* recording frame size (docs/DISPLAYS.md) */
 MediaSrc *media_crop(MediaSrc *src, int x, int y, int w, int h);
 int  media_screenrec_start(MediaSrc *s, int fps);
 void media_capture_src_closed(MediaSrc *s);

@@ -50,25 +50,6 @@ function runTests() {
     else console.log('host power dialog rendering: passed');
   };
   showDialog();
-  const profile = lord.settings.motionProfile(false, false, false);
-  check(profile.codecs.join() === 'h264' && profile.width === 1280 && profile.height === 720 && profile.fps === 15 && profile.threads === 2,
-    'CPU laptop gets a bounded native playback profile');
-  check(!lord.settings.downloadMotion('../invalid catalog entry'), 'invalid catalog selection rejected');
-  const motionJob = lord.settings.downloadMotion('testclip 1080.h264');
-  check(motionJob > 0, 'native catalog download starts without the LordOS admin helper');
-  let polls = 0;
-  const downloadTimer = setInterval(() => {
-    const result = lord.settings.pollMotion(motionJob);
-    check(++polls < 30, 'cached catalog job completed promptly');
-    if (!result.status) return;
-    clearInterval(downloadTimer);
-    check(result.status === 1 && result.path.endsWith('.mp4') && result.percent === 100, 'verified catalog cache reused');
-    check(lord.settings.removeMotion('testclip 1080.h264'), 'catalog file removal stays user scoped');
-    let removed = false;
-    try { removed = !lord.fs.stat(result.path); } catch { removed = true; }
-    check(removed, 'managed catalog file removed');
-    console.log('motion storage integration: passed');
-  }, 50);
   const source = lord.fs.home() + '/wallpaper input.png';
   const image = lord.settings.importWallpaper(source);
   check(image && image.src !== source && image.thumb !== image.src, 'wallpaper has a managed copy and thumbnail');
@@ -79,7 +60,7 @@ function runTests() {
   check(lord.settings.importWallpaper(source + '\0extra') === null, 'embedded NUL rejected');
   check(findWallpaper([], image.id, [image]) === image, 'personal wallpaper survives a theme without a collection');
   check(lord.settings.glassMaterial(true, false).backgroundColor.endsWith(',1.0000)'), 'effects off is opaque');
-  settings.set({ wallpaperUser: [image], wallpaper: image.id, motion: {} });
+  settings.set({ wallpaperUser: [image], wallpaper: image.id });
   check(lord.settings.save(JSON.stringify(settings.get()), true), 'wallpaper preferences are durable');
   console.log('wallpaper integration: passed');
   configureWindows({ apps: ['files', 'terminal', 'calculator'].map((id) => ({ id, name: id })) });
@@ -109,6 +90,14 @@ function runTests() {
       check(!switcherState.get(), 'changing profile cancels an open selector');
       const row = shortcutList().flatMap((g) => g.items).find((it) => it.id === 'switchApps');
       check(row.keys.includes('Alt+Tab'), 'Linux profile is applied live');
+      check(row.keys.includes('Super+Tab'), 'Super+Tab remains available in the Linux profile');
+      __lordKey(15, 1, 'Tab', '', '', 16);
+      check(switcherState.get()?.hold === 8, 'Super+Tab dispatcher holds Super in the Linux profile');
+      __lordKey(1, 1, 'Escape', '', '', 16);
+      __lordKey(1, 0, '', '', '', 16);
+      __lordKey(15, 0, '', '', '', 16);
+      __lordKey(125, 0, '', '', '', 0);
+      check(!switcherState.get(), 'dispatcher cancellation clears Super selector');
       openSwitcher(2);
       switcherKey({ mods: 0, down: false, key: 'Alt' });
       check(wm.focused() === 'terminal', 'releasing Alt commits focus');

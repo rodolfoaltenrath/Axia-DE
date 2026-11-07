@@ -12,7 +12,7 @@ import {
   View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
   registerDockTarget, dockDragJustEnded, refreshTrash, Layer,
 } from '@lordos/sdk';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GAP = 8, PAD = 9, MARGIN = 6;
 const SEP = GAP + 1;          // separator before the recent apps and before the Trash
@@ -191,10 +191,12 @@ function Poof({ poof, size, reduce }) {
 }
 
 export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTrashContext, trashFull = false, position = 'bottom', size = 54,
-  magnify = true, maxSize = 86, autohide = false, top = 0, keepOpen = false, area = { x: 0, y: 0, w: screen.width, h: screen.height } }) {
+  magnify = false, maxSize = 86, autohide = false, top = 0, keepOpen = false, area = { x: 0, y: 0, w: screen.width, h: screen.height } }) {
   // area: the display it is on (global coordinates); everything below is placed inside it
   const vert = position !== 'bottom';
   const [m, setM] = useState(null);             // mouse position along the Dock's axis
+  const [pressed, setPressed] = useState(null);
+  const feedback = useMemo(() => lord.appearance.request(JSON.stringify({ mode: t.mode })).dockFeedback, [t.mode]);
   const { dir } = useLocale();
   const drag = useStore(dockDrag);
   const poof = useStore(dockPoof);
@@ -258,6 +260,14 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
     return d < 1 ? Math.round(BASE + (MAX - BASE) * Math.cos((d * Math.PI) / 2)) : BASE;
   });
   const hovered = m == null || dragging ? -1 : centers.findIndex((c) => Math.abs(m - c) <= (BASE + GAP) / 2);
+  const movePointer = (e) => {
+    const coordinate = vert ? e.y : e.x;
+    if (!magnify && !dragging && m != null) {
+      const next = centers.findIndex((c) => Math.abs(coordinate - c) <= (BASE + GAP) / 2);
+      if (next === hovered) return;  // Fixed icons only redraw when the hovered item changes.
+    }
+    setM(coordinate);
+  };
   const real = layout((i) => sizes[i]);
   const len = real.len;
   const startT = Math.max(origin, origin + (avail - len) / 2);
@@ -328,7 +338,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const buttonDown = useRef(false);
   useEffect(() => {
     const a = addListener('pointerdown', () => { buttonDown.current = true; });
-    const b = addListener('pointerup', () => { buttonDown.current = false; });
+    const b = addListener('pointerup', () => { buttonDown.current = false; setPressed(null); });
     return () => { a(); b(); };
   }, []);
 
@@ -367,12 +377,14 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
     }
   }
   const trashLit = (drag && drag.over && drag.over.trash) || (trashHover && buttonDown.current && !drag);
-  // A quiet highlight accompanies magnification, using the theme's existing material.
-  // It adds no blur, timer or hit area; the fixed-size Dock keeps its original appearance.
-  const hoverPlate = (i) => magnify && hovered === i && !keepOpen ? (
+  // Rust supplies the state colors; the host only binds pointer transitions.
+  // Feedback remains visible with magnification and decorative effects off.
+  const isPressed = (i) => hovered === i && pressed === items[i].id && !dragging && !keepOpen;
+  const hoverPlate = (i) => hovered === i && !keepOpen && !dragging ? (
     <View style={{ position: 'absolute', left: -3, top: -3, right: -3, bottom: -3,
-      borderRadius: sizes[i] * 0.225 + 3, backgroundColor: t.hover,
-      border: `1px solid ${t.windowBorder}`, pointerEvents: 'none' }} />
+      borderRadius: sizes[i] * 0.225 + 3,
+      backgroundColor: feedback[isPressed(i) ? 'pressed' : 'hover'].backgroundColor,
+      pointerEvents: 'none' }} />
   ) : null;
   const ghost = drag ? (
     <View style={{ position: 'absolute', left: drag.x - BASE / 2, top: drag.y - BASE / 2, width: BASE, height: BASE, pointerEvents: 'none',
@@ -396,7 +408,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
 
   return (
     <>
-      <View onMouseMove={(e) => setM(vert ? e.y : e.x)} onMouseLeave={() => setM(null)}
+      <View onMouseMove={movePointer} onMouseLeave={() => { setM(null); setPressed(null); }}
         style={{ position: 'absolute', ...box, direction: 'ltr' }}>
         <View style={{ position: 'absolute', ...back, borderRadius: 20,
           ...dockGlass(t) }} />
@@ -406,18 +418,20 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
         ))}
         {items.map((app, i) => (app.trash ? (
           <View key={TRASH} dropTrash onClick={() => { if (!dockDragJustEnded()) onTrash?.(); }}
+            onMouseDown={(e) => { if (!e.button) setPressed(TRASH); }}
             onContextMenu={() => onTrashContext?.(anchor(i))}
             onMouseEnter={() => setTrashHover(true)} onMouseLeave={() => setTrashHover(false)}
             onMouseUp={() => setTimeout(refreshTrash, 60)}
             style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i], borderRadius: sizes[i] * 0.22,
+              opacity: isPressed(i) ? feedback.pressed.opacity : 1,
               backgroundColor: trashLit ? 'rgba(255,255,255,0.22)' : 'transparent' }}>
             {hoverPlate(i)}
             <TrashIcon size={sizes[i]} full={trashFull} dark={t.mode === 'dark'} />
           </View>
         ) : (
           <View key={app.id} onClick={() => { if (!dockDragJustEnded()) onOpen(app.id); }} onContextMenu={() => onContext?.(app.id, anchor(i))}
-            onMouseDown={(e) => { if (!e.button) beginDockDrag({ id: app.id, Icon: app.Icon, x: e.x, y: e.y, source: 'dock' }); }}
-            style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i] }}>
+            onMouseDown={(e) => { if (!e.button) { setPressed(app.id); beginDockDrag({ id: app.id, Icon: app.Icon, x: e.x, y: e.y, source: 'dock' }); } }}
+            style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i], opacity: isPressed(i) ? feedback.pressed.opacity : 1 }}>
             {hoverPlate(i)}
             <app.Icon size={sizes[i]} />
             {running.includes(app.id) && (

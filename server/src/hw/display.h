@@ -74,7 +74,7 @@ int  display_request(uint32_t conn, int w, int h, int refresh_mhz, int rotation,
 int  display_arrange(uint32_t conn, int x, int y, int apply, int *sx, int *sy);
 int  display_set_mirror(int on);        /* mirror every display to the main one, or extend */
 int  display_set_main(uint32_t conn);   /* the display with the menu bar and the Dock */
-/* Screenshots, recording and the remote desktop see the main display (0) or every one (1). */
+/* Screenshots and recording see the main display (0) or every one (1). */
 void display_set_capture_all(int all);
 int  display_capture_all(void);
 /* Save the current configuration (modes, scales, arrangement, mirror, main display). 0 if written. */

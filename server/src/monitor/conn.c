@@ -333,20 +333,6 @@ static void scopes_scan(void) {
     }
     if (d) closedir(d);
     if (dfd >= 0) close(dfd);
-    /* the remote desktop's bridge: forked by lord-sessiond after the sign-in, it runs as the user in
-     * lordos.service's root-owned `supervisor` group and isn't dumpable, so its sockets can't be traced to
-     * a pid; a socket of the user's in that group can only be the bridge's (its WebRTC UDP ports) */
-    char *up = strrchr(dir, '/');
-    if (up && nscopes < 256) {
-        *up = 0;
-        int pfd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-        struct stat st;
-        if (pfd >= 0 && !fstatat(pfd, "supervisor", &st, AT_SYMLINK_NOFOLLOW) && S_ISDIR(st.st_mode) && st.st_uid == 0) {
-            uint64_t id = cg_id(pfd, "supervisor");
-            if (id) { scopes[nscopes].id = id; snprintf(scopes[nscopes].app, sizeof scopes[nscopes].app, "remote-desktop"); nscopes++; }
-        }
-        if (pfd >= 0) close(pfd);
-    }
 }
 
 static const char *scope_app_of(uint64_t cg) {

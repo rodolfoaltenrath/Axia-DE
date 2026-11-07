@@ -100,6 +100,12 @@ char keygrab_letter(int code, const char *base) {
 }
 
 int keygrab_match(int code, char letter, unsigned mods) {
+    /* These shell actions are available in every active profile. The hold
+     * keeps Super's release routed to the switcher even over a Linux app. */
+    if (count && !letter) {
+        if (code == KEY_SPACE && mods == KG_META) return KG_TAKE;
+        if (code == KEY_TAB && (mods == KG_META || mods == (KG_META | KG_SHIFT))) return KG_HOLD;
+    }
     if (linux_profile) {
         if (code == KEY_GRAVE && !letter && (mods == KG_ALT || mods == (KG_ALT | KG_SHIFT))) return KG_TAKE;
         if (letter == 'h' && mods == KG_META) return KG_TAKE;

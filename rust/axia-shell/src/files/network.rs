@@ -82,7 +82,7 @@ pub fn parse(text: &str) -> Result<Address> {
     }
     let (scheme, rest) = uri.split_once("://").ok_or("files.invalidAddress")?;
     if ![
-        "smb", "nfs", "sftp", "ssh", "ftp", "ftps", "dav", "webdav", "davs", "rdp", "vnc", "http",
+        "smb", "nfs", "sftp", "ssh", "ftp", "ftps", "dav", "webdav", "davs", "http",
         "https",
     ]
     .contains(&scheme)
@@ -377,8 +377,7 @@ pub fn entries(state: &Value) -> Vec<super::operations::Entry> {
                 "ssh" | "sftp" => "sftp",
                 "webdav" => "dav",
                 "webdavs" => "davs",
-                "ftp" | "ftps" | "http" | "https" | "rdp" => kind,
-                "screen" => "vnc",
+                "ftp" | "ftps" | "http" | "https" => kind,
                 _ => continue,
             };
             let port = service["port"]

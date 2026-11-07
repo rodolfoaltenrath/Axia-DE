@@ -65,11 +65,11 @@ QJS_OBJ := $(patsubst %,build/qjs/%.o,quickjs libregexp libunicode cutils dtoa)
 # Monitor: metrics, connections and the country of an IP (src/monitor, see docs/MONITOR.md)
 MON_SRC := src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/monitor/nethist.c src/monitor/netrec.c src/monitor/conn.c src/monitor/procctl.c src/monitor/mmdb.c src/monitor/map.c src/ui/js_monitor.c
 # Media (src/media, docs/MEDIA.md): only the axia-server side. Only axia-media links FFmpeg.
-MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/capture.c src/media/annot.c src/media/maudio.c src/media/mpulse.c src/media/proto.c src/media/mstream.c src/ui/js_media.c
+MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/capture.c src/media/annot.c src/media/maudio.c src/media/mpulse.c src/media/proto.c src/ui/js_media.c
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
-SRC := src/hw/wallpaper_find.c src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/lpk.c src/remote/mirror.c src/remote/ipnet.c src/remote/rtcwire.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
+SRC := src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/lpk.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
        src/ui/node.c src/ui/style.c src/ui/layout.c src/ui/transform.c src/ui/text.c src/ui/image.c \
        src/ui/paint.c src/ui/js.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
@@ -86,7 +86,7 @@ SRC += $(DOC_SRC)
 FW_SRC := src/fw/rules.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
 SRC += $(FW_SRC)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
-HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/remote/*.h src/users/*.h src/sec/*.h src/platform/*.h src/monitor/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
+HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/monitor/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
 HDR += $(wildcard src/fw/*.h)
 # Touchpad and touchscreens: our own driver (src/tp, no libinput), gestures and touches for the
 # Wayland apps (src/wl/wl_input.c) and lord.input (src/ui/js_input.c). See docs/TRACKPAD.md.
@@ -316,20 +316,6 @@ build/tzif-test: tests/tzif_test.c src/ui/tzif.c src/ui/tzif.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/tzif_test.c src/ui/tzif.c
 	./$@ || { rm -f $@; exit 1; }
-# remote desktop security (docs/REMOTE.md, "Security analysis (0.8.3)"): the strict HTTP, form,
-# cookie, WebSocket and JSON parsers, addresses and networks, the failed-login lockout and the
-# connection rate; then the same parsers under ASan+UBSan with many random and mutated inputs
-REMOTE_SEC_SRC := src/remote/rsec.c src/remote/ipnet.c src/remote/lockout.c src/remote/rtcwire.c
-test: build/remote-sec-test build/remote-fuzz
-build/remote-sec-test: tests/remote_sec_test.c $(REMOTE_SEC_SRC) src/remote/rsec.h src/remote/ipnet.h src/remote/lockout.h src/remote/rtcwire.h tests/rtc_offer_chrome.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/remote_sec_test.c $(REMOTE_SEC_SRC)
-	./$@ || { rm -f $@; exit 1; }
-build/remote-fuzz: tests/remote_fuzz.c $(REMOTE_SEC_SRC) src/remote/rsec.h src/remote/ipnet.h src/remote/lockout.h src/remote/rtcwire.h tests/rtc_offer_chrome.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) -Itests -O1 -g $(WARN) -std=c11 -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer \
-	    -o $@ tests/remote_fuzz.c $(REMOTE_SEC_SRC)
-	./$@ 100000 || { rm -f $@; exit 1; }
 # journal reader (Logs): normal and compact synthetic files, LZ4 and XZ, broken and
 # truncated files; `build/journal-test dump <file>` dumps JSON to compare with journalctl
 test: build/journal-test
@@ -542,11 +528,6 @@ build/clipboard-native-protocol: tests/clipboard_native_protocol.c tests/clip_of
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Ibuild/gen $(WARN) -std=c11 -o $@ tests/clipboard_native_protocol.c $(filter %.c,$(CLIENT_GEN)) -lwayland-client
 build/clip-offers: tests/clip_offers.c $(CLIENT_GEN)
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Ibuild/gen $(WARN) -std=c11 -o $@ tests/clip_offers.c $(filter %.c,$(CLIENT_GEN)) -lwayland-client
-# off/on-monitor cycles against one session (tests/gpu_cycle.sh, docs/GPU.md); a test tool, never installed
-build/seat-cycle: tests/seat_cycle.c
-	@mkdir -p build
-	$(CC) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/seat_cycle.c
-
 # what slows the GPU under CPU load (tests/gpu_contention.c, docs/GPU.md): a test tool, never installed
 GC_PKGS := gbm egl glesv2
 build/gpu-contention: tests/gpu_contention.c src/gpu/gcontend.c src/gpu/gcontend.h
@@ -611,13 +592,6 @@ build/gen/%.o: build/gen/%.c
 
 build/axia-server: $(OBJ) build/obj/ui/stb.o $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(filter-out $(RUST_LIB),$^) $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS)
-
-# Root over SSH (advanced, src/remote/ssh_root.c): public key lines and fingerprints.
-test: build/ssh-root-test
-build/ssh-root-test: tests/ssh_root_test.c src/remote/ssh_root.c src/remote/ssh_root.h src/pkg/crypto.c
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ssh_root_test.c src/remote/ssh_root.c src/pkg/crypto.c
-	./$@ || { rm -f $@; exit 1; }
 
 # Version, channel and build of LordOS, shown in About and Settings → General (lord.version and
 # lord.system.info()). Version and channel come from ../package.json ("version" and "lordos": {"channel"}),
@@ -754,12 +728,6 @@ build/hwdec-test: tests/hwdec_test.c src/media/hwdec.c src/media/hwdec.h src/med
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/hwdec_test.c src/media/hwdec.c src/media/proto.c
 	./$@ || { rm -f $@; exit 1; }
 
-build/wallpaper-find-test: tests/wallpaper_find_test.c src/hw/wallpaper_find.c src/sec/json.c src/hw/wallpaper_find.h
-	@mkdir -p build
-	$(CC) $(CFLAGS) -o $@ tests/wallpaper_find_test.c src/hw/wallpaper_find.c src/sec/json.c
-	./$@
-
-test: build/wallpaper-find-test
 
 # Shared filesystem algorithms are Rust, including helper/test consumers.
 build/fsops-test build/launch-cli build/apps-actions-test build/defaults-test build/backup-test: $(RUST_LIB)

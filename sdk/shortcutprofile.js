@@ -12,7 +12,7 @@ const MAC = {
   lock: ['Meta+Ctrl+Q'], quit: ['Meta+Q'],
 };
 const LINUX = {
-  switchApps: ['Alt+Tab', 'Alt+Shift+Tab'],
+  switchApps: ['Meta+Tab', 'Meta+Shift+Tab', 'Alt+Tab', 'Alt+Shift+Tab'],
   cycleWindows: ['Alt+`', 'Alt+Shift+`'],
   minimize: ['Meta+H'], hide: [], hideOthers: [],
   closeWindow: ['Alt+F4'], showDesktop: ['Meta+D'],

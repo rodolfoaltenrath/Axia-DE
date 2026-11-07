@@ -86,6 +86,15 @@ pub fn frame(theme: &Value) -> Value {
     })
 }
 
+// Fixed-size Dock feedback. Only flat fills and opacity change on pointer
+// transitions: no animation loop, blur, shadow or geometry invalidation.
+pub fn dock_feedback(dark: bool) -> Value {
+    json!({
+        "hover": {"backgroundColor": if dark {"rgba(255,255,255,0.12)"} else {"rgba(0,0,0,0.08)"}, "opacity": 1},
+        "pressed": {"backgroundColor": if dark {"rgba(255,255,255,0.24)"} else {"rgba(0,0,0,0.18)"}, "opacity": 0.72}
+    })
+}
+
 // Pure style transport: no filesystem/session initialization, workers or polling.
 // SAFETY: the C bridge supplies a valid NUL-terminated string for this call.
 #[no_mangle]
@@ -101,7 +110,7 @@ pub unsafe extern "C" fn axia_native_style_request(
             Value::Null
         } else if let Ok(source) = serde_json::from_slice::<Value>(bytes) {
             let tokens = files_theme(&source);
-            json!({"tokens":tokens,"chrome":frame(&tokens)})
+            json!({"tokens":tokens,"chrome":frame(&tokens),"dockFeedback":dock_feedback(source["mode"] != "light")})
         } else {
             Value::Null
         }
@@ -112,6 +121,20 @@ pub unsafe extern "C" fn axia_native_style_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dock_feedback_is_visible_without_magnification_or_expensive_effects() {
+        for dark in [false, true] {
+            let feedback = dock_feedback(dark);
+            assert_ne!(feedback["hover"]["backgroundColor"], feedback["pressed"]["backgroundColor"]);
+            assert_eq!(feedback["hover"]["opacity"], 1);
+            assert_eq!(feedback["pressed"]["opacity"], 0.72);
+            for state in ["hover", "pressed"] {
+                let style = feedback[state].as_object().unwrap();
+                assert_eq!(style.len(), 2);
+                assert!(style.contains_key("backgroundColor") && style.contains_key("opacity"));
+            }
+        }
+    }
     #[test]
     fn scoped_style_preserves_shell_accent_and_legacy_tokens() {
         let source = json!({"mode":"light","accent":"#9141ac","windowBg":"#abcdef","filesAppearance":"adwaita"});

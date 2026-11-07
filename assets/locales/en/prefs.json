@@ -76,7 +76,7 @@
   "display.brightness": "Brightness",
   "display.capture": "Screenshots and sharing",
   "display.captureAll": "All displays",
-  "display.captureHint": "What screenshots, screen recording and the remote desktop see.",
+  "display.captureHint": "What screenshots and screen recording see.",
   "display.captureMain": "Main display",
   "display.extend": "Extend",
   "display.failed": "That mode could not be used. The previous one is still active.",

@@ -1,4 +1,4 @@
-/* capture.c — screenshots, recording and what the remote desktop sees, with the protected
+/* capture.c — screenshots and recording, with the protected
  * windows in black (see docs/MEDIA.md, «Protected windows»).
  *
  * A window is marked protected with wm.setProtected(id, true) (the SDK sets `protected` on the
@@ -7,10 +7,10 @@
  *   - screenshot: the whole tree is repainted onto a separate canvas in «capture
  *     mode» (paint_capture), where a protected node is a black rectangle. It respects the order
  *     of the windows: whatever is above the protected one is visible.
- *   - recording and remote desktop: if there is any protected window, a second
+ *   - recording: if there is any protected window, a second
  *     canvas in capture mode is kept, repainted only in the region that changed in each frame; if there
  *     is none, the frame is used as is (no extra cost).
- * Recording (like the remote desktop) composites on the CPU, so the frame is in memory. */
+ * Recording composites on the CPU, so the frame is in memory. */
 #include "media_int.h"
 #include "../ui/ui.h"
 #include "../wl/wl.h"
@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 static Canvas cap;                  /* scene in capture mode (persistent) */
-static int cap_valid, last_remote;
+static int cap_valid;
 static uint32_t *fs_px;             /* cap + full screen (temporary) */
 static size_t fs_cap;
 static MediaSrc *rec;               /* screen recording in progress (one at a time) */
@@ -65,7 +65,7 @@ static void repaint_cap(Rect clip) {
 }
 
 void media_scene_painted(const Canvas *scene) {
-    if (!(rec || last_remote) || !media_protected_count()) { cap_valid = 0; return; }
+    if (!rec || !media_protected_count()) { cap_valid = 0; return; }
     if (ensure_cap(scene->w, scene->h)) return;
     if (!cap_valid) { repaint_cap((Rect){ 0, 0, cap.w, cap.h }); cap_valid = 1; }
     else repaint_cap(scene->clip);
@@ -103,10 +103,9 @@ static void feed_recording(const Canvas *src, const MediaCursor *cur) {
     rec_pending = 0;
 }
 
-const Canvas *media_composed(const Canvas *out, int remote, const MediaCursor *cur) {
-    if (remote != last_remote) { last_remote = remote; cap_valid = 0; }
+const Canvas *media_composed(const Canvas *out, const MediaCursor *cur) {
     const Canvas *src = out;
-    if ((remote || rec) && media_protected_count() && !ensure_cap(out->w, out->h)) {
+    if (rec && media_protected_count() && !ensure_cap(out->w, out->h)) {
         if (!cap_valid) { repaint_cap((Rect){ 0, 0, cap.w, cap.h }); cap_valid = 1; }
         src = &cap;
         if (wl_fullscreen_active()) {
@@ -156,7 +155,7 @@ static const DisplayOut *capture_main(void) {
     return &p->o[p->main];
 }
 
-/* Size of the frames main.c feeds the recording and the remote desktop (main display or all). */
+/* Size of the frames main.c feeds the recording (main display or all). */
 void media_capture_size(int *w, int *h) {
     const DisplayOut *m = capture_main();
     *w = (m ? m->v.pw : (int)ui.width) & ~1;

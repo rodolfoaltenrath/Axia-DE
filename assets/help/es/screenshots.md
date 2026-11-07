@@ -20,5 +20,5 @@ Capturas de pantalla y grabación de la pantalla.
 - **Grabar la pantalla:** a MP4, con el micrófono si querés. ❖⇧5 la detiene.
 - La primera vez el sistema pide el **permiso de pantalla**.
 
-Las ventanas protegidas (por ejemplo las de contraseñas) salen en negro en las capturas, las
-grabaciones y el escritorio remoto.
+Las ventanas protegidas (por ejemplo las de contraseñas) salen en negro en las capturas y las
+grabaciones.

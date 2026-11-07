@@ -72,7 +72,6 @@ int  lm_encode_image(const AVFrame *bgra, const char *format, int quality, int o
 void lm_probe_json(AVFormatContext *fmt, LmBuf *b);
 
 /* ---- frame output to axia-server (lm_out.c) ---- */
-void lm_out_limit(int width, int height); /* wallpaper output budget; other media stays unlimited */
 void lm_out_init(int native);           /* native: original size (without scaling to the box) */
 int  lm_out_present(AVFrame *f, int64_t pts);   /* 0 presented, 1 dropped (no slot), -1 error */
 void lm_out_ack(uint32_t id);
@@ -104,9 +103,6 @@ void lm_screenrec(const char *params, int out, int pulse, int render);  /* lm_re
 void lm_camera(const char *params, int dev, int render);                /* lm_cam.c */
 void lm_audiorec(const char *params, int out, int pulse);               /* lm_rec.c */
 void lm_hwprobe(const int *render, int n_render);                       /* lm_hwprobe.c */
-void lm_stream(const char *params, int ring, int render);               /* lm_stream.c */
-/* the remote desktop's software encoder with its own settings (libx264, or libvpx for VP8), for LordBench */
-AVCodecContext *lm_stream_sw_encoder(int vp8, int w, int h, int fps, unsigned kbps);
 void lm_vbench(const char *params);                                     /* lm_vbench.c */
 
 #endif

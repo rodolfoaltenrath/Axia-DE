@@ -163,8 +163,8 @@ rows, remain inside the screen and are cleared on input, resizing or unmount.
   folder and local `file://` URLs. Network URLs use the connection flow.
 - Network folders use Fedora's GVfs backends. Install the appropriate backend
   for the protocol, such as `gvfs-smb` or `gvfs-nfs`; `gvfs-fuse` exposes mounted
-  folders to ordinary filesystem operations. Web/remote desktop addresses are
-  handed to the existing desktop application integration.
+  folders to ordinary filesystem operations. Web addresses are handed to the
+  existing desktop application integration.
 
 Keyboard controls accept both Ctrl and Super/Command for common actions:
 A/C/X/V, T/W/N, Shift+N (new folder), I (information), D (duplicate),

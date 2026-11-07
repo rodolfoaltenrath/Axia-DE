@@ -100,7 +100,7 @@ typedef struct Node {
     char *text;                 /* NODE_RAW */
     Image *img;                 /* NODE_IMAGE */
     int term;                   /* NODE_TERM: session id; NODE_SURFACE: Wayland surface id; NODE_MEDIA: source (media/) */
-    uint8_t protect;            /* protected window: black in screenshots, recordings and remote desktop (media/capture.c) */
+    uint8_t protect;            /* protected window: black in screenshots and recordings (media/capture.c) */
     uint8_t rtl;                /* effective direction (computed in layout) */
     uint8_t own_tf, has_tf;     /* it has a scale/rotate; it or an ancestor has one (tf is set) */
     uint8_t layout_ok, layout_rtl;  /* its subtree is laid out for its current w × h and direction */

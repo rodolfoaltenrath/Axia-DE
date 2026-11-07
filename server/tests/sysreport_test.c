@@ -629,26 +629,16 @@ static void test_facts(void) {
     snprintf(p, sizeof p, "%s/sys/fs/cgroup/system.slice/lordos.service/lordos-session-1000/app-lordos-media.scope", root); mkdirs(p);
     snprintf(p, sizeof p, "%s/sys/fs/cgroup/system.slice/lordos.service/lordos-session-1000/app-lordos-chromium.scope", root); mkdirs(p);
     put(root, "sys/fs/cgroup/system.slice/lordos.service/lordos-session-1000/cgroup.procs", "");
-    put(root, "proc/net/tcp", "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
-        "   0: 0100007F:0277 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 1 1\n"
-        "   1: 3400A8C0:1629 0500A8C0:C350 01 00000000:00000000 00:00000000 00000000     0        0 2 1\n");
-    put(root, "proc/net/tcp6", "  sl  local_address remote_address st\n"
-        "   0: 00000000000000000000000000000000:0016 00000000000000000000000000000000:0000 0A 0 0\n");
     SrFacts f;
     sr_facts(&f, root);
     int me_root = getuid() == 0;
     CHECK(f.uid == 1000 && f.euid == 1000, "facts: uid %d/%d", f.uid, f.euid);
     CHECK(!strcmp(f.cgroup, "/system.slice/lordos.service/lordos-session-1000/server"), "facts: cgroup %s", f.cgroup);
     CHECK(f.leaf_root == me_root && f.parent_root == me_root && f.app_scopes == 2, "facts: owners %d %d scopes %d", f.leaf_root, f.parent_root, f.app_scopes);
-    CHECK(sr_tcp_listening(root, 5673) == 0, "facts: 5673 only connected, not listening");
-    CHECK(sr_tcp_listening(root, 631) == 1 && sr_tcp_listening(root, 22) == 1, "facts: listening v4 and v6");
-    put(root, "proc/net/tcp6", "  sl  local_address remote_address st\n   0: 00000000000000000000000000000000:1629 00000000000000000000000000000000:0000 0A 0 0\n");
-    CHECK(sr_tcp_listening(root, 5673) == 1, "facts: 5673 listening (v6)");
     put(root, "proc/self/cgroup", "0::/../../etc\n");
     sr_facts(&f, root);
     CHECK(!f.cgroup[0] && f.leaf_root == -1, "facts: a path with .. is refused");
     rmtree(root);
-    CHECK(sr_tcp_listening("/nonexistent", 5673) == -1, "facts: no /proc/net");
 }
 
 /* The Raspberry Pi firmware's power and throttling (hw/rpifw.c, shared with LordBench) on small trees: what the

@@ -7,11 +7,8 @@ import json
 import os
 from pathlib import Path
 import re
-import socket
-import struct
 import subprocess
 import tempfile
-import threading
 import time
 
 from check import run
@@ -51,49 +48,20 @@ def main():
         with subprocess.Popen(args, cwd=staged / 'bin', env=env, stdout=subprocess.DEVNULL,
                               stderr=subprocess.PIPE, text=True, **opts) as server:
             try:
-                with socket.socket(socket.AF_UNIX) as viewer:
-                    deadline = time.monotonic() + 10
-                    while True:
-                        try:
-                            viewer.connect(str(runtime / 'axia/remote.sock'))
-                            break
-                        except (FileNotFoundError, ConnectionRefusedError):
-                            assert server.poll() is None and time.monotonic() < deadline, 'private compositor did not start'
-                            time.sleep(0.02)
-                    payload = struct.pack('<BBHI', 2, 0, 24, 300)
-                    viewer.sendall(struct.pack('<IB', len(payload) + 1, 32) + payload)
-                    viewer.settimeout(0.2)
-                    done = threading.Event()
-
-                    def drain():
-                        while not done.is_set():
-                            try:
-                                if not viewer.recv(65536):
-                                    break
-                            except socket.timeout:
-                                pass
-                            except OSError:
-                                break
-
-                    reader = threading.Thread(target=drain, daemon=True)
-                    reader.start()
-                    try:
-                        log = home / '.cache/axia/session.log'
-                        while True:
-                            content = log.read_text() if log.exists() else ''
-                            match = re.search(r'xwayland: DISPLAY=(:\d+)', content)
-                            if match:
-                                break
-                            assert time.monotonic() < deadline, content
-                            time.sleep(0.02)
-                        child = subprocess.run([str(REPO / 'server/build/clipboard-x11-protocol')],
-                                               env=dict(env, DISPLAY=match.group(1)), capture_output=True,
-                                               text=True, timeout=22, **opts)
-                        print(child.stdout + child.stderr)
-                        assert child.returncode == 0, log.read_text()
-                    finally:
-                        done.set()
-                        reader.join(timeout=1)
+                log = home / '.cache/axia/session.log'
+                deadline = time.monotonic() + 10
+                while True:
+                    content = log.read_text() if log.exists() else ''
+                    match = re.search(r'xwayland: DISPLAY=(:\d+)', content)
+                    if match:
+                        break
+                    assert server.poll() is None and time.monotonic() < deadline, 'private compositor did not start'
+                    time.sleep(0.02)
+                child = subprocess.run([str(REPO / 'server/build/clipboard-x11-protocol')],
+                                       env=dict(env, DISPLAY=match.group(1)), capture_output=True,
+                                       text=True, timeout=22, **opts)
+                print(child.stdout + child.stderr)
+                assert child.returncode == 0, log.read_text()
             finally:
                 server.terminate()
                 try:

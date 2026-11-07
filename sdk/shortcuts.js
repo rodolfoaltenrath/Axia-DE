@@ -103,7 +103,7 @@ export const BASE = [
 const front = (fn) => () => { const id = wm.focused(); if (id) fn(id); };
 const SNAP_CODES = { 103: 'up', 105: 'left', 106: 'right', 108: 'down' };
 const COMMON = [
-  { id: 'switchApps', run: (e) => openSwitcher(currentProfile === 'macos' ? 8 : 2, e.shift) },
+  { id: 'switchApps', run: (e) => openSwitcher(e.meta ? 8 : 2, e.shift) },
   { id: 'cycleWindows', run: (e) => cycleAppWindows(e.shift) },
   { id: 'minimize', run: front(wm.minimize) },
   { id: 'hide', run: front(hideApp) },

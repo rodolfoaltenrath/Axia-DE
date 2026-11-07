@@ -62,7 +62,7 @@ enum {
     LB_VID_AV1_1080,
     LB_VID_H264_2160,
     LB_VID_HEVC_2160,
-    LB_VENC_H264,                       /* the remote desktop's encoders with its own settings, 1920×1080, frames/s */
+    LB_VENC_H264,                       /* software H.264 and VP8 encoders (low latency), 1920×1080, frames/s */
     LB_VENC_VP8,
     /* measured by axia-server itself (bench/lbframes.c), desktop mode only */
     LB_COMP_FPS,                        /* the compositor, a scripted scene, nothing else running: frames shown per second */

@@ -16,7 +16,6 @@ import { useTheme } from './theme.js';
 import { spacing, typeScale, controlSize } from './controls.jsx';
 import { windows } from './windows.js';
 import { windowAppName } from './apps.js';
-import { remote } from './remote.js';
 import { flushSession, resumeSession } from './sessionrestore.jsx';
 import { onSessionPowerResult } from './hardware.jsx';
 
@@ -26,9 +25,7 @@ export const powerAsk = createStore(null);
 
 // A local Fedora seat, or the monitor connection of the original session daemon.
 const hostPower = () => typeof lord.session?.hostPower === 'function' && lord.session.hostPower();
-export const canPower = () => typeof lord.session !== 'undefined' && typeof lord.session.power === 'function'
-  && (hostPower() || (lord.session.managed()
-    && (typeof lord.session.onMonitor !== 'function' || lord.session.onMonitor())));
+export const canPower = () => typeof lord.session?.power === 'function' && hostPower();
 
 export function askPower(action) {
   if (action !== 'reboot' && action !== 'poweroff') return;
@@ -43,22 +40,11 @@ onSessionPowerResult((data) => {
   powerAsk.set((p) => p ? { ...p, state } : p);
 });
 
-// lord-sessiond's answers reach the session through the login screen's channel (RP_GREETER_IN);
-// the login screen theme has its own handler, so this one is only set in a user session.
-if (typeof lord.greeter === 'undefined') {
-  globalThis.__lordGreeter = (json) => {
-    let m = null;
-    try { m = JSON.parse(json); } catch (e) { return; }
-    if (m && m.t === 'power' && m.ok === false && powerAsk.get()) { resumeSession(); powerAsk.set((p) => (p ? { ...p, state: 'denied' } : p)); }
-  };
-}
-
 // Who else is logged in, and may this user do it with them there?
 function sessionInfo() {
   let me = null;
   try { me = (typeof lord.users !== 'undefined' ? lord.users.list().users : []).find((u) => u.self) || null; } catch (e) { me = null; }
-  const st = remote.status();
-  const others = [...new Set((st.sessions || []).map((s) => s.user).filter((u) => u && u !== me?.name))];
+  const others = []; // logind checks other sessions and inhibitors when the request is sent.
   return { others, admin: !!me?.admin };
 }
 

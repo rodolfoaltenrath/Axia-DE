@@ -13,7 +13,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Chart } from './Chart.jsx';
 import { Glyph, MonitorIcon } from './icons.jsx';
 import { NetworkTab } from './Network.jsx';
-import { RemoteGlyph } from './RemoteDesktop.jsx';
 import { MonitorPrivacy } from './Privacy.jsx';
 import { BlocklistsPrivacy } from './Blocklists.jsx';
 import { FirewallPrivacy } from './Firewall.jsx';
@@ -347,7 +346,6 @@ export function AppGlyph({ item, size = 16 }) {
   if (item.app === 'lordos') return <AxiaLogo size={size} />;
   const comp = sdk.netModel?.COMPONENTS?.[item.app];
   if (comp) return <ComponentGlyph comp={comp} size={size} />;
-  if (item.app === 'remote-desktop') return <RemoteGlyph size={size} />;
   const iso = isolatedAppOf(item);
   if (iso?.Icon) return <iso.Icon size={size} />;
   if (item.appIcon) return <Image src={item.appIcon} style={{ width: size, height: size, objectFit: 'contain' }} />;

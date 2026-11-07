@@ -4,8 +4,7 @@
 use serde_json::{json, Value};
 use std::{
     fs,
-    io::{Read, Write},
-    os::unix::{fs::PermissionsExt, net::UnixStream, process::CommandExt},
+    os::unix::{fs::PermissionsExt, process::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -78,6 +77,12 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
             "sample\n",
         );
     }
+    // The geometry golden uses English strings; host locale.conf can override
+    // LANG, so pin the fixture's UI language independently of the test machine.
+    file(
+        &home.join(".config/axia/settings.json"),
+        r#"{"language":"en","region":"en_US"}"#,
+    );
     file(
         &home.join("Documents/budget-fixture.txt"),
         "search preview sentinel\nsecond line",
@@ -161,28 +166,9 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
     }
     let mut child = command.spawn().unwrap();
     let deadline = Instant::now() + Duration::from_secs(60);
-    let mut viewer = loop {
-        if let Ok(viewer) = UnixStream::connect(home.join("runtime/axia/remote.sock")) {
-            break viewer;
-        }
-        if child.try_wait().unwrap().is_some() || Instant::now() > deadline {
-            let _ = child.kill();
-            panic!(
-                "{}",
-                fs::read_to_string(scratch.0.join("stderr.log")).unwrap()
-            );
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    };
-    viewer
-        .write_all(&[9, 0, 0, 0, 32, 2, 0, 24, 0, 44, 1, 0, 0])
-        .unwrap();
-    viewer
-        .set_read_timeout(Some(Duration::from_millis(100)))
-        .unwrap();
-    let mut buffer = [0; 65536];
+    // The headless session renders on its own; wait for the probe to finish.
     while child.try_wait().unwrap().is_none() && Instant::now() < deadline {
-        let _ = viewer.read(&mut buffer);
+        std::thread::sleep(Duration::from_millis(20));
     }
     if child.try_wait().unwrap().is_none() {
         let _ = child.kill();

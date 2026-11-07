@@ -14,7 +14,7 @@ keywords: privacy, permissions, camera, microphone, screen, sandbox, security
   they don't see your files except the ones you give them, and they can't run programs.
 - **Signatures:** every installed app is verified with its signature before it opens.
 - **Outside files:** PDFs, archives, images and videos are opened in separate, sandboxed processes.
-- **Protected windows:** those showing passwords come out black in screenshots, recordings and
-  remote desktop.
+- **Protected windows:** those showing passwords come out black in screenshots and
+  recordings.
 
 [Monitor](help:monitor) shows who each app connects to and which apps used the camera or microphone.

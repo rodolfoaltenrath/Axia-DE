@@ -717,7 +717,7 @@ pub unsafe extern "C" fn apps_launch_uri(id: *const c_char, uri: *const c_char) 
     {
         return -1;
     }
-    for scheme in [b"vnc".as_slice(), b"rdp", b"http", b"https"] {
+    for scheme in [b"http".as_slice(), b"https"] {
         let prefix = [scheme, b"://"].concat();
         if let Some(host) = uri.strip_prefix(prefix.as_slice()) {
             if host.is_empty() || host[0] == b'-' {

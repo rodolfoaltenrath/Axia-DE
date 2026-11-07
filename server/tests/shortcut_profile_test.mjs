@@ -8,7 +8,10 @@ assert.equal(shortcutProfile('linux', 'default'), 'linux');
 assert.equal(shortcutProfile('macos', 'classic'), 'macos');
 assert.equal(shortcutProfile('invalid', 'classic'), 'linux');
 assert.deepEqual(keys('switchApps', 'macos'), ['Meta+Tab', 'Meta+Shift+Tab']);
-assert.deepEqual(keys('switchApps', 'linux'), ['Alt+Tab', 'Alt+Shift+Tab']);
+assert.deepEqual(keys('switchApps', 'linux'), ['Meta+Tab', 'Meta+Shift+Tab', 'Alt+Tab', 'Alt+Shift+Tab']);
+for (const profile of ['macos', 'linux']) {
+  assert.deepEqual(keys('search', profile, ['Meta+Space']), ['Meta+Space']);
+}
 assert.deepEqual(keys('closeWindow', 'linux'), ['Alt+F4']);
 assert.deepEqual(keys('closeWindow', 'macos', ['Alt+F4']), []);
 assert.deepEqual(keys('files', 'linux'), ['Meta+E']);

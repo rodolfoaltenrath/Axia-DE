@@ -83,25 +83,3 @@ void sr_facts(SrFacts *f, const char *root) {
         }
     }
 }
-
-/* /proc/net/tcp{,6}: "  sl  local_address rem_address   st …", local "HEX:PORT", st 0A = LISTEN */
-static int scan(const char *root, const char *path, unsigned port) {
-    char *t = slurp(root, path, 4u << 20);
-    if (!t) return -1;
-    int found = 0;
-    for (char *l = strchr(t, '\n'); l && !found; l = strchr(l + 1, '\n')) {
-        char local[64], remote[64], state[8];
-        if (sscanf(l + 1, "%*s %63s %63s %7s", local, remote, state) != 3) continue;
-        const char *c = strrchr(local, ':');
-        if (c && strtoul(c + 1, NULL, 16) == port && !strcmp(state, "0A")) found = 1;
-    }
-    free(t);
-    return found;
-}
-
-int sr_tcp_listening(const char *root, unsigned port) {
-    if (!root) root = "";
-    int a = scan(root, "/proc/net/tcp", port), b = scan(root, "/proc/net/tcp6", port);
-    if (a < 0 && b < 0) return -1;
-    return a > 0 || b > 0;
-}

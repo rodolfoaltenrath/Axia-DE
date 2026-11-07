@@ -15,7 +15,4 @@ typedef struct {
 
 void sr_facts(SrFacts *f, const char *root);
 
-/* 1 if a socket listens on the TCP port (IPv4 or IPv6), 0 if none, -1 if /proc/net can't be read. */
-int sr_tcp_listening(const char *root, unsigned port);
-
 #endif

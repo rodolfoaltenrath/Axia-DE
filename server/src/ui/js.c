@@ -21,7 +21,6 @@
 #include "js_fw.h"
 #include "js_backup.h"
 #include "js_lan.h"
-#include "js_rdesk.h"
 #include "js_broker.h"
 #include "js_wasm.h"
 #include "js_net.h"
@@ -426,7 +425,6 @@ static void session_context(void) {
     js_fw_register(ctx, lord);         /* lord.fw: per-app network permissions (axia-netperm, docs/FIREWALL.md) */
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */
     js_backup_register(ctx, lord);     /* lord.backup: Backups (backup/) */
-    js_rdesk_register(ctx, lord);      /* lord.rdesk: the RDP and VNC apps */
     js_lan_register(ctx, lord);        /* lord.lan: Files → Network (lan/, docs/FILES.md) */
     js_logs_register(ctx, lord);       /* lord.logs: journal and LordOS logs (Logs app) */
     js_help_register(ctx, lord);       /* lord.help (Help) and lord.time.zoneOffset (Clock, tzif.c) */
@@ -854,27 +852,6 @@ void js_clipboard_poll(void) {
     }
 }
 
-/* Remote desktop: who is watching this session from the network (JSON [{ip, user}]). */
-void js_remote_event(const char *json) {
-    if (!ctx) return;
-    JSValueConst args[1] = { JS_NewString(ctx, json) };
-    JS_FreeValue(ctx, call_global("__lordRemote", 1, args));
-    JS_FreeValue(ctx, args[0]);
-    drain_jobs();
-}
-
-/* Remote desktop: lord-sessiond's notice for the user on the monitor (RP_NOTICE, e.g. a source blocked
- * after failed logins) → __lordRemoteNotice(object). sdk/remote.js shows it as a notification. */
-void js_remote_notice(const char *json) {
-    if (!ctx) return;
-    JSValue v = JS_ParseJSON(ctx, json, strlen(json), "<remote-notice>");
-    if (JS_IsException(v)) { JS_FreeValue(ctx, JS_GetException(ctx)); return; }
-    JSValueConst args[1] = { v };
-    JS_FreeValue(ctx, call_global("__lordRemoteNotice", 1, args));
-    JS_FreeValue(ctx, v);
-    drain_jobs();
-}
-
 /* Broker of isolated .lpk apps: "prompt" (ask for a permission) or "device" (indicator) →
  * __lordBroker(kind, json). The theme handles it in sdk/privacy.js. */
 void js_broker_event(const char *kind, const char *json) {
@@ -895,15 +872,6 @@ void js_broker_app_event(const char *kind, const char *json, size_t len) {
     JS_FreeValue(ctx, call_global("__lordBrokerEvent", 2, args));
     JS_FreeValue(ctx, args[0]);
     JS_FreeValue(ctx, args[1]);
-    drain_jobs();
-}
-
-/* Login screen (greeter theme): notices and responses from lord-sessiond. */
-void js_greeter_event(const char *json) {
-    if (!ctx) return;
-    JSValueConst args[1] = { JS_NewString(ctx, json) };
-    JS_FreeValue(ctx, call_global("__lordGreeter", 1, args));
-    JS_FreeValue(ctx, args[0]);
     drain_jobs();
 }
 

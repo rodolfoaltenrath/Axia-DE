@@ -23,7 +23,6 @@ import { MapView } from './MapView.jsx';
 import { TrafficChart, systemBuckets } from './TrafficChart.jsx';
 import { RuleSheet } from './RuleSheet.jsx';
 import { HistoryControls, HistoryChart, useHistory } from './History.jsx';
-import { REMOTE_KEY, RemoteDetail, remoteGroup, useRemoteDesktop } from './RemoteDesktop.jsx';
 import { TokenSearch, ViewButton, useNetView, TreeChildren, Child } from './NetTree.jsx';
 
 const { COMPONENTS, isSystemId, filterFlows, groupFlows, sortTree } = netModel;
@@ -816,16 +815,9 @@ export function NetworkTab({ last, prefs }) {
   const { apps: connApps } = useGroups(conns);
   const launcher = useLauncherApps();
   const fwApps = useMemo(() => withFirewall(connApps, fw, launcher), [connApps, fw, launcher]);
-  // the remote desktop (lord-sessiond, root) as one more app while it's on (RemoteDesktop.jsx), and
-  // the VPN tunnels (0.8.5)
-  const rd = useRemoteDesktop();
-  const rdg = remoteGroup(rd, tr);
+  // the VPN tunnels as one more app (0.8.5)
   const vpn = useVpnGroup(tr);
-  // the bridge's own sockets (its WebRTC UDP ports, found by its cgroup in conn.c) join that row
-  const bridge = fwApps.find((g) => g.key === REMOTE_KEY);
-  if (bridge && rdg) { rdg.listen = [...rdg.listen, ...bridge.listen]; rdg.conns = [...rdg.conns, ...bridge.conns]; }
-  else if (bridge) bridge.name = tr('monitor.net.remoteDesktop');
-  const apps = [...fwApps.filter((g) => !(rdg && g.key === REMOTE_KEY)), ...(rdg ? [rdg] : []), ...(vpn ? [vpn] : [])].sort((a, b) => b.sent + b.recv - (a.sent + a.recv) || b.conns.length - a.conns.length);
+  const apps = [...fwApps, ...(vpn ? [vpn] : [])].sort((a, b) => b.sent + b.recv - (a.sent + a.recv) || b.conns.length - a.conns.length);
   const [view, setView, mprefs, setPrefs] = useNetView();
   const [chips, setChips] = useState([]);
   const [text, setText] = useState('');
@@ -884,7 +876,7 @@ export function NetworkTab({ last, prefs }) {
     toggle,
     toggleAll: (key) => setAll((s0) => { const n = new Set(s0); if (n.has(key)) n.delete(key); else n.add(key); return n; }),
     selected, selectedHost: host,
-    isSystem: (id) => isSystemId(id) || id === REMOTE_KEY,
+    isSystem: (id) => isSystemId(id),
     restrictedOf: (id) => restrictedOf[id] || [],
     appLabel: (n) => labelOf(tr, byKey.get(n.app) || { key: n.app, name: n.label }),
     itemOf: (n) => byKey.get(n.app)?.item || { app: n.app, appName: n.label },
@@ -973,7 +965,7 @@ export function NetworkTab({ last, prefs }) {
       <View style={{ ...column, width: 270, padding: 12 }}>
         <ScrollView style={{ flex: 1, marginHorizontal: -12 }} contentStyle={{ paddingHorizontal: 12 }}>
           <View style={{ gap: 16 }}>
-            {selPlace ? <PlaceDetail p={selPlace} tr={tr} /> : sel?.key === REMOTE_KEY ? <RemoteDetail rd={rd} Section={Section} KV={KV} tr={tr} /> : sel ? (
+            {selPlace ? <PlaceDetail p={selPlace} tr={tr} /> : sel ? (
               <Detail g={sel} tr={tr} user={sys.user} names={names} host={host} onHost={setHost} hist={hist.get(sel.key)} range={range} end={end} onRule={(addr, action) => ruleFor(sel, addr, action)} />
             ) : <Summary groups={apps} conns={conns} last={last} tr={tr} fw={fw} names={names} range={range} sysHist={sysHist} launcher={launcher} lists={lists} />}
           </View>

@@ -42,14 +42,12 @@ Website: [lordos.org](https://lordos.org) · Brand kit: [LORDOS-BRAND.md](LORDOS
 | [GPU.md](GPU.md) | GPU composition, dmabuf and the CPU path |
 | [DOCK.md](DOCK.md) | Dock and taskbar |
 | [DESKTOPS.md](DESKTOPS.md) | Desktops and Overview |
-| [WALLPAPERS.md](WALLPAPERS.md) | Moving wallpapers on the desktop and the login screen |
 | [ON-SCREEN-KEYBOARD.md](ON-SCREEN-KEYBOARD.md) | The on-screen keyboard, for a computer with no physical keyboard |
 | [THEMES-GUIDE.md](THEMES-GUIDE.md) | How to build a LordOS appearance (theme): anatomy, tokens, frames, building, verified code, testing |
 | [LAYERS.md](LAYERS.md) | The desktop's stacking order: what is drawn and clicked above what |
 | [SPOTLIGHT.md](SPOTLIGHT.md) | Search and the advanced clipboard |
 | [TRACKPAD.md](TRACKPAD.md) | Touchpads, gestures and touchscreens |
 | [SESSIONS.md](SESSIONS.md) | Login screen, sessions, user switching, boot splash hand-off |
-| [REMOTE.md](REMOTE.md) | Remote desktop on the LAN (off by default, port 5673), SSH and root over SSH (0.8.5, advanced) |
 | [LANGUAGES.md](LANGUAGES.md) | Languages, regions, complex scripts, input methods, error messages |
 
 ## Privacy and security

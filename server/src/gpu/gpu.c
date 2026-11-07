@@ -66,8 +66,6 @@ void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float
 }
 int  gpu_scanout(const GpuDmabuf *d, void (*done)(void *), void *data) { (void)d; (void)done; (void)data; return -1; }
 int  gpu_can_scanout(const GpuDmabuf *d, int w, int h) { (void)d; (void)w; (void)h; return 0; }
-void gpu_read_next(uint32_t *px, int w, int h) { (void)px; (void)w; (void)h; }
-int  gpu_read_done(void) { return 0; }
 
 #else
 
@@ -852,29 +850,6 @@ void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float
     glDisable(GL_SCISSOR_TEST);
 }
 
-static struct { uint32_t *px; int w, h, done; } rb;
-
-void gpu_read_next(uint32_t *px, int w, int h) { rb.px = px; rb.w = w; rb.h = h; rb.done = 0; }
-int gpu_read_done(void) { return rb.done; }
-
-/* RGBA bytes, bottom row first (GL) → 0xAARRGGBB words, top row first; opaque. */
-static void read_back(int W, int H) {
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, rb.px);
-    if (glGetError() != GL_NO_ERROR) return;
-    for (int y = 0; y < (H + 1) / 2; y++) {
-        uint32_t *a = rb.px + (size_t)y * W, *b = rb.px + (size_t)(H - 1 - y) * W;
-        for (int x = 0; x < W; x++) {
-            const uint8_t *pa = (const uint8_t *)&a[x], *pb = (const uint8_t *)&b[x];
-            uint32_t va = 0xff000000u | (uint32_t)pa[0] << 16 | (uint32_t)pa[1] << 8 | pa[2];
-            uint32_t vb = 0xff000000u | (uint32_t)pb[0] << 16 | (uint32_t)pb[1] << 8 | pb[2];
-            a[x] = vb;
-            b[x] = va;
-        }
-    }
-    rb.done = 1;
-}
-
 /* Uploads r of px (sw wide, stride px a row) into the bound texture (texw wide). Without
  * GL_EXT_unpack_subimage GLES2 reads rows of the upload's own width: whole rows then, in one call when
  * they are contiguous in px, else one row at a time. Returns the pixels sent. */
@@ -1329,7 +1304,6 @@ int gpu_frame_ex(int out, const Canvas *scene, const Rect *dmg, int n, const Gpu
      * Not drawn, that rectangle is stale in the UI texture: nothing is shown (-2), the caller paints it */
     if (gdrag) {
         if (!gdrag_frame(o, out, gdrag)) {
-            rb.px = NULL;
             gsc_reset(&o->sc);              /* the buffer was written and is not swapped */
             o->sc_busy = 1;
             return -2;
@@ -1337,10 +1311,6 @@ int gpu_frame_ex(int out, const Canvas *scene, const Rect *dmg, int n, const Gpu
         if (gdrag_drawn) *gdrag_drawn = 1;
     }
     if (draw_layer) draw_layer(1);
-    if (rb.px) {
-        if (rb.w == o->W && rb.h == o->H) read_back(o->W, o->H);
-        rb.px = NULL;
-    }
     double t1 = mono_ms();
     if (!eglSwapBuffers(G.dpy, o->surf)) { fprintf(stderr, "gpu: eglSwapBuffers failed\n"); return -1; }
     double t2 = mono_ms();

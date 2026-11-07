@@ -5,7 +5,7 @@
 #undef main
 
 static int checks, uploads, moves, texture_uploads, fail_upload, gpu_on;
-static int last_x, last_y, client_mode, viewers, recording;
+static int last_x, last_y, client_mode, recording;
 static unsigned client_gen = 1;
 static uint32_t pixels[80 * 80];
 static CursorImage image = { pixels, 32, 32, 3, 4 };
@@ -13,7 +13,6 @@ Ui ui;
 #define CHECK(c) do { checks++; if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); return 1; } } while (0)
 
 int gpu_active(void) { return gpu_on; }
-int mirror_watchers(void) { return viewers; }
 int media_needs_cpu(void) { return recording; }
 GpuTex *gpu_tex_pixels(GpuTex *t, const uint32_t *p, int w, int h, int opaque) {
     (void)t; (void)p; (void)w; (void)h; (void)opaque;
@@ -62,8 +61,6 @@ int main(void) {
     CHECK(moves-before==1000); /* cursor moves while the scene's flip is pending */
     CHECK(uploads==1 && texture_uploads==0); /* no per-motion image/texture uploads */
     CHECK(!s.cursor_dirty && !s.out[0].cdirty && !out_needs(&s,&s.out[0]));
-    viewers=1; cursor_motion(&s); CHECK(s.cursor_dirty); /* remote cursor updates preserved */
-    viewers=0; s.cursor_dirty=0;
     recording=1; cursor_motion(&s); CHECK(s.cursor_dirty);
     recording=0; s.cursor_dirty=0;
 

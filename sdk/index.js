@@ -17,7 +17,6 @@ import { resetShortcuts } from './shortcuts.js';
 export { AppSwitcher, openSwitcher, cycleAppWindows } from './appswitcher.jsx';
 export { dockGlass } from './glass.js';
 export { shortcutProfile } from './shortcutprofile.js';
-export { RemoteDeskApp } from './remotedesk.jsx';
 export { osk, oskState, startOsk } from './osk.js';
 export { OskPanel, OskIcon, OskStatus, oskLift } from './osk.jsx';
 export { trackpad, useTrackpads, hasTouchpad, registerGestureActions, lastSwipe, TRACKPAD_DEFAULTS, trackpadConfig, setTrackpad } from './trackpad.js';
@@ -33,8 +32,6 @@ import { OskPanel, OskStatus } from './osk.jsx';
 import { registerStatusItem } from './statusitems.js';
 import { ClipboardPanel, ClipboardToast, clipboard as clipboardApi } from './clipboard.js';
 import { SpotlightPanel } from './rustsearch.jsx';
-import { RemoteBadge } from './remote.js';
-export { remote, remoteViewers, sshLogin, remoteCidr, remoteMinutesLeft, remoteAccess, remoteVideo, remoteIceServer, remoteFingerprint } from './remote.js';
 export { perms, permsRev, requestPermission, markDeviceUse, useIndicators, PrivacyIndicators, PermissionPrompt, registerPrivacySection, privacySections, PERMISSIONS, onPermissionRevoked, micStart, micStop, micLevel } from './privacy.js';
 import { PermissionPrompt } from './privacy.js';
 import { Powerbox } from './powerbox.jsx';
@@ -259,12 +256,10 @@ function LocaleRoot({ children }) {
     at('overlay', SpotlightPanel),
     at('popover', ClipboardPanel, EmojiPanel),
     at('modal', PrintDialog, RestorePrompt),
-    at('notification', NotificationBanner, ClipboardToast, RemoteBadge, DisplayIdentify),
+    at('notification', NotificationBanner, ClipboardToast, DisplayIdentify),
     at('system', PermissionPrompt, Powerbox, KeyringPrompt, BluetoothPrompt, DisplayConfirm),
     at('input', OskPanel, ImeOverlay));
 }
-export { setLoginStill, MotionWallpaper, MOTION_SECTIONS, MOTION_RATES, motionBusy, motionError, motionProfile, motionItems, motionThumb, motionPoster, motionDownloads, useCodecs, downloadMotion, removeMotion, setLoginMotion, variantFor } from './motion.jsx';
-export { userVideoProblem, motionCodecs, MAX_SECONDS } from './motionmodel.js';
 export { lordosWallpapers, wallpaperSrc, wallpaperThumb, findWallpaper, DEFAULT_WALLPAPER, GREETER_WALLPAPER, WALLPAPER_CATEGORIES } from './wallpapers.js';
 export { appGroup, appMenuItems, runningApps, forceQuit, recentItems, storeUpdates, hideApp, hideOthers, toggleShowDesktop, appSettingsItem } from './appcontrol.js';
 export { windowMenuItems, moveResizeItems } from './windowmenu.js';

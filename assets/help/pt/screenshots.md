@@ -21,5 +21,5 @@ Capturas de tela e gravação da tela.
 - **Gravar a tela:** em MP4, com o microfone se quiser. ❖⇧5 para a gravação.
 - Na primeira vez o sistema pede a **permissão de tela**.
 
-As janelas protegidas (por exemplo as de senhas) saem pretas nas capturas, nas gravações e no
-desktop remoto.
+As janelas protegidas (por exemplo as de senhas) saem pretas nas capturas e nas
+gravações.

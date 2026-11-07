@@ -5,9 +5,7 @@
 
 use serde_json::{json, Value};
 use std::fs;
-use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -129,29 +127,9 @@ fn real_launcher_catalog_and_both_theme_menus() {
     }
     let mut child = command.spawn().unwrap();
     let deadline = Instant::now() + Duration::from_secs(45);
-    let mut viewer = loop {
-        if let Ok(viewer) = UnixStream::connect(home.join("runtime/axia/remote.sock")) {
-            break viewer;
-        }
-        if child.try_wait().unwrap().is_some() || Instant::now() >= deadline {
-            let _ = child.kill();
-            panic!(
-                "headless viewer startup: {}",
-                fs::read_to_string(scratch.0.join("stderr.log")).unwrap()
-            );
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    };
-    // Existing private-viewer protocol: type 32, software/24-bit/300ms.
-    viewer
-        .write_all(&[9, 0, 0, 0, 32, 2, 0, 24, 0, 44, 1, 0, 0])
-        .unwrap();
-    viewer
-        .set_read_timeout(Some(Duration::from_millis(100)))
-        .unwrap();
-    let mut buffer = [0; 65536];
+    // The headless session renders on its own; wait for the probe to finish.
     while child.try_wait().unwrap().is_none() && Instant::now() < deadline {
-        let _ = viewer.read(&mut buffer);
+        std::thread::sleep(Duration::from_millis(20));
     }
     if child.try_wait().unwrap().is_none() {
         let _ = child.kill();

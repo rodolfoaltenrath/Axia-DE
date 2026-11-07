@@ -19,7 +19,6 @@ Everything you can configure in Axia DE is in Settings. The field at the top sea
 | [Sound](settings:sound) | Outputs, inputs, per-app volume (see [Sound](help:sound)) |
 | [Printers & Scanners](settings:printers) | See [Printing](help:printing) |
 | [Clipboard](settings:clipboard) | History and privacy (see [Clipboard](help:clipboard)) |
-| [Sharing](settings:sharing) | Remote desktop (see [Remote desktop](help:remote-desktop)) |
 | [Language & Region](settings:language) | Language, formats, time zone (see [Language & Region](help:language)) |
 | [Keyboard](settings:keyboard) | Layouts and input methods (see [Keyboard](help:keyboard)) |
 | [Trackpad](settings:trackpad) | When there is a touchpad (see [Touchpad](help:trackpad)) |
