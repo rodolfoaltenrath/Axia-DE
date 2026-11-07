@@ -229,12 +229,13 @@ def main():
                     entry['size'] = len(fixture)
                     entry['sha256'] = hashlib.sha256(fixture).hexdigest()
             (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
-            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '8',
+            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '14',
                         '--theme', '../themes/default/theme.bundle.js'], home / 'runtime',
                        cwd=staged / 'bin', env=env, **opts)
             log = (home / '.cache/axia/session.log').read_text()
             assert 'dock preview integration: passed' in log, log
             assert 'dock feedback integration: passed' in log, log
+            assert 'dock native animation integration: passed' in log, log
             for error in ['dock preview smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
     print('desktop: no OS backend, manifest valid, installation isolated, headless startup passed')

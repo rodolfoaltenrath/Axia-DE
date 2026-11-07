@@ -211,18 +211,34 @@ already open don't move.
 If there are many apps, the icons shrink so the Dock fits on the screen, counting how much it grows
 with magnification.
 
-## Auto-hide, at no cost
+## Native auto-hide and removal effects
 
-The Dock is not drawn while it is hidden. A pointer listener (`useAutohide` in
+The Dock stays mounted while hidden, translated beyond its display edge by the native animator.
+A pointer listener (`useAutohide` in
 `themes/default/components/Dock.jsx`) only checks whether the pointer touched the edge of the chosen side:
 
 1. when it does, it waits 120 ms and shows the Dock with a 180 ms animation;
 2. if the pointer leaves the Dock (with an 8 px margin), it waits 500 ms and hides it;
 3. with the right-click menu open or the pointer over an icon, it stays.
 
-The state only changes when crossing those limits. Moving the mouse over the rest of the screen
-doesn't redraw anything, and the animation redraws only the Dock, not the desktop. Magnification
-already worked this way: its state belongs to the Dock component.
+React receives only visibility targets. `lord.anim.dockVisibility` passes the target to
+`rust/axia-shell/src/anim.rs`, which owns the 180 ms quadratic easing, displacement and interruption
+state. Reversing the animation samples its current position rather than jumping to an endpoint.
+The C bridge applies paint-only transforms, keeping the hit box aligned with the image. A
+display-sized clip prevents a hidden Dock from painting or intercepting input on an adjacent
+display. With
+reduced motion enabled, visibility changes immediately.
+
+The removal «poof» uses `lord.anim.dockPoof`: Rust computes the icon's shrink/fade and five puffs'
+linear trajectories over 320 ms. React mounts fixed-size rasters once and removes them after a
+single completion notice. Replacing or unmounting an effect releases its completion listener.
+Reduced motion suppresses this decorative effect. Headless and software-paced outputs use a Rust
+animation deadline to wake the compositor for each frame even when JS is idle; real KMS outputs
+continue to wake on pending page flips, with a deadline when no flip was submitted (for example
+for an off-screen effect). Completion also requests one immediate loop iteration for UI work
+scheduled by the end notice, so cleanup does not sleep until an unrelated JS timer. Reordering
+and magnification still use the
+existing Dock layout; this migration does not move their logic to Rust yet.
 
 ## Above and below
 

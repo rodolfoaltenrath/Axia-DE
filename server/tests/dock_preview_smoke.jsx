@@ -5,7 +5,8 @@ import { configureWindows, windows, wm } from '../../sdk/windows.js';
 import { useDockPreviews } from '../../sdk/dockpreviews.jsx';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { Dock } from '../../themes/default/components/Dock.jsx';
-import { dockPrefs } from '../../sdk/dock.js';
+import { dockPrefs, dockPoof } from '../../sdk/dock.js';
+import { settings } from '../../sdk/settings.js';
 import { color } from '../../runtime/style.js';
 const check = (value, message) => { if (!value) throw new Error('dock preview smoke: ' + message); };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,8 +25,11 @@ for (const method of ['createNode', 'appendChild', 'insertBefore', 'setStyle', '
     return result;
   };
 }
-let opens = 0, changeDock;
-const DockIcon = ({ size }) => h(View, { style: { width: size, height: size, backgroundColor: '#5c946e' } });
+let opens = 0, changeDock, iconRenders = 0, pauseSource = false;
+const visibility = [];
+const originalVisibility = lord.anim.dockVisibility;
+lord.anim.dockVisibility = (...args) => { visibility.push(args); return originalVisibility(...args); };
+const DockIcon = ({ size }) => { iconRenders++; return h(View, { style: { width: size, height: size, backgroundColor: '#5c946e' } }); };
 const originalPreview = lord.wm.preview;
 lord.wm.preview = (...args) => { const out = originalPreview(...args); if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++; return out; };
 const original = lord.wm.thumbnail;
@@ -40,13 +44,13 @@ function Harness() {
   const p = useDockPreviews({ hit: hover ? { id: 'app:preview-test' } : null, anchor: { x: 500, y: 580 },
     area: { x: 0, y: 0, w: 1000, h: 700 }, position: 'bottom', disabled: false, theme });
   latest = p;
-  useEffect(() => { const timer = setInterval(() => setFrame((n) => n + 1), 170); return () => clearInterval(timer); }, []);
+  useEffect(() => { const timer = setInterval(() => { if (!pauseSource) setFrame((n) => n + 1); }, 170); return () => clearInterval(timer); }, []);
   useEffect(() => { source = root.current; setTimeout(() => run().catch((e) => console.error(e)), 120); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
     h(View, { ref: (inst) => { root.current = inst; wm.frameRef('preview-test')(inst); }, style: { position: 'absolute', left: 50, top: 40, width: 600, height: 300, backgroundColor: frame % 2 ? '#bc4535' : '#255bad' } },
       h(Text, { style: { color: '#ffffff', fontSize: 26, padding: 30 } }, `Live content ${frame}`)), p.panel,
     h(Dock, { t: { ...theme, mode: dock.mode, effects: dock.position !== 'left' }, items: [{ id: 'app:preview-test', name: 'Test', Icon: DockIcon }],
-      running: [], onOpen: () => { opens++; }, position: dock.position, size: 54,
+      running: [], onOpen: () => { opens++; }, position: dock.position, size: 54, autohide: !!dock.autohide,
       area: { x: 0, y: 0, w: 1000, h: 700 } }));
 }
 async function checkFeedback() {
@@ -81,6 +85,59 @@ async function checkFeedback() {
   }
   console.log('dock feedback integration: passed');
 }
+async function checkNativeDockAnimations() {
+  pauseSource = true;
+  settings.set({ reduceMotion: false });
+  for (const position of ['bottom', 'left', 'right']) {
+    changeDock({ position, mode: 'dark', autohide: true });
+    await sleep(260);
+    const hidden = visibility[visibility.length - 1];
+    check(hidden?.[3] === false, 'auto-hide starts hidden: ' + position);
+    const node = hidden[0], layout = lord.getLayout(node);
+    check(position === 'bottom' ? layout[1] >= 700 : position === 'left' ? layout[0] + layout[2] <= 0 : layout[0] >= 1000,
+      'hidden Dock moves beyond its display edge: ' + position);
+    const [x, y] = position === 'bottom' ? [500, 699] : position === 'left' ? [0, 350] : [999, 350];
+    __lordEvent('move', 0, x, y, 0);
+    await sleep(170);
+    check(visibility[visibility.length - 1]?.[3] === true, 'edge dwell shows Dock: ' + position);
+    const renders = iconRenders;
+    await sleep(160);
+    check(iconRenders === renders, 'native reveal never renders the icon per frame');
+    const shown = lord.getLayout(node);
+    check(position === 'bottom' ? shown[1] < 700 : position === 'left' ? shown[0] >= 0 : shown[0] < 1000,
+      'shown Dock returns to display: ' + position);
+    __lordEvent('move', 0, 500, 100, 0);
+    await sleep(750);
+    check(visibility[visibility.length - 1]?.[3] === false, 'leaving hides after grace: ' + position);
+  }
+  settings.set({ reduceMotion: true });
+  await sleep(50);
+  check(visibility[visibility.length - 1]?.[4] === true, 'reduced motion applies visibility immediately');
+  changeDock({ position: 'bottom', mode: 'dark', autohide: false });
+  await sleep(80);
+  const baseline = lord.stats().nodes;
+  dockPoof.set({ x: 300, y: 300, Icon: DockIcon, t0: Date.now() });
+  await sleep(60);
+  check(lord.stats().nodes === baseline, 'reduced motion suppresses the removal effect');
+  settings.set({ reduceMotion: false });
+  await sleep(60);
+  check(lord.stats().nodes === baseline, 'turning animations on never replays an old removal event');
+  // A fresh effect replaces the old one; no stale end handler may remove it.
+  dockPoof.set({ x: 300, y: 300, Icon: DockIcon, t0: Date.now() + 1 });
+  await sleep(80);
+  check(lord.stats().nodes > baseline + 5, 'native removal mounts the icon and five puffs');
+  const count = iconRenders;
+  await sleep(140);
+  check(iconRenders === count, 'native removal never renders its icon per frame');
+  dockPoof.set({ x: 400, y: 300, Icon: DockIcon, t0: Date.now() + 2 });
+  await sleep(180);
+  check(lord.stats().nodes > baseline + 5, 'replacement effect survives the old completion deadline');
+  await sleep(250);
+  check(lord.stats().nodes === baseline, 'completion removes every temporary effect node');
+  dockPoof.set(null);
+  console.log('dock native animation integration: passed');
+}
+
 async function run() {
   check(source?.id && lord.wm.preview, 'native source and bridge exist');
   check(calls === 0, 'no capture work at rest');
@@ -99,5 +156,6 @@ async function run() {
   globalThis.__lordEvent('down', 0, 4, 4, 0); await sleep(120); check(!latest.open, 'outside press dismisses');
   console.log('dock preview integration: passed');
   await checkFeedback();
+  await checkNativeDockAnimations();
 }
 render(h(Harness));

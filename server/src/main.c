@@ -2397,6 +2397,9 @@ int main(int argc, char **argv) {
         }
         if (wants && pace > 0 && (delay < 0 || pace < delay)) delay = pace;
 
+        double anim_delay = unseen ? -1 : js_anim_timeout(now_ms(), pace_next, s.headless || soft,
+            any_flip_pending(&s), main_out(&s)->kms.mode.vrefresh, js_wants_frame());
+        if (anim_delay >= 0 && (delay < 0 || anim_delay < delay)) delay = anim_delay;
         int wait = delay < 0 ? -1 : (int)ceil(delay);
         if ((wants && (!all_busy(&s) || ahead) && pace <= 0) || ui.theme_request[0] || ui.quit_requested) wait = 0;
         if (timeout_ms > 0) {

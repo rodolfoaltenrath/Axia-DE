@@ -6,9 +6,9 @@
 //   flowDesktopKeys, classicDesktopKeys     the theme tables' entries (sdk/shortcuts.js)
 //   desktopSwipe(dir)                       a registerGestureActions action
 //
-// The animation: the windows arriving slide a little and fade in, on their cached raster, by setting
-// the transform of each one's node (lord.setStyle: no React render per frame). A short timer loop runs
-// only during a switch, and none at all with Reduce motion.
+// The animation: the windows arriving slide a little and fade in, stepped by the native animator
+// (lord.anim.slide, rust/axia-shell/src/anim.rs): no JS and no relayout per frame, and none at all
+// with Reduce motion.
 import { createElement as h } from 'react';
 import { View, Text, mainDisplay } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
@@ -19,9 +19,10 @@ import { Layer } from './layers.js';
 import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing } from './windows.js';
 import { MAX_DESKTOPS, visibleOn, neighbor, arrowStep, swipeStep, cleanCount, cleanIndex } from './desktopmodel.js';
 import { cycleWindows } from './trackpad.js';
+import { nativeAnim, whenAnimDone } from './anim.js';
 import { toggleOverview, toggleAppWindows } from './overview.jsx';
 
-const FX_MS = 170, FX_SLIDE = 56, HUD_MS = 800;
+const HUD_MS = 800;
 
 // ---- names and positions ----
 
@@ -145,36 +146,21 @@ function showHud() {
   hudTimer = setTimeout(() => hudState.set(false), HUD_MS);
 }
 
-// While it runs: the windows' start offset, read once by WindowShell. Null when idle.
-export const desktopFx = createStore(null);
-let fxTimer = 0;
-// lord.setStyle takes native properties: a CSS transform only exists in React styles (runtime/style.js)
-const style = (node, k, v) => { try { lord.setStyle(node, k, v); } catch (e) { /* closed meanwhile */ } };
-
-function endFx(nodes) {
-  clearTimeout(fxTimer);
-  fxTimer = 0;
-  for (const n of nodes) { style(n, 'translateX', undefined); style(n, 'opacity', undefined); }
-  desktopFx.set(null);
-}
+// Switching desktops: the windows that appear slide in, natively (lord.anim.slide,
+// rust/axia-shell/src/anim.rs): no JS and no relayout per frame; their own values come back at the end.
+const sliding = new Set();                          // the nodes the last switch animates
 function animate(step) {
-  endFx([]);
-  if (settings.get().reduceMotion || overviewShowing.get() || typeof lord === 'undefined') return;
-  const dx = step * FX_SLIDE * (direction() === 'rtl' ? -1 : 1);
-  const t0 = Date.now();
-  desktopFx.set({ transform: `translate(${dx}px, 0px)`, opacity: 0 });
-  const tick = () => {
-    const nodes = visibleOn(windows.get(), activeDesktop.get()).map((w) => fxNodes.get(w.id)).filter(Boolean);
-    const p = Math.min(1, (Date.now() - t0) / FX_MS);
-    if (p >= 1) { endFx(nodes); return; }
-    const e = 1 - (1 - p) * (1 - p) * (1 - p);        // ease-out
-    for (const n of nodes) {
-      style(n, 'translateX', +(dx * (1 - e)).toFixed(1));
-      style(n, 'opacity', +e.toFixed(3));
-    }
-    fxTimer = setTimeout(tick, 16);
-  };
-  fxTimer = setTimeout(tick, 16);
+  const anim = nativeAnim();
+  for (const n of sliding) anim?.clear(n);
+  sliding.clear();
+  if (!anim || settings.get().reduceMotion || overviewShowing.get()) return;
+  const rtl = direction() === 'rtl';
+  for (const n of visibleOn(windows.get(), activeDesktop.get()).map((w) => fxNodes.get(w.id)).filter(Boolean)) {
+    const id = anim.slide(n, step, rtl);
+    if (!id) continue;
+    sliding.add(n);
+    whenAnimDone(id, () => { if (sliding.delete(n)) anim.clear(n); });
+  }
 }
 
 let shown = activeDesktop.get();

@@ -24,7 +24,7 @@ static float origin_px(Dim d, float size) {
 
 /* What the node shows now. */
 static AnimProps current(const Node *n) {
-    AnimProps p = { 1, 1, n->s.opacity, 0, 0, 0 };
+    AnimProps p = { 1, 1, n->s.opacity, 0, 0, n->s.translate_x, n->s.translate_y, 0 };
     const StyleExt *x = n->s.ext;
     if (x) {
         p.scale_x = x->scale_x;
@@ -46,6 +46,8 @@ static void apply(Node *n, const AnimProps *p) {
     style_set_number(&n->s, "scaleX", p->scale_x);
     style_set_number(&n->s, "scaleY", p->scale_y);
     style_set_number(&n->s, "opacity", p->opacity);
+    style_set_number(&n->s, "translateX", p->translate_x);
+    style_set_number(&n->s, "translateY", p->translate_y);
     if (p->origin_set) {
         style_set_number(&n->s, "transformOriginX", p->origin_x);
         style_set_number(&n->s, "transformOriginY", p->origin_y);
@@ -57,6 +59,9 @@ static void apply(Node *n, const AnimProps *p) {
 }
 
 int js_anim_active(void) { return axia_anim_active(); }
+double js_anim_timeout(double now, double next_frame, int software_paced, int waiting_for_flip, unsigned refresh_hz, int js_frames) {
+    return axia_anim_timeout(now, next_frame, software_paced != 0, waiting_for_flip != 0, refresh_hz, js_frames != 0);
+}
 
 void js_anim_step(double now) {
     (void)now;                          /* Rust and the shell share CLOCK_MONOTONIC (now_ms) */
@@ -83,6 +88,48 @@ static JSValue f_minimize(JSContext *c, JSValueConst this_val, int argc, JSValue
     return JS_NewUint32(c, a);
 }
 
+/* lord.anim.slide(node, step, rtl) → id: a desktop switch (step ±1) slides the node in. */
+static JSValue f_slide(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    int32_t id = 0, step = 0;
+    if (argc < 2 || JS_ToInt32(c, &id, argv[0]) || JS_ToInt32(c, &step, argv[1])) return JS_NewInt32(c, 0);
+    Node *n = node_get(id);
+    if (!n) return JS_NewInt32(c, 0);
+    AnimProps base = current(n);
+    return JS_NewUint32(c, axia_anim_slide(id, now_ms(), step, argc > 2 && JS_ToBool(c, argv[2]), &base));
+}
+
+/* Dock geometry and frame progression belong to Rust. C only converts arguments and applies
+ * the initial style, so a newly mounted puff never flashes at its unscaled size. */
+static JSValue f_dock_visibility(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    int32_t node = 0, edge = -1;
+    double distance = 0;
+    if (argc < 4 || JS_ToInt32(c, &node, argv[0]) || JS_ToInt32(c, &edge, argv[1]) ||
+        JS_ToFloat64(c, &distance, argv[2]) || edge < 0 || edge > 2) return JS_NewInt32(c, 0);
+    Node *n = node_get(node);
+    if (!n) return JS_NewInt32(c, 0);
+    AnimProps base = current(n), initial;
+    uint32_t id = axia_anim_dock_visibility(node, now_ms(), (uint8_t)edge, (float)distance,
+        JS_ToBool(c, argv[3]) > 0, argc > 4 && JS_ToBool(c, argv[4]) > 0, &base, &initial);
+    if (id) apply(n, &initial);
+    return JS_NewUint32(c, id);
+}
+
+static JSValue f_dock_poof(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    int32_t node = 0, part = -1;
+    double size = 0;
+    if (argc < 3 || JS_ToInt32(c, &node, argv[0]) || JS_ToFloat64(c, &size, argv[1]) ||
+        JS_ToInt32(c, &part, argv[2]) || part < 0 || part > 5) return JS_NewInt32(c, 0);
+    Node *n = node_get(node);
+    if (!n) return JS_NewInt32(c, 0);
+    AnimProps base = current(n), initial;
+    uint32_t id = axia_anim_dock_poof(node, now_ms(), (float)size, (uint8_t)part, &base, &initial);
+    if (id) apply(n, &initial);
+    return JS_NewUint32(c, id);
+}
+
 /* lord.anim.clear(node): stops its animation and puts back what it showed before. */
 static JSValue f_clear(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
@@ -97,7 +144,10 @@ static JSValue f_clear(JSContext *c, JSValueConst this_val, int argc, JSValueCon
 
 static const JSCFunctionListEntry anim_funcs[] = {
     JS_CFUNC_DEF("minimize", 3, f_minimize),
+    JS_CFUNC_DEF("slide", 3, f_slide),
     JS_CFUNC_DEF("clear", 1, f_clear),
+    JS_CFUNC_DEF("dockVisibility", 5, f_dock_visibility),
+    JS_CFUNC_DEF("dockPoof", 3, f_dock_poof),
 };
 
 void js_anim_register(JSContext *c, JSValue lord) {
