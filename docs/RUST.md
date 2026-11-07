@@ -318,3 +318,12 @@ No caminho GPU, um quadro cuja única mudança é esse recálculo pinta cada gla
 separado (`glass_only_frame` em `paint.c`), em vez de unir a barra e a Dock numa
 caixa que ocupa quase a tela toda. Qualquer outra mudança no quadro volta a uma
 caixa só; `paint_multi_damage` continua desligado. A aparência do glass não muda.
+
+## Histórico da área de transferência
+
+`clipboard/` possui o modelo e a persistência em uma thread da sessão. A ponte C
+transporta cópias concluídas, sensibilidade e descritores de PNG; o SDK mantém a
+API pública e os painéis existentes. Escrita, leitura, classificação, limites,
+fixados e limpeza saíram do JavaScript. Mudanças chegam por eventfd e deltas,
+sem polling em repouso. A seleção nativa do Wayland continua no compositor.
+Veja [CLIPBOARD.md](CLIPBOARD.md) para compatibilidade, limites e validação.

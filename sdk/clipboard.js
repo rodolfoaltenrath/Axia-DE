@@ -13,7 +13,7 @@
 //   clipboard.get() / clipboard.set(text, { secure, origin })
 //   useStore(clipboardHistory) → [{ id, kind: 'text'|'image', type, text?, image?, origin, time, pinned }]
 //   <ClipboardPanel /> (❖V quick, ❖⇧V full) is mounted by startShell: every theme has it.
-import { createElement as h, useEffect, useRef, useState } from 'react';
+import { createElement as h, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, addListener, screen, mainBox } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { useTheme } from './theme.js';
@@ -21,175 +21,75 @@ import { t, formatDate } from './i18n.js';
 import { settings } from './settings.js';
 import { wm } from './windows.js';
 import { TextInput, focusToken, restoreFocus, pasteIntoFocused } from './components.jsx';
-import * as fs from './fs.js';
 
-const DIR = '.local/share/axia/clipboard';
-const FILE = `${DIR}/history.json`;
 export const DEFAULTS = { save: true, max: 500, maxMB: 200, expireDays: 30, ignoreApps: [], clearOnLogout: false };
 const conf = () => ({ ...DEFAULTS, ...(settings.get().clipboard || {}) });
-
 export const clipboardHistory = createStore([]);
 
-// ---- kind of each entry (for the filters) ----
-
-export function clipboardKind(item) {
-  if (item.image) return 'image';
-  const s = String(item.text || '').trim();
-  if (/^(https?|ftp):\/\/\S+$/i.test(s) || /^www\.\S+\.\S+$/i.test(s) || /^mailto:\S+$/i.test(s)) return 'link';
-  if (/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) || /^(rgba?|hsla?)\([^)]*\)$/i.test(s)) return 'color';
-  if (/^(~?\/|file:\/\/)[^\n]*$/.test(s) && !/\s{2,}/.test(s)) return 'file';
-  const lines = s.split('\n');
-  const codey = /[{};]\s*$|^\s*(function|def|class|import|export|const|let|var|if|for|while|return|#include|SELECT|fn|func|package|public|private)\b|=>|\)\s*\{/m;
-  if ((lines.length > 1 && codey.test(s)) || (lines.length > 2 && lines.filter((l) => /^\s{2,}|\t/.test(l)).length >= 2)) return 'code';
-  return 'text';
-}
-
-// ---- persistence ----
-
-let loaded = false;
-let saveTimer = null;
-const ensureDir = () => {
-  let cur = '';
-  for (const part of DIR.split('/')) { cur = cur ? `${cur}/${part}` : part; try { fs.mkdir(cur); } catch (e) { /* already exists */ } }
-};
-const imageName = (p) => String(p).split('/').pop();
-const ownImage = (p) => String(p).includes('/.local/share/axia/clipboard/img-');
-
-function prune(list) {
-  const c = conf();
-  const now = Date.now();
-  let out = list.filter((x) => x.pinned || !c.expireDays || now - x.time < c.expireDays * 86400000);
-  // limit on count (pinned ones don't count) and on image space
-  const free = out.filter((x) => !x.pinned);
-  if (free.length > c.max) { const drop = new Set(free.slice(c.max)); out = out.filter((x) => !drop.has(x)); }
-  let bytes = out.reduce((a, x) => a + (x.bytes || 0), 0);
-  for (let i = out.length - 1; i >= 0 && bytes > c.maxMB * 1048576; i--) {
-    if (out[i].image && !out[i].pinned) { bytes -= out[i].bytes || 0; out.splice(i, 1); }
+// Thin projection/effect adapter. Rust owns history, classification, limits,
+// deduplication, privacy and disk work. No filesystem calls or history timers.
+const supported = () => typeof lord.clipboard.historyRequest === 'function';
+const request = (op, args = {}) => supported() ? lord.clipboard.historyRequest(JSON.stringify({ op, ...args })) : null;
+let lastVersion = 0, lastConfig = '', lastError = '';
+const mirror = new Map();
+const viewStore = createStore(null);
+let viewSequence = 0;
+globalThis.__axiaClipboardHistory = (reply) => {
+  if (reply.error && reply.error !== lastError) { lastError = reply.error; console.warn('clipboard:', reply.error); }
+  if (reply.view) viewStore.set(reply.view);
+  if (reply.version <= lastVersion) return;
+  lastVersion = reply.version;
+  for (const item of reply.upsert || []) {
+    const previous = mirror.get(item.id);
+    if (previous || item.text != null || item.image) mirror.set(item.id, previous ? { ...previous, ...item } : item);
   }
-  // images left out are deleted from disk
-  const keep = new Set(out.filter((x) => x.image).map((x) => x.image));
-  for (const x of list) if (x.image && ownImage(x.image) && !keep.has(x.image)) { try { lord.clipboard.deleteSaved(imageName(x.image)); } catch (e) { /* already gone */ } }
-  return out;
-}
-
-function scheduleSave() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    if (!conf().save) return;
-    try { ensureDir(); fs.write(FILE, JSON.stringify({ version: 1, items: clipboardHistory.get() })); } catch (e) { console.log(`portapapeles: no se pudo guardar: ${e.message}`); }
-  }, 600);
-}
-
-function load() {
-  if (loaded) return;
-  loaded = true;
-  if (!conf().save) return;
-  let items = [];
-  try { items = JSON.parse(fs.read(FILE)).items || []; } catch (e) { items = []; }
-  const exists = new Set();
-  try { for (const e of fs.list(DIR)) exists.add(e.name); } catch (e) { /* no folder */ }
-  items = items.filter((x) => x && (x.text != null || (x.image && exists.has(imageName(x.image)))));
-  clipboardHistory.set(prune(items));
-}
-
-let seq = Date.now();
-const newId = () => (seq++).toString(36);
-
-function push(item, same) {
-  load();
-  clipboardHistory.set((list) => {
-    const old = list.find(same);
-    const entry = { ...item, id: old?.id || newId(), time: Date.now(), pinned: old?.pinned || false };
-    entry.type = clipboardKind(entry);
-    return prune([entry, ...list.filter((x) => !same(x))]);
-  });
-  scheduleSave();
-}
-
-const ignored = (origin) => conf().ignoreApps.includes(origin);
-
-const remember = (text, origin = 'lordos') => {
-  if (!text || ignored(origin)) return;
-  push({ kind: 'text', text: text.length > 1048576 ? text.slice(0, 1048576) : text, origin }, (x) => x.text === text);
+  const ids = new Set(reply.order || []);
+  for (const id of mirror.keys()) if (!ids.has(id)) mirror.delete(id);
+  clipboardHistory.set((reply.order || []).map((id) => mirror.get(id)).filter(Boolean));
 };
-
-function rememberImage(tmpPath, origin, gen) {
-  if (!tmpPath || ignored(origin)) return;
-  // the compositor's preview lives in $XDG_RUNTIME_DIR (lost on reboot): copy it to home
-  let path = tmpPath;
-  let bytes = 0;
-  if (conf().save && lord.clipboard.saveImage) {
-    try {
-      ensureDir();
-      const name = `img-${Date.now().toString(36)}-${gen || 0}.png`;
-      if (lord.clipboard.saveImage(`${DIR}/${name}`)) {
-        path = `${fs.home()}/${DIR}/${name}`;
-        try { bytes = fs.list(DIR).find((e) => e.name === name)?.size || 0; } catch (e) { bytes = 0; }
-      }
-    } catch (e) { /* keep the temporary one */ }
-  }
-  push({ kind: 'image', image: path, origin, bytes, src: tmpPath }, (x) => x.src === tmpPath && x.image);
+function configure() {
+  const config = conf(), encoded = JSON.stringify(config);
+  if (encoded === lastConfig) return;
+  const reset = !lastConfig; lastConfig = encoded; request('configure', { config, reset });
 }
-
-const state = () => (lord.clipboard.state ? lord.clipboard.state() : { kind: 'text' });
-let skipNext = false;           // we generate the next notification ourselves (re-copying)
-globalThis.__lordClipboard = () => {
-  const s = state();
-  if (skipNext) { skipNext = false; return; }
-  if (s.sensitive) return;                          // password: not added to history
-  if (s.kind === 'image') rememberImage(s.image, s.origin || 'linux', s.imageGen);
-  else remember(lord.clipboard.get(), s.origin || 'lordos');
+export const clipboardKind = (item) => lord.clipboard.historyKind(item.text || '', !!item.image);
+const boundedText = (value, limit) => { const text = value.slice(0, limit), last = text.charCodeAt(text.length - 1); return last >= 0xd800 && last <= 0xdbff ? text.slice(0, -1) : text; };
+const remember = (text, origin) => {
+  if (!text) return;
+  const state = lord.clipboard.state?.(), current = text === lord.clipboard.get();
+  if (current && state?.sensitive) return;
+  request('remember', { text: boundedText(String(text), 1048576), origin: origin ?? (current ? state?.origin : null) ?? 'lordos' });
 };
-
-// ---- API ----
-
+const load = () => { request('load'); };
 export const clipboard = {
   get: () => lord.clipboard.get(),
-  // secure: comes from a password field (not added to history).
   set(text, { secure = false, origin = 'lordos' } = {}) {
-    const s = String(text);
-    lord.clipboard.set(s, { secure, origin });
-    if (!secure) remember(s, origin);
-    else skipNext = true;
+    lord.clipboard.set(String(text), { secure, origin });
+    // The compositor captures the completed copy, including its secure marker.
   },
-  // re-copies a history entry (and moves it to the top)
   use(item) {
-    if (item.image) { skipNext = true; lord.clipboard.useImage(item.image); }
-    else if (item.text != null) { lord.clipboard.set(item.text, { origin: item.origin || 'lordos' }); skipNext = true; }
-    clipboardHistory.set((list) => [{ ...item, time: Date.now() }, ...list.filter((x) => x.id !== item.id)]);
-    scheduleSave();
+    if (item.image) { if (!lord.clipboard.useImage(item.image)) return false; }
+    else if (item.text != null) lord.clipboard.set(item.text, { origin: item.origin || 'lordos' });
+    else return false;
+    lord.clipboard.historySuppress?.();
+    request('use', { id: item.id }); return true;
   },
-  pin(item) { clipboardHistory.set((list) => list.map((x) => (x.id === item.id ? { ...x, pinned: !x.pinned } : x))); scheduleSave(); },
-  remove(item) {
-    clipboardHistory.set((list) => list.filter((x) => x.id !== item.id));
-    if (item.image && ownImage(item.image)) { try { lord.clipboard.deleteSaved(imageName(item.image)); } catch (e) { /* already gone */ } }
-    scheduleSave();
-  },
-  clear({ keepPinned = true } = {}) {
-    const list = clipboardHistory.get();
-    const keep = keepPinned ? list.filter((x) => x.pinned) : [];
-    for (const x of list) if (!keep.includes(x) && x.image && ownImage(x.image)) { try { lord.clipboard.deleteSaved(imageName(x.image)); } catch (e) { /* */ } }
-    clipboardHistory.set(keep);
-    scheduleSave();
-  },
-  // On logout (session.quit): clears the history if the user asked for it.
-  beforeLogout() { if (conf().clearOnLogout) { clipboard.clear({ keepPinned: true }); if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; } try { fs.write(FILE, JSON.stringify({ version: 1, items: clipboardHistory.get() })); } catch (e) { /* */ } } },
-  // Re-copies and pastes: into the text field that had focus or into the frontmost Linux app
-  // (synthetic Ctrl+V for that app only). Returns 'pasted' or 'copied'.
+  pin: (item) => request('pin', { id: item.id }),
+  remove: (item) => request('remove', { id: item.id }),
+  clear: ({ keepPinned = true } = {}) => request('clear', { keepPinned }),
+  // Only the explicit session-exit boundary waits (at most two seconds) for
+  // worker writes; normal copies and panel operations never wait for disk.
+  beforeLogout: () => request('flush', { logout: true }),
   paste(item, target) {
-    clipboard.use(item);
+    if (!clipboard.use(item)) return 'copied';
     if (target?.text && (restoreFocus(target.text), pasteIntoFocused())) return 'pasted';
     if (target?.linux && typeof lord.wayland !== 'undefined' && lord.wayland.hasKeyboard() && lord.wayland.paste()) return 'pasted';
     return 'copied';
   },
-  remember,
-  load,
+  remember, load,
 };
-
-// What was saved is read when the theme starts; if saving is turned off, the file is cleared.
-settings.subscribe(() => { if (!conf().save) { try { fs.write(FILE, JSON.stringify({ version: 1, items: [] })); } catch (e) { /* */ } } });
-setTimeout(load, 0);
+settings.subscribe(configure);
+configure();
 
 // ---- panel (❖V quick, ❖⇧V full) ----
 
@@ -236,7 +136,7 @@ function Row({ item, active, th, onPick, onHover, compact }) {
   item.image
     ? h(Image, { src: item.image, style: { width: 64, height: 36, objectFit: 'contain' } })
     : h(Text, { style: { flex: 1, fontSize: 12, color: fg, whiteSpace: 'nowrap', overflow: 'hidden', fontFamily: item.type === 'code' ? 'monospace' : undefined } },
-      item.text.replace(/\s+/g, ' ').slice(0, 160)),
+      item.preview ?? item.text.slice(0, 160)),
   item.image ? h(View, { style: { flex: 1 } }) : null,
   item.pinned ? h(Text, { style: { fontSize: 11, color: fg } }, '📌') : null,
   h(Text, { style: { fontSize: 10, color: dim } }, relTime(item.time)));
@@ -265,7 +165,7 @@ function QuickPanel() {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const close = closeClipboardPanel;
-  const shown = sortPinned(list.filter((x) => match(x, q))).slice(0, 12);
+  const { items: shown } = useClipboardView(list, q, 'all', 12);
   const W = 420;
   const onKey = (e) => {
     if (e.key === 'ArrowDown') { setSel((s) => Math.min(shown.length - 1, s + 1)); return true; }
@@ -282,7 +182,7 @@ function QuickPanel() {
     },
     h(View, { style: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 } },
       h(Text, { style: { fontSize: 13, fontWeight: 700, color: th.text } }, t('shell.clipboard.title')),
-      h(TextInput, { value: q, onChange: (v) => { setQ(v); setSel(0); }, autoFocus: true, placeholder: t('shell.clipboard.search'), onKeyDown: onKey,
+      h(TextInput, { value: q, onChange: (v) => { setQ(boundedText(v, 128)); setSel(0); }, autoFocus: true, placeholder: t('shell.clipboard.search'), onKeyDown: onKey,
         onCancel: close, style: { flex: 1 } }),
       h(View, { onClick: () => openPanel('full'), style: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: th.control } },
         h(Text, { style: { fontSize: 11, color: th.text } }, t('shell.clipboard.more')))),
@@ -291,8 +191,15 @@ function QuickPanel() {
     h(Text, { style: { fontSize: 10, color: th.textDim, paddingHorizontal: 4, marginTop: 4 } }, t('shell.clipboard.hint'))));
 }
 
-const match = (x, q) => !q || (x.text && x.text.toLowerCase().includes(q.toLowerCase())) || (x.origin && x.origin.toLowerCase().includes(q.toLowerCase()));
-const sortPinned = (list) => [...list.filter((x) => x.pinned), ...list.filter((x) => !x.pinned)];
+// Queries/filter counts/pinned ordering are prepared by the same Rust worker.
+// React only resolves IDs from the current projection; hovering a row reuses it.
+function useClipboardView(list, query, filter, limit) {
+  const view = useStore(viewStore);
+  useEffect(() => { request('view', { query, filter, limit, generation: ++viewSequence }); }, [list, query, filter, limit]);
+  return useMemo(() => view && view.query === query && view.filter === filter && view.limit === limit
+    ? { items: view.ids.map((id) => mirror.get(id)).filter(Boolean), counts: view.counts }
+    : { items: [], counts: {} }, [view, list, query, filter, limit]);
+}
 
 // Full (❖⇧V): filters, list, preview and actions.
 function FullPanel() {
@@ -304,7 +211,7 @@ function FullPanel() {
   const [sel, setSel] = useState(0);
   const [confirm, setConfirm] = useState(false);
   const close = closeClipboardPanel;
-  const shown = sortPinned(list.filter((x) => match(x, q) && (filter === 'all' || (filter === 'pinned' ? x.pinned : x.type === filter))));
+  const { items: shown, counts } = useClipboardView(list, q, filter, 8192);
   const cur = shown[Math.min(sel, shown.length - 1)] || null;
   const W = Math.min(860, mainBox().width - 40), H = Math.min(540, mainBox().height - 120);
   const onKey = (e) => {
@@ -316,7 +223,7 @@ function FullPanel() {
   };
   const btn = (label, onClick, danger) => h(View, { onClick, style: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: danger ? '#ff453a' : th.control } },
     h(Text, { style: { fontSize: 11, fontWeight: 600, color: danger ? '#fff' : th.text } }, label));
-  const count = (f) => (f === 'all' ? list.length : f === 'pinned' ? list.filter((x) => x.pinned).length : list.filter((x) => x.type === f).length);
+  const count = (f) => counts[f] || 0;
   return h(View, { onClick: close, style: { position: 'absolute', ...mainBox(), backgroundColor: 'rgba(0,0,0,0.25)' } },
     h(View, {
       onClick: (e) => e.stopPropagation(),
@@ -325,7 +232,7 @@ function FullPanel() {
     },
     h(View, { style: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 } },
       h(Text, { style: { fontSize: 15, fontWeight: 700, color: th.text } }, t('shell.clipboard.title')),
-      h(TextInput, { value: q, onChange: (v) => { setQ(v); setSel(0); }, autoFocus: true, placeholder: t('shell.clipboard.search'), onKeyDown: onKey, onCancel: close, style: { flex: 1 } }),
+      h(TextInput, { value: q, onChange: (v) => { setQ(boundedText(v, 128)); setSel(0); }, autoFocus: true, placeholder: t('shell.clipboard.search'), onKeyDown: onKey, onCancel: close, style: { flex: 1 } }),
       confirm ? btn(t('shell.clipboard.confirmClear'), () => { clipboard.clear({ keepPinned: true }); setConfirm(false); }, true) : btn(t('shell.clipboard.clear'), () => setConfirm(true)),
       btn('✕', close)),
     h(View, { style: { height: 1, backgroundColor: th.separator } }),
@@ -351,7 +258,7 @@ function FullPanel() {
                 cur.text.slice(0, 3000)),
           h(Text, { key: 'm', style: { fontSize: 11, color: th.textDim, lineHeight: 1.4 } },
             t('shell.clipboard.meta', { type: t(`shell.clipboard.filter.${cur.type}`), origin: originLabel(cur.origin), when: relTime(cur.time),
-              size: cur.text ? t('shell.clipboard.chars', { count: [...cur.text].length }) : '' })),
+              size: cur.text ? t('shell.clipboard.chars', { count: cur.characters ?? cur.text.length }) : '' })),
           h(View, { key: 'a', style: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 } },
             btn(t('shell.clipboard.paste'), () => pick(cur)),
             btn(cur.pinned ? t('shell.clipboard.unpin') : t('shell.clipboard.pin'), () => clipboard.pin(cur)),

@@ -46,7 +46,7 @@ const REQUIRED: [&str; 6] = [
     "code-manifest.json",
 ];
 
-const DOCS: [&str; 8] = [
+const DOCS: [&str; 9] = [
     "STANDALONE.md",
     "COPR-UPDATES.md",
     "REPOSITORY.md",
@@ -55,6 +55,7 @@ const DOCS: [&str; 8] = [
     "DOCK-PREVIEWS.md",
     "FILES.md",
     "SHORTCUTS.md",
+    "CLIPBOARD.md",
 ];
 
 fn apply_times(path: &Path, from: &Metadata) -> Result<()> {

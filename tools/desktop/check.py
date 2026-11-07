@@ -231,6 +231,28 @@ def main():
             assert 'files integration: passed' in log, log
             for error in ['files smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
+            # A real legacy history, including PNG, then the full C/Rust/JS path.
+            clipdir = home / '.local/share/axia/clipboard'
+            clipdir.mkdir(parents=True, exist_ok=True)
+            (clipdir / 'img-legacy.png').write_bytes(png(1, 1, b'\0\x20\x60\xa0\xff'))
+            (clipdir / 'history.json').write_text(json.dumps({'version': 1, 'items': [
+                {'id': 'legacy-text', 'kind': 'text', 'type': 'text', 'text': 'Olá, histórico antigo 👋', 'origin': 'terminal', 'time': time.time() * 1000, 'pinned': True},
+                {'id': 'legacy-image', 'kind': 'image', 'type': 'image', 'image': str(clipdir / 'img-legacy.png'), 'origin': 'linux', 'time': time.time() * 1000, 'pinned': False}]}))
+            if os.geteuid() == 0:
+                for path in [clipdir, clipdir / 'img-legacy.png', clipdir / 'history.json']:
+                    os.chown(path, 65534, 65534)
+            fixture = (REPO / 'tests/clipboard-smoke.bundle.js').read_bytes()
+            target.write_bytes(fixture)
+            for entry in staged_manifest['files']:
+                if entry['path'] == 'themes/default/theme.bundle.js':
+                    entry.update(size=len(fixture), sha256=hashlib.sha256(fixture).hexdigest())
+            (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
+            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '15',
+                        '--theme', '../themes/default/theme.bundle.js'], home / 'runtime', cwd=staged / 'bin', env=env, **opts)
+            log = (home / '.cache/axia/session.log').read_text()
+            assert 'clipboard integration: passed' in log, log
+            for error in ['clipboard smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
+                assert error not in log, log
             # Dock policy, real native thumbnail updates and idle shutdown.
             fixture = (REPO / 'tests/dock-preview-smoke.bundle.js').read_bytes()
             target.write_bytes(fixture)

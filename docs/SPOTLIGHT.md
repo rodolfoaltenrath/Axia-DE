@@ -166,14 +166,16 @@ and the time.
 - **Files:**
   - `~/.local/share/axia/clipboard/history.json`, with the entries;
   - `img-*.png` next to it, with the images.
-- **How images are stored:** the compositor leaves the latest image in
-  `$XDG_RUNTIME_DIR/lordos/clip-N.png`, which is lost on reboot. That's why
-  `lord.clipboard.saveImage(path)` copies it to the home folder. It validates the path with the
-  same rules as `lord.fs.write`: inside the home folder and never in the protected folders.
-- **Copying an image again:** `lord.clipboard.useImage(path)` only accepts those two places, the
-  compositor's previews and the history's images.
-- **Deleting:** `lord.clipboard.deleteSaved(name)` deletes only `img-*.png` names in that folder.
-  There is no general file deletion.
+- **How images are stored:** the compositor leaves its preview under
+  `$XDG_RUNTIME_DIR/axia/clip-N.png`. The Rust history worker receives an opened
+  descriptor and streams the PNG into the private history directory. Temporary
+  history images use `clip-rust-*.png` under the same runtime directory when saving
+  is off. There is no synchronous image-copy operation in the SDK.
+- **Copying an image again:** `lord.clipboard.useImage(path)` remains the native
+  transfer bridge, restricted to the compositor's previews and managed history.
+- **Deleting:** the Rust worker removes only generated image names in the owned
+  history/runtime directories. The old `saveImage`/`deleteSaved` history API was
+  removed. See [CLIPBOARD.md](CLIPBOARD.md) for persistence, limits and tests.
 - **Settings → Clipboard:**
 
   | Option | Default |
