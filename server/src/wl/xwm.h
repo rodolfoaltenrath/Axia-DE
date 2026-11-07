@@ -52,10 +52,7 @@ enum { XREQ_MOVE = 1, XREQ_RESIZE, XREQ_MAXIMIZE, XREQ_UNMAXIMIZE, XREQ_MINIMIZE
 void wlx_request(int sid, int what, int arg);
 void wlx_fullscreen_rect(int *x, int *y, int *w, int *h);  /* the display a fullscreen X window covers */
 /* Clipboard: what an X app copied becomes LordOS's (and every Wayland app's) selection. */
-void wlx_clip_text(const char *text, size_t n, const char *origin);
-void wlx_clip_png(const unsigned char *png, size_t n, const char *origin);
-void wlx_primary_text(const char *text, size_t n);
-/* The PRIMARY selection of Wayland apps (middle-click paste), for X: text and a generation. */
+void wlx_native_changed(int kind); /* Rust completed text=0, PNG=1, PRIMARY=2 */
 const char *wlx_primary(size_t *n, unsigned *gen);
 
 #endif

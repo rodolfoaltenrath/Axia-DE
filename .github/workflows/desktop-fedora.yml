@@ -34,6 +34,11 @@ jobs:
       - name: Rust resident search integration
         if: matrix.gpu == 1
         run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test search_runtime -- --ignored --nocapture
+      - name: Rust native clipboard XWayland integration
+        if: matrix.gpu == 1
+        run: |
+          dnf install -y --setopt=install_weak_deps=False xorg-x11-server-Xwayland libX11-devel
+          python3 tools/desktop/clipboard_x11_check.py
       - name: Rust network, brightness and background-app contracts
         if: matrix.gpu == 1
         run: |

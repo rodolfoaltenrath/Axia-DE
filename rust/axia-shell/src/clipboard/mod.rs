@@ -1,5 +1,7 @@
 //! Session history model and worker. No UI, Wayland protocol or renderer ownership.
 mod store;
+mod native;
+mod ui;
 #[cfg(test)]
 mod tests;
 use serde::{Deserialize, Serialize};
@@ -687,6 +689,7 @@ fn run(state: Arc<State>, mut store: store::Store, mut config: Config) {
 }
 static SERVICE: OnceLock<Service> = OnceLock::new();
 fn configured(config: Config, resync: bool) -> Option<&'static Service> {
+    if resync { ui::reset(); }
     if let Some(s) = SERVICE.get() {
         s.enqueue(Command::Configure(config, resync));
         return Some(s);
@@ -733,6 +736,7 @@ pub unsafe extern "C" fn axia_clipboard_request(input: *const c_char) -> *mut c_
             return json!({"accepted":false});
         };
         let op = v["op"].as_str().unwrap_or("");
+        if op == "panel" { return ui::request(&v); }
         if op == "kind" {
             return json!({"kind":classify(v["text"].as_str().unwrap_or(""),v["image"]==true)});
         }

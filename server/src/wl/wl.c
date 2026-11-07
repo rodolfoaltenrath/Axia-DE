@@ -1,3 +1,4 @@
+#include "clipboard_native.h"
 /* wl.c — LordOS's own Wayland compositor: Linux apps (GTK, Qt, foot…) open as LordOS
  * windows. It only uses libwayland-server (it serializes the protocol; the dependency policy
  * allows it since M1) and the code wayland-scanner generates for xdg-shell and xdg-decoration.
@@ -1250,26 +1251,13 @@ void wl_keymap_changed(void) {
  * selection (terminal, text fields, an image from the history) is offered to the focused app. */
 
 #define MAX_MIMES 32
-#define CLIP_MAX (16u << 20)
 typedef struct { struct wl_resource *res; char mimes[MAX_MIMES][64]; int nmimes; } Source;
 static Source *selection;           /* source of the app owning the selection, or NULL (LordOS) */
 /* Bumped whenever the selection changes: an offer is only good for the selection it was made for,
  * and only while its client has the keyboard (an app can't keep an old offer to read later copies). */
-static unsigned clip_offer_gen = 1;
 typedef struct { Source *src; unsigned gen; } OfferRef;
 static unsigned clip_seen;          /* LordOS clipboard generation already offered */
-static unsigned char *clip_png;     /* last copied image */
-static size_t clip_png_len;
-static unsigned clip_img_gen;
-static int clip_is_image;           /* the last thing copied was that image (and not text) */
-static char clip_png_path[160];
-static char clip_img_origin[128] = "linux";
-static int clip_img_sensitive;
-
-static int text_mime(const char *m) {
-    return !strcmp(m, "text/plain;charset=utf-8") || !strcmp(m, "text/plain") || !strcmp(m, "UTF8_STRING") ||
-           !strcmp(m, "STRING") || !strcmp(m, "TEXT");
-}
+static int text_mime(const char *m) { return axia_native_mime_rank(m) > 0; }
 
 static void src_offer(struct wl_client *c, struct wl_resource *r, const char *mime) {
     (void)c;
@@ -1284,136 +1272,101 @@ static void src_gone(struct wl_resource *r) {
     Source *s = wl_resource_get_user_data(r);
     if (selection == s) {
         selection = NULL;
-        clip_offer_gen++;
-        if (clip_is_image) offer_to_focus();    /* the image stays, now LordOS offers it */
+        axia_native_offer_advance();
+        if (wl_clip_is_image() || term_clipboard()[0]) offer_to_focus(); /* Rust retains the completed copy after owner exit. */
     }
     free(s);
 }
 
-/* The image is also saved as a file in $XDG_RUNTIME_DIR/axia (user-only),
- * for the history preview; the last 10 are kept. */
-static void store_png(const unsigned char *png, size_t n) {
-    unsigned char *copy = malloc(n);
-    if (!copy) return;
-    memcpy(copy, png, n);
-    free(clip_png);
-    clip_png = copy;
-    clip_png_len = n;
-    clip_img_gen++;
-    clip_is_image = 1;
-    clip_png_path[0] = 0;
-    const char *rt = getenv("XDG_RUNTIME_DIR");
-    if (!rt) return;
-    char dir[128], old[160];
-    snprintf(dir, sizeof dir, "%s/axia", rt);
-    mkdir(dir, 0700);
-    if (clip_img_gen > 10) { snprintf(old, sizeof old, "%s/clip-%u.png", dir, clip_img_gen - 10); unlink(old); }
-    snprintf(clip_png_path, sizeof clip_png_path, "%s/clip-%u.png", dir, clip_img_gen);
-    int fd = open(clip_png_path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
-    size_t off = 0;
-    while (fd >= 0 && off < n) { ssize_t w = write(fd, png + off, n - off); if (w <= 0) break; off += (size_t)w; }
-    if (fd < 0 || close(fd) || off != n) clip_png_path[0] = 0;
+/* Protocol registration stays in C. Rust owns descriptors, bounded buffers,
+ * cancellation, partial I/O and final payloads; there is no C transfer engine. */
+typedef struct Reader { NativeReader *stream; struct wl_event_source *ev; int kind; struct Reader *next; } Reader;
+typedef struct Writer { NativeWriter *stream; struct wl_event_source *ev; struct Writer *next; } Writer;
+static Reader *clip_readers;
+static Writer *clip_writers;
+static struct wl_event_source *clip_transfer_timer;
+static int transfer_gc(void *data);
+static void reader_free(Reader *r) {
+    for (Reader **p = &clip_readers; *p; p = &(*p)->next) if (*p == r) { *p = r->next; break; }
+    wl_event_source_remove(r->ev); axia_native_read_free(r->stream); free(r);
 }
-
-/* reading an app's selection into LordOS */
-typedef struct { int fd, image, sensitive, primary; struct wl_event_source *ev; char *buf; size_t len, cap; char origin[128]; } Reader;
-static void prim_store(const char *t, size_t n);
-
-static int reader_ready(int fd, uint32_t mask, void *data) {
-    Reader *rd = data;
-    (void)mask;
-    for (;;) {
-        if (rd->len + 4096 > rd->cap) {
-            size_t cap = rd->cap ? rd->cap * 2 : 8192;
-            if (cap > CLIP_MAX) break;
-            char *nb = realloc(rd->buf, cap);
-            if (!nb) break;
-            rd->buf = nb;
-            rd->cap = cap;
-        }
-        ssize_t n = read(fd, rd->buf + rd->len, rd->cap - rd->len);
-        if (n > 0) { rd->len += (size_t)n; continue; }
-        if (n < 0 && (errno == EAGAIN || errno == EINTR)) return 0;
-        break;                              /* end (or error): done */
-    }
-    if (rd->primary) {
-        if (rd->len) prim_store(rd->buf, rd->len);
-    } else if (rd->len && rd->image) {
-        if (rd->len > 8 && !memcmp(rd->buf, "\x89PNG\r\n\x1a\n", 8)) {
-            store_png((unsigned char *)rd->buf, rd->len);
-            snprintf(clip_img_origin, sizeof clip_img_origin, "%s", rd->origin);
-            clip_img_sensitive = rd->sensitive;
-        }
-    } else if (rd->len) {
-        term_set_clipboard(rd->buf, rd->len);
-        term_clipboard_mark(rd->origin, rd->sensitive);
-        clip_seen = term_clipboard_gen();       /* not a change from LordOS */
-        clip_is_image = 0;
-    }
-    wl_event_source_remove(rd->ev);
-    close(rd->fd);
-    free(rd->buf);
-    free(rd);
+static void writer_free(Writer *w) {
+    for (Writer **p = &clip_writers; *p; p = &(*p)->next) if (*p == w) { *p = w->next; break; }
+    wl_event_source_remove(w->ev); axia_native_write_free(w->stream); free(w);
+}
+static int transfer_gc(void *data) {
+    (void)data;
+    for (Reader *r = clip_readers, *next; r; r = next) { next = r->next; if (axia_native_read_expired(r->stream)) reader_free(r); }
+    for (Writer *w = clip_writers, *next; w; w = next) { next = w->next; if (axia_native_write_expired(w->stream)) writer_free(w); }
+    if (clip_transfer_timer) wl_event_source_timer_update(clip_transfer_timer, clip_readers || clip_writers ? 1000 : 0);
     return 0;
 }
-
+static int transfer_watch(void) {
+    if (!clip_transfer_timer) clip_transfer_timer = wl_event_loop_add_timer(loop, transfer_gc, NULL);
+    if (!clip_transfer_timer) return 0;
+    wl_event_source_timer_update(clip_transfer_timer, 1000); return 1;
+}
+static void prim_offer_focus(void);
+static int reader_ready(int fd, uint32_t mask, void *data) {
+    (void)fd; (void)mask;
+    Reader *r = data;
+    int result = axia_native_read_poll(r->stream);
+    if (!result) return 0;
+    if (result > 0) {
+        if (r->kind == 2) prim_offer_focus();
+        else {
+            if (r->kind == 0) clip_seen = term_clipboard_gen();
+            if (!selection) { axia_native_offer_advance(); offer_to_focus(); }
+        }
+    }
+    reader_free(r);
+    transfer_gc(NULL);
+    return 0;
+}
+static void receive_native(int fd, int kind, const char *origin, int sensitive) {
+    NativeReader *stream = axia_native_read_new(fd, kind, origin, sensitive != 0);
+    if (!stream) return; /* Rust closes fd on rejection too. */
+    Reader *r = calloc(1, sizeof *r);
+    if (!r) { axia_native_read_free(stream); return; }
+    r->stream = stream; r->kind = kind;
+    r->ev = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE, reader_ready, r);
+    if (!r->ev) { axia_native_read_free(stream); free(r); return; }
+    r->next = clip_readers; clip_readers = r;
+    if (!transfer_watch()) reader_free(r);
+}
 static void read_selection(Source *s) {
-    if (getenv("LORD_WL_DEBUG")) for (int i = 0; i < s->nmimes; i++) fprintf(stderr, "wayland: selection %s\n", s->mimes[i]);
-    const char *mime = NULL;
-    int image = 0;
-    for (int i = 0; i < s->nmimes && !mime; i++) if (!strcmp(s->mimes[i], "text/plain;charset=utf-8")) mime = s->mimes[i];
-    for (int i = 0; i < s->nmimes && !mime; i++) if (text_mime(s->mimes[i])) mime = s->mimes[i];
-    for (int i = 0; i < s->nmimes && !mime; i++) if (!strcmp(s->mimes[i], "image/png")) { mime = s->mimes[i]; image = 1; }
-    if (!mime) return;
+    const char *mimes[MAX_MIMES];
+    for (int i = 0; i < s->nmimes; i++) mimes[i] = s->mimes[i];
+    int picked = axia_native_mime_choose(mimes, (size_t)s->nmimes);
+    if (picked < 0) return;
+    const char *mime = mimes[picked];
     int p[2];
     if (pipe2(p, O_CLOEXEC | O_NONBLOCK)) return;
-    wl_data_source_send_send(s->res, mime, p[1]);
-    close(p[1]);
-    Reader *rd = calloc(1, sizeof *rd);
-    if (!rd) { close(p[0]); return; }
-    rd->fd = p[0];
-    rd->image = image;
-    /* origin: the app_id of a window of that app; sensitive if it is a password manager
-     * (KDE/GNOME convention: offers x-kde-passwordManagerHint = secret) */
+    wl_data_source_send_send(s->res, mime, p[1]); close(p[1]);
+    char origin[128] = "";
     struct wl_client *cl = wl_resource_get_client(s->res);
-    for (int i = 0; i < MAX_SURF && !rd->origin[0]; i++)
-        if (surfs[i] && surfs[i]->client == cl && surfs[i]->app_id[0]) snprintf(rd->origin, sizeof rd->origin, "%s", surfs[i]->app_id);
-    if (!rd->origin[0]) snprintf(rd->origin, sizeof rd->origin, "linux");
-    for (int i = 0; i < s->nmimes; i++) if (!strcmp(s->mimes[i], "x-kde-passwordManagerHint")) rd->sensitive = 1;
-    rd->ev = wl_event_loop_add_fd(loop, p[0], WL_EVENT_READABLE, reader_ready, rd);
-    if (!rd->ev) { close(p[0]); free(rd); }
+    for (int i = 0; i < MAX_SURF && !origin[0]; i++)
+        if (surfs[i] && surfs[i]->client == cl && surfs[i]->app_id[0]) snprintf(origin, sizeof origin, "%s", surfs[i]->app_id);
+    receive_native(p[0], text_mime(mime) ? 0 : 1, origin[0] ? origin : "linux", axia_native_mime_secret(mimes, (size_t)s->nmimes));
 }
-
-/* writing to an app, without blocking the server if the app reads slowly */
-typedef struct { int fd; struct wl_event_source *ev; unsigned char *buf; size_t len, off; } Writer;
-
 static int writer_ready(int fd, uint32_t mask, void *data) {
+    (void)fd; (void)mask;
     Writer *w = data;
-    (void)mask;
-    while (w->off < w->len) {
-        ssize_t n = write(fd, w->buf + w->off, w->len - w->off);
-        if (n > 0) { w->off += (size_t)n; continue; }
-        if (n < 0 && (errno == EAGAIN || errno == EINTR)) return 0;
-        break;
-    }
-    wl_event_source_remove(w->ev);
-    close(w->fd);
-    explicit_bzero(w->buf, w->len);       /* may be a password copied from Passwords */
-    free(w->buf);
-    free(w);
+    if (!axia_native_write_poll(w->stream)) return 0;
+    writer_free(w);
+    transfer_gc(NULL);
     return 0;
 }
-
-static void send_bytes(int fd, const void *data, size_t n) {
+static void send_native(int fd, int kind) {
+    NativeWriter *stream = axia_native_write_new(fd, kind);
+    if (!stream) return;
     Writer *w = calloc(1, sizeof *w);
-    if (!w || !(w->buf = malloc(n ? n : 1))) { free(w); close(fd); return; }
-    memcpy(w->buf, data, n);
-    w->len = n;
-    w->fd = fd;
-    int fl = fcntl(fd, F_GETFL);
-    if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+    if (!w) { axia_native_write_free(stream); return; }
+    w->stream = stream;
     w->ev = wl_event_loop_add_fd(loop, fd, WL_EVENT_WRITABLE, writer_ready, w);
-    if (!w->ev) { close(fd); free(w->buf); free(w); }
+    if (!w->ev) { axia_native_write_free(stream); free(w); return; }
+    w->next = clip_writers; clip_writers = w;
+    if (!transfer_watch()) writer_free(w);
 }
 
 /* offers: from another app (forwarded) or from the LordOS clipboard (written) */
@@ -1422,13 +1375,13 @@ static void ofr_accept(struct wl_client *c, struct wl_resource *r, uint32_t seri
 }
 static void ofr_receive(struct wl_client *c, struct wl_resource *r, const char *mime, int32_t fd) {
     OfferRef *ref = wl_resource_get_user_data(r);
-    if (!ref || ref->gen != clip_offer_gen || !key_focus || key_focus->client != c) { close(fd); return; }   /* stale, or not focused */
+    if (!ref || ref->gen != axia_native_offer_gen() || !key_focus || key_focus->client != c) { close(fd); return; }   /* stale, or not focused */
     Source *src = ref->src;
     if (src && src == selection) { wl_data_source_send_send(src->res, mime, fd); close(fd); return; }
-    if (!src && clip_is_image && clip_png && !strcmp(mime, "image/png")) { send_bytes(fd, clip_png, clip_png_len); return; }
-    if (!src && !clip_is_image && text_mime(mime)) { const char *t = term_clipboard(); send_bytes(fd, t, strlen(t)); return; }
+    if (!src && wl_clip_is_image() && !strcmp(mime, "image/png")) { send_native(fd, 1); return; }
+    if (!src && !wl_clip_is_image() && text_mime(mime)) { send_native(fd, 0); return; }
     /* KDE/GNOME convention: clipboard managers skip an offer carrying this hint */
-    if (!src && !clip_is_image && !strcmp(mime, "x-kde-passwordManagerHint") && term_clipboard_sensitive()) { send_bytes(fd, "secret", 6); return; }
+    if (!src && !strcmp(mime, "x-kde-passwordManagerHint") && (wl_clip_is_image() ? wl_clip_image_sensitive() : term_clipboard_sensitive())) { send_native(fd, 3); return; }
     close(fd);
 }
 static void ofr_destroy(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
@@ -1445,18 +1398,21 @@ static void offer_selection(struct wl_resource *dev) {
     /* the focused client gets every new selection, its own included (the protocol says so; its receive is
      * forwarded to its own source) */
     const char *t = term_clipboard();
-    int image = !selection && clip_is_image && clip_png;
+    int image = !selection && wl_clip_is_image();
     if (!selection && !image && !t[0]) { wl_data_device_send_selection(dev, NULL); return; }
     struct wl_resource *o = wl_resource_create(c, &wl_data_offer_interface, wl_resource_get_version(dev), 0);
     if (!o) return;
     OfferRef *ref = malloc(sizeof *ref);
     if (!ref) { wl_resource_destroy(o); return; }
     ref->src = selection;
-    ref->gen = clip_offer_gen;
+    ref->gen = axia_native_offer_gen();
     wl_resource_set_implementation(o, &offer_impl, ref, offer_gone);
     wl_data_device_send_data_offer(dev, o);
     if (selection) for (int i = 0; i < selection->nmimes; i++) wl_data_offer_send_offer(o, selection->mimes[i]);
-    else if (image) wl_data_offer_send_offer(o, "image/png");
+    else if (image) {
+        wl_data_offer_send_offer(o, "image/png");
+        if (wl_clip_image_sensitive()) wl_data_offer_send_offer(o, "x-kde-passwordManagerHint");
+    }
     else {
         wl_data_offer_send_offer(o, "text/plain;charset=utf-8");
         wl_data_offer_send_offer(o, "text/plain");
@@ -1468,49 +1424,16 @@ static void offer_selection(struct wl_resource *dev) {
 }
 
 /* Clipboard image for JS (history) and copying one from the history again. */
-unsigned wl_clip_image_gen(void) { return clip_img_gen; }
-const char *wl_clip_image_path(void) { return clip_is_image ? clip_png_path : ""; }
-int wl_clip_is_image(void) { return clip_is_image; }
-const unsigned char *wl_clip_png(size_t *len) {
-    *len = clip_is_image && clip_png ? clip_png_len : 0;
-    return *len ? clip_png : NULL;
-}
-const char *wl_clip_image_origin(void) { return clip_img_origin; }
-int wl_clip_image_sensitive(void) { return clip_img_sensitive; }
-
-/* Only two places: the compositor's previews ($XDG_RUNTIME_DIR/axia/clip-N.png) and the
- * saved history (~/.local/share/axia/clipboard/img-*.png). */
-static int clip_path_ok(const char *path) {
-    const char *rt = getenv("XDG_RUNTIME_DIR"), *home = getenv("HOME");
-    char dir[PATH_MAX];
-    size_t n = strlen(path);
-    if (n < 6 || strcmp(path + n - 4, ".png") || strstr(path, "..")) return 0;
-    for (int k = 0; k < 2; k++) {
-        if (k == 0 && rt) snprintf(dir, sizeof dir, "%s/axia/clip-", rt);
-        else if (k == 1 && home) snprintf(dir, sizeof dir, "%s/.local/share/axia/clipboard/img-", home);
-        else continue;
-        size_t dl = strlen(dir);
-        if (!strncmp(path, dir, dl) && n > dl + 4 && !strchr(path + dl, '/')) return 1;
-    }
-    return 0;
-}
-
+unsigned wl_clip_image_gen(void) { return axia_native_image_gen(); }
+const char *wl_clip_image_path(void) { return axia_native_image_path(); }
+int wl_clip_is_image(void) { return axia_native_is_image(); }
+const unsigned char *wl_clip_png(size_t *len) { return axia_native_png(len); }
+const char *wl_clip_image_origin(void) { return axia_native_image_origin(); }
+int wl_clip_image_sensitive(void) { return axia_native_image_sensitive(); }
 int wl_clip_use_image(const char *path) {
-    if (!dpy || !clip_path_ok(path)) return -1;
-    int fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    struct stat st;
-    if (fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || (size_t)st.st_size > CLIP_MAX) { if (fd >= 0) close(fd); return -1; }
-    unsigned char *buf = malloc((size_t)st.st_size + 1);
-    size_t got = 0;
-    while (buf && got < (size_t)st.st_size) { ssize_t r = read(fd, buf + got, (size_t)st.st_size - got); if (r <= 0) break; got += (size_t)r; }
-    close(fd);
-    if (!buf || got != (size_t)st.st_size) { free(buf); return -1; }
+    if (!dpy || !axia_native_use_image(path)) return -1;
     if (selection) { wl_data_source_send_cancelled(selection->res); selection = NULL; }
-    clip_offer_gen++;
-    store_png(buf, got);
-    snprintf(clip_img_origin, sizeof clip_img_origin, "lordos");
-    clip_img_sensitive = 0;
-    free(buf);
+    axia_native_offer_advance();
     offer_to_focus();
     return 0;
 }
@@ -1531,7 +1454,9 @@ static void dev_set_selection(struct wl_client *c, struct wl_resource *r, struct
     Source *s = src ? wl_resource_get_user_data(src) : NULL;
     if (selection && selection != s) wl_data_source_send_cancelled(selection->res);
     selection = s;
-    clip_offer_gen++;
+    axia_native_invalidate(false);
+    transfer_gc(NULL);
+    axia_native_offer_advance();
     if (s) read_selection(s);
     offer_to_focus();                   /* the new selection, to the client with the keyboard (the owner, usually) */
 }
@@ -1568,32 +1493,14 @@ static void bind_ddm(struct wl_client *c, void *data, uint32_t ver, uint32_t id)
 static struct wl_list prim_devices;
 typedef struct { struct wl_resource *res; char mime[64]; int rank; } PSource;
 static PSource *prim_src;
-static char *prim_text;
-static size_t prim_len;
-static unsigned prim_gen;
 
-static int prim_rank(const char *m) {
-    return !strcmp(m, "text/plain;charset=utf-8") ? 4 : !strcmp(m, "UTF8_STRING") ? 3 : !strcmp(m, "text/plain") ? 2 : text_mime(m) ? 1 : 0;
-}
+static int prim_rank(const char *m) { return axia_native_mime_rank(m); }
 static void prim_offer_to(struct wl_resource *dev);
 static void prim_offer_focus(void) {
     if (!key_focus) return;
     struct wl_resource *d;
     FOR_CLIENT(&prim_devices, key_focus->client, d) prim_offer_to(d);
 }
-static void prim_store(const char *t, size_t n) {
-    char *nb = malloc(n + 1);
-    if (!nb) return;
-    memcpy(nb, t, n);
-    nb[n] = 0;
-    if (prim_text) explicit_bzero(prim_text, prim_len);
-    free(prim_text);
-    prim_text = nb;
-    prim_len = strlen(nb);
-    prim_gen++;
-    prim_offer_focus();
-}
-
 static void psrc_offer(struct wl_client *c, struct wl_resource *r, const char *mime) {
     (void)c;
     PSource *s = wl_resource_get_user_data(r);
@@ -1611,7 +1518,9 @@ static void psrc_gone(struct wl_resource *r) {
  * its client has the keyboard. */
 static void poffer_receive(struct wl_client *c, struct wl_resource *r, const char *mime, int32_t fd) {
     unsigned *gen = wl_resource_get_user_data(r);
-    if (gen && *gen == prim_gen && key_focus && key_focus->client == c && prim_text && prim_rank(mime)) { send_bytes(fd, prim_text, prim_len); return; }
+    unsigned current; size_t len;
+    axia_native_primary(&len, &current);
+    if (gen && *gen == current && key_focus && key_focus->client == c && len && prim_rank(mime)) { send_native(fd, 2); return; }
     close(fd);
 }
 static const struct zwp_primary_selection_offer_v1_interface poffer_impl = { .receive = poffer_receive, .destroy = res_release };
@@ -1619,12 +1528,14 @@ static void poffer_gone(struct wl_resource *r) { free(wl_resource_get_user_data(
 
 static void prim_offer_to(struct wl_resource *dev) {
     struct wl_client *c = wl_resource_get_client(dev);
-    if (!prim_text || !prim_len) { zwp_primary_selection_device_v1_send_selection(dev, NULL); return; }
+    unsigned current; size_t len;
+    axia_native_primary(&len, &current);
+    if (!len) { zwp_primary_selection_device_v1_send_selection(dev, NULL); return; }
     struct wl_resource *o = wl_resource_create(c, &zwp_primary_selection_offer_v1_interface, wl_resource_get_version(dev), 0);
     if (!o) return;
     unsigned *gen = malloc(sizeof *gen);
     if (!gen) { wl_resource_destroy(o); return; }
-    *gen = prim_gen;
+    *gen = current;
     wl_resource_set_implementation(o, &poffer_impl, gen, poffer_gone);
     zwp_primary_selection_device_v1_send_data_offer(dev, o);
     zwp_primary_selection_offer_v1_send_offer(o, "text/plain;charset=utf-8");
@@ -1639,17 +1550,14 @@ static void pdev_set_selection(struct wl_client *c, struct wl_resource *r, struc
     PSource *s = src ? wl_resource_get_user_data(src) : NULL;
     if (prim_src && prim_src != s) zwp_primary_selection_source_v1_send_cancelled(prim_src->res);
     prim_src = s;
+    axia_native_invalidate(true);
+    transfer_gc(NULL);
     if (!s || !s->rank) return;
     int p[2];
     if (pipe2(p, O_CLOEXEC | O_NONBLOCK)) return;
     zwp_primary_selection_source_v1_send_send(s->res, s->mime, p[1]);
     close(p[1]);
-    Reader *rd = calloc(1, sizeof *rd);
-    if (!rd) { close(p[0]); return; }
-    rd->fd = p[0];
-    rd->primary = 1;
-    rd->ev = wl_event_loop_add_fd(loop, p[0], WL_EVENT_READABLE, reader_ready, rd);
-    if (!rd->ev) { close(p[0]); free(rd); }
+    receive_native(p[0], 2, "", 0);
 }
 static const struct zwp_primary_selection_device_v1_interface pdev_impl = { .set_selection = pdev_set_selection, .destroy = res_release };
 
@@ -3715,6 +3623,9 @@ int wl_start(void) {
 void wl_stop(void) {
     axia_glass_set_backdrop(NULL);
     if (!dpy) return;
+    while (clip_readers) reader_free(clip_readers);
+    while (clip_writers) writer_free(clip_writers);
+    if (clip_transfer_timer) { wl_event_source_remove(clip_transfer_timer); clip_transfer_timer = NULL; }
     xwl_stop();
     wl_display_destroy_clients(dpy);
     wl_display_destroy(dpy);
@@ -3728,13 +3639,14 @@ void wl_dispatch(void) { if (dpy) wl_event_loop_dispatch(loop, 0); }
 
 void wl_flush(void) {
     if (!dpy) return;
+    if (clip_readers || clip_writers) transfer_gc(NULL);
     /* LordOS copied something (terminal, text field): the focused app sees it as the selection */
     unsigned g = term_clipboard_gen();
     if (g != clip_seen) {
         clip_seen = g;
-        clip_is_image = 0;
+        axia_native_text_active();
         if (selection) { wl_data_source_send_cancelled(selection->res); selection = NULL; }
-        clip_offer_gen++;
+        axia_native_offer_advance();
         offer_to_focus();
     }
     xwm_tick();                         /* X11: clipboard changes, pending requests */
@@ -3847,30 +3759,20 @@ void wlx_fullscreen_rect(int *x, int *y, int *w, int *h) {
 
 /* What an X11 app copied: LordOS's clipboard (the next wl_flush offers it to the focused Wayland app
  * and cancels a Wayland app's selection). */
-void wlx_clip_text(const char *t, size_t n, const char *origin) {
-    term_set_clipboard(t, n);
-    term_clipboard_mark(origin && origin[0] ? origin : "x11", 0);
-}
-
-void wlx_clip_png(const unsigned char *png, size_t n, const char *origin) {
-    if (n < 8 || memcmp(png, "\x89PNG\r\n\x1a\n", 8)) return;
-    if (selection) { wl_data_source_send_cancelled(selection->res); selection = NULL; }
-    clip_offer_gen++;
-    store_png(png, n);
-    snprintf(clip_img_origin, sizeof clip_img_origin, "%s", origin && origin[0] ? origin : "x11");
-    clip_img_sensitive = 0;
-    offer_to_focus();
-}
-
-void wlx_primary_text(const char *t, size_t n) {
-    if (prim_src) { zwp_primary_selection_source_v1_send_cancelled(prim_src->res); prim_src = NULL; }
-    prim_store(t, n);
+void wlx_native_changed(int kind) {
+    if (kind == 2) {
+        if (prim_src) { zwp_primary_selection_source_v1_send_cancelled(prim_src->res); prim_src = NULL; }
+        prim_offer_focus();
+    } else if (kind == 1) {
+        if (selection) { wl_data_source_send_cancelled(selection->res); selection = NULL; }
+        axia_native_offer_advance();
+        offer_to_focus();
+    }
+    /* A text generation is offered/cancels the old source in wl_flush. */
 }
 
 const char *wlx_primary(size_t *n, unsigned *gen) {
-    *n = prim_len;
-    *gen = prim_gen;
-    return prim_text ? prim_text : "";
+    return axia_native_primary(n, gen);
 }
 
 int wl_idle_inhibited(void) {

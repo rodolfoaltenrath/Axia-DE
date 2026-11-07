@@ -12,6 +12,7 @@ import zlib
 import sys
 import socket
 import time
+from clipboard_native_check import check_native
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -156,6 +157,7 @@ def main():
                     assert error not in log, log
                 for app in ['store', 'settings', 'files']:
                     assert f'timing: {app} window committed' in log, log
+            check_native(staged, env, opts)
             # Real PNG with a space in its source name. The bridge must copy, validate
             # and thumbnail it, then persist a theme-independent wallpaper selection.
             def png(w, h, pixels):

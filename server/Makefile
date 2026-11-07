@@ -536,6 +536,10 @@ build/deco-client: tests/deco_client.c $(CLIENT_GEN)
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Ibuild/gen $(WARN) -std=c11 -o $@ tests/deco_client.c $(filter %.c,$(CLIENT_GEN)) -lwayland-client
 
 # Clipboard and primary-selection offers bound to their selection (tests/xwayland/clip_offers.sh, docs/WAYLAND.md)
+build/clipboard-x11-protocol: tests/clipboard_x11_protocol.c
+	$(CC) $(CFLAGS) $(WARN) -std=c11 -D_DEFAULT_SOURCE -o $@ $< $(shell pkg-config --cflags --libs x11)
+build/clipboard-native-protocol: tests/clipboard_native_protocol.c tests/clip_offers.c $(CLIENT_GEN)
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -Ibuild/gen $(WARN) -std=c11 -o $@ tests/clipboard_native_protocol.c $(filter %.c,$(CLIENT_GEN)) -lwayland-client
 build/clip-offers: tests/clip_offers.c $(CLIENT_GEN)
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Ibuild/gen $(WARN) -std=c11 -o $@ tests/clip_offers.c $(filter %.c,$(CLIENT_GEN)) -lwayland-client
 # off/on-monitor cycles against one session (tests/gpu_cycle.sh, docs/GPU.md); a test tool, never installed
