@@ -4,7 +4,7 @@ import { createElement as h, useEffect, useRef, useState } from 'react';
 import { View, Text, addListener, mainDisplay } from '@lordos/runtime';
 import { TextInput, ScrollView } from './components.jsx';
 import { SearchField } from './controls.jsx';
-import { useLauncherApps, launcherRequest, launcherApp, launchApp } from './apps.js';
+import { useLauncherApps, launcherRequest, launcherApp, launchApp, refreshApps } from './apps.js';
 import { settings, useSettings } from './settings.js';
 import { locale, t, tOptional, direction } from './i18n.js';
 import { useStore } from './store.js';
@@ -58,6 +58,7 @@ function Widget({ node, host }) {
 }
 
 export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = launchApp, onClose, isOnBar = () => false, Menu = DefaultMenu }) {
+  useState(refreshApps);                // apps installed since the last look show up at once
   const apps = useLauncherApps();
   const [prefs] = useSettings();
   const language = useStore(locale);

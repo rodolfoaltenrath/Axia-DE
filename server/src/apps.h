@@ -21,10 +21,18 @@ typedef struct {
  * NotShowIn, TryExec present, not terminal apps). lang = "es-AR": translated names.
  * Returns the count; *out is an internal array valid until the next call. */
 int apps_list(const char *lang, const DesktopApp **out);
+/* Bumped by Rust only when a re-read changed that list (applications/desktop.rs). */
+unsigned long long apps_generation(const char *lang);
 
 /* Launches the app with that id: only one from the list above, with its Exec line, without arguments
  * from the caller and without a shell. 0 if the process started. */
 int apps_launch(const char *id);
+/* axia-server --launch: the helper apps_launch starts with posix_spawn instead of forking the
+ * session; it reads the resolved request on fd 3 and starts the program (applications/launch.rs). */
+int apps_launch_child_main(void);
+/* Only axia-server calls this (its main handles --launch): other programs linking the launcher keep
+ * starting apps from a small fork of themselves and are never re-executed with a flag they don't know. */
+void apps_set_launch_helper(const char *exe);
 /* Same, but opening a file or folder (only apps with MimeType and paths in the
  * home folder or the user's mounts, as a single argument). */
 int apps_launch_with(const char *id, const char *path);

@@ -54,6 +54,9 @@
 #include "hw/modes.h"
 #include "ui/js_hw.h"
 #include "outputs.h"
+#include "flip_ffi.h"
+#include "apps.h"
+#include "ui/js_anim.h"
 #include "monitor/netrec.h"
 #include "sec/codesig.h"
 #include "sec/netconn.h"
@@ -266,8 +269,6 @@ static int out_count(const Server *s) {
     return n;
 }
 static Out *main_out(Server *s) { return &s->out[s->out[s->main_out].on ? s->main_out : 0]; }
-/* page flips that complete before vblank (see the main loop): consecutive early flips seen, 0..8 */
-static int flip_instant, flip_told;
 static double pace_next;                /* the next frame's slot when frames are paced in software, ms */
 
 static FPipe fpipe;                     /* LORD_PIPELINE (fpipe.h), read once at startup */
@@ -798,8 +799,79 @@ static void outputs_apply(Server *s) {
 
 static char local_card[PATH_MAX];
 
+/* A card with no monitor connected when the session comes back (a laptop lid closed on a dock): the
+ * fds are kept and display_attach is tried again on the next DRM uevent, so plugging in the monitor
+ * later shows the session without restarting anything. Leaving the screen drops them. */
+#define PARK_MAX 65
+static int parked_fd[PARK_MAX], parked_n;
+static unsigned parked_seq;
+static void parked_drop(void) {
+    for (int i = 0; i < parked_n; i++) seat_device_close(parked_fd[i]);
+    parked_n = 0;
+}
+
+/* The session gets the screen (libseat: back from another VT or user). fds[0] is the card, the rest
+ * keyboards and mice. It draws on the card with the GPU if there is one, direct scanout of fullscreen
+ * and the hardware cursor. */
+static void display_attach(const int *fds, int n) {
+    Server *s = active_server;
+    parked_drop();
+    if (!s->headless || n < 1) { for (int i = 0; i < n; i++) seat_device_close(fds[i]); return; }
+    Out *o0 = &s->out[0];
+    out_free(o0);
+    memset(o0, 0, sizeof *o0);
+    o0->gpu = -1;
+    int card = dup(fds[0]);             /* kms_attach closes its fd when it fails */
+    if (kms_attach(&o0->kms, fds[0], 0)) {
+        o0->kms.fd = -1;
+        if (card >= 0 && n <= PARK_MAX) {
+            fprintf(stderr, "monitor: nothing connected to the card; waiting for a monitor (hotplug)\n");
+            parked_fd[0] = card;
+            for (int i = 1; i < n; i++) parked_fd[i] = fds[i];
+            parked_n = n;
+            parked_seq = display_hotplug_seq();
+        } else {
+            fprintf(stderr, "monitor: could not use the card\n");
+            if (card >= 0) close(card);
+            for (int i = 1; i < n; i++) seat_device_close(fds[i]);
+        }
+        set_size(s, s->W, s->H);            /* back to the frame in memory */
+        return;
+    }
+    if (card >= 0) close(card);
+    if (input_open_fds(&s->input, fds + 1, n - 1)) fprintf(stderr, "monitor: no keyboard or mouse\n");
+    wl_input_devices_changed();         /* is there a touch screen? (wl_seat touch) */
+    s->headless = 0;
+    s->gpu_paused = need_cpu();
+    o0->on = 1;
+    struct stat st;
+    if (fstat(o0->kms.fd, &st) == 0) wl_set_drm_device(st.st_rdev);
+    display_attached();                 /* Night Light, idle timers, the list in Settings; queues a resync */
+    keyboards_check(s);
+    display_take_resync();
+    outputs_apply(s);                   /* the other displays, saved modes, scales and arrangement */
+    /* the pointer where it is (an absolute tablet does not report if it does not move) or in the middle of the main display */
+    Out *m = main_out(s);
+    s->cx = m->v.x + m->v.w / 2;
+    s->cy = m->v.y + m->v.h / 2;
+    for (int i = 0; i < s->input.count; i++) {
+        const InputDevice *d = &s->input.dev[i];
+        int rx = d->ax.maximum - d->ax.minimum, ry = d->ay.maximum - d->ay.minimum;
+        if (!d->has_abs || rx <= 0 || ry <= 0) continue;
+        s->cx = (int)((long)(d->ax.value - d->ax.minimum) * (s->W - 1) / rx);
+        s->cy = (int)((long)(d->ay.value - d->ay.minimum) * (s->H - 1) / ry);
+        break;
+    }
+    clamp_pointer(s);
+    s->lx = s->cx;
+    s->ly = s->cy;
+    full_damage(s);
+    fprintf(stderr, "monitor: the session is shown (%d display(s), %dx%d, %s)\n", out_count(s), s->W, s->H, gpu_active() ? "GPU" : "CPU");
+}
+
 static void display_detach(void) {
     Server *s = active_server;
+    parked_drop();
     if (s->headless) return;
     prep_undo_all(s);                           /* a prepared frame is dropped with its display */
     gpu_tex_free(s->cursor_tex);
@@ -839,7 +911,7 @@ static void local_enable(void) {
         int fd = seat_device_open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (fd >= 0) fds[n++] = fd;
     }
-    display_attach(fds, n, 0);
+    display_attach(fds, n);
 }
 
 static void on_input(void *ud, const InputDevice *d, const struct input_event *ev) {
@@ -974,14 +1046,13 @@ static void tp_flush(void) {
 }
 static const TpHost tp_host = { tp_move, tp_warp, tp_button, tp_position, tp_flush };
 
-/* escritorio remoto: scroll fino del trackpad del navegador y pellizco (ctrl+rueda) */
-
 /* Layout and damage of the UI (once per frame, logical px). The damage goes to every display; each
  * one paints it when its flip is not pending (paint_out), at its own scale. */
 /* render_frame: paint_ui skips the JS frame callbacks (hold); they ran in this render (ran) */
 static int ui_js_hold, ui_js_ran;
 static Box paint_ui(Server *s) {
     Box d = { 0, 0, 0, 0 };
+    if (js_anim_active()) js_anim_step(now_ms());      /* native animations (Rust): no JS render */
     if (!ui_js_hold && js_wants_frame()) { js_frame(now_ms()); ui_js_ran = 1; }
     int relayout = ui.dirty;
     if (!relayout && box_empty(ui.damage)) return d;
@@ -1467,10 +1538,8 @@ static void present_cpu(Server *s, Out *o, int index, Rect r, int feed) {
 static void present_memory(Server *s, Out *o, int index, int feed, Rect drawn) {
     if (!o->frame) return;
     /* Without a fullscreen app the frame is the scene itself: read it there, no copy. A fullscreen app
-     * paints over a copy (o->frame). Right after one, the whole screen counts as changed. */
-    static int fs_before;
-    int fs = wl_fullscreen_active(), whole = fs || fs_before;
-    fs_before = fs;
+     * paints over a copy (o->frame). */
+    int fs = wl_fullscreen_active();
     Canvas out;
     if (fs) {
         canvas_init(&out, o->frame, o->scene.w, o->scene.h, o->scene.w);
@@ -1532,7 +1601,7 @@ static void gdrag_feed_now(Server *s, LbPhase *ph) {
  * several displays paint.c's drag layer and GPU drag state are shared between them (each frame is built and
  * submitted at once there, as before). */
 static int pipe_on(const Server *s, const Out *o) {
-    return fpipe_engaged(&fpipe) && !s->headless && flip_instant < 3 && o->on && out_count(s) == 1;
+    return fpipe_engaged(&fpipe) && !s->headless && !axia_flip_soft() && o->on && out_count(s) == 1;
 }
 /* pointer input and LordBench's scripted step wait for this display's flip (fpipe_blocked) */
 static int out_blocked(const Server *s, const Out *o) { return fpipe_blocked(pipe_on(s, o), o->kms.flip_pending, o->prep); }
@@ -1541,7 +1610,7 @@ static int any_blocked(const Server *s) {
     return 0;
 }
 /* the next frame's CPU work that can be done ahead: UI damage, layout or a JS frame callback waiting */
-static int ahead_work(const Out *o) { return ui.dirty || !box_empty(ui.damage) || js_wants_frame() || o->full || !box_empty(o->pend); }
+static int ahead_work(const Out *o) { return ui.dirty || !box_empty(ui.damage) || js_wants_frame() || js_anim_active() || o->full || !box_empty(o->pend); }
 static int can_prepare(const Server *s) {
     for (int i = 0; i < OUT_MAX; i++) {
         const Out *o = &s->out[i];
@@ -2040,6 +2109,9 @@ int main(int argc, char **argv) {
     if (argc > 1 && !strcmp(argv[1], "--term-holder")) return hold_main(argc, argv);
     /* (0.8.5) a component's network connector (sec/netconn.h): only creates sockets in its scope */
     if (argc > 1 && !strcmp(argv[1], "--net-connector")) return netconn_main(argc, argv);
+    /* the app launcher's helper (apps.h): started with posix_spawn, so the session never forks itself */
+    if (argc > 1 && !strcmp(argv[1], "--launch")) return apps_launch_child_main();
+    apps_set_launch_helper("/proc/self/exe");   /* this binary serves --launch (the line above) */
     if (argc > 1 && !strcmp(argv[1], "--check-code")) return check_code(argc, argv);
     /* «modo app»: axia-server --app <id> corre una app .lpk como cliente Wayland aislado
      * (app/appclient.c). El id ya viene validado del propio axia-server (no de JS). */
@@ -2297,13 +2369,13 @@ int main(int argc, char **argv) {
         /* the frame pipeline (fpipe.h): a prepared frame whose flip is done is submitted, and the next one may
          * be painted while every display waits for its flip */
         int ahead = !unseen && can_prepare(&s);
-        int wants = !unseen && (ui.dirty || !box_empty(ui.damage) || s.cursor_dirty || js_wants_frame() || wl_wants_frame() || media_wants_frame() ||
+        int wants = !unseen && (ui.dirty || !box_empty(ui.damage) || s.cursor_dirty || js_wants_frame() || js_anim_active() || wl_wants_frame() || media_wants_frame() ||
                                 outs_have_work(&s) || prep_ready(&s) || ahead);
         /* no monitor, no vblank: 60 frames a second */
         int hz = 60;
         /* a driver that completes page flips at once instead of on vblank (vmwgfx, some virtual cards)
          * is paced to the mode's refresh, or the compositor and every app draw hundreds of frames a second */
-        int soft = !s.headless && flip_instant >= 3;
+        int soft = !s.headless && axia_flip_soft();
         if (soft) hz = main_out(&s)->kms.mode.vrefresh > 0 ? main_out(&s)->kms.mode.vrefresh : 60;
         /* frames start on a fixed grid of 1000/hz ms (a software vblank): waiting in whole milliseconds
          * then never adds up, so 60 Hz stays 60 frames a second, not 57 */
@@ -2378,14 +2450,10 @@ int main(int argc, char **argv) {
             if (nh) kms_dispatch_heads(heads, nh);
             /* wp_presentation follows the main display's vblank */
             if (was && !mk->flip_pending) {
-                /* a flip waits for vblank, half a period on average; one that completes within an eighth
-                 * of it, again and again, comes from a driver that doesn't wait (a virtual card) */
+                /* does the driver wait for vblank? (rust/axia-shell/src/flip_pacing.rs) */
                 uint64_t period = mk->mode.vrefresh ? 1000000000ull / mk->mode.vrefresh : 16666667ull;
-                if (mk->flip_submit_ns && mk->flip_ns >= mk->flip_submit_ns) {
-                    if (mk->flip_ns - mk->flip_submit_ns < period / 8) { if (flip_instant < 8) flip_instant++; }
-                    else if (flip_instant > 0) flip_instant--;
-                    if (flip_instant == 3 && !flip_told++) fprintf(stderr, "kms: page flips complete before vblank: pacing to %d Hz\n", mk->mode.vrefresh ? mk->mode.vrefresh : 60);
-                }
+                if (axia_flip_observe(mk->flip_submit_ns, mk->flip_ns, period))
+                    fprintf(stderr, "kms: page flips complete before vblank: pacing to %d Hz\n", mk->mode.vrefresh ? mk->mode.vrefresh : 60);
                 wl_presented(mk->flip_ns, mk->flip_seq, mk->mode.vrefresh ? 1000000000u / mk->mode.vrefresh : 16666667u);
                 lbf_presented(mk->flip_ns, mk->mode.vrefresh ? 1000000000u / mk->mode.vrefresh : 16666667u);
                 if (keylag_enabled) keylag_presented(mk->flip_ns);
@@ -2431,6 +2499,12 @@ int main(int argc, char **argv) {
         /* Dispatch after input: a seat switch can replace the entire device list. */
         if (seatbase >= 0 && pfd[seatbase].revents && seat_dispatch() < 0) break;
         if (inputbase >= 0 && pfd[inputbase].revents && input_watch_dispatch(&s.input, !s.headless)) wl_input_devices_changed();
+        if (parked_n && s.headless && display_hotplug_seq() != parked_seq) {   /* a monitor may have appeared */
+            int f[PARK_MAX], fn = parked_n;
+            memcpy(f, parked_fd, sizeof(int) * (size_t)fn);
+            parked_n = 0;
+            display_attach(f, fn);
+        }
         hw_events();
         media_events(js_media_event);
         brokersrv_events(js_broker_event);        /* avisos de permiso e indicadores → tema */

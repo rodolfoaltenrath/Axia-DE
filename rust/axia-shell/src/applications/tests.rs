@@ -314,6 +314,21 @@ fn environment_contract_child() {
         b"[Desktop Entry]\nType=Application\nName=Imposter\nExec=/usr/bin/true\n",
     );
     assert_eq!(desktop::list(b"en").len(), 2);
+    // An app installed while the session runs (dnf, GNOME Software) bumps the generation once;
+    // asking again without changes keeps it, so the shell re-syncs only when needed.
+    let g = desktop::generation(b"en");
+    assert_eq!(desktop::generation(b"en"), g);
+    write(
+        &system.join("steam.desktop"),
+        b"[Desktop Entry]\nType=Application\nName=Steam\nExec=/usr/bin/true %U\nActions=Store;\n[Desktop Action Store]\nName=Store\nExec=/usr/bin/true steam://store\n",
+    );
+    let installed = desktop::generation(b"en");
+    assert!(installed > g);
+    assert_eq!(desktop::list(b"en").len(), 3);
+    assert_eq!(desktop::generation(b"en"), installed);
+    std::fs::remove_file(system.join("steam.desktop")).unwrap();
+    assert!(desktop::generation(b"en") > installed);
+    assert_eq!(desktop::list(b"en").len(), 2);
     assert_eq!(
         launch::default_for(b"text/plain").unwrap(),
         (3, b"beta.desktop".to_vec())

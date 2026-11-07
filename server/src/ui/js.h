@@ -15,6 +15,7 @@ void   js_shutdown(void);
 double js_tick(double now);        /* runs expired timers; ms until the next one or -1 */
 int    js_wants_frame(void);       /* there are pending requestAnimationFrame callbacks */
 void   js_frame(double now);
+void   js_anim_done(unsigned id);    /* a native animation ended → __lordAnimDone(id) (js_anim.c) */
 void   js_pointer(const char *type, int target, float x, float y, int button);
 /* Touchpad (tp/tp_route.c) → __lordGesture(kind, phase, id, x, y, a, b, c, d):
  * "scroll" (dx, dy, source), "pinch" (scale, rotation, dx, dy), "swipe" (dx, dy, fingers, system). */

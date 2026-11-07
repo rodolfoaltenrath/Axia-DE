@@ -11,7 +11,7 @@ const NO_BLUETOOTH: u32 = 1 << 8;
 const NO_FILES: u32 = 1 << 9;
 const VIEWED: u32 = NO_CAMERA | NO_MIC | NO_USB | NO_BLUETOOTH | NO_FILES;
 // Layout of sec/sandbox.h. Strings and pointer tables are fully owned by Plan
-// and remain at stable addresses until after the launcher has forked.
+// and remain at stable addresses while the launch helper uses them.
 #[repr(C)]
 struct SandboxFilesCfg {
     home: *const c_char,
@@ -522,6 +522,485 @@ pub extern "C" fn apps_last_error() -> *const c_char {
     ERROR.with(|e| e.borrow().as_ptr())
 }
 
+// ---- spawning without forking the session ----
+//
+// The session never forks itself to start an app: fork() copies the page tables of the whole
+// compositor (hundreds of MB resident, GPU mappings, dozens of threads) on the UI thread, and the
+// copy-on-write faults that follow stall the next frames. Instead the session resolves everything
+// (program, arguments, confinement) and posix_spawn()s `axia-server --launch` (vfork-style: no
+// copy, the UI thread only waits for the exec). That small, fresh process reads the request on fd 3,
+// detaches (setsid, fork) and does what the child did before: signals, logs, scope, sandbox, exec.
+
+/// The confinement plan, as plain bytes (sec/sandbox.h SandboxFilesCfg without pointers).
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+struct FilesWire {
+    home: Vec<u8>,
+    runtime_dir: Vec<u8>,
+    rw: Vec<Vec<u8>>,
+    ro: Vec<Vec<u8>>,
+    sockets: Vec<Vec<u8>>,
+    cwd: Option<Vec<u8>>,
+    opened: Option<Vec<u8>>,
+    opened_dev: u64,
+    opened_ino: u64,
+    keep_home: i32,
+}
+
+/// Everything the launched program needs, resolved by the session.
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+struct Request {
+    prog: Vec<u8>,
+    argv: Vec<Vec<u8>>,
+    cwd: Vec<u8>,
+    home: Vec<u8>,
+    id: Vec<u8>,
+    strict: bool,
+    log: Option<(Vec<u8>, bool)>,
+    files: Option<FilesWire>,
+}
+
+const WIRE_MAGIC: &[u8; 4] = b"AXL1";
+const WIRE_MAX: usize = 1 << 20;
+const WIRE_STRING_MAX: usize = 64 * 1024;
+const WIRE_ARGS_MAX: usize = 4096;
+
+unsafe fn c_bytes(p: *const c_char) -> Option<Vec<u8>> {
+    (!p.is_null()).then(|| CStr::from_ptr(p).to_bytes().to_vec())
+}
+
+impl FilesWire {
+    unsafe fn from_plan(p: &Plan) -> Self {
+        let list = |l: &[*const c_char]| l.iter().take_while(|s| !s.is_null()).map(|s| CStr::from_ptr(*s).to_bytes().to_vec()).collect();
+        let c = &p.cfg;
+        Self {
+            home: c_bytes(c.home).unwrap_or_default(),
+            runtime_dir: c_bytes(c.runtime_dir).unwrap_or_default(),
+            rw: list(&c.rw),
+            ro: list(&c.ro),
+            sockets: list(&c.sockets),
+            cwd: c_bytes(c.cwd),
+            opened: c_bytes(c.opened),
+            opened_dev: c.opened_dev,
+            opened_ino: c.opened_ino,
+            keep_home: c.keep_home,
+        }
+    }
+    /// The C structure again, pointing into strings the returned Plan owns.
+    fn plan(&self) -> Option<Plan> {
+        if self.rw.len() > 48 || self.ro.len() > 48 || self.sockets.len() > 7 {
+            return None;
+        }
+        let nil = std::ptr::null();
+        let mut p = Plan {
+            cfg: SandboxFilesCfg {
+                home: nil,
+                runtime_dir: nil,
+                rw: [nil; 49],
+                ro: [nil; 49],
+                sockets: [nil; 8],
+                cwd: nil,
+                opened: nil,
+                opened_dev: self.opened_dev,
+                opened_ino: self.opened_ino,
+                keep_home: self.keep_home,
+            },
+            strings: Vec::new(),
+        };
+        p.cfg.home = p.string(&self.home);
+        p.cfg.runtime_dir = p.string(&self.runtime_dir);
+        for (i, s) in self.rw.iter().enumerate() {
+            p.cfg.rw[i] = p.string(s);
+        }
+        for (i, s) in self.ro.iter().enumerate() {
+            p.cfg.ro[i] = p.string(s);
+        }
+        for (i, s) in self.sockets.iter().enumerate() {
+            p.cfg.sockets[i] = p.string(s);
+        }
+        if let Some(s) = &self.cwd {
+            p.cfg.cwd = p.string(s);
+        }
+        if let Some(s) = &self.opened {
+            p.cfg.opened = p.string(s);
+        }
+        Some(p)
+    }
+}
+
+struct Writer(Vec<u8>);
+impl Writer {
+    fn bytes(&mut self, s: &[u8]) {
+        self.0.extend_from_slice(&(s.len() as u32).to_le_bytes());
+        self.0.extend_from_slice(s);
+    }
+    fn list(&mut self, l: &[Vec<u8>]) {
+        self.0.extend_from_slice(&(l.len() as u32).to_le_bytes());
+        for s in l {
+            self.bytes(s);
+        }
+    }
+    fn opt(&mut self, s: &Option<Vec<u8>>) {
+        self.0.push(s.is_some() as u8);
+        if let Some(s) = s {
+            self.bytes(s);
+        }
+    }
+}
+struct Reader<'a>(&'a [u8]);
+impl Reader<'_> {
+    fn take(&mut self, n: usize) -> Option<&[u8]> {
+        if n > self.0.len() {
+            return None;
+        }
+        let (a, b) = self.0.split_at(n);
+        self.0 = b;
+        Some(a)
+    }
+    fn u32(&mut self) -> Option<u32> {
+        Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
+    }
+    fn u64(&mut self) -> Option<u64> {
+        Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
+    }
+    fn flag(&mut self) -> Option<bool> {
+        match self.take(1)?[0] {
+            0 => Some(false),
+            1 => Some(true),
+            _ => None,
+        }
+    }
+    /// A C string's bytes: bounded, no NUL inside.
+    fn bytes(&mut self) -> Option<Vec<u8>> {
+        let n = self.u32()? as usize;
+        if n > WIRE_STRING_MAX {
+            return None;
+        }
+        let s = self.take(n)?;
+        (!s.contains(&0)).then(|| s.to_vec())
+    }
+    fn list(&mut self, max: usize) -> Option<Vec<Vec<u8>>> {
+        let n = self.u32()? as usize;
+        if n > max {
+            return None;
+        }
+        (0..n).map(|_| self.bytes()).collect()
+    }
+    fn opt(&mut self) -> Option<Option<Vec<u8>>> {
+        Some(if self.flag()? { Some(self.bytes()?) } else { None })
+    }
+}
+
+impl Request {
+    fn encode(&self) -> Vec<u8> {
+        let mut w = Writer(WIRE_MAGIC.to_vec());
+        w.bytes(&self.prog);
+        w.list(&self.argv);
+        w.bytes(&self.cwd);
+        w.bytes(&self.home);
+        w.bytes(&self.id);
+        w.0.push(self.strict as u8);
+        w.0.push(self.log.is_some() as u8);
+        if let Some((path, truncate)) = &self.log {
+            w.bytes(path);
+            w.0.push(*truncate as u8);
+        }
+        w.0.push(self.files.is_some() as u8);
+        if let Some(f) = &self.files {
+            w.bytes(&f.home);
+            w.bytes(&f.runtime_dir);
+            w.list(&f.rw);
+            w.list(&f.ro);
+            w.list(&f.sockets);
+            w.opt(&f.cwd);
+            w.opt(&f.opened);
+            w.0.extend_from_slice(&f.opened_dev.to_le_bytes());
+            w.0.extend_from_slice(&f.opened_ino.to_le_bytes());
+            w.0.extend_from_slice(&f.keep_home.to_le_bytes());
+        }
+        w.0
+    }
+    fn decode(b: &[u8]) -> Option<Self> {
+        if b.len() > WIRE_MAX {
+            return None;
+        }
+        let mut r = Reader(b);
+        if r.take(4)? != WIRE_MAGIC {
+            return None;
+        }
+        let mut q = Request {
+            prog: r.bytes()?,
+            argv: r.list(WIRE_ARGS_MAX)?,
+            cwd: r.bytes()?,
+            home: r.bytes()?,
+            id: r.bytes()?,
+            strict: r.flag()?,
+            ..Request::default()
+        };
+        if r.flag()? {
+            q.log = Some((r.bytes()?, r.flag()?));
+        }
+        if r.flag()? {
+            q.files = Some(FilesWire {
+                home: r.bytes()?,
+                runtime_dir: r.bytes()?,
+                rw: r.list(48)?,
+                ro: r.list(48)?,
+                sockets: r.list(7)?,
+                cwd: r.opt()?,
+                opened: r.opt()?,
+                opened_dev: r.u64()?,
+                opened_ino: r.u64()?,
+                keep_home: i32::from_le_bytes(r.take(4)?.try_into().ok()?),
+            });
+        }
+        // a program and its own name as argv[0] at least; nothing left over
+        (r.0.is_empty() && q.prog.starts_with(b"/") && !q.argv.is_empty()).then_some(q)
+    }
+}
+
+/// The request as the C strings and tables execve and the sandbox take.
+struct Ready {
+    prog: CString,
+    args: Vec<CString>,
+    cwd: CString,
+    home: CString,
+    id: CString,
+    strict: bool,
+    log: Option<(CString, bool)>,
+    plan: Option<Plan>,
+}
+impl Ready {
+    fn new(q: &Request) -> Option<Self> {
+        Some(Self {
+            prog: CString::new(q.prog.clone()).ok()?,
+            args: q.argv.iter().map(|a| CString::new(a.clone()).ok()).collect::<Option<_>>()?,
+            cwd: CString::new(q.cwd.clone()).ok()?,
+            home: CString::new(q.home.clone()).ok()?,
+            id: CString::new(q.id.clone()).ok()?,
+            strict: q.strict,
+            log: match &q.log {
+                Some((p, t)) => Some((CString::new(p.clone()).ok()?, *t)),
+                None => None,
+            },
+            plan: match &q.files {
+                Some(f) => Some(f.plan()?),
+                None => None,
+            },
+        })
+    }
+
+    /// The launched program's process: signals, standard streams, scope, sandbox, exec.
+    /// Only libc and the C sandbox/cgroup entry points; never returns.
+    unsafe fn exec(&self) -> ! {
+        let mut argv: Vec<_> = self.args.iter().map(|s| s.as_ptr()).collect();
+        argv.push(std::ptr::null());
+        let mut none = std::mem::zeroed();
+        libc::sigemptyset(&mut none);
+        libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
+        for s in 1..32 {
+            libc::signal(s, libc::SIG_DFL);
+        }
+        let null = libc::open(c"/dev/null".as_ptr(), libc::O_RDWR);
+        if null >= 0 {
+            for d in 0..3 {
+                libc::dup2(null, d);
+            }
+        }
+        if let Some((log, truncate)) = &self.log {
+            let fd = libc::open(
+                log.as_ptr(),
+                libc::O_WRONLY
+                    | libc::O_CREAT
+                    | libc::O_APPEND
+                    | libc::O_NOFOLLOW
+                    | if *truncate { libc::O_TRUNC } else { 0 },
+                0o600,
+            );
+            if fd >= 0 {
+                libc::dup2(fd, 1);
+                libc::dup2(fd, 2);
+            }
+        }
+        libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32);
+        if self.cwd.as_bytes().is_empty() || libc::chdir(self.cwd.as_ptr()) != 0 {
+            if !self.home.as_bytes().is_empty() {
+                libc::chdir(self.home.as_ptr());
+            }
+        }
+        if self.id.as_bytes() == b"lordos-rclone"
+            || self.id.as_bytes() == b"lordos-rdesk"
+            || (app_scope_enter(self.id.as_ptr()) != 0 && self.strict)
+        {
+            libc::_exit(126);
+        }
+        if let Some(p) = &self.plan {
+            libc::unsetenv(c"DISPLAY".as_ptr());
+            if sandbox_files_isolate(&p.cfg) != 0
+                || (if p.cfg.keep_home != 0 {
+                    sandbox_apply_scope()
+                } else {
+                    sandbox_apply_files(&p.cfg)
+                }) != 0
+            {
+                libc::_exit(126);
+            }
+        }
+        libc::execve(self.prog.as_ptr(), argv.as_ptr(), environ.cast());
+        libc::_exit(127);
+    }
+}
+
+/// `axia-server --launch`: reads one request on fd 3, detaches and starts the program. Returns
+/// the helper's exit status (0: the program's process was created).
+#[no_mangle]
+pub extern "C" fn apps_launch_child_main() -> i32 {
+    unsafe {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 16 * 1024];
+        loop {
+            let n = libc::read(3, chunk.as_mut_ptr().cast(), chunk.len());
+            if n < 0 && *libc::__errno_location() == libc::EINTR {
+                continue;
+            }
+            if n <= 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n as usize]);
+            if buf.len() > WIRE_MAX {
+                return 2;
+            }
+        }
+        libc::close(3);
+        let Some(ready) = Request::decode(&buf).as_ref().and_then(Ready::new) else {
+            return 2;
+        };
+        // its own session, and the program a child of it: never a session leader, so it can't take
+        // a controlling terminal; this helper exits at once and the program is reparented
+        libc::setsid();
+        match libc::fork() {
+            0 => ready.exec(),
+            pid if pid < 0 => 1,
+            _ => 0,
+        }
+    }
+}
+
+unsafe fn write_all(fd: i32, mut b: &[u8]) -> bool {
+    while !b.is_empty() {
+        let n = libc::write(fd, b.as_ptr().cast(), b.len());
+        if n < 0 && *libc::__errno_location() == libc::EINTR {
+            continue;
+        }
+        if n <= 0 {
+            return false;
+        }
+        b = &b[n as usize..];
+    }
+    true
+}
+
+unsafe fn wait_quietly(pid: libc::pid_t) {
+    while libc::waitpid(pid, std::ptr::null_mut(), 0) < 0 && *libc::__errno_location() == libc::EINTR {}
+}
+
+/// The executable that serves `--launch`. Only axia-server registers itself (its main handles the
+/// flag); any other program linking this library (tests, launch-cli) uses `spawn_forked`, so a
+/// binary that doesn't know the flag is never re-executed with it.
+static HELPER: std::sync::OnceLock<CString> = std::sync::OnceLock::new();
+
+#[no_mangle]
+pub unsafe extern "C" fn apps_set_launch_helper(path: *const c_char) {
+    if !path.is_null() {
+        let _ = HELPER.set(CStr::from_ptr(path).to_owned());
+    }
+}
+
+unsafe fn spawn(request: &[u8]) -> i32 {
+    match HELPER.get() {
+        Some(exe) => spawn_helper(exe, request),
+        None => spawn_forked(request),
+    }
+}
+
+/// Starts the registered helper with the request on its fd 3. The UI thread waits only for the
+/// exec (posix_spawn uses CLONE_VM | CLONE_VFORK); a small thread collects the helper.
+unsafe fn spawn_helper(exe: &CStr, request: &[u8]) -> i32 {
+    let mut fds = [0; 2];
+    if libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) != 0 {
+        return -1;
+    }
+    let (r0, w) = (fds[0], fds[1]);
+    // above 3, so the dup2 to fd 3 always copies and drops close-on-exec
+    let r = libc::fcntl(r0, libc::F_DUPFD_CLOEXEC, 10);
+    libc::close(r0);
+    if r < 0 {
+        libc::close(w);
+        return -1;
+    }
+    let mut actions: libc::posix_spawn_file_actions_t = std::mem::zeroed();
+    let mut attr: libc::posix_spawnattr_t = std::mem::zeroed();
+    libc::posix_spawn_file_actions_init(&mut actions);
+    libc::posix_spawn_file_actions_adddup2(&mut actions, r, 3);
+    libc::posix_spawnattr_init(&mut attr);
+    let mut none: libc::sigset_t = std::mem::zeroed();
+    let mut all: libc::sigset_t = std::mem::zeroed();
+    libc::sigemptyset(&mut none);
+    libc::sigfillset(&mut all);
+    libc::posix_spawnattr_setsigmask(&mut attr, &none);
+    libc::posix_spawnattr_setsigdefault(&mut attr, &all);
+    libc::posix_spawnattr_setflags(&mut attr, (libc::POSIX_SPAWN_SETSIGMASK | libc::POSIX_SPAWN_SETSIGDEF) as libc::c_short);
+    let argv = [c"axia-server".as_ptr(), c"--launch".as_ptr(), std::ptr::null()];
+    let mut pid: libc::pid_t = 0;
+    let rc = libc::posix_spawn(
+        &mut pid,
+        exe.as_ptr(),
+        &actions,
+        &attr,
+        argv.as_ptr() as *const *mut c_char,
+        environ as *const *mut c_char,
+    );
+    libc::posix_spawn_file_actions_destroy(&mut actions);
+    libc::posix_spawnattr_destroy(&mut attr);
+    libc::close(r);
+    if rc != 0 {
+        libc::close(w);
+        return -1;
+    }
+    // a request is a few KB: it fits in the pipe, so this doesn't wait for the helper
+    let sent = write_all(w, request);
+    libc::close(w);
+    if std::thread::Builder::new()
+        .name("axia-launch-reap".into())
+        .spawn(move || unsafe { wait_quietly(pid) })
+        .is_err()
+    {
+        wait_quietly(pid);
+    }
+    if sent { 0 } else { -1 }
+}
+
+/// Without a registered helper (tests, launch-cli): the helper's entry runs in a forked child of
+/// this small process, with the same pipe on fd 3.
+unsafe fn spawn_forked(request: &[u8]) -> i32 {
+    let mut fds = [0; 2];
+    if libc::pipe(fds.as_mut_ptr()) != 0 {
+        return -1;
+    }
+    let pid = libc::fork();
+    if pid == 0 {
+        libc::close(fds[1]);
+        libc::dup2(fds[0], 3);
+        libc::_exit(apps_launch_child_main());
+    }
+    libc::close(fds[0]);
+    let sent = pid > 0 && write_all(fds[1], request);
+    libc::close(fds[1]);
+    if pid > 0 {
+        wait_quietly(pid);
+    }
+    if sent { 0 } else { -1 }
+}
+
 fn launch(id: &[u8], file: Option<&[u8]>, action: Option<&[u8]>) -> i32 {
     error(b"");
     if file.is_some() && action.is_some() {
@@ -571,16 +1050,6 @@ fn launch(id: &[u8], file: Option<&[u8]>, action: Option<&[u8]>) -> i32 {
     } else {
         None
     };
-    // All Rust allocations, lookups and environment reads happen BEFORE fork.
-    // The child uses libc and the existing C sandbox/cgroup entrypoints only.
-    let prog = cstring(&prog);
-    let id = cstring(id);
-    let args: Vec<_> = args.iter().map(|a| cstring(a)).collect();
-    let mut argv: Vec<_> = args.iter().map(|s| s.as_ptr()).collect();
-    argv.push(std::ptr::null());
-    let cwd = cstring(if e.cwd.starts_with(b"/") { &e.cwd } else { b"" });
-    let home = cstring(&env("HOME").unwrap_or_default());
-    let strict = env("LORDOS_SESSIOND").is_some();
     let log = defaults::home().map(|h| {
         let cache = h.join(".cache/axia");
         let _ = fs::DirBuilder::new()
@@ -589,79 +1058,19 @@ fn launch(id: &[u8], file: Option<&[u8]>, action: Option<&[u8]>) -> i32 {
             .create(&cache);
         let path = cache.join("apps.log");
         let truncate = fs::symlink_metadata(&path).is_ok_and(|m| m.len() > 1024 * 1024);
-        (cstring(path.as_os_str().as_bytes()), truncate)
+        (path.as_os_str().as_bytes().to_vec(), truncate)
     });
-    unsafe {
-        let pid = libc::fork();
-        if pid == 0 {
-            libc::setsid();
-            if libc::fork() != 0 {
-                libc::_exit(0);
-            }
-            let mut none = std::mem::zeroed();
-            libc::sigemptyset(&mut none);
-            libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
-            for s in 1..32 {
-                libc::signal(s, libc::SIG_DFL);
-            }
-            let null = libc::open(c"/dev/null".as_ptr(), libc::O_RDWR);
-            if null >= 0 {
-                for d in 0..3 {
-                    libc::dup2(null, d);
-                }
-            }
-            if let Some((log, truncate)) = &log {
-                let fd = libc::open(
-                    log.as_ptr(),
-                    libc::O_WRONLY
-                        | libc::O_CREAT
-                        | libc::O_APPEND
-                        | libc::O_NOFOLLOW
-                        | if *truncate { libc::O_TRUNC } else { 0 },
-                    0o600,
-                );
-                if fd >= 0 {
-                    libc::dup2(fd, 1);
-                    libc::dup2(fd, 2);
-                }
-            }
-            libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32);
-            if cwd.as_bytes().is_empty() || libc::chdir(cwd.as_ptr()) != 0 {
-                if !home.as_bytes().is_empty() {
-                    libc::chdir(home.as_ptr());
-                }
-            }
-            if id.as_bytes() == b"lordos-rclone"
-                || id.as_bytes() == b"lordos-rdesk"
-                || (app_scope_enter(id.as_ptr()) != 0 && strict)
-            {
-                libc::_exit(126);
-            }
-            if let Some(p) = &plan {
-                libc::unsetenv(c"DISPLAY".as_ptr());
-                if sandbox_files_isolate(&p.cfg) != 0
-                    || (if p.cfg.keep_home != 0 {
-                        sandbox_apply_scope()
-                    } else {
-                        sandbox_apply_files(&p.cfg)
-                    }) != 0
-                {
-                    libc::_exit(126);
-                }
-            }
-            libc::execve(prog.as_ptr(), argv.as_ptr(), environ.cast());
-            libc::_exit(127);
-        }
-        if pid < 0 {
-            return -1;
-        }
-        while libc::waitpid(pid, std::ptr::null_mut(), 0) < 0 {
-            if *libc::__errno_location() != libc::EINTR {
-                return -1;
-            }
-        }
-    }
-    0
+    let request = Request {
+        prog,
+        argv: args,
+        cwd: if e.cwd.starts_with(b"/") { e.cwd.clone() } else { Vec::new() },
+        home: env("HOME").unwrap_or_default(),
+        id: id.to_vec(),
+        strict: env("LORDOS_SESSIOND").is_some(),
+        log,
+        files: plan.as_ref().map(|p| unsafe { FilesWire::from_plan(p) }),
+    };
+    unsafe { spawn(&request.encode()) }
 }
 #[no_mangle]
 pub unsafe extern "C" fn apps_launch(id: *const c_char) -> i32 {
@@ -754,6 +1163,74 @@ pub unsafe extern "C" fn apps_default_for(m: *const c_char, out: *mut c_char, n:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn request() -> Request {
+        Request {
+            prog: b"/usr/bin/steam".to_vec(),
+            argv: vec![b"/usr/bin/steam".to_vec(), b"steam://store".to_vec()],
+            cwd: b"/home/u/games".to_vec(),
+            home: b"/home/u".to_vec(),
+            id: b"steam".to_vec(),
+            strict: true,
+            log: Some((b"/home/u/.cache/axia/apps.log".to_vec(), true)),
+            files: Some(FilesWire {
+                home: b"/home/u".to_vec(),
+                runtime_dir: b"/run/user/1000".to_vec(),
+                rw: vec![b"/home/u/.config/steam".to_vec(), b"/home/u/doc".to_vec()],
+                ro: vec![b"/home/u/ro".to_vec()],
+                sockets: vec![b"wayland-0".to_vec(), b"pipewire-0".to_vec()],
+                cwd: None,
+                opened: Some(b"/home/u/doc".to_vec()),
+                opened_dev: 64769,
+                opened_ino: 1234567,
+                keep_home: 0,
+            }),
+        }
+    }
+
+    #[test]
+    fn launch_requests_round_trip_and_rebuild_the_sandbox_table() {
+        let q = request();
+        let wire = q.encode();
+        assert_eq!(Request::decode(&wire), Some(q.clone()));
+        let plain = Request { log: None, files: None, strict: false, ..request() };
+        assert_eq!(Request::decode(&plain.encode()), Some(plain));
+        // the C table points at the same strings, in order, NULL-terminated
+        let plan = q.files.as_ref().unwrap().plan().unwrap();
+        assert_eq!(unsafe { FilesWire::from_plan(&plan) }, *q.files.as_ref().unwrap());
+        assert!(plan.cfg.rw[2].is_null() && plan.cfg.ro[1].is_null() && plan.cfg.sockets[2].is_null());
+        assert!(plan.cfg.cwd.is_null());
+        let ready = Ready::new(&q).unwrap();
+        assert_eq!(ready.args.len(), 2);
+        assert_eq!(ready.prog.as_bytes(), b"/usr/bin/steam");
+    }
+
+    #[test]
+    fn damaged_or_hostile_requests_are_refused() {
+        let wire = request().encode();
+        for n in 0..wire.len() {
+            assert_eq!(Request::decode(&wire[..n]), None, "truncated at {n}");
+        }
+        let mut extra = wire.clone();
+        extra.push(0);
+        assert_eq!(Request::decode(&extra), None, "trailing bytes");
+        let mut magic = wire.clone();
+        magic[0] = b'X';
+        assert_eq!(Request::decode(&magic), None);
+        let nul = Request { argv: vec![b"/bin/true".to_vec(), b"a\0b".to_vec()], ..request() };
+        assert_eq!(Request::decode(&nul.encode()), None, "NUL inside an argument");
+        let relative = Request { prog: b"steam".to_vec(), ..request() };
+        assert_eq!(Request::decode(&relative.encode()), None, "the program is an absolute path");
+        let empty = Request { argv: vec![], ..request() };
+        assert_eq!(Request::decode(&empty.encode()), None);
+        let mut many = request();
+        many.files.as_mut().unwrap().rw = vec![b"/x".to_vec(); 49];
+        assert_eq!(Request::decode(&many.encode()), None, "more grants than the C table holds");
+        let mut bad_flag = Request { log: None, files: None, ..request() }.encode();
+        let at = bad_flag.len() - 2;              // the log flag
+        bad_flag[at] = 7;
+        assert_eq!(Request::decode(&bad_flag), None);
+    }
 
     #[test]
     fn sandbox_plan_contract_child() {

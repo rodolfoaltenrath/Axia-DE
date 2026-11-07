@@ -1,6 +1,8 @@
 //! Rust services embedded in the existing C compositor.
 //! Window-system objects and the React UI retain their existing interfaces.
+mod anim;
 mod files;
+mod flip_pacing;
 mod clipboard;
 mod applications;
 mod launcher;

@@ -17,7 +17,10 @@ const wait = async (test, message) => {
 const find = (node, test) => !node ? null : test(node) ? node : (node.children || []).map((n) => find(n, test)).find(Boolean);
 const oldPreferences = { schema: 1, externalWindowStyle: true, filesAppearance: 'axia', mode: 'light', files: { zoom: 1.5 } };
 const migrated = migrateSettings(oldPreferences);
-check(migrated.schema === 2 && migrated.externalWindowStyle === false && migrated.files === oldPreferences.files && migrated.filesAppearance === 'axia', 'upgrade retires legacy adapters and retains app preferences');
+check(migrated.schema === 3 && migrated.externalWindowStyle === false && migrated.files === oldPreferences.files && migrated.filesAppearance === 'axia', 'upgrade retires legacy adapters and retains app preferences');
+const retired = migrateSettings({ schema: 2, motion: { '*': 'earth-spin' }, motionUser: [], remoteDesks: [{ host: 'pc' }], loginWallpaper: 'x', wallpaper: 'event-horizon' });
+check(retired.schema === 3 && !('motion' in retired) && !('motionUser' in retired) && !('remoteDesks' in retired) && !('loginWallpaper' in retired) && retired.wallpaper === 'event-horizon',
+  'moving wallpapers and Remote Desk preferences are removed, the still wallpaper stays');
 check(migrateSettings({ ...migrated, externalWindowStyle: true }).externalWindowStyle === true, 'legacy style can be enabled explicitly after migration');
 const styleRequest = lord.appearance.request;
 let styleCalls = 0;

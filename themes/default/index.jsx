@@ -11,7 +11,7 @@ import {
   openOverview, closeOverview, toggleOverview,
 } from '@lordos/sdk';
 import { apps } from '@lordos/apps';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { makeTheme } from './tokens.js';
 import { MenuBar } from './components/MenuBar.jsx';
 import { Dock, LaunchpadIcon, dockThickness } from './components/Dock.jsx';
@@ -45,33 +45,32 @@ configureWindows({ apps, workArea: areaFn, chrome: { w: 2, h: 43 } });
 // Pinned by default (the user changes the Dock by dragging and with «Keep in Dock»: settings.dockPinned).
 const DOCK_DEFAULT = [...DOCK_ORDER, ...apps.filter((a) => a.dock && !DOCK_ORDER.includes(a.id)).map((a) => a.id)];
 
-// Minimize effect: a window that was just minimized stays drawn for MIN_MS, shrinking towards the
-// Dock (transform: scale, painted from a cached raster by axia-server; layout doesn't change).
-const MIN_MS = 260;
-function useMinimizing(windows) {
+// Minimize effect, animated natively (lord.anim.minimize, rust/axia-shell/src/anim.rs): the frame
+// shrinks towards the Dock with no React render per frame. The window stays drawn (leaving) until
+// Rust reports the end; then it's hidden and the frame's own values are put back.
+const animDone = new Map();                             // animation id → what to do at its end
+globalThis.__lordAnimDone = (id) => { const done = animDone.get(id); animDone.delete(id); done?.(); };
+function useMinimizing(windows, dock) {
   const prev = useRef(new Map());
-  const [anim, setAnim] = useState([]);                 // [{ id, t0 }]
-  useEffect(() => {
-    const started = [];
+  const [leaving, setLeaving] = useState([]);           // [{ id, node }]
+  useLayoutEffect(() => {                               // before paint: the frame never blinks out
     for (const w of windows) {
-      if (w.minimized && prev.current.get(w.id) === false && !w.fullscreen && !w.pip) started.push({ id: w.id, t0: Date.now() });
+      const was = prev.current.get(w.id);
       prev.current.set(w.id, !!w.minimized);
+      if (!w.minimized || was !== false || w.fullscreen || w.pip || settings.get().reduceMotion) continue;
+      const node = wm.previewNode(w.id);
+      const anim = node && typeof lord.anim?.minimize === 'function' ? lord.anim.minimize(node, dock.x, dock.y) : 0;
+      if (!anim) continue;
+      setLeaving((l) => [...l.filter((x) => x.id !== w.id), { id: w.id, node }]);
+      animDone.set(anim, () => setLeaving((l) => l.filter((x) => x.id !== w.id)));
     }
-    if (started.length) setAnim((a) => [...a.filter((x) => !started.some((y) => y.id === x.id)), ...started]);
   }, [windows]);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!anim.length) return undefined;
-    let raf = requestAnimationFrame(function step() {
-      const now = Date.now();
-      if (anim.some((x) => now - x.t0 >= MIN_MS)) setAnim((a) => a.filter((x) => now - x.t0 < MIN_MS));
-      else { tick((n) => n + 1); raf = requestAnimationFrame(step); }
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [anim]);
-  const now = Date.now();
-  return anim.map((x) => ({ win: windows.find((w) => w.id === x.id), p: Math.min(1, (now - x.t0) / MIN_MS) }))
-    .filter((x) => x.win && x.win.minimized);
+  const shown = useRef([]);
+  useLayoutEffect(() => {                               // hidden now: the frame's values come back
+    for (const x of shown.current) if (!leaving.includes(x)) lord.anim?.clear(x.node);
+    shown.current = leaving;
+  }, [leaving]);
+  return leaving.map((x) => windows.find((w) => w.id === x.id)).filter((w) => w && w.minimized);
 }
 
 // Lord Flow's own shortcuts (the common ones are in sdk/shortcuts.js).
@@ -107,8 +106,6 @@ function App() {
   const [s] = useSettings();
   const t = makeTheme(s);
   const { windows, mounted, focused } = useWindows();
-  const minimizing = useMinimizing(windows);
-  const minFx = (id) => { const m = minimizing.find((x) => x.win.id === id); return m ? { p: m.p, x: main.x + main.w / 2, y: main.y + main.h - 36 } : undefined; };
   const [launchpad, setLaunchpad] = useState(false);
   const [control, setControl] = useState(null);         // the display whose menu bar opened it
   const [context, setContext] = useState(null);
@@ -121,6 +118,7 @@ function App() {
   useEffect(() => { configureWindows({ apps, workArea: areaFn }); },
     [dp.dockPosition, dp.dockSize, dp.dockAutohide, s.menuBarAllDisplays, screen.width, screen.height]);
   const main = mainDisplay();
+  const minimizing = useMinimizing(windows, { x: main.x + main.w / 2, y: main.y + main.h - 36 });
   const all = screenDisplays();
   const bars = s.menuBarAllDisplays && !screen.mirror ? all : [main];
 
@@ -152,8 +150,8 @@ function App() {
         ))}
         <DesktopWidgets layer="below" />
         <OverviewBackdrop />
-        {mounted.map((w) => <Window key={w.id} win={w} app={getApp(w.id)} t={t} focused={w.id === focused} fx={minFx(w.id)} />)}
-        {minimizing.filter((x) => !mounted.includes(x.win)).map(({ win }) => <Window key={win.id} win={win} app={getApp(win.id)} t={t} focused={false} fx={minFx(win.id)} />)}
+        {mounted.map((w) => <Window key={w.id} win={w} app={getApp(w.id)} t={t} focused={w.id === focused} leaving={minimizing.includes(w)} />)}
+        {minimizing.filter((w) => !mounted.includes(w)).map((win) => <Window key={win.id} win={win} app={getApp(win.id)} t={t} focused={false} leaving />)}
         <DesktopWidgets layer="above" />
         {/* Everything above the windows goes in its layer (sdk/layers.js, docs/LAYERS.md): the
             order is the layers', not this tree's, and clicks follow it. Menus go to «popover»

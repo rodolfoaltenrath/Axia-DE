@@ -13,15 +13,9 @@ const LIGHTS = [
   { key: 'max', color: '#28c840', glyph: '+', act: (id) => wm.toggleMaximize(id) },
 ];
 
-// fx: the minimize effect ({ p: 0..1, x, y: where the Dock is}): the frame shrinks towards it.
-function fxStyle(fx, geo) {
-  if (!fx) return null;
-  const e = fx.p * fx.p;                                // ease-in
-  const dx = (fx.x - (geo.x + geo.w / 2)) * e, dy = (fx.y - (geo.y + geo.h / 2)) * e;
-  return { transform: `translate(${dx}px, ${dy}px) scale(${1 - 0.9 * e})`, opacity: 1 - 0.7 * e, pointerEvents: 'none' };
-}
+// leaving: the minimize effect is drawing it on its way to the Dock (natively, see index.jsx).
 
-export function Window({ win, app, t, focused, fx }) {
+export function Window({ win, app, t, focused, leaving = false }) {
   const drag = useRef(null);
   const [hover, setHover] = useState(false);
   const [hoverKey, setHoverKey] = useState(null);
@@ -31,7 +25,7 @@ export function Window({ win, app, t, focused, fx }) {
   t = chrome ? { ...t, ...chrome.tokens } : t;
   const controls = chrome ? chrome.buttons.map((b) => ({ ...b, act: LIGHTS.find((l) => l.key === b.key)?.act })).filter((b) => b.act) : LIGHTS;
   const geo = wm.frame(win);
-  const fxs = fxStyle(fx, geo);
+  const fxs = leaving ? { pointerEvents: 'none' } : null;
 
   useEffect(() => {
     const offMove = addListener('pointermove', (e) => {
@@ -47,7 +41,7 @@ export function Window({ win, app, t, focused, fx }) {
   if (win.args?.csd || app.ownFrame) {
     const wmenu = win.windowMenu;
     return (
-      <WindowShell win={win} leaving={!!fx} onMouseDown={() => wm.focus(win.id)}
+      <WindowShell win={win} leaving={leaving} onMouseDown={() => wm.focus(win.id)}
         style={{ ...(app.ownFrame ? { borderRadius: win.maximized ? 0 : 12, overflow: 'hidden' } : null), boxShadow: focused ? '0 24px 56px rgba(0,0,0,0.5)' : '0 10px 28px rgba(0,0,0,0.3)', ...fxs }}>
         <AppHost id={win.id} focused={focused} />
         {wmenu && (
@@ -64,7 +58,7 @@ export function Window({ win, app, t, focused, fx }) {
   }
 
   return (
-    <WindowShell win={win} leaving={!!fx} onMouseDown={() => wm.focus(win.id)} style={{
+    <WindowShell win={win} leaving={leaving} onMouseDown={() => wm.focus(win.id)} style={{
       borderRadius: win.maximized ? 0 : chrome?.radius ?? 12, backgroundColor: app.transparent ? 'transparent' : t.windowBg, overflow: 'hidden',
       // a transparent app (the Terminal) has nothing behind its border: the border is drawn opaque
       border: `1px solid ${app.transparent ? solidOver(t.windowBorder, t.titleBg) : t.windowBorder}`,

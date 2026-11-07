@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 const MAX_APPS: usize = 1024;
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct DesktopApp {
     pub id: [c_char; 160],
     pub name: [c_char; 160],
@@ -402,6 +402,8 @@ struct Catalog {
     dirs: [PathBuf; 2],
     mt: [i128; 2],
     ready: bool,
+    /// Bumped only when a re-read changed the list, so the shell re-syncs only then.
+    generation: u64,
 }
 thread_local! {static CATALOG:RefCell<Catalog>=RefCell::new(Catalog::default());}
 pub(super) fn invalidate() {
@@ -500,13 +502,29 @@ fn refresh(c: &mut Catalog, lang: &[u8]) {
             .to_ascii_lowercase()
             .cmp(&value(&b.name).to_ascii_lowercase())
     });
+    let generation = if c.ready && c.apps == apps {
+        c.generation
+    } else {
+        c.generation + 1
+    };
     *c = Catalog {
         apps,
         lang: lang.to_vec(),
         dirs,
         mt,
         ready: true,
+        generation,
     };
+}
+/// The catalog's generation for `lang`, re-reading the folders if their mtime changed. Packages are
+/// installed by dnf or GNOME Software outside the session, so the shell asks this cheaply (two
+/// stats when nothing changed) and only fetches the list when the number moved.
+pub(super) fn generation(lang: &[u8]) -> u64 {
+    CATALOG.with(|c| {
+        let mut c = c.borrow_mut();
+        refresh(&mut c, lang);
+        c.generation
+    })
 }
 pub(super) fn list(lang: &[u8]) -> Vec<DesktopApp> {
     CATALOG.with(|c| {
@@ -525,6 +543,10 @@ pub(super) fn find(id: &[u8]) -> Option<DesktopApp> {
         refresh(&mut c, &lang);
         c.apps.iter().find(|a| value(&a.id) == id).cloned()
     })
+}
+#[no_mangle]
+pub unsafe extern "C" fn apps_generation(lang: *const c_char) -> u64 {
+    generation(bytes(lang))
 }
 #[no_mangle]
 pub unsafe extern "C" fn apps_list(lang: *const c_char, out: *mut *const DesktopApp) -> i32 {

@@ -155,6 +155,7 @@ Node *node_new(int type);
 Node *node_get(int id);
 int   node_count(void);
 void  node_destroy(Node *n);
+extern void (*node_destroy_hook)(int id);   /* js_anim.c: an animated node is gone (its id may be reused) */
 void  node_append(Node *p, Node *c);
 void  node_insert_before(Node *p, Node *c, Node *before);
 void  node_detach(Node *c);

@@ -19,6 +19,7 @@
 #include "js_mail.h"
 #include "js_input.h"
 #include "js_fw.h"
+#include "js_anim.h"
 #include "js_backup.h"
 #include "js_lan.h"
 #include "js_broker.h"
@@ -426,6 +427,7 @@ static void session_context(void) {
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */
     js_backup_register(ctx, lord);     /* lord.backup: Backups (backup/) */
     js_lan_register(ctx, lord);        /* lord.lan: Files → Network (lan/, docs/FILES.md) */
+    js_anim_register(ctx, lord);       /* lord.anim: native animations (rust/axia-shell/src/anim.rs) */
     js_logs_register(ctx, lord);       /* lord.logs: journal and LordOS logs (Logs app) */
     js_help_register(ctx, lord);       /* lord.help (Help) and lord.time.zoneOffset (Clock, tzif.c) */
     js_hw_register(ctx, lord);         /* lord.display/power/bt/mime/timedate (Settings, src/hw) */
@@ -735,6 +737,13 @@ void js_keyboards_event(int present) {
 }
 
 /* Media (media/) → __lordMedia(id, type, JSON data). */
+void js_anim_done(unsigned id) {
+    if (!ctx) return;
+    JSValueConst args[1] = { JS_NewUint32(ctx, id) };
+    JS_FreeValue(ctx, call_global("__lordAnimDone", 1, args));
+    drain_jobs();
+}
+
 void js_media_event(int id, const char *type, const char *json) {
     if (!ctx) return;
     JSValueConst args[3] = { JS_NewInt32(ctx, id), JS_NewString(ctx, type), JS_ParseJSON(ctx, json, strlen(json), "<media>") };

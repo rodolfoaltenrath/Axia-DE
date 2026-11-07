@@ -47,9 +47,16 @@ function readLinux() {
   return lord.apps.linux(locale.get().lang);
 }
 
-// Re-reads the .desktop files (after installing or removing packages; it's cheap: the server
-// only re-reads if the folders changed).
-export function refreshApps() { linux.set(readLinux()); }
+// Packages are installed by dnf or GNOME Software, outside the session. Rust decides whether the
+// installed apps changed (lord.apps.generation, applications/desktop.rs); this only asks, when
+// the launcher or search opens and every 30 s, and fetches the list when the answer moved.
+let linuxGeneration = null;
+export function refreshApps() {
+  const generation = typeof lord.apps?.generation === 'function' ? lord.apps.generation(locale.get().lang) : NaN;
+  if (generation === linuxGeneration) return;
+  linuxGeneration = generation;
+  linux.set(readLinux());
+}
 export function useLauncherApps() {
   return useStore(launcherCatalog).apps;
 }
@@ -174,3 +181,4 @@ linux.subscribe(scheduleSync);
 appRegistry.subscribe(scheduleSync);
 locale.subscribe(refreshApps);
 refreshApps();
+if (typeof lord.apps !== 'undefined' && typeof lord.apps.linux === 'function') setInterval(refreshApps, 30000);
