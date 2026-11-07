@@ -305,3 +305,16 @@ cargo xtask srpm --outdir "$PWD/build/srpm"
 O crate fica fora dos `default-members`, então o build do `axia-shell` não o
 compila. Não acrescente crates novos sem necessidade: cada um entra em
 `rust/vendor` e no arquivo-fonte do RPM. `make check` roda os testes do crate.
+
+## Custo do glass sobre aplicativos externos
+
+`surface_damage.rs` responde qual parte de uma janela o commit de um aplicativo
+mudou, a partir de `wl_surface.damage` e `damage_buffer`. O glass só é recalculado
+quando essa parte alcança ele ou a margem que o blur amostra. Em qualquer dúvida
+(janela com transformação, mudança de tamanho ou posição, recorte de viewport,
+buffer sem dano declarado), a resposta é a janela inteira.
+
+No caminho GPU, um quadro cuja única mudança é esse recálculo pinta cada glass em
+separado (`glass_only_frame` em `paint.c`), em vez de unir a barra e a Dock numa
+caixa que ocupa quase a tela toda. Qualquer outra mudança no quadro volta a uma
+caixa só; `paint_multi_damage` continua desligado. A aparência do glass não muda.
