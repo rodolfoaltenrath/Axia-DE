@@ -217,68 +217,6 @@ static void test_mimeapps(void) {
     CHECK(!desktop_id_valid("../x.desktop") && !desktop_id_valid("a/b.desktop") && !desktop_id_valid("x.desk") && !desktop_id_valid(".desktop"));
     CHECK(!desktop_id_valid("-x.desktop") && !desktop_id_valid("a b.desktop"));
 
-    const char *text =
-        "# mine\n"
-        "[Added Associations]\n"
-        "text/plain=mousepad.desktop;\n"
-        "\n"
-        "[Default Applications]\n"
-        "text/plain = org.gnome.TextEditor.desktop;mousepad.desktop;\n"
-        "application/pdf=bad/../id;org.gnome.Evince.desktop;\n"
-        "\n"
-        "[Removed Associations]\n"
-        "image/png=gimp.desktop;\n";
-    char id[DESKTOP_ID_MAX];
-    CHECK(mimeapps_default(text, "text/plain", id, sizeof id) == 0 && !strcmp(id, "org.gnome.TextEditor.desktop"));
-    CHECK(mimeapps_default(text, "application/pdf", id, sizeof id) == 0 && !strcmp(id, "org.gnome.Evince.desktop"));
-    CHECK(mimeapps_default(text, "image/png", id, sizeof id) != 0);
-    CHECK(mimeapps_default(text, "text/plai", id, sizeof id) != 0);
-    CHECK(mimeapps_removed(text, "image/png", "gimp.desktop") && !mimeapps_removed(text, "image/png", "eog.desktop"));
-
-    char *t2 = mimeapps_set_default(text, "text/plain", "mousepad.desktop");
-    CHECK(t2 != NULL);
-    CHECK(mimeapps_default(t2, "text/plain", id, sizeof id) == 0 && !strcmp(id, "mousepad.desktop"));
-    CHECK(strstr(t2, "# mine\n") == t2);                         /* comments kept */
-    CHECK(strstr(t2, "[Default Applications]\ntext/plain=mousepad.desktop;\napplication/pdf=bad/../id;org.gnome.Evince.desktop;\n\n[Removed"));
-    CHECK(strstr(t2, "[Added Associations]\ntext/plain=mousepad.desktop;\n\n"));
-    CHECK(strstr(t2, "image/png=gimp.desktop;\n"));
-    char *t3 = mimeapps_set_default(t2, "image/png", "lordos-photos.desktop");
-    CHECK(t3 && mimeapps_default(t3, "image/png", id, sizeof id) == 0 && !strcmp(id, "lordos-photos.desktop"));
-    /* new key goes at the end of its group, before the blank line */
-    CHECK(t3 && strstr(t3, "application/pdf=bad/../id;org.gnome.Evince.desktop;\nimage/png=lordos-photos.desktop;\n\n[Removed"));
-    CHECK(t3 && strstr(t3, "[Added Associations]\ntext/plain=mousepad.desktop;\nimage/png=lordos-photos.desktop;\n"));
-    char *t4 = mimeapps_set_default(t3, "text/plain", "org.gnome.TextEditor.desktop");
-    CHECK(t4 && strstr(t4, "[Added Associations]\ntext/plain=org.gnome.TextEditor.desktop;mousepad.desktop;\n"));
-    free(t2); free(t3); free(t4);
-
-    char *e = mimeapps_set_default(NULL, "x-scheme-handler/https", "firefox-esr.desktop");
-    CHECK(e && !strcmp(e, "[Default Applications]\nx-scheme-handler/https=firefox-esr.desktop;\n\n[Added Associations]\nx-scheme-handler/https=firefox-esr.desktop;\n"));
-    free(e);
-    e = mimeapps_set_default("[Default Applications]\ntext/plain=a.desktop;", "text/plain", "b.desktop");   /* no final newline */
-    CHECK(e && mimeapps_default(e, "text/plain", id, sizeof id) == 0 && !strcmp(id, "b.desktop"));
-    free(e);
-    CHECK(mimeapps_set_default(text, "text/plain", "../evil.desktop") == NULL);
-    CHECK(mimeapps_set_default(text, "text/plain\n[x]", "a.desktop") == NULL);
-
-    const char *globs =
-        "# glob\n"
-        "50:text/plain:*.txt\n"
-        "50:application/pdf:*.pdf\n"
-        "50:image/jpeg:*.jpg\n"
-        "50:image/jpeg:*.jpeg\n"
-        "50:text/x-csrc:*.c\n"
-        "50:text/x-c++src:*.C:cs\n"
-        "55:application/x-compressed-tar:*.tar.gz\n"
-        "50:application/gzip:*.gz\n"
-        "10:text/x-readme:README*\n";
-    char mt[MIME_MAX];
-    CHECK(mime_guess(globs, "/home/u/Doc.PDF", mt, sizeof mt) == 0 && !strcmp(mt, "application/pdf"));
-    CHECK(mime_guess(globs, "a.tar.gz", mt, sizeof mt) == 0 && !strcmp(mt, "application/x-compressed-tar"));
-    CHECK(mime_guess(globs, "a.gz", mt, sizeof mt) == 0 && !strcmp(mt, "application/gzip"));
-    CHECK(mime_guess(globs, "x.c", mt, sizeof mt) == 0 && !strcmp(mt, "text/x-csrc"));
-    CHECK(mime_guess(globs, "x.C", mt, sizeof mt) == 0 && !strcmp(mt, "text/x-c++src"));
-    CHECK(mime_guess(globs, "README.md", mt, sizeof mt) == 0 && !strcmp(mt, "text/x-readme"));
-    CHECK(mime_guess(globs, "noext", mt, sizeof mt) != 0);
 }
 
 static void wfile(const char *dir, const char *dev, const char *name, const char *val) {

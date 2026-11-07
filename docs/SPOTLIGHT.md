@@ -97,7 +97,7 @@ Extensions can still use `registerSpotlightSource(id, fn)`, returning a disposer
 Provider callbacks are deferred until after the immediate input update; they should
 remain fast, since JavaScript callbacks still run on the UI thread. Built-in Help
 does not use such a callback. The Classic menu uses `searchEverything.prepare()` to
-acquire an explicit lease, passes it to `results(query, apps, lease)` and calls
+acquire an explicit lease, passes it to `results(query, lease)` and calls
 `lease.close()` on unmount; its async results share the same Rust search core.
 
 After building the desktop and installing the locked frontend dependencies:
@@ -111,8 +111,9 @@ The integration test is orchestrated and asserted in Rust. Its temporary embedde
 module drives the existing React/QuickJS UI. It checks the real shortcut and button,
 Enter/reveal, calculator/conversion, apps/files/images/notes/help/clipboard/providers,
 160 open/search/close cycles, released native pixels and absence of closed-panel
-polling. `AXIA_SEARCH_OBSERVATIONS` saves JSON; `AXIA_SEARCH_BASELINE` optionally points
-to the historical `sdk/spotlight.js` for visible text/geometry and math comparisons.
+polling. The visible text and geometry are checked against fixed expectations from
+the validated UI, without loading the removed engine. `AXIA_SEARCH_OBSERVATIONS`
+saves JSON; calculator and conversion cases also have native Rust unit tests.
 The `activeBytes` diagnostic measures serialized active result/query/preview payload,
 not allocator usage; process RSS and managed image bytes are checked separately.
 Headless timing measures key dispatch to a native text update, not presented-frame

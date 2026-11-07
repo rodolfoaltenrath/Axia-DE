@@ -1,4 +1,4 @@
-/* apps_actions_test.c — desktop actions of the Linux app launcher (src/apps.c): which
+/* apps_actions_test.c — desktop actions of the Linux app launcher (rust/axia-shell/src/applications/): which
  * "[Desktop Action …]" groups are listed, their translated names, and that apps_launch_action only
  * runs an action the .desktop lists (with its own Exec line, through the normal launcher).
  *

@@ -70,7 +70,7 @@ export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = laun
   const context = { theme: tokens, area: box || area,
     settings: { startPinned: prefs.startPinned, dockRecentApps: prefs.dockRecentApps }, info: { fullName: info.fullName, user: info.user }, rtl: direction() === 'rtl',
     session: { managed: session.managed(), canPower: session.canPower() } };
-  latest.current = { context, onOpen, onClose, isOnBar, apps };
+  latest.current = { context, onOpen, onClose, isOnBar };
   const [snapshot, setSnapshot] = useState(() => {
     const reply = launcherRequest({ op: 'open', mode, context }); id.current = reply.id; return reply;
   });
@@ -97,7 +97,7 @@ export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = laun
       case 'prepareSearch': searchLease.current = searchEverything.prepare(); break;
       case 'runSearch': searchEverything.run(results.current.get(effect.key)); break;
       case 'search': {
-        const sections = searchEverything.results(effect.query, latest.current.apps, searchLease.current);
+        const sections = searchEverything.results(effect.query, searchLease.current);
         results.current = new Map(sections.flatMap((section) => section.items.map((it) => [it.key, it])));
         send(['results'], { query: effect.query, sections: sections.map((section) => ({ id: section.id,
           title: tOptional(`shell.spotlight.section.${section.id}`) || section.id,

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn mime_validation_and_buffer_contract() {
+fn mime_validation() {
     for good in ["text/plain", "x-scheme-handler/https", "image/svg+xml"] {
         assert!(mime::valid(good.as_bytes()));
     }
@@ -25,37 +25,90 @@ fn mime_validation_and_buffer_contract() {
     ] {
         assert!(!mime::desktop_valid(bad.as_bytes()));
     }
-    let t = c"[Default Applications]\ntext/plain=../bad.desktop;a.desktop;longer.desktop;\n";
-    unsafe {
-        let mut out = [42; 12];
+}
+#[test]
+fn association_lists_preserve_order_and_skip_invalid_ids() {
+    let text = b"# mine\n[Added Associations]\ntext/plain=mousepad.desktop;\n\n[Default Applications]\ntext/plain = org.gnome.TextEditor.desktop;mousepad.desktop;\napplication/pdf=bad/../id;org.gnome.Evince.desktop;\n\n[Removed Associations]\nimage/png=gimp.desktop;\n";
+    assert_eq!(
+        mime::entries(text, b"Default Applications", b"text/plain").collect::<Vec<_>>(),
+        vec![
+            b"org.gnome.TextEditor.desktop".as_slice(),
+            b"mousepad.desktop"
+        ]
+    );
+    assert_eq!(
+        mime::entries(text, b"Default Applications", b"application/pdf").collect::<Vec<_>>(),
+        vec![b"org.gnome.Evince.desktop".as_slice()]
+    );
+    for absent in [b"image/png".as_slice(), b"text/plai"] {
         assert_eq!(
-            mime::mimeapps_default(t.as_ptr(), c"text/plain".as_ptr(), out.as_mut_ptr(), 10),
+            mime::entries(text, b"Default Applications", absent).count(),
             0
         );
-        assert_eq!(&out[10..], &[42, 42]);
-        assert_eq!(CStr::from_ptr(out.as_ptr()).to_bytes(), b"a.desktop");
-        assert_eq!(
-            mime::mimeapps_default(t.as_ptr(), c"text/plain".as_ptr(), out.as_mut_ptr(), 9),
-            -1
-        );
-        assert_eq!(
-            mime::mimeapps_default(
-                t.as_ptr(),
-                c"text/plain".as_ptr(),
-                std::ptr::null_mut(),
-                160
-            ),
-            -1
-        );
-        let result = mime::mimeapps_set_default(
-            std::ptr::null(),
-            c"text/plain".as_ptr(),
-            c"a.desktop".as_ptr(),
-        );
-        assert!(!result.is_null());
-        assert!(bytes(result).starts_with(b"[Default Applications]"));
-        libc::free(result.cast());
     }
+    assert!(mime::removed(text, b"image/png", b"gimp.desktop"));
+    assert!(!mime::removed(text, b"image/png", b"eog.desktop"));
+    let changed = mime::set(text, b"text/plain", b"mousepad.desktop");
+    assert_eq!(changed, b"# mine\n[Added Associations]\ntext/plain=mousepad.desktop;\n\n[Default Applications]\ntext/plain=mousepad.desktop;\napplication/pdf=bad/../id;org.gnome.Evince.desktop;\n\n[Removed Associations]\nimage/png=gimp.desktop;\n");
+    let changed = mime::set(&changed, b"image/png", b"lordos-photos.desktop");
+    assert_eq!(changed, b"# mine\n[Added Associations]\ntext/plain=mousepad.desktop;\nimage/png=lordos-photos.desktop;\n\n[Default Applications]\ntext/plain=mousepad.desktop;\napplication/pdf=bad/../id;org.gnome.Evince.desktop;\nimage/png=lordos-photos.desktop;\n\n[Removed Associations]\nimage/png=gimp.desktop;\n");
+    let changed = mime::set(&changed, b"text/plain", b"org.gnome.TextEditor.desktop");
+    assert_eq!(
+        mime::entries(&changed, b"Added Associations", b"text/plain").collect::<Vec<_>>(),
+        vec![
+            b"org.gnome.TextEditor.desktop".as_slice(),
+            b"mousepad.desktop"
+        ]
+    );
+    let list = b"[Default Applications]\ntext/html=a.desktop;../bad.desktop;b.desktop;\n[Added Associations]\ntext/html=c.desktop;\n";
+    assert_eq!(
+        mime::entries(list, b"Default Applications", b"text/html").collect::<Vec<_>>(),
+        vec![b"a.desktop".as_slice(), b"b.desktop"]
+    );
+    assert_eq!(
+        mime::entries(list, b"Added Associations", b"text/html").collect::<Vec<_>>(),
+        vec![b"c.desktop".as_slice()]
+    );
+}
+#[test]
+fn association_edits_handle_empty_files_and_missing_final_newlines() {
+    assert_eq!(mime::set(b"", b"x-scheme-handler/https", b"firefox-esr.desktop"), b"[Default Applications]\nx-scheme-handler/https=firefox-esr.desktop;\n\n[Added Associations]\nx-scheme-handler/https=firefox-esr.desktop;\n");
+    let changed = mime::set(
+        b"[Default Applications]\ntext/plain=a.desktop;",
+        b"text/plain",
+        b"b.desktop",
+    );
+    assert_eq!(
+        mime::entries(&changed, b"Default Applications", b"text/plain").collect::<Vec<_>>(),
+        vec![b"b.desktop".as_slice()]
+    );
+    assert_eq!(
+        mime::unset(
+            b"[Default Applications]\ntext/html=a.desktop;",
+            b"text/html"
+        ),
+        b"[Default Applications]\n"
+    );
+    assert_eq!(mime::unset(b"# mine\n[Default Applications]\ntext/plain=x.desktop;\ntext/html=a.desktop;\n\n[Added Associations]\ntext/html=a.desktop;z.desktop;\nimage/png=p.desktop;\n[Removed Associations]\ntext/html=r.desktop;\n", b"text/html"), b"# mine\n[Default Applications]\ntext/plain=x.desktop;\n\n[Added Associations]\nimage/png=p.desktop;\n[Removed Associations]\ntext/html=r.desktop;\n");
+}
+#[test]
+fn mime_globs_match_paths_suffixes_and_case_flags() {
+    let globs = b"# glob\n50:text/plain:*.txt\n50:application/pdf:*.pdf\n50:image/jpeg:*.jpg\n50:image/jpeg:*.jpeg\n50:text/x-csrc:*.c\n50:text/x-c++src:*.C:cs\n55:application/x-compressed-tar:*.tar.gz\n50:application/gzip:*.gz\n10:text/x-readme:README*\n";
+    for (path, expected) in [
+        ("/home/u/Doc.PDF", "application/pdf"),
+        ("a.tar.gz", "application/x-compressed-tar"),
+        ("a.gz", "application/gzip"),
+        ("x.c", "text/x-csrc"),
+        ("x.C", "text/x-c++src"),
+        ("README.md", "text/x-readme"),
+    ] {
+        assert_eq!(
+            mime::guess(globs, path.as_bytes(), 128).as_deref(),
+            Some(expected.as_bytes()),
+            "{path}"
+        );
+    }
+    assert!(mime::guess(globs, b"noext", 128).is_none());
 }
 #[test]
 fn associations_keep_other_preferences_and_remove_all_target_keys() {
@@ -281,7 +334,22 @@ fn environment_contract_child() {
         launch::default_for(b"text/plain").unwrap(),
         (2, b"beta.desktop".to_vec())
     );
+    write(
+        &config.join("mimeapps.list"),
+        b"# kept\n[Default Applications]\nimage/png=photos.desktop;\n",
+    );
     unsafe {
+        let before = std::fs::read(config.join("mimeapps.list")).unwrap();
+        assert_eq!(
+            defaults::defaults_set(c"text/plain".as_ptr(), c"../evil.desktop".as_ptr()),
+            -1
+        );
+        assert_eq!(
+            defaults::defaults_set(c"text/plain\n[x]".as_ptr(), c"zeta.desktop".as_ptr()),
+            -1
+        );
+        assert_eq!(defaults::defaults_unset(c"text/plain\n[x]".as_ptr()), -1);
+        assert_eq!(std::fs::read(config.join("mimeapps.list")).unwrap(), before);
         assert_eq!(
             defaults::defaults_set(c"text/plain".as_ptr(), c"zeta.desktop".as_ptr()),
             0
@@ -292,7 +360,32 @@ fn environment_contract_child() {
             launch::default_for(b"text/plain").unwrap(),
             (1, b"zeta.desktop".to_vec())
         );
+        let mut out = [42; 16];
+        assert_eq!(
+            defaults::defaults_lookup(c"text/plain".as_ptr(), out.as_mut_ptr(), 13),
+            0
+        );
+        assert_eq!(CStr::from_ptr(out.as_ptr()).to_bytes(), b"zeta.desktop");
+        assert_eq!(&out[13..], &[42; 3]);
+        assert_eq!(
+            defaults::defaults_lookup(c"text/plain".as_ptr(), out.as_mut_ptr(), 12),
+            -1
+        );
+        assert_eq!(
+            defaults::defaults_lookup(c"text/plain".as_ptr(), std::ptr::null_mut(), 160),
+            -1
+        );
         assert_eq!(defaults::defaults_unset(c"text/plain".as_ptr()), 0);
+        let reset = std::fs::read(config.join("mimeapps.list")).unwrap();
+        assert!(reset.starts_with(b"# kept\n"));
+        assert_eq!(
+            mime::entries(&reset, b"Default Applications", b"image/png").next(),
+            Some(b"photos.desktop".as_slice())
+        );
+        assert_eq!(
+            mime::entries(&reset, b"Default Applications", b"text/plain").count(),
+            0
+        );
         assert_eq!(
             launch::default_for(b"text/plain").unwrap(),
             (2, b"beta.desktop".to_vec())

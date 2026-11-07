@@ -1652,7 +1652,7 @@ static const JSCFunctionListEntry wayland_funcs[] = {
     JS_CFUNC_DEF("info", 0, f_wl_info),
 };
 
-/* ---- lord.apps: installed Linux apps (.desktop, apps.c) ---- */
+/* ---- lord.apps: installed Linux apps (.desktop, Rust applications module) ---- */
 
 /* lord.apps.linux(language) → [{ id, name, genericName, comment, keywords, categories, wmClass, icon, user }] */
 static JSValue f_apps_linux(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -1685,7 +1685,7 @@ static JSValue f_apps_linux(JSContext *c, JSValueConst this_val, int argc, JSVal
     return arr;
 }
 
-/* lord.apps.launch(id): only the id of a .desktop from the list (see apps.c); no arguments. */
+/* lord.apps.launch(id): only the id of a .desktop from the list (see the Rust applications module); no arguments. */
 static JSValue f_apps_launch(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val; (void)argc;
     const char *id = JS_ToCString(c, argv[0]);
@@ -1695,7 +1695,7 @@ static JSValue f_apps_launch(JSContext *c, JSValueConst this_val, int argc, JSVa
 }
 
 /* lord.apps.actions(id, language) → [{ id, name }]: the desktop actions of an installed .desktop
- * (apps.c, apps_actions); [] for an unknown id. */
+ * (Rust applications::desktop, apps_actions); [] for an unknown id. */
 static JSValue f_apps_actions(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
     JSValue arr = JS_NewArray(c);

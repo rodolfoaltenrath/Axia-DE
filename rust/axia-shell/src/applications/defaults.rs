@@ -88,7 +88,7 @@ fn write_atomic(path: &Path, text: &[u8]) -> std::io::Result<()> {
     }
     result
 }
-fn load_files() -> Vec<(Option<Vec<u8>>, bool)> {
+pub(super) fn load() -> Vec<(Vec<u8>, bool)> {
     let mut paths = Vec::new();
     if let Some(c) = config() {
         paths.push((c.join("mimeapps.list"), true));
@@ -104,12 +104,9 @@ fn load_files() -> Vec<(Option<Vec<u8>>, bool)> {
     ] {
         paths.push((system(s), false));
     }
-    paths.into_iter().map(|(p, u)| (read(&p), u)).collect()
-}
-pub(super) fn load() -> Vec<(Vec<u8>, bool)> {
-    load_files()
+    paths
         .into_iter()
-        .map(|(t, u)| (t.unwrap_or_default(), u))
+        .map(|(p, u)| (read(&p).unwrap_or_default(), u))
         .collect()
 }
 pub(super) fn is_removed(files: &[(Vec<u8>, bool)], upto: usize, m: &[u8], id: &[u8]) -> bool {
@@ -150,12 +147,6 @@ fn edit(m: &[u8], id: Option<&[u8]>) -> i32 {
     }
 }
 
-#[repr(C)]
-pub struct DefaultsFiles {
-    text: [*mut c_char; 6],
-    user: [i32; 6],
-    n: i32,
-}
 #[no_mangle]
 pub unsafe extern "C" fn defaults_set_root(p: *const c_char) {
     let p = bytes(p);
@@ -168,57 +159,6 @@ pub unsafe extern "C" fn defaults_set_root(p: *const c_char) {
     });
     GLOBS.with(|g| *g.borrow_mut() = None);
     desktop::invalidate();
-}
-#[no_mangle]
-pub extern "C" fn defaults_root() -> *const c_char {
-    ROOT.with(|r| r.borrow().as_ptr())
-}
-#[no_mangle]
-pub unsafe extern "C" fn defaults_read(p: *const c_char) -> *mut c_char {
-    read(path(p)).map_or(std::ptr::null_mut(), |v| allocated(&v))
-}
-#[no_mangle]
-pub unsafe extern "C" fn defaults_load(out: *mut DefaultsFiles) {
-    if out.is_null() {
-        return;
-    }
-    let mut f = DefaultsFiles {
-        text: [std::ptr::null_mut(); 6],
-        user: [0; 6],
-        n: 0,
-    };
-    for (i, (text, user)) in load_files().into_iter().enumerate() {
-        f.text[i] = text.map_or(std::ptr::null_mut(), |t| allocated(&t));
-        f.user[i] = user as i32;
-        f.n += 1;
-    }
-    out.write(f);
-}
-#[no_mangle]
-pub unsafe extern "C" fn defaults_free(p: *mut DefaultsFiles) {
-    if let Some(f) = p.as_mut() {
-        for t in &mut f.text {
-            libc::free((*t).cast());
-            *t = std::ptr::null_mut();
-        }
-        f.user = [0; 6];
-        f.n = 0;
-    }
-}
-#[no_mangle]
-pub unsafe extern "C" fn defaults_removed(
-    p: *const DefaultsFiles,
-    upto: i32,
-    m: *const c_char,
-    id: *const c_char,
-) -> i32 {
-    let Some(f) = p.as_ref() else {
-        return 0;
-    };
-    f.text
-        .iter()
-        .take((upto.saturating_add(1).max(0) as usize).min(f.n.max(0) as usize))
-        .any(|t| mime::removed(bytes(*t), bytes(m), bytes(id))) as i32
 }
 #[no_mangle]
 pub unsafe extern "C" fn defaults_lookup(m: *const c_char, out: *mut c_char, n: usize) -> i32 {
