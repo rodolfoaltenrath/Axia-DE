@@ -381,3 +381,18 @@ O teste headless real verifica a cadência dos quadros e uma atualização agend
 durante a pintura. Uma segunda sessão inicia um app isolado de teste usando o
 host real, React e callbacks Wayland, para detectar quadros travados ou sem limite
 de frequência. Só o pacote temporário de teste é alterado.
+
+## Ativação local com backup
+
+`cargo xtask deploy --source DIRETORIO --target DIRETORIO --backups DIRETORIO
+--server-sha256 HASH` aplica um payload local já compilado. A operação verifica o
+manifesto e o hash do compositor antes de escrever, conserva os auxiliares do
+host e cria um backup dos arquivos que serão alterados, incluindo uma assinatura
+anterior. Cada arquivo novo é sincronizado e renomeado sobre o destino, sem
+substituir os diretórios existentes nem truncar o executável em uso.
+
+Depois da cópia, o novo compositor valida o manifesto. Erros de cópia ou
+verificação restauram os arquivos anteriores e removem os novos que não existiam.
+Os testes cobrem instalação sobre diretórios não vazios, executável em execução,
+entrada corrompida, links no destino e falha de verificação com restauração.
+O instalador pode ser compilado em contêiner e executado no host sem Cargo.

@@ -7,6 +7,7 @@
 //!
 //! This crate runs on the development or build machine only.
 
+mod deploy;
 mod dist;
 mod install;
 mod sha256;
@@ -73,8 +74,20 @@ fn dispatch(args: &[String]) -> Result<()> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|dist|srpm|desktop-binaries>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries>")?;
     match command.as_str() {
+        "deploy" => {
+            let values = options(rest, &["source", "target", "backups", "server-sha256"])?;
+            let get = |name: &str| {
+                values.get(name).ok_or_else(|| format!("deploy requires --{name}"))
+            };
+            deploy::deploy(
+                Path::new(get("source")?),
+                Path::new(get("target")?),
+                Path::new(get("backups")?),
+                get("server-sha256")?,
+            )
+        }
         "install" => {
             let values = options(rest, &["prefix", "libexecdir", "destdir"])?;
             let value = |name: &str, default: &str| {
