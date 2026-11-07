@@ -16,7 +16,6 @@ import { View } from '@lordos/runtime';
 import { useStore } from './store.js';
 import { wm, fxNodes, activeDesktop } from './windows.js';
 import { onDesktop } from './desktopmodel.js';
-import { desktopFx } from './desktops.js';
 import { OverviewCover, OverviewPlaceholder, useOverviewPlace } from './overview.jsx';
 
 export const WINDOW_EDGE = 6;     // px of border outside the frame
@@ -40,11 +39,10 @@ export function WindowShell({ win, style, children, onMouseDown, resizable = tru
   const geo = wm.frame(win);
   const tv = useOverviewPlace(win.id);
   const here = onDesktop(win, useStore(activeDesktop));
-  const fx = useStore(desktopFx);
   const m = resizable && !win.maximized && !tv ? WINDOW_EDGE : 0;
   const inner = useRef(null);
   if (!inner.current) inner.current = (n) => { if (n && n.id) fxNodes.set(win.id, n.id); else fxNodes.delete(win.id); };
-  const place = tv ? { transform: `translate(${tv.x - geo.x}px, ${tv.y - geo.y}px) scale(${tv.scale})`, transformOrigin: 'left top' } : fx && here ? fx : null;
+  const place = tv ? { transform: `translate(${tv.x - geo.x}px, ${tv.y - geo.y}px) scale(${tv.scale})`, transformOrigin: 'left top' } : null;
   return (
     <View ref={wm.frameRef(win.id, m)} onMouseDown={tv ? undefined : onMouseDown}
       style={{ position: 'absolute', left: geo.x - m, top: geo.y - m, width: geo.w + 2 * m, height: geo.h + 2 * m, display: here && (!win.minimized || tv || leaving) ? 'flex' : 'none', ...(tv ? { pointerEvents: 'box-none' } : null) }}>

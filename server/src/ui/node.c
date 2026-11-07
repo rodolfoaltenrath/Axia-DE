@@ -169,7 +169,16 @@ void node_restyled(Node *n, const Style *before, const StyleExt *ext_before) {
          * content; the old and new boxes are damaged by the paint pass) */
         Style moved = *before;
         memcpy(moved.pos, n->s.pos, sizeof moved.pos);
-        if (!ext_changed && n->s.absolute && before->absolute && !memcmp(&moved, &n->s, sizeof moved)) node_moved(n);
+        /* translate only shifts where the node is placed (layout.c place) and opacity only how its pixels
+         * are blended: neither needs its subtree laid out again (native animations, rust/.../anim.rs) */
+        moved.translate_x = n->s.translate_x;
+        moved.translate_y = n->s.translate_y;
+        moved.opacity = n->s.opacity;
+        int insets = memcmp(before->pos, n->s.pos, sizeof before->pos) != 0;
+        if (!ext_changed && (!insets || (n->s.absolute && before->absolute)) && !memcmp(&moved, &n->s, sizeof moved)) {
+            if (before->opacity != n->s.opacity) { n->paint_dirty = 1; n->gen++; }
+            node_moved(n);
+        }
         else if (transform_only(n, before, ext_before)) {
             /* repainted, placed again by its parent; its own layout and every measure are kept */
             n->paint_dirty = 1;

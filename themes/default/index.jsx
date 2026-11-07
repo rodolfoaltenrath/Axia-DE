@@ -8,7 +8,7 @@ import {
   DesktopWidgets, registerGestureActions, screenDisplays, mainDisplay, settings, Layer, PowerDialog,
   findWallpaper, wallpaperSrc, useShortcuts, AppSwitcher, hideApp, hideOthers,
   toggleShowDesktop, appSettingsItem, flowDesktopKeys, flowGrabs, desktopSwipe, DesktopHud, OverviewBackdrop, OverviewChrome,
-  openOverview, closeOverview, toggleOverview,
+  openOverview, closeOverview, toggleOverview, whenAnimDone, nativeAnim,
 } from '@lordos/sdk';
 import { apps } from '@lordos/apps';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -48,8 +48,6 @@ const DOCK_DEFAULT = [...DOCK_ORDER, ...apps.filter((a) => a.dock && !DOCK_ORDER
 // Minimize effect, animated natively (lord.anim.minimize, rust/axia-shell/src/anim.rs): the frame
 // shrinks towards the Dock with no React render per frame. The window stays drawn (leaving) until
 // Rust reports the end; then it's hidden and the frame's own values are put back.
-const animDone = new Map();                             // animation id → what to do at its end
-globalThis.__lordAnimDone = (id) => { const done = animDone.get(id); animDone.delete(id); done?.(); };
 function useMinimizing(windows, dock) {
   const prev = useRef(new Map());
   const [leaving, setLeaving] = useState([]);           // [{ id, node }]
@@ -59,15 +57,15 @@ function useMinimizing(windows, dock) {
       prev.current.set(w.id, !!w.minimized);
       if (!w.minimized || was !== false || w.fullscreen || w.pip || settings.get().reduceMotion) continue;
       const node = wm.previewNode(w.id);
-      const anim = node && typeof lord.anim?.minimize === 'function' ? lord.anim.minimize(node, dock.x, dock.y) : 0;
+      const anim = node ? nativeAnim()?.minimize(node, dock.x, dock.y) || 0 : 0;
       if (!anim) continue;
       setLeaving((l) => [...l.filter((x) => x.id !== w.id), { id: w.id, node }]);
-      animDone.set(anim, () => setLeaving((l) => l.filter((x) => x.id !== w.id)));
+      whenAnimDone(anim, () => setLeaving((l) => l.filter((x) => x.id !== w.id)));
     }
   }, [windows]);
   const shown = useRef([]);
   useLayoutEffect(() => {                               // hidden now: the frame's values come back
-    for (const x of shown.current) if (!leaving.includes(x)) lord.anim?.clear(x.node);
+    for (const x of shown.current) if (!leaving.includes(x)) nativeAnim()?.clear(x.node);
     shown.current = leaving;
   }, [leaving]);
   return leaving.map((x) => windows.find((w) => w.id === x.id)).filter((w) => w && w.minimized);

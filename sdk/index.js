@@ -16,6 +16,7 @@ export { useShortcuts, addShortcuts, runShortcut, shortcutList, shortcutsRev, sh
 import { resetShortcuts } from './shortcuts.js';
 export { AppSwitcher, openSwitcher, cycleAppWindows } from './appswitcher.jsx';
 export { dockGlass } from './glass.js';
+export { whenAnimDone, nativeAnim } from './anim.js';
 export { shortcutProfile } from './shortcutprofile.js';
 export { osk, oskState, startOsk } from './osk.js';
 export { OskPanel, OskIcon, OskStatus, oskLift } from './osk.jsx';

@@ -10,15 +10,13 @@ import { dockGlass, useDockPreviews } from '@lordos/sdk';
 // this file only draws it and says where things are. The Trash is always the last item.
 import {
   View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
-  registerDockTarget, dockDragJustEnded, refreshTrash, Layer,
+  registerDockTarget, dockDragJustEnded, refreshTrash, Layer, nativeAnim, whenAnimDone,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GAP = 8, PAD = 9, MARGIN = 6;
 const SEP = GAP + 1;          // separator before the recent apps and before the Trash
-const SLIDE_MS = 180;
 const REORDER_MS = 150;       // neighbours sliding aside while dragging
-const POOF_MS = 320;
 const NEAR = 60;              // dragged farther than this from the Dock: the remove cue (after a hold)
 const TRASH = '__trash';
 
@@ -72,35 +70,23 @@ export function TrashIcon({ size: s, full, dark }) {
 
 // Auto-hide: shows when the pointer touches the edge (after a short delay) and hides
 // when it leaves the Dock. State only changes when crossing those boundaries: moving the mouse around the rest of the
-// screen doesn't redraw anything. The animation belongs to this component, not the desktop.
+// screen doesn't redraw anything. Rust owns interpolation in the native animator.
 // force: shown right away (an app being dragged from the app launcher).
 function useAutohide(enabled, position, rectRef, keepOpen, areaRef, force) {
-  const [p, setP] = useState(enabled ? 0 : 1);     // 0 hidden … 1 in view
+  const [shown, setShown] = useState(!enabled);
   const want = useRef(!enabled);
   const keep = useRef(keepOpen);
   keep.current = keepOpen;
   const show = useRef(null);
   useEffect(() => {
-    if (!enabled) { want.current = true; setP(1); return undefined; }
+    if (!enabled) { want.current = true; setShown(true); return undefined; }
     want.current = false;
-    setP(0);
-    let timer = 0, raf = 0, from = 0, t0 = 0;
-    const animate = (to) => {
-      cancelAnimationFrame(raf);
-      t0 = performance.now();
-      const step = (now) => {
-        const k = Math.min(1, (now - t0) / SLIDE_MS), e = 1 - (1 - k) * (1 - k);
-        setP(from + (to - from) * e);
-        if (k < 1) raf = requestAnimationFrame(step);
-        else from = to;
-      };
-      raf = requestAnimationFrame(step);
-    };
+    setShown(false);
+    let timer = 0;
     const set = (on) => {
       if (want.current === on) return;
       want.current = on;
-      from = on ? 0 : 1;
-      animate(on ? 1 : 0);
+      setShown(on);
     };
     show.current = () => set(true);
     const off = addListener('pointermove', (e) => {
@@ -116,10 +102,10 @@ function useAutohide(enabled, position, rectRef, keepOpen, areaRef, force) {
         if (!timer) timer = setTimeout(() => { timer = 0; if (!keep.current) set(false); }, 500);
       } else if (timer) { clearTimeout(timer); timer = 0; }
     });
-    return () => { off(); clearTimeout(timer); cancelAnimationFrame(raf); show.current = null; };
+    return () => { off(); clearTimeout(timer); show.current = null; };
   }, [enabled, position]);
   useEffect(() => { if (force && enabled) show.current?.(); }, [force, enabled]);
-  return p;
+  return shown;
 }
 
 // Positions that glide to their new value in `ms` (ease-out) while `active`; otherwise they jump.
@@ -158,36 +144,48 @@ function useGlide(targets, active, ms, origin) {
   return out;
 }
 
-// The «poof» after an icon is removed: the icon shrinks and fades and five puffs spread out.
-function Poof({ poof, size, reduce }) {
-  const [, tick] = useState(0);
-  const p = poof ? Math.min(1, (Date.now() - poof.t0) / POOF_MS) : 1;
+// Static React nodes; Rust animates the cached rasters until one completion notice.
+function PoofPart({ part, size, Icon, onDone }) {
+  const node = useRef(null);
   useEffect(() => {
-    if (!poof || p >= 1 || reduce) return undefined;
-    const raf = requestAnimationFrame(() => tick((n) => n + 1));
-    return () => cancelAnimationFrame(raf);
-  });
-  if (!poof || p >= 1 || reduce) return null;
-  const s = size;
-  return (
-    <View style={{ position: 'absolute', left: poof.x - s, top: poof.y - s, width: s * 2, height: s * 2, pointerEvents: 'none' }}>
-      {(() => {
-        // the icon shrinks (drawn smaller, not scaled: a scaled raster would show its box) and fades
-        const k = Math.round(s * (1 - 0.6 * p));
-        return (
-          <View style={{ position: 'absolute', left: s - k / 2, top: s - k / 2, width: k, height: k, opacity: 1 - p }}>
-            {poof.Icon ? <poof.Icon size={k} /> : null}
-          </View>
-        );
-      })()}
-      {[0, 72, 144, 216, 288].map((a) => {
-        const r = s * (0.25 + 0.75 * p), d = s * (0.22 + 0.2 * p);
-        const cx = s + Math.cos((a * Math.PI) / 180) * r, cy = s + Math.sin((a * Math.PI) / 180) * r;
-        return <View key={a} style={{ position: 'absolute', left: cx - d / 2, top: cy - d / 2, width: d, height: d, borderRadius: d / 2,
-          backgroundColor: 'rgba(235,238,245,0.9)', opacity: 0.85 * (1 - p) }} />;
-      })}
-    </View>
-  );
+    const anim = nativeAnim(), n = node.current?.id;
+    if (!anim?.dockPoof || !n) { onDone?.(); return undefined; }
+    const id = anim.dockPoof(n, size, part);
+    if (!id) { onDone?.(); return undefined; }
+    const cancel = onDone ? whenAnimDone(id, onDone) : () => {};
+    return () => { cancel(); if (node.current?.id === n) anim.clear(n); };
+  }, [part, size]);
+  return <View ref={node} style={{ position: 'absolute', left: size / 2, top: size / 2,
+    width: size, height: size, ...(part ? { borderRadius: size / 2, backgroundColor: 'rgba(235,238,245,0.9)' } : null) }}>
+    {Icon ? <Icon size={size} /> : null}
+  </View>;
+}
+function PoofEffect({ poof, size, reduce }) {
+  const [done, setDone] = useState(!!reduce);
+  useEffect(() => { if (reduce) setDone(true); }, [reduce]);
+  const finish = useRef(() => setDone(true));
+  if (done || reduce) return null;
+  return <View style={{ position: 'absolute', left: poof.x - size, top: poof.y - size,
+    width: size * 2, height: size * 2, pointerEvents: 'none' }}>
+    <PoofPart part={0} size={size} Icon={poof.Icon} onDone={finish.current} />
+    {[1, 2, 3, 4, 5].map((part) => <PoofPart key={part} part={part} size={size} />)}
+  </View>;
+}
+function Poof({ poof, size, reduce }) {
+  return poof ? <PoofEffect key={poof.t0} poof={poof} size={size} reduce={reduce} /> : null;
+}
+
+// The Dock stays mounted when hidden. Its native transform moves the hit box with the image.
+function useDockVisibility(shown, position, distance, reduce) {
+  const node = useRef(null), first = useRef(true);
+  useEffect(() => {
+    const anim = nativeAnim(), n = node.current?.id;
+    if (!anim?.dockVisibility || !n) return undefined;
+    anim.dockVisibility(n, { bottom: 0, left: 1, right: 2 }[position], distance, shown, first.current || reduce);
+    first.current = false;
+  }, [shown, position, distance, reduce]);
+  useEffect(() => () => { const n = node.current?.id; if (n) nativeAnim()?.clear(n); }, []);
+  return node;
 }
 
 export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTrashContext, trashFull = false, position = 'bottom', size = 54,
@@ -303,7 +301,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   if (hovered >= 0) previewAnchor.current = anchor(hovered);
   const preview = useDockPreviews({ hit, anchor: previewAnchor.current, area, position, disabled: keepOpen || dragging, theme: t });
   const shown = useAutohide(autohide, position, rect, keepOpen || preview.open || hovered >= 0 || dragging, areaRef, external);
-  const hide = Math.round((1 - shown) * (bar + MARGIN + 2));
+  const dockNode = useDockVisibility(shown, position, bar + MARGIN + 2, reduce);
 
   // Drop target (sdk/dock.js): the index among the shown pinned items, or the Trash. Computed from
   // the layout without the dragged icon and without the gap, so it doesn't move under the pointer.
@@ -342,14 +340,12 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
     return () => { a(); b(); };
   }, []);
 
-  if (autohide && shown <= 0 && !dragging) return <Layer name="drag"><Poof poof={poof} size={BASE} reduce={reduce} /></Layer>;
-
   // The hit box covers only the bar until the pointer is on it; then it grows to fit the magnified
   // icons and the tooltip. A full-height box at rest would swallow clicks on windows just above the Dock.
   const BH = m != null ? MAX + PAD * 2 + 34 : bar, BW = m != null ? MAX + PAD * 2 : bar;
-  const box = position === 'bottom' ? { left: start, top: AB - (MARGIN - hide) - BH, width: glen, height: BH }
-    : position === 'left' ? { left: AX + MARGIN - hide, top: start, width: BW, height: glen }
-      : { left: AR - (MARGIN - hide) - BW, top: start, width: BW, height: glen };
+  const box = position === 'bottom' ? { left: start, top: AB - MARGIN - BH, width: glen, height: BH }
+    : position === 'left' ? { left: AX + MARGIN, top: start, width: BW, height: glen }
+      : { left: AR - MARGIN - BW, top: start, width: BW, height: glen };
   const back = position === 'bottom' ? { left: 0, right: 0, bottom: 0, height: bar }
     : position === 'left' ? { left: 0, top: 0, bottom: 0, width: bar } : { right: 0, top: 0, bottom: 0, width: bar };
   const place = (i) => (position === 'bottom' ? { left: iconC[i] - sizes[i] / 2, bottom: PAD }
@@ -357,7 +353,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const dot = (s) => (position === 'bottom' ? { left: s / 2 - 2, bottom: -7 } : position === 'left' ? { top: s / 2 - 2, left: -7 } : { top: s / 2 - 2, right: -7 });
   const dotColor = t.mode === 'dark' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.7)';
   // where to open the right-click menu and the tooltip: beside the icon, on the inner side
-  const showTip = hovered >= 0 && !keepOpen && !preview.open;
+  const showTip = shown && hovered >= 0 && !keepOpen && !preview.open;
   const label = !hit ? '' : hit.trash ? tr('shell.trash.name') : hit.launcher ? tr('shell.menu.apps') : appName(hit);
   const tip = (
     <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, backgroundColor: t.panelBg,
@@ -408,8 +404,10 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
 
   return (
     <>
-      <View onMouseMove={movePointer} onMouseLeave={() => { setM(null); setPressed(null); }}
-        style={{ position: 'absolute', ...box, direction: 'ltr' }}>
+      <View style={{ position: 'absolute', left: AX, top: AY, width: area.w, height: area.h,
+        overflow: 'hidden', pointerEvents: 'box-none' }}>
+      <View ref={dockNode} onMouseMove={movePointer} onMouseLeave={() => { setM(null); setPressed(null); }}
+        style={{ position: 'absolute', ...box, left: box.left - AX, top: box.top - AY, direction: 'ltr' }}>
         <View style={{ position: 'absolute', ...back, borderRadius: 20,
           ...dockGlass(t) }} />
         {sepLines.map((c, i) => (
@@ -440,16 +438,17 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
           </View>
         )))}
       </View>
+      </View>
       {preview.panel}
       {/* the name tooltip (not while the icon's menu is open: the menu takes that place) */}
       <Layer name="tooltip">
         {showTip && position === 'bottom' && (
-          <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN + hide) + sizes[hovered] + PAD + 12,
+          <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
             alignItems: 'center', pointerEvents: 'none', direction: 'ltr' }}>{tip}</View>
         )}
         {showTip && vert && (
           <View style={{ position: 'absolute', top: start + iconC[hovered] - 13, pointerEvents: 'none', direction: 'ltr',
-            ...(position === 'left' ? { left: AX + MARGIN - hide + PAD + sizes[hovered] + 14 } : { right: screen.width - AR + MARGIN - hide + PAD + sizes[hovered] + 14 }) }}>{tip}</View>
+            ...(position === 'left' ? { left: AX + MARGIN + PAD + sizes[hovered] + 14 } : { right: screen.width - AR + MARGIN + PAD + sizes[hovered] + 14 }) }}>{tip}</View>
         )}
       </Layer>
       <Layer name="drag">
