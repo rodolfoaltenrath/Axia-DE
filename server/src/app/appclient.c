@@ -69,6 +69,16 @@ typedef struct {
     Buf bufs[2];
 } AppWin;
 static AppWin wins[MAX_WINS];
+static unsigned frame_epoch;
+/* Host facts only: whether every configured window awaits a Wayland callback. */
+static int frames_waiting(void) {
+    int configured = 0;
+    for (int i = 0; i < MAX_WINS; i++) if (wins[i].used && wins[i].configured) {
+        configured = 1;
+        if (!wins[i].frame_pending) return 0;
+    }
+    return configured;
+}
 static int next_key = 1, closed;
 static double t_start;              /* app_main entry (CLOCK_MONOTONIC ms), for the first-frame log */
 static int first_frame_logged;
@@ -163,7 +173,7 @@ static void frame_done(void *d, struct wl_callback *cb, uint32_t t) {
     (void)t;
     wl_callback_destroy(cb);
     AppWin *w = d;
-    if (w->used) w->frame_pending = 0;
+    if (w->used) { w->frame_pending = 0; frame_epoch++; }
 }
 static const struct wl_callback_listener fl = { frame_done };
 
@@ -560,7 +570,7 @@ int app_main(const char *id, const char *theme_bundle, const char *fonts) {
     while (!closed && !ui.quit_requested) {
         double delay = -1;
         for (int i = 0; i < 64; i++) { delay = js_tick(now_ms()); if (delay != 0) break; }
-        if (js_wants_frame()) { js_frame(now_ms()); }
+        if (js_frame_ready(now_ms(), frames_waiting(), frame_epoch)) { js_frame(now_ms()); }
         /* the system app's own code was refused while the host loaded it: show why (outside JS) */
         if (!recovered && js_broker_code_refused()) {
             recovered = 1;
@@ -575,6 +585,9 @@ int app_main(const char *id, const char *theme_bundle, const char *fonts) {
             AppWin *w = &wins[i];
             if (w->used && w->configured && w->need_render && !w->frame_pending) render(w);
         }
+        double frame_wait = js_frame_wait(now_ms(), frames_waiting(), frame_epoch);
+        if (frame_wait >= 0 && (delay < 0 || frame_wait < delay)) delay = frame_wait;
+        if (js_timers_changed()) delay = 0; /* callbacks can schedule work during rendering */
         wl_display_flush(dpy);
         struct pollfd pfd[2];
         int n = 0;

@@ -15,6 +15,8 @@ void   js_shutdown(void);
 double js_tick(double now);        /* runs expired timers; ms until the next one or -1 */
 int    js_wants_frame(void);       /* there are pending requestAnimationFrame callbacks */
 void   js_frame(double now);
+int    js_frame_ready(double now, int waiting, unsigned epoch);
+double js_frame_wait(double now, int waiting, unsigned epoch);
 void   js_anim_done(unsigned id);    /* a native animation ended → __lordAnimDone(id) (js_anim.c) */
 void   js_pointer(const char *type, int target, float x, float y, int button);
 /* Touchpad (tp/tp_route.c) → __lordGesture(kind, phase, id, x, y, a, b, c, d):
@@ -42,4 +44,5 @@ void   js_hw_event(const char *kind, const char *json);   /* Settings' hardware 
 void   js_broker_event(const char *kind, const char *json);   /* broker notices → theme */
 void   js_broker_app_event(const char *kind, const char *json, size_t len);   /* axia-server → isolated app */
 
+int js_timers_changed(void);
 #endif

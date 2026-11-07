@@ -13,6 +13,8 @@
  *
  * `build/timer-order-test bench` times a tick with nothing due and 200 timers pending, both ways. */
 #include "ui/js_prelude.h"
+#include "ui/js_timers.h"
+#include "timer_js_baseline.h"
 
 #include "quickjs.h"
 
@@ -159,6 +161,7 @@ static JSContext *new_context(JSRuntime *rt, const char *prel) {
     JSValue g = JS_GetGlobalObject(c), lord = JS_NewObject(c);
     JS_SetPropertyStr(c, lord, "now", JS_NewCFunction(c, f_now, "now", 0));
     JS_SetPropertyStr(c, lord, "log", JS_NewCFunction(c, f_log, "log", 1));
+    js_timers_register(c, lord);
     JS_SetPropertyStr(c, g, "lord", lord);
     JS_FreeValue(c, g);
     if (!eval(c, prel, "<prelude>")) exit(2);
@@ -218,15 +221,16 @@ static double ms(void) {
 }
 
 /* a tick with nothing due among 200 pending timers (a React app, the clock, polls) */
-static double bench(const char *prel) {
+static double bench(const char *prel, int noop) {
     JSRuntime *rt = JS_NewRuntime();
     JSContext *c = new_context(rt, prel);
     if (!eval(c, "for (let i = 0; i < 200; i++) setTimeout(() => {}, 1e7 + i);", "<bench>")) exit(2);
+    if (!eval(c, "globalThis.__benchNoop = () => -1;", "<noop>")) exit(2);
     const int n = 20000;
     double t0 = ms();
     for (int i = 0; i < n; i++) {
         JSValue arg = JS_NewFloat64(c, 1000 + i * 0.001);
-        JS_FreeValue(c, call(c, "__lordTick", 1, &arg));
+        JS_FreeValue(c, call(c, noop ? "__benchNoop" : "__lordTick", 1, &arg));
         drain(rt);
     }
     double per = (ms() - t0) / n * 1000;
@@ -235,18 +239,41 @@ static double bench(const char *prel) {
     return per;
 }
 
+static void frame_trace(const char *prel) {
+    loglen = 0; if (logbuf) logbuf[0] = 0; clk = 1000.; crng = 12345;
+    JSRuntime *rt = JS_NewRuntime(); JSContext *c = new_context(rt, prel);
+    static const char code[] =
+        "const trace = []; let second;"
+        "requestAnimationFrame(t => { trace.push('first ' + t); cancelAnimationFrame(second);"
+        " requestAnimationFrame(t => trace.push('later ' + t)); setTimeout(() => trace.push('timer'), 0); });"
+        "second = requestAnimationFrame(t => trace.push('second ' + t));"
+        "const cancelled = requestAnimationFrame(() => trace.push('cancelled')); cancelAnimationFrame(cancelled);"
+        "requestAnimationFrame(() => { throw 'frame failure'; });"
+        "cancelAnimationFrame('1');"
+        "__lordFrame(12); __lordFrame(24); __lordTick(1e8);"
+        "console.log(JSON.stringify(trace)); console.log(__lordWantsFrame());";
+    if (!eval(c, code, "<frame trace>")) exit(2);
+    JS_FreeContext(c); JS_FreeRuntime(rt);
+}
+
 int main(int argc, char **argv) {
     if (argc > 1 && !strcmp(argv[1], "bench")) {
-        printf("timer-order-test bench: a tick with 200 timers pending, nothing due: before %.2f us, now %.2f us\n",
-               bench(old_prelude), bench(prelude));
+        printf("timer-order-test bench (200 pending, none due): call floor %.3f us, recent JS %.3f us, Rust %.3f us, historical scan %.3f us\n",
+               bench(prelude, 1), bench(js_baseline_prelude, 0), bench(prelude, 0), bench(old_prelude, 0));
         return 0;
     }
+    frame_trace(js_baseline_prelude); char *frame_want = strdup(logbuf);
+    frame_trace(prelude);
+    if (!frame_want || strcmp(frame_want, logbuf)) {
+        fprintf(stderr, "RAF traces differ: %s vs %s\n", frame_want, logbuf); return 1;
+    }
+    free(frame_want);
     const unsigned seeds = 400;
     const int steps = 300;
     int fails = 0;
     long bytes = 0;
     for (unsigned seed = 1; seed <= seeds; seed++) {
-        run(old_prelude, seed, steps);
+        run(js_baseline_prelude, seed, steps);
         char *want = strdup(logbuf ? logbuf : "");
         long f0 = fires;
         run(prelude, seed, steps);
