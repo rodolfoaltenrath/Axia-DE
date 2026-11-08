@@ -3,11 +3,14 @@ use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 pub enum NativeApp {
     ForceQuit(crate::forcequit::App),
+    Calculator(crate::calculator::App),
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
         if id == crate::native_apps::forcequit::ID.as_bytes() {
             Some(Self::ForceQuit(Default::default()))
+        } else if id == crate::native_apps::calculator::ID.as_bytes() {
+            Some(Self::Calculator(Default::default()))
         } else {
             None
         }
@@ -29,6 +32,7 @@ impl NativeApp {
     fn dispatch(&mut self, input: &Value) -> Value {
         match self {
             Self::ForceQuit(app) => app.request(input),
+            Self::Calculator(app) => app.request(input),
         }
     }
 }

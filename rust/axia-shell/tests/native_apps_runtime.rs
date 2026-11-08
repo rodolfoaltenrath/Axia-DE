@@ -163,7 +163,7 @@ fn real_compiled_app_widgets_and_effects() {
     };
     assert_eq!(
         get("catalog")["ids"],
-        json!(["files", "forcequit"])
+        json!(["calculator", "files", "forcequit"])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
     assert_eq!(get("empty")["groups"], 0);
@@ -181,7 +181,18 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("x11")["calls"], json!([["close", 803]]));
     assert_eq!(get("selection-removed")["calls"], json!([]));
     assert_eq!(get("remount")["calls"], json!([]));
-    println!("native Rust apps: Force Quit actions and catalog passed");
+    let has_text = |name: &str, text: &str| {
+        get(name)["text"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == text)
+    };
+    assert!(has_text("calculator-click", "14"));
+    assert!(has_text("calculator-keyboard-error", "Error"));
+    assert!(has_text("calculator-keyboard", "3"));
+    assert!(has_text("calculator-remount", "0"));
+    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount and catalog passed");
 }
 
 const DRIVER: &str = r#"
@@ -244,6 +255,15 @@ async function run(){
   calls=[];click('Force Quit');await pause();record('selection-removed',{calls});
   wm.open('demo');await pause();click('Demo');await pause();control.setInstance(1);await pause();
   calls=[];click('Force Quit');await pause();record('remount',{calls});
+  control.setMode('calculator');await pause();
+  for(const label of ['2','+','3','×','4','=']){click(label);await pause();}
+  record('calculator-click',{text:texts().map(n=>n.text)});
+  const key=(name,char='')=>{__lordKey(0,1,name,char,name,0);__lordKey(0,0,name,'',name,0);};
+  key('Escape');key('1','1');key('/','/');key('0','0');key('Enter');await pause();
+  record('calculator-keyboard-error',{text:texts().map(n=>n.text)});
+  key('Escape');key('1','1');key(',', ',');key('5','5');key('*','*');key('2','2');key('Enter');await pause();
+  record('calculator-keyboard',{text:texts().map(n=>n.text)});
+  control.setInstance(2);await pause();record('calculator-remount',{text:texts().map(n=>n.text)});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

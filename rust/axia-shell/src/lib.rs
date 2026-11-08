@@ -5,6 +5,8 @@ mod anim;
 mod files;
 #[path = "../../../apps/forcequit/mod.rs"]
 mod forcequit;
+#[path = "../../../apps/calculator/mod.rs"]
+mod calculator;
 mod native_apps_host;
 #[path = "../../native_apps.rs"]
 mod native_apps;
