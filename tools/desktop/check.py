@@ -124,7 +124,7 @@ def main():
                 # compiled registry entry through the shared host after the theme starts.
                 native_target = staged / f'themes/{theme}/theme.bundle.js'
                 native_original = native_target.read_bytes()
-                native_fixture = native_original + b"\nsetTimeout(() => { const sdk = __lordos.require('@lordos/sdk'); sdk.wm.open('forcequit'); }, 700);\n"
+                native_fixture = native_original + b"\nsetTimeout(() => { const sdk = __lordos.require('@lordos/sdk'); sdk.wm.open('forcequit'); sdk.wm.open('appabout', {args:{key:'calculator'}}); }, 700);\n"
                 native_manifest = json.loads((staged / 'code-manifest.json').read_text())
                 native_entry = next(e for e in native_manifest['files'] if e['path'] == f'themes/{theme}/theme.bundle.js')
                 native_target.write_bytes(native_fixture)
@@ -150,7 +150,7 @@ def main():
                 assert f'js: theme ../themes/{theme}/theme.bundle.js loaded' in log, log
                 for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'code refused', 'react (error)']:
                     assert error not in log, log
-                for app in ['store', 'settings', 'files', 'forcequit', 'calculator']:
+                for app in ['store', 'settings', 'files', 'forcequit', 'calculator', 'appabout']:
                     assert f'timing: {app} window committed' in log, log
             check_native(staged, env, opts)
             # Real PNG with a space in its source name. The bridge must copy, validate

@@ -7,6 +7,8 @@ mod files;
 mod forcequit;
 #[path = "../../../apps/calculator/mod.rs"]
 mod calculator;
+#[path = "../../../apps/appabout/mod.rs"]
+mod appabout;
 mod native_apps_host;
 #[path = "../../native_apps.rs"]
 mod native_apps;
