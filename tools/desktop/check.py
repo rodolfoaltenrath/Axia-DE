@@ -120,6 +120,16 @@ def main():
                                              'sessionSaved': {'clean': True, 'windows': saved}}))
                 if os.geteuid() == 0:
                     os.chown(prefs, 65534, 65534)
+                # Force Quit is deliberately excluded from session restore. Open its
+                # compiled registry entry through the shared host after the theme starts.
+                native_target = staged / f'themes/{theme}/theme.bundle.js'
+                native_original = native_target.read_bytes()
+                native_fixture = native_original + b"\nsetTimeout(() => { const sdk = __lordos.require('@lordos/sdk'); sdk.wm.open('forcequit'); }, 700);\n"
+                native_manifest = json.loads((staged / 'code-manifest.json').read_text())
+                native_entry = next(e for e in native_manifest['files'] if e['path'] == f'themes/{theme}/theme.bundle.js')
+                native_target.write_bytes(native_fixture)
+                native_entry.update(size=len(native_fixture), sha256=hashlib.sha256(native_fixture).hexdigest())
+                (staged / 'code-manifest.json').write_text(json.dumps(native_manifest))
                 try:
                     run(str(staged / 'bin/axia-server'), '--headless', '800x600', '--timeout', '5',
                         '--theme', f'../themes/{theme}/theme.bundle.js',
@@ -130,14 +140,17 @@ def main():
                     if log.exists():
                         print(log.read_text())
                     raise
+                native_target.write_bytes(native_original)
+                native_entry.update(size=len(native_original), sha256=hashlib.sha256(native_original).hexdigest())
+                (staged / 'code-manifest.json').write_text(json.dumps(native_manifest))
                 log = (home / '.cache/axia/session.log').read_text()
                 toolkit = (home / '.config/glib-2.0/settings/keyfile').read_text()
                 assert "gtk-theme='Adwaita" in toolkit, 'standard GTK theme was not selected'
                 assert "button-layout=':minimize,maximize,close'" in toolkit, 'standard GTK button order was not synchronized'
                 assert f'js: theme ../themes/{theme}/theme.bundle.js loaded' in log, log
-                for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'code refused']:
+                for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'code refused', 'react (error)']:
                     assert error not in log, log
-                for app in ['store', 'settings', 'files']:
+                for app in ['store', 'settings', 'files', 'forcequit']:
                     assert f'timing: {app} window committed' in log, log
             check_native(staged, env, opts)
             # Real PNG with a space in its source name. The bridge must copy, validate

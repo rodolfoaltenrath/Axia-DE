@@ -16,6 +16,7 @@
 #include "js_sys.h"
 #include "js_files.h"
 #include "js_launcher.h"
+#include "js_native_apps.h"
 #include "wallpaper_ffi.h"
 #include "../pkg/crypto.h"
 #include "../glass_ffi.h"
@@ -2077,6 +2078,7 @@ void js_sys_register_app(JSContext *c, JSValue lord) {
 void js_sys_register(JSContext *c, JSValue lord) {
     js_launcher_register(c, lord, 1);
     js_files_register(c, lord);
+    js_native_apps_register(c, lord);
     add_object(c, lord, "fs", fs_funcs, sizeof fs_funcs / sizeof fs_funcs[0]);
     add_object(c, lord, "system", system_funcs, sizeof system_funcs / sizeof system_funcs[0]);
     add_object(c, lord, "settings", settings_funcs, sizeof settings_funcs / sizeof settings_funcs[0]);

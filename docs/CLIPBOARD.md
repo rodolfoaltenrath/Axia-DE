@@ -6,7 +6,7 @@ panel controller and widget trees (`ui.rs`). The panel geometry, shortcuts,
 theme tokens and glass/rendering paths stay compatible with the previous UI.
 
 `sdk/clipboard.js` retains the public API, focus/paste effects and QuickJS
-projection. `sdk/rustwidgets.jsx` binds the existing shared widgets, text input
+projection. `sdk/rustwidgets.js` binds the existing shared widgets, text input
 and locale formatter to Rust's trees. This is a layout/controller migration;
 it does not replace the DE's shared React runtime or C renderer. C keeps Wayland
 resource registration, focus checks, X11 wire packets and event-loop integration.

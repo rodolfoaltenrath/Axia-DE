@@ -74,7 +74,7 @@ function iconTree(name, size) {
 
 // Rust sends only what changed: {$: 1} stands for the previous node at that
 // place (same key, or same position), so memo() below skips it. Matches delta()
-// in rust/axia-shell/src/files/ffi.rs. Every reply must pass through here, in order.
+// in apps/files/ffi.rs. Every reply must pass through here, in order.
 function expand(prev, node) {
   if (node.$) return prev;
   const children = node.children;

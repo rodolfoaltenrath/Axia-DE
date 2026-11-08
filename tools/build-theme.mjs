@@ -2,15 +2,17 @@
 // axia-server loads with QuickJS.
 // Usage: node tools/build-theme.mjs [theme ...]   (no arguments: every theme)
 import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import { writeManifest } from './code-manifest.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const nativeApps = JSON.parse(execFileSync(process.env.CARGO || 'cargo', ['xtask', 'native-apps'], { cwd: root, encoding: 'utf8' }));
 const defines = { 'process.env.NODE_ENV': '"production"', __LORD_STANDALONE__: 'true' };
 
-// Virtual module '@lordos/apps': one entry per apps/<id>/manifest.json.
+// Virtual module '@lordos/apps': remaining JS apps and the compiled Rust registry.
 const appsPlugin = {
   name: 'lordos-apps',
   setup(b) {
@@ -37,8 +39,10 @@ const appsPlugin = {
       const list = ids.map((_, i) => (iso[i]
         ? `{ ...M${i}, system: true, isolated: true, Component: isolatedApp(M${i}.id, A${i}.default), Icon: A${i}.Icon }`
         : `{ ...M${i}, system: true, Component: A${i}.default, Icon: A${i}.Icon }`)).join(',\n  ');
+      const nativeHead = `import { nativeApp } from ${JSON.stringify(path.join(root, 'sdk', 'nativeapps.js'))};\n`;
+      const compiled = nativeApps.map(app => `nativeApp(${JSON.stringify(app)})`).join(',\n  ');
       const head = iso.some(Boolean) ? `import { isolatedApp } from ${JSON.stringify(path.join(root, 'sdk', 'packages.js'))};\n` : '';
-      return { contents: `${head}${lines.join('\n')}\nexport const apps = [\n  ${list}\n];\n`, resolveDir: root, loader: 'js' };
+      return { contents: `${nativeHead}${head}${lines.join('\n')}\nexport const apps = [\n  ${list},\n  ${compiled}\n];\n`, resolveDir: root, loader: 'js' };
     });
   },
 };

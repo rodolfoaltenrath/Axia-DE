@@ -3,6 +3,11 @@
 mod anim;
 #[path = "../../../apps/files/mod.rs"]
 mod files;
+#[path = "../../../apps/forcequit/mod.rs"]
+mod forcequit;
+mod native_apps_host;
+#[path = "../../native_apps.rs"]
+mod native_apps;
 mod flip_pacing;
 mod stall;
 mod clipboard;
