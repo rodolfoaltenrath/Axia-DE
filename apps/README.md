@@ -1,6 +1,20 @@
-# LordOS apps
+# Axia apps
 
-Each app is a folder `apps/<id>/` with two files. Apps don't depend on the theme: any theme shows
+`apps/forcequit/`, `apps/files/`, `apps/calculator/` and `apps/appabout/` are compiled Rust applications. Their folders
+contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
+`tests.rs` its behavior and `manifest.rs` its metadata. There are no app JSX or
+JSON manifest sources and no generated per-app JSX wrappers.
+
+`rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
+its metadata during the theme build; the common host in `sdk/nativeapps.js`
+binds compiled apps to the desktop's current renderer. Files shares its Rust
+service with the file dialogs; `sdk/rustfiles.js` transports those shared widgets
+and desktop effects. Process termination still passes through the compositor's
+Wayland credential checks.
+
+## Remaining apps awaiting migration
+
+Each remaining app is a folder `apps/<id>/` with two files. Apps don't depend on the theme: any theme shows
 them with its own colors (via `useTheme()`).
 
 ```
