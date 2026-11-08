@@ -1,5 +1,5 @@
 //! Resident global search core. The host transports facts and draws Rust widgets.
-mod matching;
+pub(crate) mod matching;
 mod math;
 mod ui;
 mod worker;

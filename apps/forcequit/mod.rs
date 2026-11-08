@@ -67,7 +67,8 @@ fn groups(windows: &Value) -> Vec<Group> {
         });
     }
     let mut groups: Vec<_> = groups.into_values().collect();
-    groups.sort_by_cached_key(|g| (g.name.to_lowercase(), g.key.clone()));
+    // Accents and case don't move a name ("Área" sorts with "A", as the previous localeCompare did).
+    groups.sort_by_cached_key(|g| (crate::search::matching::fold(&g.name), g.key.clone()));
     groups
 }
 impl App {

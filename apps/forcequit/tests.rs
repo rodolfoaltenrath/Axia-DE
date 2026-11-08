@@ -19,6 +19,19 @@ fn request(app: &mut App, cmd: &str, extra: Value) -> Value {
     app.request(&input)
 }
 #[test]
+fn groups_sort_by_name_ignoring_accents_and_case() {
+    let mut app = App::default();
+    let windows = json!([
+        {"id":"a#1","key":"zed","name":"zed"},
+        {"id":"a#2","key":"area","name":"Área de trabalho"},
+        {"id":"a#3","key":"browser","name":"Browser"},
+        {"id":"a#4","key":"eclair","name":"éclair"}
+    ]);
+    let result = request(&mut app, "groups", json!({"windows":windows}));
+    let keys: Vec<_> = result["groups"].as_array().unwrap().iter().map(|g| g["key"].as_str().unwrap()).collect();
+    assert_eq!(keys, ["area", "browser", "eclair", "zed"]);
+}
+#[test]
 fn grouping_filters_shell_and_self_but_preserves_all_desktops_and_windows() {
     let mut app = App::default();
     let result = request(&mut app, "groups", json!({"windows":snapshot()}));
