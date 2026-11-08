@@ -30,7 +30,7 @@ export function formatSize(n) {
   return `${(n / 1048576).toFixed(1)} MB`;
 }
 
-// The same rules as Files (apps/files/ops.js), in the session (sdk/sysopen.js).
+// The same rules as Files (apps/files/external.rs), in the session (sdk/sysopen.js).
 export const openPath = (path, name) => openFileWithApps(path, name);
 export { revealPath };
 
