@@ -163,7 +163,7 @@ fn real_compiled_app_widgets_and_effects() {
     };
     assert_eq!(
         get("catalog")["ids"],
-        json!(["calculator", "files", "forcequit"])
+        json!(["appabout", "calculator", "files", "forcequit"])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
     assert_eq!(get("empty")["groups"], 0);
@@ -192,7 +192,11 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("calculator-keyboard-error", "Error"));
     assert!(has_text("calculator-keyboard", "3"));
     assert!(has_text("calculator-remount", "0"));
-    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount and catalog passed");
+    assert_eq!(get("appabout")["title"], "About Calculator");
+    assert!(has_text("appabout", "Version 0.9.0"));
+    assert_eq!(get("appabout-missing")["title"], "About missing");
+    assert!(!has_text("appabout-missing", "Version 0.9.0"));
+    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount, About metadata/title and catalog passed");
 }
 
 const DRIVER: &str = r#"
@@ -264,6 +268,9 @@ async function run(){
   key('Escape');key('1','1');key(',', ',');key('5','5');key('*','*');key('2','2');key('Enter');await pause();
   record('calculator-keyboard',{text:texts().map(n=>n.text)});
   control.setInstance(2);await pause();record('calculator-remount',{text:texts().map(n=>n.text)});
+  wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
+  record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
+  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);
