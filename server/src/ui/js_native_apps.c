@@ -1,5 +1,6 @@
 /* App-owned state and widget trees stay in Rust; this bridge owns only QuickJS handles. */
 #include "js_native_apps.h"
+#include <stdio.h>
 #include <string.h>
 typedef struct AxiaNativeApp AxiaNativeApp;
 extern AxiaNativeApp *axia_native_app_new(const char *);
@@ -59,7 +60,11 @@ void js_native_apps_register(JSContext *ctx, JSValue lord) {
         if (JS_NewClass(JS_GetRuntime(ctx), class_id, &def) < 0) return;
     }
     JSValue object = make(ctx, "forcequit");
-    if (JS_IsException(object)) return;
+    if (JS_IsException(object)) {                /* no compiled apps; the exception is not left pending */
+        JS_FreeValue(ctx, JS_GetException(ctx));
+        fprintf(stderr, "native apps: the shared host could not start\n");
+        return;
+    }
     JS_SetPropertyStr(ctx, object, "create", JS_NewCFunction(ctx, create, "create", 1));
     JS_SetPropertyStr(ctx, lord, "nativeApps", object);
 }
