@@ -14,7 +14,8 @@ pub fn tree(app: &App, context: &Value) -> Value {
     let show = |s: &str| s.replace('.', decimal).replace('-', "−");
     let shown = show(&app.result);
     let length = shown.chars().count();
-    let big = if length <= 8 {
+    // "Error" is short in every language: it is never shrunk for the previous, longer result
+    let big = if app.error || length <= 8 {
         44
     } else if length <= 11 {
         34

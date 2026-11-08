@@ -91,3 +91,17 @@ fn pointer_state_clears_and_display_tracks_region_and_theme() {
     assert_eq!(tree["tree"]["style"]["direction"], "ltr");
     assert_eq!(tree["tree"]["style"]["backgroundColor"], "#202020");
 }
+#[test]
+fn an_error_after_a_long_result_is_shown_at_full_size() {
+    let mut app = App::default();
+    for key in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "×", "9", "9", "9", "="] {
+        press(&mut app, key);
+    }
+    let size = |app: &App| ui::tree(app, &json!({}))["children"][0]["children"][1]["style"]["fontSize"].clone();
+    assert_eq!(size(&app), json!(26), "the long result shrinks");
+    for key in ["÷", "0", "="] {
+        press(&mut app, key);
+    }
+    assert!(app.error);
+    assert_eq!(size(&app), json!(44));
+}
