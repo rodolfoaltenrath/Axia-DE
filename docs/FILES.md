@@ -60,11 +60,12 @@ does not repeatedly update the frame or trigger directory scans.
   to network folders. Authentication and trust questions use the same Rust
   dialog system. Passwords are not put in command arguments or preferences.
 - `server/src/ui/js_files.c` transports JSON between QuickJS and Rust.
-  `sdk/rustfiles.jsx` binds widget descriptions to the existing renderer and
+  `sdk/rustfiles.js` binds widget descriptions to the existing renderer and
   carries out desktop service effects (opening apps, media/document/archive
   helpers). These adapters contain no file navigation or selection model.
 
-`apps/files/index.jsx` registers the native app. `sdk/filepicker.jsx` preserves
+`apps/files/manifest.rs` registers the compiled app through `rust/native_apps.rs`.
+All application sources are Rust; `apps/files` has no JSX or JSON manifest. `sdk/filepicker.jsx` preserves
 callers' existing component API. Notes, Editor, Contacts, Settings, Mail and
 Passwords use this shared chooser. Isolated apps retain their descriptor
 broker: they receive the selected file descriptor, never the desktop's
@@ -247,7 +248,7 @@ reaches QuickJS is the expensive part, not building it in Rust, so:
 - Only visible cells exist. They keep fixed positions inside one moving
   container, so a scroll changes one offset, and each has a stable `key`.
 - `ffi.rs` compares each new tree with the last one sent. An unchanged subtree
-  travels as `{"$":1}` and `expand()` in `sdk/rustfiles.jsx` restores the previous
+  travels as `{"$":1}` and `expand()` in `sdk/rustfiles.js` restores the previous
   object, which `memo` then skips. A reply with no change is `null`. Every reply
   must pass through `expand()`, in order. File icons travel by name (`icon`).
 - The filtered list is cached per tab until entries, search, or hidden files change.

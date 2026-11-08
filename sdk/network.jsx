@@ -6,7 +6,7 @@ import { ScrollView } from './components.jsx';
 import { wm } from './windows.js';
 import { dockGlass } from './glass.js';
 import { Overlay } from './layers.js';
-import { RustWidget } from './rustfiles.jsx';
+import { RustWidget } from './rustfiles.js';
 import { useTheme } from './theme.js';
 const colors = (t) => Object.fromEntries(['text', 'textDim', 'accent', 'hover', 'selection', 'panelBg', 'windowBorder', 'blur'].map((k) => [k, t[k]]));
 const request = (value) => lord.net?.host ? lord.net.host(JSON.stringify(value)) : null;

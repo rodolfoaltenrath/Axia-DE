@@ -21,7 +21,7 @@ import { t, locale } from './i18n.js';
 import { settings } from './settings.js';
 import { wm } from './windows.js';
 import { focusToken, restoreFocus, pasteIntoFocused } from './components.jsx';
-import { RustWidget } from './rustwidgets.jsx';
+import { RustWidget } from './rustwidgets.js';
 
 export const DEFAULTS = { save: true, max: 500, maxMB: 200, expireDays: 30, ignoreApps: [], clearOnLogout: false };
 const conf = () => ({ ...DEFAULTS, ...(settings.get().clipboard || {}) });

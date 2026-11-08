@@ -4,9 +4,12 @@
 //!   cargo xtask dist
 //!   cargo xtask srpm --outdir DIR
 //!   cargo xtask desktop-binaries
+//!   cargo xtask native-apps
 //!
 //! This crate runs on the development or build machine only.
 
+#[path = "../../native_apps.rs"]
+mod native_apps;
 mod deploy;
 mod dist;
 mod install;
@@ -74,8 +77,13 @@ fn dispatch(args: &[String]) -> Result<()> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps>")?;
     match command.as_str() {
+        "native-apps" => {
+            options(rest, &[])?;
+            println!("{}", native_apps::manifests());
+            Ok(())
+        }
         "deploy" => {
             let values = options(rest, &["source", "target", "backups", "server-sha256"])?;
             let get = |name: &str| {

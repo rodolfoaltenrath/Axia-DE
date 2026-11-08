@@ -17,6 +17,7 @@ import { launcherIdOf, quitApp } from './dock.js';
 import { linuxAppFor, shortAppName, windowAppName } from './apps.js';
 import { openFileWithApps } from './sysopen.js';
 import * as fs from './fs.js';
+import { nativeAppRequest, nativeAppEffects } from './nativeappmodel.js';
 import { t, appName } from './i18n.js';
 
 // the theme's own panels; a Linux window also runs under a built-in app id, but it is an app
@@ -88,37 +89,20 @@ export function appMenuItems(winId) {
   ];
 }
 
-export function runningApps() {
-  const groups = new Map();
-  for (const w of windows.get()) {
-    if (isShellPanel(w)) continue;
-    if (w.app === 'forcequit') continue;
-    const key = launcherIdOf(w);
-    if (!groups.has(key)) groups.set(key, { key, name: groupName(key, w), windows: [] });
-    groups.get(key).windows.push(w);
-  }
-  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+// Host facts resolve registry/localized names and window handles. Rust owns filtering and grouping.
+export function appControlFacts() {
+  return windows.get().map(w => ({ id: String(w.id), app: w.app, builtin: !!getApp(w.id)?.builtin,
+    key: launcherIdOf(w), name: groupName(launcherIdOf(w), w), surface: w.args?.surface,
+    x11: !!w.args?.x11, isolated: !!w.args?.pkg }));
 }
-
-// Force Quit, without asking the app: a Linux app's or an isolated app's process gets SIGKILL from
-// axia-server (lord.wayland.kill: only its own client of this user, never axia-server; an X11 window
-// is asked to close instead, since every X11 app shares Xwayland); a built-in app that runs inside
-// the session closes without its close guard. Returns '' or an error code.
+export function runningApps() {
+  const snapshot = windows.get(), byId = new Map(snapshot.map(w => [String(w.id), w]));
+  return nativeAppRequest(lord.nativeApps, { cmd: 'groups', windows: appControlFacts() }).groups
+    .map(group => ({ ...group, windows: group.windows.map(id => byId.get(id)) }));
+}
+// Rust owns retry, deduplication and error aggregation. The compositor checks client credentials.
 export function forceQuit(key) {
-  const g = runningApps().find((x) => x.key === key);
-  if (!g) return 'app.notFound';
-  let err = '';
-  const killed = new Set();
-  for (const w of g.windows) {
-    const sid = w.args?.surface;
-    if (String(w.id).startsWith('linux#') && sid > 0) {
-      if (w.args?.x11) { lord.wayland.close(sid); err = err || 'app.forceQuitX11'; continue; }
-      if (killed.size && w.args?.pkg) continue;            // one process for all of an isolated app's windows
-      const e = typeof lord.wayland.kill === 'function' ? lord.wayland.kill(sid) : 'app.forceQuitFailed';
-      if (e) err = err || e; else killed.add(sid);
-    } else wm.close(w.id, true);
-  }
-  return err;
+  return nativeAppEffects(lord.nativeApps, nativeAppRequest(lord.nativeApps, { cmd: 'quit', key, windows: appControlFacts() }));
 }
 
 export function recentItems(n = 10) {

@@ -3,7 +3,7 @@ import { createElement as h } from 'react';
 import { createStore, useStore } from './store.js';
 import { useLocale, appName } from './i18n.js';
 import { getApp } from './windows.js';
-import { RustFileDialog, filesRequest } from './rustfiles.jsx';
+import { RustFileDialog, filesRequest } from './rustfiles.js';
 const queue = createStore([]);
 let sequence = 0;
 globalThis.__lordBrokerPick = (reqid, app, save, suggest) => {

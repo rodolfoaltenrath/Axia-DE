@@ -2,7 +2,7 @@
 // application rows, menu tree and every action.
 import { createElement as h, useEffect, useRef, useState } from 'react';
 import { View, addListener } from '@lordos/runtime';
-import { RustWidget } from './rustfiles.jsx';
+import { RustWidget } from './rustfiles.js';
 import { useTheme } from './theme.js';
 import { Overlay } from './layers.js';
 const request = (value) => lord.net?.tray ? lord.net.tray(JSON.stringify(value)) : null;

@@ -5,7 +5,7 @@ import { startShell } from '../../sdk/index.js';
 import { View } from '@lordos/runtime';
 import { ThemeProvider, appAppearance } from '../../sdk/theme.js';
 import { migrateSettings } from '../../sdk/settings.js';
-import { RustFiles } from '../../sdk/rustfiles.jsx';
+import { RustFiles } from '../../sdk/rustfiles.js';
 import { AppWindowContext } from '../../sdk/components.jsx';
 import { wm } from '../../sdk/windows.js';
 import { makeTextPdf, saveBlob, releaseBlob } from '../../sdk/doc.js';

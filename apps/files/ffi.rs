@@ -278,7 +278,7 @@ pub unsafe extern "C" fn axia_files_free(value: *mut c_char) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // The host's half of the protocol: sdk/rustfiles.jsx expand().
+    // The host's half of the protocol: sdk/rustfiles.js expand().
     fn expand(prev: Option<&Value>, node: &Value) -> Value {
         if node.get("$").is_some() {
             return prev.unwrap().clone();
