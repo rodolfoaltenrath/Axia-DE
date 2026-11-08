@@ -411,7 +411,7 @@ In the **Backups** tab: snapshots by day, the tree of each one (with real sizes)
   (`fsops_allowed`, on the resolved folder), never in protected places (`fsops_protected`:
   `~/.local/share/applications`, `~/.config/autostart`, `~/.local/share/axia/apps`,
   `settings.json`, `permisos.json`, `backup.json`, and also `firewall.json`, the blocklists, the
-  Mail accounts and cache and the Passwords vaults, the whole list in `rust/axia-shell/src/files/policy.rs`). A `.desktop` file planted in a backup is not
+  Mail accounts and cache and the Passwords vaults, the whole list in `apps/files/policy.rs`). A `.desktop` file planted in a backup is not
   restored, not even through a link in the home folder that points to a protected folder.
 - **No escapes through the backup:** the requested path is validated (`bk_rel_valid`) and its
   resolved folder must stay inside the snapshot.

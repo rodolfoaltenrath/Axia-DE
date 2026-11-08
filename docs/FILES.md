@@ -2,7 +2,7 @@
 
 The launcher name remains **Arquivos** in Portuguese (**Files** in English).
 Its description is “Axia file explorer”. The app and native open/save/folder
-choosers share one Rust implementation in `rust/axia-shell/src/files/`.
+choosers share one Rust implementation in `apps/files/`.
 
 ## Shared traditional appearance
 

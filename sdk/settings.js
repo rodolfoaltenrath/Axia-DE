@@ -26,7 +26,7 @@ const DEFAULTS = {
   desktopArrows: true,        // 0.8.7, Settings → Keyboard: Lord Flow's ⌃ arrows are the Desktops keys
   sessionRestore: 'always',   // 0.8.7, Settings → Session: 'off' | 'ask' | 'always' (sessionrestore.jsx)
   sessionBrowsers: true,      // browsers reopen their tabs too (the browser-restore admin action)
-  files: null,                // 0.8.7, Files → Settings (rust/axia-shell/src/files/model.rs)
+  files: null,                // 0.8.7, Files → Settings (apps/files/model.rs)
   sessionSaved: null,         // { clean, windows } what was open; written by sessionrestore.jsx only
 };
 
