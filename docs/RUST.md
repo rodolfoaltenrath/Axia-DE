@@ -396,3 +396,73 @@ verificação restauram os arquivos anteriores e removem os novos que não exist
 Os testes cobrem instalação sobre diretórios não vazios, executável em execução,
 entrada corrompida, links no destino e falha de verificação com restauração.
 O instalador pode ser compilado em contêiner e executado no host sem Cargo.
+
+## Aplicativos compilados: Force Quit e Files
+
+`apps/forcequit/` e `apps/files/` contêm apenas fontes `.rs`. Os antigos
+`index.jsx` e manifestos JSON foram removidos. `manifest.rs` descreve os dados do
+app; `rust/native_apps.rs` compila um único catálogo, compartilhado entre o
+compositor e `cargo xtask native-apps`. O bundler consulta esse catálogo e registra
+os apps pelo host comum `sdk/nativeapps.js`, sem gerar um JSX por aplicativo.
+A compilação incremental acompanha também os fontes Rust dentro de `apps/`.
+
+Force Quit possui em Rust o agrupamento, exclusão dos painéis e do próprio app,
+seleção por chave, invalidação quando a janela desaparece, ícone, árvore de widgets
+e fila de efeitos. O resultado de cada ação volta a Rust. Um SIGKILL bem sucedido
+suprime apenas as outras janelas do mesmo app isolado; uma falha permite tentar
+a próxima superfície. Janelas X11 recebem pedido de fechamento, nunca SIGKILL
+contra o XWayland. A primeira mensagem de erro é preservada.
+
+Cada janela do app possui um estado Rust independente, pertencente a um objeto
+QuickJS com finalizador. O adaptador conserva referências do renderizador e aplica
+os efeitos usando as APIs existentes; o compositor continua verificando usuário,
+cliente Wayland e PID antes de encerrar um processo. Nenhum PID vindo do app é
+aceito. `runningApps()` e `forceQuit()` também usam esse modelo Rust compartilhado.
+
+Files mantém seu serviço e sua interface Rust, agora fisicamente em `apps/files/`.
+Navegador e seletores continuam compartilhando o mesmo modelo. `sdk/rustfiles.js`
+e `sdk/rustwidgets.js` são adaptadores comuns, escritos sem sintaxe JSX, para os
+componentes já existentes da DE. O renderizador compartilhado ainda usa React;
+essa mudança elimina a implementação própria dos apps em JSX, não substitui o
+renderizador de toda a sessão.
+
+Os testes Rust verificam política de encerramento, falhas, seleção obsoleta,
+isolamento entre instâncias, metadados e ausência dos fontes legados. A integração
+`native_apps_runtime` exercita a tela real com cliques, remoção de janelas,
+reabertura, close guards e efeitos simulados em uma sessão privada:
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust \
+  --locked --offline --test native_apps_runtime -- --ignored --nocapture
+```
+
+`make check` abre ambos os aplicativos compilados nos temas padrão e clássico,
+além dos testes existentes de navegação, seletores e operações de arquivos.
+
+## Calculadora e Sobre o aplicativo
+
+`apps/calculator/` e `apps/appabout/` também são fontes Rust completas, com
+metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. A propriedade do
+estado e a FFI comum ficam em `rust/axia-shell/src/native_apps_host.rs`: cada
+objeto possui uma variante Rust tipada, liberada pelo finalizador QuickJS.
+
+A Calculadora mantém expressão, resultado, erro, hover e pressionamento em
+Rust. O parser limita o tamanho e a profundidade e exige consumir toda a entrada.
+Não descarta caracteres desconhecidos nem aceita parênteses incorretos. Resultados
+em notação científica podem ser reutilizados sem serem interpretados como outra
+operação. O arredondamento não multiplica resultados enormes até gerar infinito.
+O limite de entrada de 40 caracteres, separador decimal regional, apresentação
+LTR, atalhos e cores dos dois estilos são conservados.
+
+O Sobre recebe fatos serializáveis do catálogo e do registro. Rust escolhe nome,
+versão, descrição, origem, indicação de isolamento, ícone e título da janela.
+Dados de um alvo anterior não são conservados ao mudar para um app inexistente.
+O host comum resolve traduções, ícones e teclado/foco e aplica o título, sem
+wrappers específicos por app. As capacidades `facts` e `keyboard` vêm dos
+metadados Rust; a Calculadora não transporta o catálogo a cada tecla.
+
+Os testes unitários cobrem expressões malformadas, limites, valores grandes,
+precedência, teclado, estados independentes e as origens dos aplicativos. A
+integração real usa botões e teclado da Calculadora, provoca divisão por zero,
+reabre a janela e confere os títulos e versões do Sobre. Os quatro apps compilados
+são abertos nos temas padrão e clássico pelo teste headless.
