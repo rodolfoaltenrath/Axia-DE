@@ -19,6 +19,7 @@
   "app.forceQuitFailed": "No se pudo detener la app",
   "app.forceQuitRefused": "Ese proceso no es una de tus apps",
   "app.forceQuitX11": "No se puede forzar la salida de una app X11 sola: se le pidió que se cierre",
+  "app.invalidRequest": "La app recibió una solicitud que no entiende",
   "app.loadFailed": "No se pudo leer el código de la app",
   "app.noSuchFile": "La app no incluye ese archivo",
   "app.notFound": "Esa ventana ya no está",
