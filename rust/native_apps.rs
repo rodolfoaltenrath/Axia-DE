@@ -1,10 +1,13 @@
 //! Single metadata source for apps compiled into the compositor; no app JSON/JSX sources.
+#[path = "../apps/calculator/manifest.rs"]
+pub mod calculator;
 #[path = "../apps/files/manifest.rs"]
 pub mod files;
 #[path = "../apps/forcequit/manifest.rs"]
 pub mod forcequit;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
+        calculator::manifest(),
         files::manifest(),
         forcequit::manifest()
     ])

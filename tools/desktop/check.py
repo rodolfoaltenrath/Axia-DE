@@ -113,7 +113,7 @@ def main():
                 # a shell-only startup misses Store/Settings integration errors.
                 saved = [{'id': f'app:{app}', 'f': {'x': 20, 'y': 30, 'w': 700, 'h': 500},
                           **({'args': {'section': 'wallpaper'}} if app == 'settings' else {})}
-                         for app in ['store', 'settings', 'files']]
+                         for app in ['store', 'settings', 'files', 'calculator']]
                 prefs = config / 'settings.json'
                 prefs.write_text(json.dumps({'schema': 1, 'debugTiming': True, 'externalWindowStyle': True,
                                              'sessionRestore': 'always',
@@ -150,7 +150,7 @@ def main():
                 assert f'js: theme ../themes/{theme}/theme.bundle.js loaded' in log, log
                 for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'code refused', 'react (error)']:
                     assert error not in log, log
-                for app in ['store', 'settings', 'files', 'forcequit']:
+                for app in ['store', 'settings', 'files', 'forcequit', 'calculator']:
                     assert f'timing: {app} window committed' in log, log
             check_native(staged, env, opts)
             # Real PNG with a space in its source name. The bridge must copy, validate
