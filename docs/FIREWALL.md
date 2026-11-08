@@ -493,7 +493,7 @@ reader in `server/src/sec/json.c`. For example:
   The store only changes if everything validated: a new one is built and swapped in. If the file
   doesn't exist, `fw_load` returns 1 and the store stays as it was.
 
-The path is on the `lord.fs` deny list (`rust/axia-shell/src/files/policy.rs`, like `settings.json` and
+The path is on the `lord.fs` deny list (`apps/files/policy.rs`, like `settings.json` and
 `permisos.json`, see `AGENTS.md`): a LordOS app can't write its own rules. A Linux app runs as the
 user and could edit the file, just like `permisos.json`; `.lpk` apps can't, because of Landlock.
 
