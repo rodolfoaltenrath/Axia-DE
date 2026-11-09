@@ -82,7 +82,7 @@ function SnapLayouts({ t, win, at, onEnter, onLeave, onDone }) {
               <LayoutGlyph cells={l.cells} w={60} h={40} color={t.textDim} accent={t.accent}
                 hoverIndex={hover && hover[0] === li ? hover[1] : -1}
                 onHover={(i) => setHover(i < 0 ? null : [li, i])}
-                onPick={(i) => { onDone(); wm.focus(win.id); wm.snap(win.id, l.zones[i]); }} />
+                onPick={(i) => { onDone(); wm.focus(win.id); wm.snap(win.id, l.zones[i], { assist: true, layout: l.zones }); }} />
             </View>
           ))}
         </View>
@@ -134,7 +134,7 @@ export function Window({ win, t, focused, app }) {
     const offUp = addListener('pointerup', (e) => {
       const d = drag.current;
       drag.current = null;
-      if (d && d.moving) { const z = snapZoneAt(e.x, e.y); if (z) wm.snap(win.id, z); }
+      if (d && d.moving) { const z = snapZoneAt(e.x, e.y); if (z) wm.snap(win.id, z, { assist: true }); }
     });
     return () => { offMove(); offUp(); clearTimeout(hoverTimer.current); clearTimeout(leaveTimer.current); };
   }, [win.id, win.w, geo.y]);

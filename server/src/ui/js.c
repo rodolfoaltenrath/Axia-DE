@@ -28,6 +28,8 @@
 #include "js_media.h"
 #include "js_wm.h"
 #include "js_switcher.h"
+#include "js_snap.h"
+#include "js_winmodel.h"
 #include "js_disk.h"
 #include "js_imager.h"
 #include "js_logs.h"
@@ -424,6 +426,9 @@ static void session_context(void) {
     js_mail_register(ctx, lord);       /* lord.mail: Mail, Calendar, Contacts, Reminders via axia-maild (docs/MAIL.md) */
     js_wm_register(ctx, lord);         /* lord.wm: moving and resizing windows in C (grab.c) */
     js_switcher_register(ctx, lord);   /* session-owned Rust app selector */
+    js_snap_register(ctx, lord);       /* lord.snap: window snapping's geometry in Rust */
+    js_winmodel_register(ctx, lord);   /* lord.winmodel: the window manager's pure rules in Rust */
+    js_windows_register(ctx, lord);    /* lord.windowList: the session's windows in Rust */
     js_input_register(ctx, lord);      /* lord.input: touchpads and touchscreens (tp/) */
     js_fw_register(ctx, lord);         /* lord.fw: per-app network permissions (axia-netperm, docs/FIREWALL.md) */
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */
@@ -561,6 +566,8 @@ static void app_context(const char *app_id) {
     js_broker_register(ctx, lord, app_id);         /* fs/clipboard/perms through the broker + appId */
     js_vault_register_app(ctx, lord);              /* Passwords only: its own channel to axia-vault */
     js_sys_register_app(ctx, lord);                /* lord.text (language, direction) and lord.image */
+    js_winmodel_register(ctx, lord);               /* lord.winmodel: pure rules, no state or I/O */
+    js_windows_register(ctx, lord);                /* lord.windowList: this app's own windows (app-host.js) */
     js_wasm_register(ctx, g);                      /* WebAssembly for the app's loadWasm */
     JS_SetPropertyStr(ctx, g, "lord", lord);
     JS_FreeValue(ctx, g);
@@ -728,6 +735,8 @@ static void ime_commit(const char *text) {
 void js_key(int code, int value) {
     KeyInfo k;
     kb_key(code, value, &k);
+    grab_note_shift(k.shift);           /* Shift while moving a window: the thirds (grab.c) */
+    js_wm_zone_flush();
     if (!kb_ready()) {
         JSValueConst args[2] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value) };
         JS_FreeValue(ctx, call_global("__lordKey", 2, args));

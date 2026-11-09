@@ -21,7 +21,7 @@ import { spacing, typeScale, controlSize } from './controls.jsx';
 import { settings, saveSettingsNow } from './settings.js';
 import { windows, wm, getApp, isLiveSystem, workAreaOf, setLinuxPlacement, SNAP_ZONES, activeDesktop, setActiveDesktop } from './windows.js';
 import { desktopAt, indexOfDesktop, activeIndex } from './desktops.js';
-import { cleanIndex } from './desktopmodel.js';
+import { cleanIndex } from './winmodel.js';
 import { dockIdOfWindow, launchDockItem } from './dock.js';
 import { parseDockId } from './dockmodel.js';
 import { useLauncherApps, shortAppName } from './apps.js';

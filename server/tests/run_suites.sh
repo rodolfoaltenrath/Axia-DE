@@ -143,7 +143,6 @@ EOF
     run "ipp-test" build/ipp-test
     run "tp-test" build/tp-test
     run "fan-test" build/fan-test
-    if have node; then run "place-model-test (sdk/placemodel.js)" node tests/place_model_test.mjs; fi
     # the Dock's pinned-list model (sdk/dockmodel.js)
     # Files model tests are part of test-rust; the former JS suite was removed.
     if have node; then run "osk-model-test (sdk/oskmodel.js)" node tests/osk_model_test.mjs
@@ -153,12 +152,13 @@ EOF
     # Desktops: what shows and who has the keyboard (sdk/desktopmodel.js)
     if have node; then run "desktop-model-test (sdk/desktopmodel.js)" node tests/desktop_model_test.mjs
     else skip "desktop-model-test" "node"; fi
+    # sdk/windows.js over the real bridge and the Rust window list, in QuickJS (needs esbuild)
+    if have node && [ -d ../node_modules/esbuild ] && [ -x build/windows-bridge-host ]; then
+        run "windows-bridge-test (sdk/windows.js, js_winmodel.c, winmodel/session.rs)" node tests/windows_bridge_test.mjs
+    else skip "windows-bridge-test" "node, node_modules/esbuild"; fi
     # session restore's data rules (sdk/sessionmodel.js)
     if have node; then run "session-model-test (sdk/sessionmodel.js)" node tests/session_model_test.mjs
     else skip "session-model-test" "node"; fi
-    # window snapping geometry (sdk/snap.js): zones without gaps or overlaps, drop zones, Super+arrows
-    if have node; then run "snap-test (sdk/snap.js)" node tests/snap_test.mjs
-    else skip "snap-test" "node"; fi
     # smartctl's JSON → the Disks/Monitor SMART model (sdk/smartparse.js), with real smartctl output
     if have node; then run "smart-parse-test (sdk/smartparse.js)" node tests/smart_parse_test.mjs
     else skip "smart-parse-test" "node"; fi
@@ -181,9 +181,6 @@ EOF
     # checks (tools/hwreport/lib.mjs), the catalogue and its snapshot, the Compatibility panel's community data
     if have node; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node tests/hwreport_test.mjs
     else skip "hwreport-test" "node"; fi
-    # (0.8.5) Settings → Displays' arrangement (sdk/displaylayout.js): numbers, magnetic snap, valid drops
-    if have node; then run "display-layout-test (sdk/displaylayout.js)" node tests/display_layout_test.mjs
-    else skip "display-layout-test" "node"; fi
     # (0.8.6) runtime/index.js's skip of unchanged styles sends the same lord.* calls as without it
     if have node && [ -d ../node_modules/esbuild ] && [ -d ../node_modules/react-reconciler ]; then
         run "runtime-props-test (runtime/index.js)" node tests/runtime_props_test.mjs

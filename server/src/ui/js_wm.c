@@ -1,16 +1,21 @@
 /* js_wm.c — lord.wm: window dragging in C (grab.c, docs/WINDOWS.md).
  *
- *   lord.wm.grab(node, edges, { inset, minW, minH, maxW, maxH, minTop }) → bool
+ *   lord.wm.grab(node, edges, { inset, minW, minH, maxW, maxH, minTop, areas, snap, links, area }) → bool
  *       edges 0 = move; 1 top, 2 bottom, 4 left, 8 right (like xdg_toplevel.resize).
  *       Only with a button held down; axia-server tracks it until it is released.
+ *       snap: [{ x, y, w, h, work: { x, y, w, h } }] per display turns on the snapping zones while
+ *       moving: __lordWm('zone', { zone, x, y, w, h }) each time the zone under the pointer changes
+ *       (zone null: none). links: [{ node, inset, minW, minH, maxW, maxH }] the other windows snapped
+ *       in work area `area`; those sharing the dragged edge resize with it (docs/WINDOWS.md).
  *   lord.wm.cancel()                 also stops a scripted move
  *   lord.wm.script(node, { rx, ry, periodMs, inset, minTop, areas }) → bool
  *       LordBench's desktop scene (docs/BENCHMARK.md): the node moves along a figure of eight, rx × ry px,
  *       one turn every periodMs (500–60000), one step per frame through the drag's own path (grab.c),
  *       with no button held; pointer input or cancel() stops it. No end notice: the scene's window closes.
  *   lord.wm.pointer() → { x, y, active, edges }: the pointer now and the drag in progress (no
- *       arguments, read only). The theme polls it while a window moves, for the snapping preview.
- * On release: __lordWm('end', { node, edges, dx, dy, dw, dh }) with the node's change.
+ *       arguments, read only).
+ * On release: __lordWm('end', { node, edges, dx, dy, dw, dh, zone, links: [{ node, dx, dy, dw, dh }] })
+ * with the node's change, the zone it was dropped on and the change of each linked window.
  *
  *   lord.portal.set({ dark, accent: '#rrggbb', accentName, buttons })
  *       what GTK, GNOME and Qt apps read through org.freedesktop.portal.Settings (portal.c). */
@@ -39,6 +44,11 @@ static double num(JSContext *c, JSValueConst o, const char *k, double def, doubl
     return d < lo ? lo : d > hi ? hi : d;
 }
 
+static AxiaSnapRect rect(JSContext *c, JSValueConst o) {
+    return (AxiaSnapRect){ num(c, o, "x", 0, -100000, 100000), num(c, o, "y", 0, -100000, 100000),
+                           num(c, o, "w", 0, 0, 100000), num(c, o, "h", 0, 0, 100000) };
+}
+
 static GrabLimits limits(JSContext *c, JSValueConst o) {
     GrabLimits lim = {
         .inset = (float)num(c, o, "inset", 0, 0, 64),
@@ -60,6 +70,41 @@ static GrabLimits limits(JSContext *c, JSValueConst o) {
         JS_FreeValue(c, a);
     }
     JS_FreeValue(c, areas);
+    /* snapping while moving: snap: [{ x, y, w, h, work: { x, y, w, h } }] */
+    JSValue snap = JS_IsObject(o) ? JS_GetPropertyStr(c, o, "snap") : JS_UNDEFINED;
+    for (uint32_t i = 0; i < GRAB_SNAP_DISPLAYS && JS_IsArray(c, snap); i++) {
+        JSValue d = JS_GetPropertyUint32(c, snap, i);
+        JSValue w = JS_IsObject(d) ? JS_GetPropertyStr(c, d, "work") : JS_UNDEFINED;
+        if (JS_IsObject(d) && JS_IsObject(w)) {
+            AxiaSnapDisplay *s = &lim.snap[lim.nsnap++];
+            s->bounds = rect(c, d);
+            s->work = rect(c, w);
+        }
+        JS_FreeValue(c, w);
+        JS_FreeValue(c, d);
+    }
+    JS_FreeValue(c, snap);
+    /* resizing a snapped window: links: [{ node, inset, minW, minH, maxW, maxH }] and their area */
+    JSValue links = JS_IsObject(o) ? JS_GetPropertyStr(c, o, "links") : JS_UNDEFINED;
+    for (uint32_t i = 0; i < GRAB_LINKS && JS_IsArray(c, links); i++) {
+        JSValue l = JS_GetPropertyUint32(c, links, i);
+        double node = num(c, l, "node", 0, 0, 2147483647);
+        if (JS_IsObject(l) && node > 0) {
+            lim.links[lim.nlinks].node = (int)node;
+            lim.links[lim.nlinks].inset = (float)num(c, l, "inset", 0, 0, 64);
+            lim.links[lim.nlinks].min_w = (float)num(c, l, "minW", 120, 32, 8192);
+            lim.links[lim.nlinks].min_h = (float)num(c, l, "minH", 80, 32, 8192);
+            lim.links[lim.nlinks].max_w = (float)num(c, l, "maxW", 0, 0, 16384);
+            lim.links[lim.nlinks].max_h = (float)num(c, l, "maxH", 0, 0, 16384);
+            lim.nlinks++;
+        }
+        JS_FreeValue(c, l);
+    }
+    JS_FreeValue(c, links);
+    JSValue area = JS_IsObject(o) ? JS_GetPropertyStr(c, o, "area") : JS_UNDEFINED;
+    lim.area = rect(c, area);
+    JS_FreeValue(c, area);
+    if (lim.area.w <= 0 || lim.area.h <= 0) lim.nlinks = 0;
     return lim;
 }
 
@@ -291,19 +336,67 @@ void js_wm_register(JSContext *c, JSValue lord) {
     JS_SetPropertyStr(c, lord, "portal", p);
 }
 
-void js_wm_end(int node, int edges, float dx, float dy, float dw, float dh) {
+static JSValue zone_value(JSContext *c, int zone) {
+    const char *name = zone >= 0 ? axia_snap_zone_name(zone) : NULL;
+    return name ? JS_NewString(c, name) : JS_NULL;
+}
+
+static void set_rect(JSContext *c, JSValue o, double x, double y, double w, double h) {
+    JS_SetPropertyStr(c, o, "x", JS_NewFloat64(c, x));
+    JS_SetPropertyStr(c, o, "y", JS_NewFloat64(c, y));
+    JS_SetPropertyStr(c, o, "w", JS_NewFloat64(c, w));
+    JS_SetPropertyStr(c, o, "h", JS_NewFloat64(c, h));
+}
+
+static void call_wm(const char *type, JSValue (*build)(JSContext *, const void *), const void *arg);
+
+static JSValue end_data(JSContext *c, const void *arg) {
+    const GrabEnd *e = arg;
+    JSValue d = JS_NewObject(c);
+    JS_SetPropertyStr(c, d, "node", JS_NewInt32(c, e->node));
+    JS_SetPropertyStr(c, d, "edges", JS_NewInt32(c, e->edges));
+    JS_SetPropertyStr(c, d, "dx", JS_NewFloat64(c, e->dx));
+    JS_SetPropertyStr(c, d, "dy", JS_NewFloat64(c, e->dy));
+    JS_SetPropertyStr(c, d, "dw", JS_NewFloat64(c, e->dw));
+    JS_SetPropertyStr(c, d, "dh", JS_NewFloat64(c, e->dh));
+    JS_SetPropertyStr(c, d, "zone", zone_value(c, e->zone));
+    JSValue links = JS_NewArray(c);
+    for (int i = 0; i < e->nlinks; i++) {
+        JSValue l = JS_NewObject(c);
+        JS_SetPropertyStr(c, l, "node", JS_NewInt32(c, e->links[i].node));
+        JS_SetPropertyStr(c, l, "dx", JS_NewFloat64(c, e->links[i].dx));
+        JS_SetPropertyStr(c, l, "dy", JS_NewFloat64(c, e->links[i].dy));
+        JS_SetPropertyStr(c, l, "dw", JS_NewFloat64(c, e->links[i].dw));
+        JS_SetPropertyStr(c, l, "dh", JS_NewFloat64(c, e->links[i].dh));
+        JS_SetPropertyUint32(c, links, (uint32_t)i, l);
+    }
+    JS_SetPropertyStr(c, d, "links", links);
+    return d;
+}
+
+void js_wm_end(const GrabEnd *e) { call_wm("end", end_data, e); }
+
+typedef struct { int zone; AxiaSnapRect r; } ZoneNotice;
+static JSValue zone_data(JSContext *c, const void *arg) {
+    const ZoneNotice *z = arg;
+    JSValue d = JS_NewObject(c);
+    JS_SetPropertyStr(c, d, "zone", zone_value(c, z->zone));
+    set_rect(c, d, z->r.x, z->r.y, z->r.w, z->r.h);
+    return d;
+}
+
+void js_wm_zone_flush(void) {
+    ZoneNotice z;
+    if (!grab_zone_take(&z.zone, &z.r)) return;
+    call_wm("zone", zone_data, &z);
+}
+
+static void call_wm(const char *type, JSValue (*build)(JSContext *, const void *), const void *arg) {
     JSContext *c = wctx;
     if (!c) return;
     JSValue g = JS_GetGlobalObject(c), f = JS_GetPropertyStr(c, g, "__lordWm");
     if (JS_IsFunction(c, f)) {
-        JSValue d = JS_NewObject(c);
-        JS_SetPropertyStr(c, d, "node", JS_NewInt32(c, node));
-        JS_SetPropertyStr(c, d, "edges", JS_NewInt32(c, edges));
-        JS_SetPropertyStr(c, d, "dx", JS_NewFloat64(c, dx));
-        JS_SetPropertyStr(c, d, "dy", JS_NewFloat64(c, dy));
-        JS_SetPropertyStr(c, d, "dw", JS_NewFloat64(c, dw));
-        JS_SetPropertyStr(c, d, "dh", JS_NewFloat64(c, dh));
-        JSValue args[2] = { JS_NewString(c, "end"), d };
+        JSValue args[2] = { JS_NewString(c, type), build(c, arg) };
         JSValue r = JS_Call(c, f, g, 2, args);
         if (JS_IsException(r)) {
             JSValue e = JS_GetException(c);

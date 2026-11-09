@@ -1,7 +1,7 @@
 // Real Rust -> compositor -> image -> React contract, in a private headless session.
 import { createElement as h, useEffect, useRef, useState } from 'react';
 import { render, View, Text } from '@lordos/runtime';
-import { configureWindows, windows, wm } from '../../sdk/windows.js';
+import { configureWindows, wm } from '../../sdk/windows.js';
 import { useDockPreviews } from '../../sdk/dockpreviews.jsx';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { Dock } from '../../themes/default/components/Dock.jsx';
@@ -34,8 +34,10 @@ const originalPreview = lord.wm.preview;
 lord.wm.preview = (...args) => { const out = originalPreview(...args); if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++; return out; };
 const original = lord.wm.thumbnail;
 lord.wm.thumbnail = (...args) => { calls++; const ok = original(...args); if (ok) { captures++; lastSource = args[1]; if (firstImageMs == null) firstImageMs = lord.now() - hoverStarted; } return ok; };
-configureWindows({ apps: [{ id: 'preview-test', name: 'Live preview' }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
-windows.set([{ id: 'preview-test', app: 'preview-test', title: 'Live preview', x: 50, y: 40, w: 600, h: 300 }]);
+configureWindows({ apps: [{ id: 'preview-test', name: 'Live preview', size: [600, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
+const previewId = wm.open('preview-test', { frame: { x: 50, y: 40, w: 600, h: 300 } });
+wm.setTitle(previewId, 'Live preview');
+check(previewId === 'preview-test' && wm.get(previewId)?.app === 'preview-test', 'source window registered through the Rust window manager');
 function Harness() {
   const [hover, setHover] = useState(false), [frame, setFrame] = useState(0);
   const [dock, setDock] = useState({ position: 'bottom', mode: 'dark' });

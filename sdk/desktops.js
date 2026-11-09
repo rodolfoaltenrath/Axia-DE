@@ -16,8 +16,9 @@ import { t, direction } from './i18n.js';
 import { settings } from './settings.js';
 import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
-import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing } from './windows.js';
-import { MAX_DESKTOPS, visibleOn, neighbor, arrowStep, swipeStep, cleanCount, cleanIndex } from './desktopmodel.js';
+import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows } from './windows.js';
+import { MAX_DESKTOPS } from './desktopmodel.js';
+import { neighbor, arrowStep, swipeStep, cleanCount, cleanIndex } from './winmodel.js';
 import { cycleWindows } from './trackpad.js';
 import { nativeAnim, whenAnimDone } from './anim.js';
 import { toggleOverview, toggleAppWindows } from './overview.jsx';
@@ -155,7 +156,7 @@ function animate(step) {
   sliding.clear();
   if (!anim || settings.get().reduceMotion || overviewShowing.get()) return;
   const rtl = direction() === 'rtl';
-  for (const n of visibleOn(windows.get(), activeDesktop.get()).map((w) => fxNodes.get(w.id)).filter(Boolean)) {
+  for (const n of visibleWindows().map((w) => fxNodes.get(w.id)).filter(Boolean)) {
     const id = anim.slide(n, step, rtl);
     if (!id) continue;
     sliding.add(n);
