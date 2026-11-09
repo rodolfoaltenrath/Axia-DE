@@ -54,7 +54,7 @@
   "swapValue": "{used} of {total}",
   "last60": "Last 60 seconds",
   "usedCache": "Used + cache",
-  "cacheHint": "The file cache speeds up repeated reads from disks. Linux frees it by itself when an app needs memory, so it does not count as used.",
+  "cacheHint": "Available memory is Linux’s estimate of what apps can use without swapping, including reclaimable cache. A high cache value alone does not mean RAM is running out.",
   "allDisks": "All disks",
   "diskCol": "Disk",
   "device": "Device",
@@ -445,5 +445,18 @@
   "volt.rail.HDMI": "HDMI 5 V",
   "volt.rail.BATT": "Clock battery",
   "comp.lan": "Network search in Files",
-  "comp.lanHint": "Files → Network: computers and shares on the local network."
+  "comp.lanHint": "Files → Network: computers and shares on the local network.",
+  "memAvailable": "available for apps",
+  "memoryPressure": "Memory pressure (10 s)",
+  "dirty": "Waiting for disk write",
+  "writeback": "Writing to disk",
+  "pause": "Pause chart",
+  "resume": "Resume chart",
+  "hist.title": "Traffic history",
+  "openInDisks": "Open in Disks",
+  "volt.noSources": "No voltage sensors reported.",
+  "volt.voltage": "Voltage",
+  "majorFaults": "Major page faults",
+  "minorFaults": "Minor page faults",
+  "net.outgoing": "Outgoing"
 }

@@ -965,7 +965,7 @@ Everything is validated in C:
 
 No call takes paths. Isolated `.lpk` apps don't have `lord.fw`.
 
-In the SDK, `firewall` and `firewallState` from `sdk/monitor.js`, exported in `@lordos/sdk`.
+In the SDK, `firewall` and `firewallState` from `sdk/firewall.js`, exported in `@lordos/sdk`.
 
 **The Monitor** also attributes each process to the scope it runs in (`js_monitor.c`, `scope_of`,
 which reads `/proc/<pid>/cgroup` with a cache). This way a `curl` inside `foot` is `foot`, just as
@@ -1250,7 +1250,7 @@ server/src/fw/fwlists.{c,h}      raw parsers, the set (hashes), the compiled fil
 server/src/fw/fwsub.{c,h}        axia-server: subscriptions, the download job, compiling
 server/src/fetch/fetch.c         axia-dl, the downloader (OpenSSL), fetchproto.h its protocol
 server/src/ui/js_fw.c            lord.fw.lists / setList / addList / removeList / updateLists / listMatch
-apps/monitor/Blocklists.jsx      Settings → Privacy → Blocklists
+apps/monitor/ui.rs      Settings → Privacy → Blocklists
 tests/fwlists_test.c, fwsub_test.c
 ```
 
@@ -1337,63 +1337,17 @@ and the next connection went through; switching it off removed the rule.
 
 ## Rules by app (Settings and Monitor)
 
-The rules the store always supported (`lord.fw.addRule`: domains, wildcards, addresses, networks,
-ports, protocols) now have screens:
+The Monitor application and its Settings privacy sections are implemented in
+`apps/monitor/*.rs`. `ui.rs` builds the firewall, rules and blocklist interfaces;
+`rules.rs` validates destinations and ports. The generic native app host executes
+only the firewall methods allowlisted in `manifest.rs`. Enforcement and rule
+precedence remain the responsibility of the shared firewall engine.
 
-```
-apps/monitor/FwRules.jsx     Settings → Privacy → "Network rules by app" (registerPrivacySection)
-apps/monitor/RuleSheet.jsx   the add / edit sheet, shared with the Monitor
-apps/monitor/Network.jsx     Monitor → Network: "Allow / Block this domain" on an app's destinations
-sdk/fwrule.js                checks what is typed, orders rules by precedence (fwRule in @lordos/sdk)
-server/tests/fw_dest_cases.txt, fwdest_test.c, fwrule_input_test.mjs   the parser tests
-```
-
-**Settings → Privacy → Network rules by app.** One row per app that has rules (plus any app added
-with "Add app…" or opened from the Monitor). Open, an app shows:
-
-- **Default for this app:** "Allow all" (no `{out, any}` rule: what no rule covers follows the mode)
-  or "Block all except rules" (the `{out, any, deny}` rule, the same one the Monitor's switch writes).
-- **Its rules**, each with Allow / Block, the destination, its kind (exact domain, domain and
-  subdomains, address, network…), port, protocol and **when it last matched**, with Edit and Delete
-  (Delete asks once more in the row).
-- **Add rule…** opens the sheet: action, destination, optional port (`443` or `8000-8080`) and
-  protocol (any, TCP, UDP). What is typed is checked as it is typed and the sheet says what the
-  destination covers ("example.com and every name under it", "a network of 256 addresses") or what
-  is wrong (a host bit outside the prefix in `10.0.0.1/8`, a bad label, a port out of range). A bare
-  "any" is refused there: that is the app's default, set above.
-
-**There is no priority to reorder.** `fw_decide` has no rule order: of the rules that match a
-connection, the most specific destination wins (exact domain > longer wildcard > shorter wildcard
-> longer prefix > shorter prefix > lan/internet > any), then the smaller port range, a concrete
-protocol, deny over allow, and the newest (see [Precedence](#precedence)). The list shows each app's
-rules in exactly that order (`sortByPrecedence` in `sdk/fwrule.js`, a copy of `consider` in
-`rules.c`) and the footer explains it, so the top rule is the one that would win.
-
-**Monitor → Network.** Selecting an app's destination (in the list or in the detail pane) offers
-"Allow this domain" / "Block this domain" for that app. The sheet opens over the window:
-
-- prefilled with the name the system resolver gave for that address when the firewall notice
-  carries one, with the exact name and `*.parent` as one-click choices;
-- without a name (today, see Known limits) it says so and is prefilled with the address, which the
-  user can replace with a domain.
-
-Short connections (a `curl`) close before the next sample, so besides the open sockets each app
-lists the destinations `axia-netperm` reported recently ("recent connection" / "recently denied").
-Since 0.8.2 each destination in an app's open row also has its own allow/block switch: it shows what
-the app's rules decide for that name or address (the same order as `fw_decide`, mirrored in
-`sdk/fwrule.js` `decide()` and checked against it with `server/tests/fw_domain_cases.txt`) and a
-click writes, flips or removes the exact-name rule (`MONITOR.md`, "Per-destination switches").
-The detail pane also links to "Rules for this app" (Settings → Privacy, with that app open).
-
-**Last match.** `axia-netperm`'s `EVENT` notices carry the rule that decided (`"by":"rule"`,
-`"rule": N`). axia-server keeps, per rule, the time it last saw one (memory only, like the counters;
-`lastMatch` in `rules()`), and Settings reads it every 5 s while shown. Two details:
-
-- `axia-netperm` numbers rules on its own: on every reload it reads `firewall.json` into a new
-  store, so its ids are 1, 2, 3… in file order. After every save `js_fw.c` reads the saved text the
-  same way and maps those ids to its own rules by app, direction, destination, ports and protocol.
-- Notices are deduplicated per destination for 5 s, and only those this session received count:
-  "matched just now" means within the last minute, not per packet.
+The editor supports app defaults, trusted apps, restrictions, add/edit/remove
+rules and custom lists. Network address actions prefill the editor for an app
+whose identity is known. The editor and `fw_parse_dest` consume the same
+`server/tests/fw_dest_cases.txt` contract. The former JS validator and its JS
+tests have been replaced by Rust tests. See [MONITOR.md](MONITOR.md).
 
 ### What domain rules can't see
 
@@ -1420,9 +1374,8 @@ Settings says this in a footer under the rules, in the user's language.
   punycode, bad labels, IPv4 and IPv6 addresses and networks, host bits outside the prefix, bad
   prefixes, `::ffff:` mapped addresses, leading zeros) through `fw_parse_dest` + `fw_format_dest`:
   62 cases, 0 failures on VM 122.
-- `server/tests/fwrule_input_test.mjs` (run by `run_suites.sh` when `node` is installed, otherwise
-  "skipped: needs node") runs the same file through the sheet's parser, plus ports, protocols, the
-  default rule and the precedence order: 99 checks. Both parsers read one file, so they can't drift.
+- `apps/monitor/tests.rs` checks the Rust editor against the same destination
+  cases, port boundaries, invalid defaults and numeric rule identifiers.
 - End to end on VM 122 (`axia-netperm` from the package, the new `axia-server` and bundle): a
   `.desktop` "Curl test" (`foot -e` a loop of `curl https://example.com` and
   `https://www.debian.org`, every 4 s) started from the launcher runs in

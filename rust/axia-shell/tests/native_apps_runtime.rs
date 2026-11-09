@@ -91,7 +91,7 @@ fn real_compiled_app_widgets_and_effects() {
     );
     let mut command = Command::new(repo.join("server/build/axia-server"));
     command
-        .args(["--headless", "1000x700", "--timeout", "10", "--theme"])
+        .args(["--headless", "1000x700", "--timeout", "16", "--theme"])
         .arg(&bundle)
         .arg("--fonts")
         .arg(repo.join("assets/fonts"))
@@ -163,7 +163,7 @@ fn real_compiled_app_widgets_and_effects() {
     };
     assert_eq!(
         get("catalog")["ids"],
-        json!(["appabout", "calculator", "files", "forcequit"])
+        json!(["appabout", "calculator", "files", "forcequit", "monitor"])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
     assert_eq!(get("empty")["groups"], 0);
@@ -196,7 +196,26 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("appabout", "Version 0.9.0"));
     assert_eq!(get("appabout-missing")["title"], "About missing");
     assert!(!has_text("appabout-missing", "Version 0.9.0"));
-    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount, About metadata/title and catalog passed");
+    assert!(has_text("monitor-memory", "available for apps"));
+    assert!(get("monitor-memory")["pixels"].as_u64().unwrap_or(0) > 0);
+    for tab in [
+        "overview",
+        "cpu",
+        "memory",
+        "network",
+        "disks",
+        "processes",
+        "cooling",
+        "voltage",
+    ] {
+        assert!(
+            get(&format!("monitor-{tab}"))["texts"]
+                .as_u64()
+                .unwrap_or(0)
+                > 0
+        );
+    }
+    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount, About metadata/title, Monitor tabs/RGBA/memory and catalog passed");
 }
 
 const DRIVER: &str = r#"
@@ -212,7 +231,9 @@ const compiled=catalog.map(nativeApp), force=compiled.find(app=>app.id==='forceq
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 configureWindows({apps:[...compiled,{id:'demo',name:'Demo',Component:()=>null,Icon},{id:'isolated',name:'Isolated',isolated:true,Component:()=>null,Icon}]});
 registerBuiltinApp({id:'linux',name:'Linux',builtin:true,Component:()=>null,Icon});
-const nodes=new Map();let root,control,guards=0,calls=[];
+const nodes=new Map();let root,control,guards=0,calls=[],pixelBytes=0;
+const originalSetProp=lord.setProp;
+lord.setProp=(id,key,value)=>{if(key==='pixels'&&value?.data)pixelBytes=Math.max(pixelBytes,value.data.length);return originalSetProp(id,key,value);};
 for(const method of ['createNode','appendChild','insertBefore','removeChild','destroy','setRoot','setText']) {
   const original=lord[method];lord[method]=(...args)=>{
     const result=original(...args);
@@ -237,7 +258,7 @@ const click=label=>{
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
 const tokens={mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3584e4',separator:'#555',control:'#333',controlRadius:6};
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:420,height:460}},h(app.Component,{key:mode+':'+instance}))));}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
@@ -271,6 +292,13 @@ async function run(){
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
+  wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
+  for(let i=0;i<30&&!texts().some(n=>n.text==='available for apps');i++)await pause();
+  record('monitor-memory',{text:texts().map(n=>n.text),texts:texts().length,pixels:pixelBytes});
+  for(const tab of ['overview','cpu','network','disks','processes','cooling','voltage']){
+    control.setArgs({tab});await pause();await pause();
+    record('monitor-'+tab,{text:texts().map(n=>n.text),texts:texts().length,pixels:pixelBytes});
+  }
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

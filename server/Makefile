@@ -9,6 +9,7 @@ RUST_LIB := build/rust/release/libaxia_shell.a
 RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../apps/*/*.rs ../rust/native_apps.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
+RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/clipboard/*.rs)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
@@ -62,8 +63,8 @@ QJS_DIR := ../third_party/quickjs
 QJS_OBJ := $(patsubst %,build/qjs/%.o,quickjs libregexp libunicode cutils dtoa)
 
 # .lpk app isolation, permissions and signing (src/sec, see docs/PRIVACY.md and docs/SIGNING.md)
-# Monitor: metrics, connections and the country of an IP (src/monitor, see docs/MONITOR.md)
-MON_SRC := src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/monitor/nethist.c src/monitor/netrec.c src/monitor/conn.c src/monitor/procctl.c src/monitor/mmdb.c src/monitor/map.c src/ui/js_monitor.c
+# Monitor is implemented in apps/monitor/*.rs; C only binds the shell compatibility ABI.
+MON_SRC := src/ui/js_monitor.c
 # Media (src/media, docs/MEDIA.md): only the axia-server side. Only axia-media links FFmpeg.
 MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/capture.c src/media/annot.c src/media/maudio.c src/media/mpulse.c src/media/proto.c src/ui/js_media.c
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
@@ -86,7 +87,7 @@ SRC += $(DOC_SRC)
 FW_SRC := src/fw/rules.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
 SRC += $(FW_SRC)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
-HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/monitor/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
+HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
 HDR += $(wildcard src/fw/*.h)
 # Touchpad and touchscreens: our own driver (src/tp, no libinput), gestures and touches for the
 # Wayland apps (src/wl/wl_input.c) and lord.input (src/ui/js_input.c). See docs/TRACKPAD.md.
@@ -263,7 +264,7 @@ all: $(ALL)
 # every prerequisite of `test` is done, tests/run_suites.sh runs them (a few seconds) and fails if any
 # fails; a suite whose tool or data isn't installed says "skipped: needs X". `make test-full` adds the
 # helpers (axia-media, axia-doc), the sandbox (Landlock kernel) and the HarfBuzz comparison.
-test: build/vt-dump build/shape-test build/bidi-test build/ime-test build/thbrk-test build/sound-test build/wasm-test build/wasm-js-test build/fsops-test build/sign-test build/mmdb-test build/canvas-test build/arcpath-test build/ipp-test build/tp-test build/media-test
+test: build/vt-dump build/shape-test build/bidi-test build/ime-test build/thbrk-test build/sound-test build/wasm-test build/wasm-js-test build/fsops-test build/sign-test build/canvas-test build/arcpath-test build/ipp-test build/tp-test build/media-test
 	@sh tests/run_suites.sh
 test-full: test build/sandbox-test build/doc-test $(filter build/axia-media build/axia-doc,$(ALL))
 	@sh tests/run_suites.sh full
@@ -402,7 +403,7 @@ build/fwlists-test-asan: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules.c sr
 	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
 	./$@
 # the destinations a user types in the rule sheet (tests/fw_dest_cases.txt), through the store's
-# parser; tests/fwrule_input_test.mjs checks the same file against sdk/fwrule.js (run_suites.sh)
+# parser; apps/monitor/tests.rs checks the Rust editor against the same cases.
 test: build/fwdest-test
 build/fwdest-test: tests/fwdest_test.c tests/fw_dest_cases.txt tests/fw_domain_cases.txt src/fw/rules.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h
 	@mkdir -p build
@@ -419,33 +420,9 @@ build/backup-test: tests/backup_test.c src/backup/engine.c src/backup/crypt.c sr
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -isystem ../third_party/monocypher $(CFLAGS) $(WARN) -std=c11 -o $@ tests/backup_test.c src/backup/engine.c src/backup/crypt.c build/obj/vault/monocypher.o -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
-# Monitor's MaxMind DB reader (country of an IP): known lookups and broken files
-build/mmdb-test: tests/mmdb_test.c src/monitor/mmdb.c src/monitor/mmdb.h src/pkg/xz.c build/obj/ui/stb.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/mmdb_test.c src/monitor/mmdb.c src/pkg/xz.c build/obj/ui/stb.o -lm
-# drawing time of the Monitor's vector map (not a test: it measures; see docs/MONITOR.md)
-build/map-bench: tests/map_bench.c src/monitor/map.c src/monitor/map.h src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/hw/rpifw.c src/monitor/conn.c src/monitor/procctl.c src/monitor/mmdb.c src/pkg/xz.c build/obj/ui/stb.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/map_bench.c src/monitor/map.c src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/hw/rpifw.c src/monitor/conn.c src/monitor/procctl.c src/monitor/mmdb.c src/pkg/xz.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c src/sec/cgroup.c build/obj/ui/stb.o -lm -lpthread
-# Monitor process actions (src/monitor/procctl.c): the protected list, stat parsing, a signal that
-# refuses a stale start time (PID reuse), TERM/KILL on a child, and the Get Info JSON
-test: build/procctl-test
-# one reading of Monitor → Network's sockets (tests/conn_dump.c), for checking conn.c by hand
-build/conn-dump: tests/conn_dump.c src/monitor/conn.c src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/hw/rpifw.c src/monitor/mmdb.c src/pkg/xz.c build/obj/ui/stb.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/conn_dump.c src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/hw/rpifw.c src/monitor/conn.c src/monitor/procctl.c src/monitor/mmdb.c src/pkg/xz.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c src/sec/cgroup.c build/obj/ui/stb.o -lm -lpthread
-build/procctl-test: tests/procctl_test.c src/monitor/procctl.c src/monitor/procctl.h src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/hw/rpifw.c src/monitor/conn.c src/monitor/mmdb.c src/pkg/xz.c build/obj/ui/stb.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/procctl_test.c src/monitor/procctl.c src/monitor/mon.c src/monitor/disktemp.c src/monitor/voltage.c src/hw/rpifw.c src/monitor/conn.c src/monitor/mmdb.c src/pkg/xz.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c src/sec/cgroup.c build/obj/ui/stb.o -lm -lpthread
-	./$@ || { rm -f $@; exit 1; }
-# Monitor → Voltage (src/monitor/voltage.c): hwmon, batteries and adapters on fake sysfs trees, hostile values
-test: build/voltage-test
-build/voltage-test: tests/voltage_test.c src/monitor/voltage.c src/monitor/voltage.h src/hw/rpifw.c src/hw/rpifw.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -D_GNU_SOURCE -o $@ tests/voltage_test.c src/monitor/voltage.c src/hw/rpifw.c
-	./$@ || { rm -f $@; exit 1; }
-# the Monitor's traffic history file: totals, 7-day/30-day rotation, cut and damaged files, Clear
-test: build/nethist-test
-build/nethist-test: tests/nethist_test.c src/monitor/nethist.c src/monitor/nethist.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/nethist_test.c src/monitor/nethist.c -lm
-	./$@ || { rm -f $@; exit 1; }
+# Monitor collection, rendering and regression tests are in apps/monitor/*.rs.
+# Keep the migrated regression suite in the standard test entry point.
+test: test-rust
 # canvas.c rows: SIMD (NEON on aarch64) against C, bit for bit, and how long each one takes
 # UI engine (docs/DESIGN.md "Engine notes"): ellipsis in LTR/RTL/Arabic/Thai/emoji, per-side borders,
 # per-corner radii, logical edges, transforms and hit testing, and the dragged window's frames against
@@ -700,17 +677,13 @@ build/smart-test: tests/smart_test.c src/disk/smart.c src/disk/disk.h src/admin.
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smart_test.c src/disk/smart.c
 	./$@ || { rm -f $@; exit 1; }
 # smart-* actions (smartmontools): which device names are accepted, JSON compaction and LOG pieces;
-# disk temperatures (src/monitor/disktemp.c) on fake sysfs trees: NVMe, multipath NVMe, drivetemp,
-# a card and a virtual disk without a sensor, and chips that must be ignored
-test: build/smartctl-test build/disktemp-test
+# Disk SMART helper tests (Monitor sensor coverage is in Rust).
+test: build/smartctl-test
 build/smartctl-test: tests/smartctl_test.c src/disk/smartctl.c src/disk/disk.h src/admin.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smartctl_test.c src/disk/smartctl.c
 	./$@ || { rm -f $@; exit 1; }
-build/disktemp-test: tests/disktemp_test.c src/monitor/disktemp.c src/monitor/disktemp.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -D_GNU_SOURCE -o $@ tests/disktemp_test.c src/monitor/disktemp.c
-	./$@ || { rm -f $@; exit 1; }
+
 # a system with no administrator (src/users/admin_rescue.c): who may become one
 test: build/admin-rescue-test
 build/admin-rescue-test: tests/admin_rescue_test.c src/users/admin_rescue.c src/users/admin_rescue.h

@@ -16,7 +16,7 @@ hardware live, with the curve and a temperature/fan history.
 | Session API `lord.fan` | `server/src/ui/js_fan.c` (registered from `js_hw.c`) |
 | Shared UI: status store, illustrations, curve chart | `sdk/cooling.jsx` |
 | Settings → Cooling | `apps/settings/Cooling.jsx` |
-| Monitor → Cooling | `apps/monitor/Cooling.jsx` |
+| Monitor → Cooling | `apps/monitor/ui.rs` |
 | Case accessories (Raspberry Pi 5) | admin action `rpi-case` in `server/src/hw/hw_admin.c` |
 | Tests | `server/tests/fan_test.c` (`build/fan-test`, in `tests/run_suites.sh`) |
 

@@ -102,5 +102,6 @@
   "lists.name.scam": "Sites de golpe",
   "lists.name.ransomware": "Ransomware",
   "lists.name.cryptomining": "Mineração de criptomoedas oculta",
-  "lists.name.attackers": "Endereços atacantes"
+  "lists.name.attackers": "Endereços atacantes",
+  "lists.enabled": "Ativa"
 }

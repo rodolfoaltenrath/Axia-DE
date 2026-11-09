@@ -102,5 +102,6 @@
   "lists.name.scam": "Sitios de estafa",
   "lists.name.ransomware": "Ransomware",
   "lists.name.cryptomining": "Minería de criptomonedas oculta",
-  "lists.name.attackers": "Direcciones atacantes"
+  "lists.name.attackers": "Direcciones atacantes",
+  "lists.enabled": "Activada"
 }
