@@ -210,7 +210,7 @@ static JSValue f_set_prop(JSContext *c, JSValueConst this_val, int argc, JSValue
         }
         if (data && w > 0 && h > 0 && w <= 4096 && h <= 4096 && len >= (size_t)w * h * 4) {
             Image *img = image_pixels(n->img, w, h, data);
-            n->img = img;
+            if (img) n->img = img;
         } else if (!JS_IsUndefined(argv[2]) && !JS_IsNull(argv[2])) fprintf(stderr, "js: invalid pixels (%dx%d, %zu bytes)\n", w, h, len);
         JS_FreeValue(c, wv);
         JS_FreeValue(c, hv);

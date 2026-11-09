@@ -162,6 +162,14 @@ impl Preview {
         self.interval = (self.cost.max(cost) * 34.).clamp(67., 1000.);
         self.next_capture = self.next_capture.max(now + self.interval);
     }
+    fn finish(&mut self, source: i32, cost: f64, now: f64, success: bool) {
+        self.done(cost, now);
+        if !success {
+            // Keep the prior thumbnail, but do not acknowledge content that
+            // failed to reach it. Retry after the normal aggregate cooldown.
+            self.signatures.remove(&source);
+        }
+    }
 }
 thread_local! { static STATES: RefCell<(u32, HashMap<u32, Preview>)> = RefCell::new((0, HashMap::new())); }
 fn request(v: Value, now: f64) -> Value {
@@ -231,16 +239,45 @@ pub extern "C" fn axia_dock_preview_due(
     })
 }
 #[no_mangle]
-pub extern "C" fn axia_dock_preview_done(id: u32, cost: f64, now: f64) {
+pub extern "C" fn axia_dock_preview_finish(
+    id: u32,
+    source: i32,
+    cost: f64,
+    now: f64,
+    success: i32,
+) {
     STATES.with(|states| {
         if let Some(s) = states.borrow_mut().1.get_mut(&id) {
-            s.done(cost, now);
+            s.finish(source, cost, now, success != 0);
         }
     });
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_capture_retries_with_existing_pixels_without_bypassing_the_cooldown() {
+        let mut s = Preview {
+            open: true,
+            interval: 67.,
+            ..Preview::default()
+        };
+        assert!(s.due(1, 10, 0., false));
+        s.finish(1, 2., 2., true);
+        assert!(s.due(2, 20, 70., false));
+        s.finish(2, 2., 72., false);
+        assert!(!s.due(2, 20, 139., false));
+        assert!(
+            !s.due(1, 10, 140., false),
+            "successful images remain deduplicated"
+        );
+        assert!(
+            s.due(2, 20, 140., false),
+            "retry even when the old image is still present"
+        );
+        s.finish(2, 2., 142., true);
+        assert!(!s.due(2, 20, 1000., false));
+    }
     fn input(key: &str, inside: bool) -> Value {
         json!({"key":key,"inside":inside,"windows":[{"id":"a","node":5}],"aw":800,"ah":600,"x":400,"y":500})
     }

@@ -71,7 +71,7 @@ SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
 SRC := src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/lpk.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
-       src/ui/text.c src/ui/image.c \
+       src/ui/text.c \
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
        src/term/vt.c src/term/pty.c src/term/term.c src/term/term_paint.c src/term/hold.c \
@@ -130,7 +130,7 @@ build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
 	./$@ || { rm -f $@; exit 1; }
 
-test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/wl-fullscreen-test
 	./build/ui-damage-test
 	./build/glass-damage-test
@@ -142,7 +142,7 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 	./build/portal-files-test
 	./build/media-preview-test
 	./build/glass-renderer-test
-	./build/wallpaper-image-test
+	cargo test --manifest-path $(RUST_MANIFEST) --target-dir build/rust --locked --offline --test image_runtime -- --ignored --nocapture
 	./build/seat-test
 	./build/platform-admin-test
 	./build/switcher-ffi-test
@@ -170,8 +170,6 @@ build/media-preview-test: tests/media_preview_test.c src/media/mview.c src/media
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/media/mview.c src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/host-power-test: tests/host_power_test.c src/platform/power.c src/platform/power.h src/vault/dbus.c $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ $< src/platform/power.c src/vault/dbus.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
-build/wallpaper-image-test: tests/wallpaper_image_test.c src/ui/image.c src/canvas.c src/glass_ffi.h build/obj/ui/stb.o $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c build/obj/ui/stb.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/cpu-cursor-test: tests/cpu_cursor_test.c src/main.c src/outputs.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/outputs.c -lm
 build/kms-cursor-test: tests/kms_cursor_test.c src/kms.c src/kms.h
@@ -447,7 +445,7 @@ test: test-rust
 # per-corner radii, logical edges, transforms and hit testing, and the dragged window's frames against
 # the golden hashes in tests/drag_golden_{cpu,gpu}.txt; `build/engine-test bench` times a 2000-row
 # list and a window drag on one and two displays
-ENGINE_SRC := src/gpu/gscissor.c src/gpu/gcontend.c src/ui/text.c src/ui/textlayout.c src/ui/image.c \
+ENGINE_SRC := src/gpu/gscissor.c src/gpu/gcontend.c src/ui/text.c src/ui/textlayout.c \
               src/ui/paint.c src/ui/otf.c src/ui/fonts.c src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c \
               src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/canvas.c
 test: build/engine-test

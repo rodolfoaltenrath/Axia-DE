@@ -1090,11 +1090,8 @@ impl Metrics for NativeMetrics {
     }
     fn image(&mut self, image: *mut c_void) -> (i32, i32) {
         unsafe {
-            extern "C" {
-                fn image_size(image: *mut c_void, w: *mut i32, h: *mut i32);
-            }
             let (mut w, mut h) = (0, 0);
-            image_size(image, &mut w, &mut h);
+            super::image::image_size(image.cast(), &mut w, &mut h);
             (w, h)
         }
     }
