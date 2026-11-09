@@ -64,6 +64,56 @@ Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
 
+## Núcleo do runtime: árvore de nós e estilos
+
+`runtime/` contém a implementação da árvore e dos estilos. Os antigos
+`server/src/ui/node.c` e `style.c` foram removidos do repositório e do build.
+O React continua enviando as mesmas operações; layout, texto, pintura e o
+cache de imagens continuam integrados ao renderer existente.
+
+Para revisar o código:
+
+- `scene.rs` possui os nós em `Box`, mantém as relações por IDs, valida
+  reparentamento e libera subárvores iterativamente. A tabela de views mantém
+  os endereços estáveis e a fila de vagas reaproveita o menor ID disponível.
+- `style.rs` resolve propriedades por tipos, sem offsets de bytes. Snapshots
+  comparam os campos e os bits dos floats; padding e caches derivados não
+  participam da comparação. As extensões são alocadas somente quando usadas.
+- `damage.rs` mantém as regiões de repintura, incluindo a união de regiões
+  sobrepostas e o limite de 16 retângulos.
+- `types.rs` define as views `repr(C)` e `mod.rs` contém a ABI e seus contratos.
+  `state.rs` fornece o armazenamento do estado global compartilhado.
+
+Rust possui e libera nós, texto, extensões de estilo e transformações. O cache
+C ainda possui as imagens; o dono do nó devolve cada referência ao cache ao
+ser destruído. Views C são empréstimos síncronos na thread da interface:
+o renderer pode atualizar geometria e pintura, mas não liberar os dados nem
+alterar as relações da árvore. Os blocos `unsafe` nessa fronteira continuam
+necessários enquanto layout e pintura usam as views C.
+
+Criação de nós não varre mais toda a tabela desde o início; a contagem de nós
+é direta. Repetir um texto idêntico preserva suas alocações e caches. Resetar
+a árvore libera também as tabelas, e operações que criariam ciclos são
+recusadas. IDs e operações da interface continuam compatíveis.
+
+Os testes novos são Rust e cobrem crescimento/reuso de IDs, endereços estáveis,
+reparentamento, ciclos, descarte de subárvores profundas, limites de buffers,
+ordem de pintura, invalidação, estilos e regiões de repintura. O teste de ABI
+usa Clang para inspecionar o arquivo C de layout existente e verificar tamanho,
+alinhamento e offset de todos os campos compartilhados, sem gerar teste C.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline runtime::
+# Requer Clang; também executado no CI Fedora:
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline runtime::tests::native_views_match_c_layout -- --ignored --nocapture
+# Regressões existentes de layout, texto, pintura e frames de arraste:
+make -C server build/engine-test GPU=1
+```
+
+Essa etapa migra a árvore e os estilos. O motor de layout, pintura e as pontes
+QuickJS são etapas seguintes; não há promessa de redução de RAM ou latência
+apenas pela troca de linguagem.
+
 ## Aplicativos Linux e associações de arquivos
 
 `applications/` substitui integralmente `apps.c`, `hw/mimeapps.c` e

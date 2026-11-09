@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-/* The order matches CURSOR_CSS_NAMES (the nodes' `cursor` style, ui/style.c). */
+/* The order matches CURSOR_CSS_NAMES (the nodes' `cursor` style, Rust runtime/style.rs). */
 enum {
     CUR_AUTO = 0, CUR_DEFAULT, CUR_POINTER, CUR_TEXT, CUR_MOVE, CUR_GRAB, CUR_GRABBING, CUR_NOT_ALLOWED,
     CUR_WAIT, CUR_PROGRESS, CUR_CROSSHAIR,

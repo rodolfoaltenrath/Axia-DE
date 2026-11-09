@@ -166,7 +166,7 @@ static JSValue f_set_style(JSContext *c, JSValueConst this_val, int argc, JSValu
     }
     if (err) style_warn(key);
     JS_FreeCString(c, key);
-    node_restyled(n, &before, before.ext ? &ext_before : NULL);     /* node.c (engine-test does the same) */
+    node_restyled(n, &before, before.ext ? &ext_before : NULL);     /* Rust runtime (engine-test does the same) */
     return JS_UNDEFINED;
 }
 
