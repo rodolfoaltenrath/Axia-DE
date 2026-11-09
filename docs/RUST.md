@@ -64,13 +64,13 @@ Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
 
-## Núcleo do runtime: árvore, estilos e layout
+## Núcleo do runtime: árvore, estilos, layout e imagens
 
 `runtime/` contém a implementação da árvore e dos estilos. Os antigos
-`server/src/ui/node.c`, `style.c`, `layout.c` e `transform.c` foram removidos
+`server/src/ui/node.c`, `style.c`, `layout.c`, `transform.c` e `image.c` foram removidos
 do repositório e do build. O React continua enviando as mesmas operações.
-Medição de texto, shaping, pintura e o cache de imagens continuam integrados
-ao renderer C; a árvore, os estilos e a geometria são calculados em Rust.
+Medição de texto, shaping e pintura continuam integrados ao renderer C;
+árvore, estilos, geometria e gestão/reamostragem das imagens estão em Rust.
 
 Para revisar o código:
 
@@ -88,12 +88,17 @@ Para revisar o código:
   A medição chama os serviços existentes de texto e imagens através de `Metrics`.
 - `edges.rs` resolve bordas, margens, padding e cantos físicos/lógicos.
   `transform.rs` contém a matemática afim compartilhada com pintura e hit testing.
+- `image.rs` possui as imagens e o cache por caminho, preserva handles durante
+  alterações da tabela e integra o desenho ao canvas atual. `image_sampling.rs`
+  mantém pixels ARGB premultiplicados, bilinear e médias por área.
 - `types.rs` define as views `repr(C)` e `mod.rs` contém a ABI e seus contratos.
   `state.rs` fornece o armazenamento do estado global compartilhado.
 
-Rust possui e libera nós, texto, extensões de estilo e transformações. O cache
-C ainda possui as imagens; o dono do nó devolve cada referência ao cache ao
-ser destruído. Views C são empréstimos síncronos na thread da interface:
+Rust possui e libera nós, texto, extensões de estilo, transformações e imagens.
+O dono do nó devolve sua referência à imagem ao ser destruído. O cache possui
+uma referência independente; imagens geradas de wallpapers, tray e busca saem
+do cache quando o último consumidor devolve sua referência. Views C são
+empréstimos síncronos na thread da interface:
 o renderer pode atualizar geometria e pintura, mas não liberar os dados nem
 alterar as relações da árvore. Os blocos `unsafe` nessa fronteira continuam
 necessários enquanto layout e pintura usam as views C.
@@ -159,9 +164,50 @@ cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --lock
 make -C server build/engine-test GPU=1
 ```
 
-Essa etapa migra a árvore, os estilos, o layout e as transformações. Texto,
-shaping, pintura e as pontes QuickJS são etapas seguintes; não há promessa de
+Essa etapa migra a árvore, os estilos, o layout, as transformações e a gestão
+das imagens. Texto, shaping, pintura e as pontes QuickJS são etapas seguintes; não há promessa de
 redução de RAM ou latência apenas pela troca de linguagem.
+
+### Imagens do runtime
+
+O cache usa lookup por hash, sem varrer uma lista ligada a cada acesso. Handles
+opacos continuam com endereço estável. O cache e os nós têm referências
+independentes, inclusive durante a destruição dos estados locais da thread:
+destruir o cache não invalida imagens ainda usadas por nós. Imagens dos temas
+continuam em cache; imagens geradas são liberadas após o último consumidor.
+
+São mantidas duas versões redimensionadas por imagem para alternar tamanhos
+como dock/top-bar sem recalcular. Uma terceira dimensão reaproveita o buffer
+evicto se houver capacidade; reservas são exatas e um buffer com capacidade
+superior a duas vezes a nova necessidade é descartado. `managedImageKB`
+contabiliza a capacidade dos buffers de pixels, incluindo as duas versões.
+
+Atualizações RGBA/ARGB do mesmo tamanho reaproveitam a imagem e invalidam as
+versões redimensionadas. Trocar tamanho ou substituir uma imagem compartilhada
+só consome a referência antiga depois de concluir a nova alocação. Falhas
+retornam NULL e preservam a imagem anterior; os consumidores C respeitam esse
+contrato. Inputs são limitados a 32.768 por lado e 64 megapixels. Arquivos são
+regulares, lidos com limite de 64 MiB e dimensões verificadas antes da decodificação.
+No preview da dock, uma captura que falhou mantém a imagem anterior, mas não
+confirma sua assinatura como atualizada. A próxima tentativa respeita o cooldown
+agregado existente, mesmo quando o conteúdo e a imagem anterior são os mesmos.
+
+O decodificador PNG/JPEG vendorizado `stb` permanece para preservar os pixels;
+é uma dependência de terceiros, também utilizada pelas fontes. O blit ainda
+usa o canvas C. Não há fallback para o antigo `image.c`. Os testes Rust
+substituem `wallpaper_image_test.c`, removido do build e do repositório.
+
+`image_tests.rs` cobre referências, caches, troca de tamanho, OOM, ordem de
+destruição, handles após rehash, clipping e o overflow corrigido ao reduzir
+imagens grandes. O teste nativo `image_runtime.rs` liga os consumidores reais
+e compara 13 hashes registrados do renderer C antes da remoção, sem atualizar
+resultados esperados a partir da implementação Rust. Ele também verifica PNG,
+JPEG, caminhos não UTF-8, arquivos inválidos e vida útil de wallpapers em dois
+consumidores. O `make -C server test-platform` executa esse teste após o build:
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test image_runtime -- --ignored --nocapture
+```
 
 Na fronteira com o renderer, a propriedade de cada nó é transferida de `Box`
 para um registro RAII com `NonNull`, antes de publicar qualquer ponteiro.

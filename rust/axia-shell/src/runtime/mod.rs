@@ -1,11 +1,14 @@
 //! Native scene ownership and styles. The renderer still borrows the C-layout
-//! views synchronously; image decoding, text shaping and painting remain in C.
+//! views synchronously. Image ownership/cache/sampling are Rust; the vendored
+//! stb decoder, text shaping and the remaining canvas/painting stay in C.
 //!
 //! FFI contract: UI thread only, no reentrant calls. Node pointers are null or
 //! live views returned by node_new/node_get. C cannot free or relink views, text,
 //! style extensions or transforms. Style snapshots never own their ext pointer.
 mod damage;
 mod edges;
+mod image;
+mod image_sampling;
 mod layout;
 #[cfg(test)]
 mod layout_tests;
@@ -46,10 +49,7 @@ pub unsafe extern "C" fn layout_root(root: *mut Node, w: f32, h: f32) -> i32 {
 
 #[cfg(not(test))]
 unsafe fn release_image(image: *mut c_void) {
-    extern "C" {
-        fn image_release(image: *mut c_void);
-    }
-    image_release(image);
+    self::image::image_release(image.cast());
 }
 #[cfg(test)]
 unsafe fn release_image(_image: *mut c_void) {

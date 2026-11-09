@@ -273,9 +273,15 @@ const char *text_language(void);                         /* the UI language the 
 int   text_script_fallback(uint32_t cp, int bold);         /* terminal: font per script */
 int   text_direction(const char *s);                       /* 1 if the first strong character is RTL */
 
-/* image.c */
+/* Rust runtime images. UI thread only; handles are opaque owned references.
+ * Call image_release exactly once per acquired reference. Pixel inputs must
+ * remain readable for the call and must not alias the image's own storage. */
 Image *image_get(const char *path);
 void   image_size(const Image *img, int *w, int *h);
+/* On success, consumes img and returns its replacement (possibly the same handle).
+ * On failure, returns NULL and leaves img alive and unchanged. Keep the previous
+ * handle unless a non-NULL replacement was returned. Dimensions are bounded to
+ * 32768 per side and 64 megapixels; input holds w*h pixels. */
 Image *image_pixels(Image *img, int w, int h, const uint8_t *rgba);
 Image *image_argb(Image *img, int w, int h, const uint32_t *argb);   /* premultiplied ARGB (doc/doc.c) */
 void   image_release(Image *img);

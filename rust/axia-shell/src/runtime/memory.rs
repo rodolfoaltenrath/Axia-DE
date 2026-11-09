@@ -10,6 +10,17 @@ pub fn try_reserve<T>(values: &mut Vec<T>, additional: usize) -> bool {
     allowed() && values.try_reserve(additional).is_ok()
 }
 
+pub fn try_reserve_exact<T>(values: &mut Vec<T>, additional: usize) -> bool {
+    values.capacity() - values.len() >= additional
+        || (allowed() && values.try_reserve_exact(additional).is_ok())
+}
+
+pub fn try_reserve_map<K: Eq + std::hash::Hash, V>(
+    values: &mut std::collections::HashMap<K, V>,
+) -> bool {
+    values.len() < values.capacity() || (allowed() && values.try_reserve(1).is_ok())
+}
+
 pub fn try_box<T>(value: T) -> Option<Box<T>> {
     if !allowed() {
         return None;

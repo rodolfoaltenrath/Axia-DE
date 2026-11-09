@@ -39,8 +39,8 @@ impl Drop for OwnedNode {
         unsafe {
             // Reclaim ownership only after the renderer's borrow has ended.
             let mut n = Box::from_raw(self.view.as_ptr());
-            // Image references are still owned by the C image cache. Everything
-            // else here is allocated and released by Rust, including rare fields.
+            // Return this node's reference to the Rust image owner/cache.
+            // All remaining owned allocations are also released by Rust.
             if !n.img.is_null() {
                 super::release_image(n.img);
             }

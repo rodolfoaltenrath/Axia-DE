@@ -253,7 +253,7 @@ extern char *axia_dock_preview_request(const char *, double);
 extern void axia_dock_preview_reset(void);
 extern void axia_dock_preview_free(char *);
 extern int axia_dock_preview_due(uint32_t, int, uint64_t, double, int);
-extern void axia_dock_preview_done(uint32_t, double, double);
+extern void axia_dock_preview_finish(uint32_t, int, double, double, int);
 static double preview_now(void) { struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);return ts.tv_sec*1000.+ts.tv_nsec/1e6; }
 static JSValue f_preview(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
     (void)self;if (!argc) return JS_NULL;
@@ -281,12 +281,12 @@ static JSValue f_thumbnail(JSContext *c,JSValueConst self,int argc,JSValueConst 
     if (px) {
         Canvas canvas;canvas_init(&canvas,px,w,h,w);
         if (paint_preview(&canvas,n)) {
-            dst->img=image_argb(dst->img,w,h,px);
-            if (dst->img) {dst->paint_dirty=1;dst->gen++;ui.dirty=1;ok=1;}
+            Image *img=image_argb(dst->img,w,h,px);
+            if (img) {dst->img=img;dst->paint_dirty=1;dst->gen++;ui.dirty=1;ok=1;}
         }
         free(px);
     }
-    double end=preview_now();axia_dock_preview_done(handle,end-now,end);
+    double end=preview_now();axia_dock_preview_finish(handle,source,end-now,end,ok);
     return JS_NewBool(c,ok);
 }
 
@@ -313,11 +313,11 @@ static JSValue f_thumbnail_surface(JSContext *c,JSValueConst self,int argc,JSVal
         paint_view=(PaintView){0,0,k,(w-sw*k)*0.5f,(h-sh*k)*0.5f,keep.index};
         wl_preview_paint(&canvas,sid,0,0,sw,sh,1);
         paint_view=keep;
-        dst->img=image_argb(dst->img,w,h,px);
-        if (dst->img) {dst->paint_dirty=1;dst->gen++;ui.dirty=1;ok=1;}
+        Image *img=image_argb(dst->img,w,h,px);
+        if (img) {dst->img=img;dst->paint_dirty=1;dst->gen++;ui.dirty=1;ok=1;}
         free(px);
     }
-    double end=preview_now();axia_dock_preview_done(handle,end-now,end);
+    double end=preview_now();axia_dock_preview_finish(handle,sid|0x40000000,end-now,end,ok);
     return JS_NewBool(c,ok);
 }
 
