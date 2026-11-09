@@ -251,7 +251,7 @@ development package.
     `xz -9`), instead of the deflate in the design above; QuickJS running a fixed script (strings, JSON,
     sorting, objects, a regular expression), one runtime per thread.
   - LordOS's own interface work (`bench/lbui.c`), with the engine's real code linked into `axia-bench`
-    (`ui/node.c`, `style.c`, `layout.c`, `paint.c`, `text.c`, `canvas.c`, the shaper `otf.c`, `shape*.c`,
+    (Rust scene graph/styles, `ui/layout.c`, `paint.c`, `text.c`, `canvas.c`, the shaper `otf.c`, `shape*.c`,
     `bidi.c`; the Wayland, terminal, media and GPU hooks of `paint.c` are stubs, as in `tests/engine_test.c`):
     - **Layout and paint** (`cpu.ui.1`, `cpu.ui.n`, frames per second): a fixed 1920×1080 scene built in C,
       529 nodes: a translucent top bar with backdrop blur, a file manager (title bar, a 14-item sidebar, a

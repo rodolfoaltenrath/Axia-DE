@@ -356,7 +356,7 @@ was checked against this path:
   window only changes its `left`/`top` (`grab.c` calls `node_moved`), so a frame of a drag lays out the
   desktop's top level and places the rest (`place()`), instead of laying out every window.
 - **A transform-only setStyle keeps the node's layout** (0.8.6; `node_restyled` in
-  `ui/node.c`). A change of only `rotate`, `scaleX`, `scaleY` or `transformOriginX/Y` on a node that
+  `rust/axia-shell/src/runtime/scene.rs`). A change of only `rotate`, `scaleX`, `scaleY` or `transformOriginX/Y` on a node that
   already has its `StyleExt`, with no text node above it and no text or image in its subtree, marks
   it for repaint and has its parent place it again (`node_moved`) instead of `node_invalidate`.
   Layout never reads the transform and `place()` recomputes every matrix, so the result is the same;

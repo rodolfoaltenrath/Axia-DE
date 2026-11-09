@@ -384,7 +384,7 @@ static void place(Node *n, float px, float py, const Affine *world) {
     n->own_tf = n->type != NODE_RAW && style_has_transform(&n->s);
     const Affine *cw = world;
     if (n->own_tf || world) {
-        if (!n->tf && !(n->tf = calloc(1, sizeof *n->tf))) { n->own_tf = n->has_tf = 0; cw = NULL; goto kids; }
+        if (!node_ensure_transform(n)) { n->own_tf = n->has_tf = 0; cw = NULL; goto kids; }
         NodeTf *t = n->tf;
         if (n->own_tf) {
             t->own = style_transform(&n->s, n->ax, n->ay, n->w, n->h);
