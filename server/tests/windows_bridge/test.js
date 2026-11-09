@@ -89,11 +89,29 @@ wm.dropFromKeyboard('files#2');
 eq('back from the keyboard', wm.get('files#2').oskFrame, null);
 wm.setArgs('files#2', { csd: true });
 eq('args merged', [wm.get('files#2').args.csd, wm.get('files#2').args.path], [true, '/tmp']);
+const argsBefore = wm.get('files#2').args, winBefore = wm.get('files#2');
+wm.move('files#2', 300, 300);
+ok('a moved window is a new object…', wm.get('files#2') !== winBefore);
+ok('…but keeps its args object (no effect fires for nothing)', wm.get('files#2').args === argsBefore);
+wm.setArgs('files#2', { csd: true });
+ok('the same args again change nothing', wm.get('files#2').args === argsBefore);
 
 // the overview's views
 overviewShowing.set(true);
 ok('overview on', overviewShowing.get() === true);
 overviewShowing.set(false);
+
+// REGRESSION: a subscriber that changes the windows while the stores update (the Overview closing
+// itself when the desktop changes) wins; the older state must not come back over it
+createDesktop();
+overviewShowing.set(true);
+const off = activeDesktop.subscribe(() => { if (overviewShowing.get()) overviewShowing.set(false); });
+setActiveDesktop(2);
+off();
+eq('the nested change stays', [overviewShowing.get(), activeDesktop.get()], [false, 2]);
+ok('the mirror matches the list', windows.get().every((w) => w === wm.get(w.id)));
+setActiveDesktop(1);
+closeDesktop(2);
 
 // a display unplugged: the window comes back on the one left
 __screenChanged([{ id: 0, name: 'A', x: 0, y: 0, w: 1280, h: 800, scale: 100, main: true }, { id: 1, name: 'B', x: 1280, y: 0, w: 1920, h: 1080 }]);
@@ -101,6 +119,18 @@ wm.move('files#2', 2000, 100);
 eq('on the second display', wm.get('files#2').x, 2000);
 __screenChanged([{ id: 0, name: 'A', x: 0, y: 0, w: 1280, h: 800, scale: 100, main: true }]);
 ok('back on the first', wm.get('files#2').x + wm.get('files#2').w <= 1280);
+
+// a state that never reached the mirror (lost): the next one finds it out and asks for everything again
+JSON.parse(lord.windowList.call('patch', JSON.stringify([{}, 'files#2', { title: 'Lost' }])));
+wm.minimize('files');
+eq('resynced', [wm.get('files#2').title, wm.get('files').minimized], ['Lost', true]);
+ok('the mirror matches the list after a resync', windows.get().every((w) => w === wm.get(w.id)) && windows.get().length === 2);
+
+// the mirror is read-only: a write from outside is refused, not half-applied
+const was = windows.get();
+windows.set([]);
+activeDesktop.set(7);
+ok('read-only mirror', windows.get() === was && activeDesktop.get() === 1);
 
 // closing
 ok('close', wm.close('files#2'));

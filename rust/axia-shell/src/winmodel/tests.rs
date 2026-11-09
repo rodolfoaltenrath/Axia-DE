@@ -489,6 +489,8 @@ fn opening_places_and_raises() {
     op(&mut s, "open", json!([{ "app": "b", "memory": { "x": 7, "y": 8, "w": 300, "h": 200, "maximized": true } }]));
     assert_eq!((window(&mut s, "b")["x"].clone(), window(&mut s, "b")["maximized"].clone()), (json!(7), json!(true)));
     assert!(s.call("open", &[facts(), json!({ "app": "" })]).is_err());
+    assert_eq!(op(&mut s, "open", json!([{ "app": "t", "instance": 5 }]))["result"], json!("t#5"), "a numeric instance");
+    assert_eq!(op(&mut s, "open", json!([{ "app": "t", "instance": 0 }]))["result"], json!("t"), "0 is no instance");
 }
 
 #[test]
@@ -651,4 +653,6 @@ fn the_mirror_gets_only_what_changed() {
     assert_eq!(op(&mut s, "patch", json!(["b", { "title": "B" }]))["state"], Value::Null, "nothing changed, nothing sent");
     assert!(op(&mut s, "raise", json!(["a"]))["state"].is_object(), "the order changed");
     assert!(s.call("nothing", &[facts()]).is_err());
+    let again = op(&mut s, "resync", json!([]));
+    assert!(again["state"]["windows"].as_array().unwrap().iter().all(|w| w.get("w").is_some()), "resync sends everything");
 }

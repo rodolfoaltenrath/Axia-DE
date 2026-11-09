@@ -74,12 +74,19 @@ const guards = new Map();
 // and every rule that changes them; it also works out what shows, what is mounted and what is in
 // front, once per change. These stores are its mirror, for React: read them, change them with wm.*.
 // Each window has a revision, and only the objects that changed are replaced, so React keeps the rest.
-export const windows = createStore([]);
+// Read-only for everyone else: a write here would only part the mirror from Rust's list.
+const readOnly = (store, name, how) => ({
+  get: store.get, subscribe: store.subscribe,
+  set() { console.warn(`${name} is Rust's (winmodel/session.rs): change it with ${how}`); },
+});
+const windowsStore = createStore([]);
+export const windows = readOnly(windowsStore, 'windows', 'wm.*');
 // Desktops (docs/DESKTOPS.md): each window has w.desktop, and only the windows of activeDesktop show,
 // take the front place and get the keyboard. All displays switch together. desktopList is the order on
 // screen; sdk/desktops.js switches, persists and animates.
-export const activeDesktop = createStore(FIRST_DESKTOP);
-export const desktopList = createStore([FIRST_DESKTOP]);
+const activeStore = createStore(FIRST_DESKTOP), listStore = createStore([FIRST_DESKTOP]);
+export const activeDesktop = readOnly(activeStore, 'activeDesktop', 'setActiveDesktop');
+export const desktopList = readOnly(listStore, 'desktopList', 'createDesktop/closeDesktop/setDesktops');
 // The overview shows this desktop's minimized windows too (sdk/overview.jsx turns it on).
 export const overviewShowing = { get: () => overviewOn.get(), subscribe: (fn) => overviewOn.subscribe(fn), set: (on) => { run('setOverview', !!on); } };
 const overviewOn = createStore(false);
@@ -89,6 +96,7 @@ const NO_VIEWS = { visible: [], mounted: [], front: null, top: null, hidden: [],
 export const windowViews = createStore({ ...NO_VIEWS, sets: { hidden: new Set(), parked: new Set(), placeholder: new Set(), desk: new Map() } });
 
 const mirror = new Map();           // id → the window object last received
+const revs = new Map();             // id → its revision
 const rect = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
 // What the rules need that only this side knows: the displays with the theme's work areas (in
 // lord.screen's order: an index into it names a display), the open apps' sizes, and whether the theme snaps.
@@ -101,26 +109,51 @@ function facts() {
   const displays = (screen.displays || []).map((d) => ({ id: d.id, x: d.x, y: d.y, w: d.w, h: d.h, main: !!d.main, work: rect(workAreaOf(d)) }));
   return { displays, apps, snap: snapOn };
 }
+// A changed window comes as a new object, but its parts that didn't change (args, restore, pip…) keep
+// the objects they had: an app's AppHost and effects see a new `args` only when its content changed.
+function keepParts(old, w) {
+  if (!old) return w;
+  for (const k of Object.keys(w)) {
+    const a = old[k], b = w[k];
+    if (a && b && a !== b && typeof a === 'object' && typeof b === 'object' && JSON.stringify(a) === JSON.stringify(b)) w[k] = a;
+  }
+  return w;
+}
+// A subscriber may change the windows while this runs (the Overview closing itself when the desktop
+// changes): that newer state is applied in full, and this older one must not overwrite what is left.
+let applied = 0;
+let resyncing = false;
 function apply(st) {
+  // a window the mirror doesn't have at that revision (it can't happen unless a state was lost): ask
+  // for all of them again
+  if (!resyncing && st.windows.some((x) => !x.w && revs.get(x.id) !== x.rev)) {
+    resyncing = true;
+    try { const r = JSON.parse(lord.windowList.call('resync', JSON.stringify([facts()]))); if (r.state) st = r.state; } catch (e) { console.error('windows: resync:', e); } finally { resyncing = false; }
+  }
+  const gen = ++applied;
   const seen = new Set();
   const next = [];
   for (const x of st.windows) {
     seen.add(x.id);
-    if (x.w) mirror.set(x.id, x.w);
+    if (x.w) { mirror.set(x.id, keepParts(mirror.get(x.id), x.w)); revs.set(x.id, x.rev); }
     const w = mirror.get(x.id);
     if (w) next.push(w);
   }
-  for (const id of [...mirror.keys()]) if (!seen.has(id)) mirror.delete(id);
+  for (const id of [...mirror.keys()]) if (!seen.has(id)) { mirror.delete(id); revs.delete(id); }
   const v = st.views || NO_VIEWS;
   windowViews.set({ ...v, sets: {
     hidden: new Set(v.hidden), parked: new Set(v.parked), placeholder: new Set(v.placeholder),
     desk: new Map(Object.entries(v.desk || {}).map(([d, ids]) => [Number(d), new Set(ids)])),
   } });
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-  if (!same(desktopList.get(), st.desktops)) desktopList.set(st.desktops);
-  if (activeDesktop.get() !== st.active) activeDesktop.set(st.active);
+  if (gen !== applied) return;
+  if (!same(listStore.get(), st.desktops)) listStore.set(st.desktops);
+  if (gen !== applied) return;
+  if (activeStore.get() !== st.active) activeStore.set(st.active);
+  if (gen !== applied) return;
   if (overviewOn.get() !== !!st.overview) overviewOn.set(!!st.overview);
-  if (!same(windows.get(), next)) windows.set(next);
+  if (gen !== applied) return;
+  if (!same(windowsStore.get(), next)) windowsStore.set(next);
 }
 // Runs a rule on the window list; its result. Without lord.windowList (a test, a tool) nothing happens.
 function run(op, ...args) {

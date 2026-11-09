@@ -3,8 +3,8 @@ use super::call;
 use serde_json::Value;
 use std::ffi::{c_char, CStr, CString};
 
-/// Arguments larger than this are refused.
-pub const MAX_ARGS: usize = 1 << 20;
+/// Arguments larger than this are refused (a window's args are the app's data: room to spare).
+pub const MAX_ARGS: usize = 16 << 20;
 
 fn into_c(s: String) -> *mut c_char {
     // serde_json escapes NUL; our own messages have none
