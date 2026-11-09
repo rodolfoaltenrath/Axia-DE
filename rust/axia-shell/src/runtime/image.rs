@@ -400,7 +400,7 @@ struct Draw {
 }
 fn draw_bounds(clip: Clip, x: f32, y: f32, w: f32, h: f32) -> Option<Draw> {
     // Validate before casts, additions, reservations or touching image pixels.
-    if ![x, y, w, h].into_iter().all(f32::is_finite) {
+    if clip.x0 >= clip.x1 || clip.y0 >= clip.y1 || ![x, y, w, h].into_iter().all(f32::is_finite) {
         return None;
     }
     let (x, y, w, h) = (x.round(), y.round(), w.round(), h.round());
@@ -450,7 +450,12 @@ pub unsafe extern "C" fn image_draw(
             opaque: i32,
         );
     }
-    if canvas.is_null() || image.is_null() || !radius.is_finite() || !opacity.is_finite() {
+    if canvas.is_null()
+        || image.is_null()
+        || !radius.is_finite()
+        || !opacity.is_finite()
+        || opacity <= 0.
+    {
         return;
     }
     let Some(draw) = draw_bounds((*canvas).clip, x, y, w, h) else {
@@ -461,6 +466,10 @@ pub unsafe extern "C" fn image_draw(
         &image.pixels
     } else {
         let Some(pixels) = image.scaled(draw.w, draw.h, fit) else {
+            // Painting happens after damage_walk cleared the dirty bits. Keep
+            // the affected nodes eligible for a new frame, including cached
+            // transformed/drag layers; an allocation failure is temporary.
+            super::with_scene(|scene, ui| scene.retry_image(image as *mut Image, ui));
             return;
         };
         pixels

@@ -185,6 +185,41 @@ const GOLDENS: &[u64] = &[
     0xab0ff88ec41717e8,
 ];
 
+// Exercise overlapping/repeated area footprints and recycled contain margins.
+// The expected digest is recorded separately from the frozen C renderer.
+fn sampling_hash(api: &Api) -> u64 {
+    let mut digest = 0xcbf29ce484222325u64;
+    unsafe {
+        for (sw, sh) in [(1, 1), (3, 17), (31, 2), (2, 31), (63, 5), (5, 63)] {
+            let rgba = texture(sw as usize, sh as usize);
+            let image = (api.rgba)(std::ptr::null_mut(), sw, sh, rgba.as_ptr());
+            assert!(!image.is_null());
+            for (w, h) in [(2, 29), (29, 2), (11, 13), (24, 24), (3, 3)] {
+                for fit in 0..3 {
+                    let mut pixels = vec![0xff29374bu32; 32 * 32];
+                    let mut canvas = std::mem::MaybeUninit::<Canvas>::uninit();
+                    (api.init)(canvas.as_mut_ptr(), pixels.as_mut_ptr(), 32, 32, 32);
+                    let mut canvas = canvas.assume_init();
+                    (api.draw)(
+                        &mut canvas,
+                        image,
+                        1.25,
+                        1.5,
+                        w as f32,
+                        h as f32,
+                        0.,
+                        fit,
+                        1.,
+                    );
+                    digest = (digest ^ hash(&pixels)).wrapping_mul(1099511628211);
+                }
+            }
+            (api.release)(image);
+        }
+    }
+    digest
+}
+
 #[test]
 #[ignore = "requires make -C server and a native C toolchain; see docs/RUST.md"]
 fn native_image_pixels_decoding_cache_and_abi_preserve_the_renderer() {
@@ -196,6 +231,11 @@ fn native_image_pixels_decoding_cache_and_abi_preserve_the_renderer() {
     std::fs::create_dir_all(&work).unwrap();
     let library = build(&root, &work);
     let api = unsafe { Api::load(&library) };
+    assert_eq!(
+        sampling_hash(&api),
+        0xc349127fff015bca,
+        "90 sampled frames must match the C reference"
+    );
     let mut hashes = Vec::new();
     unsafe {
         for (ix, &(sw, sh, w, h, fit, r, opacity)) in CASES.iter().enumerate() {
@@ -287,6 +327,27 @@ fn native_image_pixels_decoding_cache_and_abi_preserve_the_renderer() {
         let mut canvas = std::mem::MaybeUninit::<Canvas>::uninit();
         (api.init)(canvas.as_mut_ptr(), pixels.as_mut_ptr(), 32, 32, 32);
         let mut canvas = canvas.assume_init();
+        let original_clip = canvas.clip;
+        let source_bytes = (api.bytes)();
+        for opacity in [0., -1., f32::NAN] {
+            (api.draw)(&mut canvas, a, 0., 0., 30., 30., 0., 1, opacity);
+            assert_eq!(
+                (api.bytes)(),
+                source_bytes,
+                "invisible draws must not scale"
+            );
+            assert!(pixels.iter().all(|&p| p == 0));
+        }
+        canvas.clip = Rect {
+            x0: 5,
+            y0: 5,
+            x1: 5,
+            y1: 10,
+        };
+        (api.draw)(&mut canvas, a, 0., 0., 30., 30., 0., 1, 1.);
+        assert_eq!((api.bytes)(), source_bytes, "empty clips must not scale");
+        assert!(pixels.iter().all(|&p| p == 0));
+        canvas.clip = original_clip;
         (api.draw)(&mut canvas, a, 0., 0., 24., 24., 0., 1, 1.);
         (api.draw)(&mut canvas, a, 0., 0., 32., 32., 0., 1, 1.);
         let source = (api.rgba)(std::ptr::null_mut(), 16, 16, rgba.as_ptr());
@@ -330,6 +391,28 @@ fn native_image_pixels_decoding_cache_and_abi_preserve_the_renderer() {
         std::fs::write(folder.join("broken.png"), b"not a PNG").unwrap();
         let bad = CString::new(folder.join("broken.png").as_os_str().as_bytes()).unwrap();
         assert!((api.get)(bad.as_ptr()).is_null());
+        // Size/type checks happen before decoding; malformed headers and
+        // truncated payloads must also return failure without caching a handle.
+        let oversized = folder.join("oversized.png");
+        std::fs::File::create(&oversized)
+            .unwrap()
+            .set_len(64 * 1024 * 1024 + 1)
+            .unwrap();
+        let png = std::fs::read(folder.join("test.png")).unwrap();
+        std::fs::write(folder.join("truncated.png"), &png[..33]).unwrap();
+        let mut bad_size = png.clone();
+        bad_size[16..20].copy_from_slice(&32769u32.to_be_bytes());
+        std::fs::write(folder.join("bad-size.png"), bad_size).unwrap();
+        let pipe = folder.join("pipe.png");
+        let _ = std::fs::remove_file(&pipe);
+        let pipe_name = CString::new(pipe.as_os_str().as_bytes()).unwrap();
+        assert_eq!(libc::mkfifo(pipe_name.as_ptr(), 0o600), 0);
+        for name in ["oversized.png", "truncated.png", "bad-size.png", "pipe.png"] {
+            let name = CString::new(folder.join(name).as_os_str().as_bytes()).unwrap();
+            assert!((api.get)(name.as_ptr()).is_null());
+        }
+        std::fs::remove_file(oversized).unwrap();
+        std::fs::remove_file(pipe).unwrap();
         assert_eq!((api.bytes)(), before);
         // Invalid requests cannot consume the prior handle.
         let old = (api.argb)(std::ptr::null_mut(), 1, 1, [0xff123456].as_ptr());

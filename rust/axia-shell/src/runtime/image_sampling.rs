@@ -75,12 +75,7 @@ impl Pixels {
         }
         out
     }
-    fn area(&self, u0: f32, v0: f32, u1: f32, v1: f32) -> u32 {
-        let (x0, y0) = (u0.floor().max(0.) as usize, v0.floor().max(0.) as usize);
-        let (x1, y1) = (
-            u1.ceil().min(self.w as f32) as usize,
-            v1.ceil().min(self.h as f32) as usize,
-        );
+    fn area(&self, (x0, x1): (usize, usize), (y0, y1): (usize, usize)) -> u32 {
         // A source up to 64 megapixels can overflow the old u32 accumulator.
         let (mut acc, mut n) = ([0u64; 4], 0u64);
         for y in y0..y1 {
@@ -108,11 +103,12 @@ impl Pixels {
         if !memory::try_reserve_exact(&mut dst.data, additional) {
             return Err(dst);
         }
+        // Only initialize new elements once. Existing samples are overwritten
+        // below, including the transparent margins of object-fit: contain.
         dst.data.resize(n, 0);
-        dst.data.fill(0);
         dst.w = w;
         dst.h = h;
-        dst.opaque = self.opaque && fit != 2;
+        dst.opaque = self.opaque && (fit == 0 || fit == 1);
         let (mut sx, mut sy) = (w as f32 / self.w as f32, h as f32 / self.h as f32);
         let (mut ox, mut oy) = (0., 0.);
         if fit != 0 {
@@ -123,19 +119,44 @@ impl Pixels {
             oy = (h as f32 - self.h as f32 * scale) / 2.;
         }
         let area = sx < 0.75 || sy < 0.75;
+        let bounds = |a: f32, b: f32, limit: i32| {
+            (
+                a.floor().max(0.) as usize,
+                b.ceil().min(limit as f32) as usize,
+            )
+        };
+        let mut previous_y = None;
         for j in 0..h {
+            let row = j as usize * w as usize;
+            let (v0, v1) = ((j as f32 - oy) / sy, ((j + 1) as f32 - oy) / sy);
+            if v1 <= 0. || v0 >= self.h as f32 {
+                dst.data[row..row + w as usize].fill(0);
+                continue;
+            }
+            let y_bounds = bounds(v0, v1, self.h);
+            if area && previous_y == Some(y_bounds) {
+                // An enlarged axis can repeat an identical source footprint
+                // thousands of times. Reuse its exact integer average.
+                dst.data.copy_within(row - w as usize..row, row);
+                continue;
+            }
+            previous_y = Some(y_bounds);
+            let mut previous_x = None;
+            let mut sample = 0;
             for i in 0..w {
-                let (u0, v0, u1, v1) = (
-                    (i as f32 - ox) / sx,
-                    (j as f32 - oy) / sy,
-                    ((i + 1) as f32 - ox) / sx,
-                    ((j + 1) as f32 - oy) / sy,
-                );
-                if u1 <= 0. || v1 <= 0. || u0 >= self.w as f32 || v0 >= self.h as f32 {
+                let (u0, u1) = ((i as f32 - ox) / sx, ((i + 1) as f32 - ox) / sx);
+                let out = row + i as usize;
+                if u1 <= 0. || u0 >= self.w as f32 {
+                    dst.data[out] = 0;
                     continue;
                 }
-                dst.data[j as usize * w as usize + i as usize] = if area {
-                    self.area(u0, v0, u1, v1)
+                dst.data[out] = if area {
+                    let x_bounds = bounds(u0, u1, self.w);
+                    if previous_x != Some(x_bounds) {
+                        sample = self.area(x_bounds, y_bounds);
+                        previous_x = Some(x_bounds);
+                    }
+                    sample
                 } else {
                     self.bilinear((u0 + u1) / 2. - 0.5, (v0 + v1) / 2. - 0.5)
                 };

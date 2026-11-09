@@ -256,6 +256,21 @@ impl Scene {
         }
         self.invalidate_measure(id, ui);
     }
+    pub fn retry_image(&mut self, image: *mut super::image::Image, ui: &mut Ui) {
+        if image.is_null() {
+            return;
+        }
+        // Failure-only scan: image handles may be shared by several nodes.
+        // No allocation or layout invalidation is needed to retry painting.
+        for owned in self.slots.iter_mut().flatten() {
+            let n = unsafe { owned.view.as_mut() };
+            if n.img == image.cast() {
+                n.paint_dirty = 1;
+                n.gen = n.gen.wrapping_add(1);
+                ui.dirty = 1;
+            }
+        }
+    }
     pub fn detach(&mut self, id: usize, ui: &mut Ui) {
         let l = self.links(id);
         if l.parent == 0 {
