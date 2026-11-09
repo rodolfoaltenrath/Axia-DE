@@ -13,7 +13,6 @@ import { createStore, useStore } from './store.js';
 import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
 import { windows, wm, getApp, activeDesktop, onActiveDesktop } from './windows.js';
-import { pickWindow } from './desktopmodel.js';
 import { desktopSuffix } from './desktops.js';
 import { dockIdOfWindow } from './dock.js';
 import { runningApps } from './appcontrol.js';
@@ -47,7 +46,7 @@ windows.subscribe(trackRecent);
 // the window an app comes back with: on this desktop if it has one, a visible one before a minimized
 // one. The switcher lists the apps of every desktop; choosing one elsewhere jumps there (wm.focus).
 function windowOf(group) {
-  return pickWindow(windows.get().filter((w) => group.windows.some((x) => x.id === w.id)), activeDesktop.get());
+  return wm.get(wm.pick(windows.get().filter((w) => group.windows.some((x) => x.id === w.id)).map((w) => w.id)));
 }
 
 function listApps() {
@@ -110,7 +109,7 @@ export function cycleAppWindows(back = false) {
   const mine = windows.get().filter((w) => keyOf(w) === key && !w.minimized && onActiveDesktop(w));
   if (mine.length < 2) return;
   if (!back) { wm.focus(mine[0].id); return; }           // the app's rearmost window comes up
-  windows.set((ws) => [top, ...ws.filter((w) => w !== top)]);   // the front one goes under everything
+  wm.toBack(top.id);                                     // the front one goes under everything
   wm.focus(mine[mine.length - 2].id);
 }
 

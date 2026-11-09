@@ -8,4 +8,11 @@
 
 int  axia_winmodel_call(const char *op, const char *json, size_t len, char **out);
 void axia_winmodel_free(char *s);
+
+/* The session's windows (rust winmodel/session.rs): opaque, Rust-owned, UI thread only. Like
+ * axia_winmodel_call, with `json` = [facts, arguments…]; the answer is { result, state }. */
+typedef struct AxiaWindows AxiaWindows;
+AxiaWindows *axia_windows_new(void);
+void         axia_windows_free(AxiaWindows *);
+int          axia_windows_call(AxiaWindows *, const char *op, const char *json, size_t len, char **out);
 #endif

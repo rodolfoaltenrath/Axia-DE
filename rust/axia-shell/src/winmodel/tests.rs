@@ -328,3 +328,327 @@ fn bad_calls_say_why() {
         axia_winmodel_free(std::ptr::null_mut());
     }
 }
+
+// ---- the session's windows (session.rs; the predicates were server/tests/desktop_model_test.mjs) ----
+
+use super::session::Session;
+
+fn facts() -> Value {
+    json!({
+        "displays": [{ "id": 1, "x": 0, "y": 0, "w": 1280, "h": 800, "main": true, "work": { "x": 0, "y": 28, "w": 1280, "h": 772 } }],
+        "apps": { "files": { "size": [800, 500], "minSize": [400, 300] } },
+        "snap": true,
+    })
+}
+fn op(s: &mut Session, name: &str, args: Value) -> Value {
+    let mut all = vec![facts()];
+    all.extend(args.as_array().unwrap().iter().cloned());
+    s.call(name, &all).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+fn state(s: &mut Session) -> Value {
+    op(s, "state", json!([]))["state"].clone()
+}
+fn ids(v: &Value) -> Vec<String> {
+    v.as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_owned()).collect()
+}
+fn window(s: &mut Session, id: &str) -> Value {
+    s.debug_window(id)
+}
+/// A session from plain windows (bottom to top) on `desktops`, `active` showing.
+fn session(list: Value, desktops: Value, active: i64) -> Session {
+    let mut s = Session::default();
+    s.call("setDesktops", &[facts(), desktops, json!(active)]).unwrap();
+    s.debug_load(list.as_array().unwrap());
+    s
+}
+fn lin(sid: u64, desktop: i64, extra: Value) -> Value {
+    let mut w = json!({ "id": format!("linux#{sid}"), "desktop": desktop, "args": { "surface": sid }, "x": 0, "y": 0, "w": 100, "h": 100 });
+    for (k, v) in extra.as_object().unwrap() {
+        w[k] = v.clone();
+    }
+    w
+}
+fn win(id: &str, desktop: i64, extra: Value) -> Value {
+    let mut w = json!({ "id": id, "desktop": desktop, "x": 0, "y": 0, "w": 100, "h": 100 });
+    for (k, v) in extra.as_object().unwrap() {
+        w[k] = v.clone();
+    }
+    w
+}
+
+#[test]
+fn what_shows_and_what_is_mounted() {
+    let list = json!([win("a", 1, json!({})), lin(5, 2, json!({})), win("b", 2, json!({})), win("m", 1, json!({ "minimized": true })),
+        win("fs", 1, json!({ "fullscreen": true })), win("p", 2, json!({ "pip": { "x": 0 } }))]);
+    let mut s = session(list.clone(), json!([1, 2, 3]), 1);
+    let v = state(&mut s)["views"].clone();
+    assert_eq!(ids(&v["visible"]), ["a"]);
+    assert_eq!(ids(&v["mounted"]), ["a", "b", "m"], "a Linux window on a hidden desktop has no node");
+    assert_eq!(v["front"], json!("fs"), "fullscreen is in front");
+    assert_eq!(v["top"], json!("a"), "the theme's top framed window");
+    assert_eq!(ids(&v["hidden"]), ["linux#5", "b", "m"], "pip is on every desktop");
+    assert_eq!(ids(&v["desk"]["3"]), ["p"], "pip is sticky");
+    op(&mut s, "setActiveDesktop", json!([2]));
+    let v = state(&mut s)["views"].clone();
+    assert_eq!(ids(&v["visible"]), ["linux#5", "b"]);
+    assert_eq!(ids(&v["mounted"]), ["a", "linux#5", "b", "m"]);
+    assert_eq!(v["front"], json!("b"), "front skips pip");
+    op(&mut s, "setActiveDesktop", json!([3]));
+    assert_eq!(state(&mut s)["views"]["front"], Value::Null, "an empty desktop has none");
+    // a window without a desktop is on the first
+    let mut old = session(json!([{ "id": "old", "x": 0, "y": 0, "w": 10, "h": 10 }]), json!([1]), 1);
+    assert_eq!(ids(&state(&mut old)["views"]["visible"]), ["old"]);
+}
+
+#[test]
+fn minimized_linux_windows_in_the_overview() {
+    let iconic = json!([lin(5, 1, json!({ "minimized": true })), lin(6, 2, json!({ "minimized": true })), lin(7, 1, json!({}))]);
+    let mut s = session(iconic, json!([1, 2]), 1);
+    assert_eq!(ids(&state(&mut s)["views"]["mounted"]), ["linux#7"]);
+    op(&mut s, "setOverview", json!([true]));
+    let v = state(&mut s)["views"].clone();
+    assert_eq!(ids(&v["mounted"]), ["linux#5", "linux#7"], "the overview brings this desktop's minimized");
+    assert_eq!(ids(&v["placeholder"]), ["linux#5", "linux#6"]);
+    op(&mut s, "setActiveDesktop", json!([2]));
+    assert_eq!(ids(&state(&mut s)["views"]["mounted"]), ["linux#6"], "not another desktop's");
+}
+
+// REGRESSION: the keyboard never lands on a hidden desktop, whatever the stack looks like
+#[test]
+fn the_front_window_is_never_on_a_hidden_desktop() {
+    let pool = vec![lin(1, 1, json!({})), lin(2, 2, json!({})), lin(3, 3, json!({})), win("x", 2, json!({})),
+        lin(4, 1, json!({ "minimized": true })), lin(6, 2, json!({ "minimized": true }))];
+    fn perms(v: Vec<Value>) -> Vec<Vec<Value>> {
+        if v.len() < 2 {
+            return vec![v];
+        }
+        let mut out = Vec::new();
+        for i in 0..v.len() {
+            let mut rest = v.clone();
+            let x = rest.remove(i);
+            for mut p in perms(rest) {
+                p.insert(0, x.clone());
+                out.push(p);
+            }
+        }
+        out
+    }
+    let mut wrong = 0;
+    let all = perms(pool);
+    assert_eq!(all.len(), 720);
+    for order in all {
+        let mut s = session(Value::Array(order.clone()), json!([1, 2, 3, 4]), 1);
+        for active in 1..=4 {
+            op(&mut s, "setActiveDesktop", json!([active]));
+            let front = state(&mut s)["views"]["front"].clone();
+            if let Some(id) = front.as_str() {
+                let w = order.iter().find(|w| w["id"] == json!(id)).unwrap();
+                if w["desktop"] != json!(active) || truthy(&w["minimized"]) {
+                    wrong += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(wrong, 0);
+}
+
+#[test]
+fn which_window_an_app_comes_back_with() {
+    let app = json!([win("t1", 1, json!({})), win("t2", 2, json!({})), win("t3", 2, json!({ "minimized": true }))]);
+    let mut s = session(app, json!([1, 2, 3]), 2);
+    let pick = |s: &mut Session, list: Value| op(s, "pick", json!([list]))["result"].clone();
+    assert_eq!(pick(&mut s, json!(["t1", "t2", "t3"])), json!("t2"), "here");
+    op(&mut s, "setActiveDesktop", json!([1]));
+    assert_eq!(pick(&mut s, json!(["t1", "t2", "t3"])), json!("t1"));
+    op(&mut s, "setActiveDesktop", json!([3]));
+    assert_eq!(pick(&mut s, json!(["t1", "t2", "t3"])), json!("t2"), "none here: the latest");
+    assert_eq!(pick(&mut s, json!(["t3"])), json!("t3"), "only a minimized one");
+    assert_eq!(pick(&mut s, json!([])), Value::Null);
+}
+
+#[test]
+fn opening_places_and_raises() {
+    let mut s = Session::default();
+    let id = op(&mut s, "open", json!([{ "app": "files", "size": [800, 500], "area": { "x": 0, "y": 28, "w": 1280, "h": 772 } }]))["result"].clone();
+    assert_eq!(id, json!("files"));
+    let w = window(&mut s, "files");
+    assert_eq!((w["x"].clone(), w["y"].clone(), w["w"].clone(), w["h"].clone()), (json!(180), json!(124), json!(800), json!(500)));
+    assert_eq!((w["desktop"].clone(), w["title"].clone(), w["args"].clone()), (json!(1), Value::Null, Value::Null));
+    let second = op(&mut s, "open", json!([{ "app": "files", "new": true, "args": { "path": "/tmp" }, "size": [800, 500], "area": { "x": 0, "y": 28, "w": 1280, "h": 772 } }]));
+    assert_eq!(second["result"], json!("files#2"));
+    let w2 = window(&mut s, "files#2");
+    assert_eq!((w2["x"].clone(), w2["args"]["path"].clone(), w2["args"]["nonce"].clone()), (json!(210), json!("/tmp"), json!(3)), "cascaded, with a nonce");
+    // opening it again raises it and passes the new args
+    op(&mut s, "open", json!([{ "app": "files", "args": { "path": "/home" } }]));
+    let st = state(&mut s);
+    assert_eq!(st["views"]["top"], json!("files"));
+    assert_eq!(window(&mut s, "files")["args"]["path"], json!("/home"));
+    // a frame asked for, and the place the app was left in
+    op(&mut s, "open", json!([{ "app": "a", "frame": { "x": 5, "y": 6, "w": 300, "h": 200 } }]));
+    assert_eq!(window(&mut s, "a")["x"], json!(5));
+    op(&mut s, "open", json!([{ "app": "b", "memory": { "x": 7, "y": 8, "w": 300, "h": 200, "maximized": true } }]));
+    assert_eq!((window(&mut s, "b")["x"].clone(), window(&mut s, "b")["maximized"].clone()), (json!(7), json!(true)));
+    assert!(s.call("open", &[facts(), json!({ "app": "" })]).is_err());
+}
+
+#[test]
+fn focus_brings_its_desktop_and_close_removes() {
+    let mut s = session(json!([win("a", 1, json!({})), win("b", 2, json!({ "minimized": true })), win("c", 1, json!({}))]), json!([1, 2]), 1);
+    op(&mut s, "focus", json!(["b"]));
+    let st = state(&mut s);
+    assert_eq!((st["active"].clone(), st["views"]["top"].clone()), (json!(2), json!("b")), "its desktop shows and it comes up");
+    op(&mut s, "raise", json!(["a"]));
+    assert_eq!(state(&mut s)["active"], json!(2), "raise keeps the desktop");
+    assert_eq!(op(&mut s, "close", json!(["a"]))["result"], json!(true));
+    assert_eq!(op(&mut s, "close", json!(["a"]))["result"], Value::Null, "already closed");
+    op(&mut s, "moveToDesktop", json!(["c", 2]));
+    assert_eq!(window(&mut s, "c")["desktop"], json!(2));
+    op(&mut s, "moveToDesktop", json!(["c", 9]));
+    assert_eq!(window(&mut s, "c")["desktop"], json!(2), "no such desktop");
+}
+
+#[test]
+fn maximize_snap_and_restore() {
+    let mut s = session(json!([{ "id": "files", "app": "files", "x": 100, "y": 100, "w": 500, "h": 400 }]), json!([1]), 1);
+    op(&mut s, "snap", json!(["files", "left"]));
+    let w = window(&mut s, "files");
+    assert_eq!((w["x"].clone(), w["y"].clone(), w["w"].clone(), w["h"].clone(), w["snapped"].clone()), (json!(0), json!(28), json!(640), json!(772), json!("left")));
+    assert_eq!(w["restore"], json!({ "x": 100, "y": 100, "w": 500, "h": 400 }));
+    op(&mut s, "snap", json!(["files", "right"]));
+    assert_eq!(window(&mut s, "files")["restore"]["x"], json!(100), "the size from before the first snap");
+    op(&mut s, "toggleMaximize", json!(["files"]));
+    let w = window(&mut s, "files");
+    assert_eq!((w["maximized"].clone(), w["snapped"].clone(), w["x"].clone()), (json!(true), Value::Null, json!(100)));
+    op(&mut s, "snap", json!(["files", "restore"]));
+    assert_eq!(window(&mut s, "files")["maximized"], json!(false));
+    // Super+arrows: from a free window, Snap Assist follows
+    assert_eq!(op(&mut s, "snapKey", json!(["files", "left"]))["result"], json!("left"));
+    assert_eq!(op(&mut s, "snapKey", json!(["files", "up"]))["result"], Value::Null);
+    assert_eq!(window(&mut s, "files")["snapped"], json!("top-left"));
+    op(&mut s, "snapKey", json!(["files", "right"]));
+    op(&mut s, "snapKey", json!(["files", "up"]));
+    assert_eq!(window(&mut s, "files")["maximized"], json!(true));
+    op(&mut s, "snapKey", json!(["files", "down"]));
+    op(&mut s, "snapKey", json!(["files", "down"]));
+    assert_eq!(window(&mut s, "files")["minimized"], json!(true));
+    // the app's minimum size wins over a small zone
+    let mut small = Session::default();
+    small.call("setDesktops", &[facts(), json!([1]), json!(1)]).unwrap();
+    small.debug_load(&[json!({ "id": "files", "app": "files", "x": 0, "y": 0, "w": 500, "h": 400 })]);
+    let tiny = json!({ "displays": [{ "id": 1, "x": 0, "y": 0, "w": 600, "h": 400, "main": true }], "apps": { "files": { "minSize": [400, 300] } } });
+    small.call("snap", &[tiny, json!("files"), json!("top-left")]).unwrap();
+    assert_eq!(small.debug_window("files")["w"], json!(400));
+}
+
+#[test]
+fn a_dropped_window_snaps_or_comes_out() {
+    let mut s = session(json!([{ "id": "files", "app": "files", "x": 300, "y": 200, "w": 500, "h": 400 }]), json!([1]), 1);
+    let start = json!({ "x": 300, "y": 200, "w": 500, "h": 400 });
+    state(&mut s); // the mirror has it all
+    // a click on the bar changes nothing
+    assert_eq!(op(&mut s, "grabEnd", json!([{ "id": "files", "f": start, "edges": 0, "dx": 0, "dy": 0, "dw": 0, "dh": 0 }]))["state"], Value::Null);
+    let r = op(&mut s, "grabEnd", json!([{ "id": "files", "f": start, "edges": 0, "dx": -300, "dy": 10, "pointer": { "x": 2, "y": 400 }, "zone": "left" }]));
+    assert_eq!(r["result"], json!({ "assist": "left", "display": 0 }));
+    let w = window(&mut s, "files");
+    assert_eq!((w["snapped"].clone(), w["restore"].clone()), (json!("left"), json!({ "x": 0, "y": 210, "w": 500, "h": 400 })));
+    // dragged out: back to its size under the pointer, where it was grabbed
+    let snapped = json!({ "x": 0, "y": 28, "w": 640, "h": 772 });
+    op(&mut s, "grabEnd", json!([{ "id": "files", "f": snapped, "edges": 0, "dx": 400, "dy": 100, "pointer": { "x": 720, "y": 140 } }]));
+    let w = window(&mut s, "files");
+    assert_eq!((w["w"].clone(), w["snapped"].clone(), w["y"].clone()), (json!(500), Value::Null, json!(128)));
+    assert_eq!(w["x"], json!(720 - 250), "the pointer at the same share of its width");
+    // a plain resize
+    let now = window(&mut s, "files");
+    let f = json!({ "x": now["x"], "y": now["y"], "w": now["w"], "h": now["h"] });
+    op(&mut s, "grabEnd", json!([{ "id": "files", "f": f, "edges": 8, "dw": 40 }]));
+    assert_eq!(window(&mut s, "files")["w"], json!(540));
+}
+
+#[test]
+fn a_linked_resize_keeps_both_snapped() {
+    let l = json!({ "id": "l", "app": "files", "x": 0, "y": 28, "w": 640, "h": 772, "snapped": "left", "restore": { "x": 1, "y": 1, "w": 1, "h": 1 } });
+    let r = json!({ "id": "r", "app": "files", "x": 640, "y": 28, "w": 640, "h": 772, "snapped": "right", "restore": { "x": 1, "y": 1, "w": 1, "h": 1 } });
+    let mut s = session(json!([l, r]), json!([1]), 1);
+    op(&mut s, "grabEnd", json!([{ "id": "l", "f": { "x": 0, "y": 28, "w": 640, "h": 772 }, "edges": 8, "dw": 60, "links": [{ "id": "r", "dx": 60, "dw": -60 }] }]));
+    let (wl, wr) = (window(&mut s, "l"), window(&mut s, "r"));
+    assert_eq!((wl["w"].clone(), wr["x"].clone(), wr["w"].clone()), (json!(700), json!(700), json!(580)));
+    assert_eq!((wl["snapped"].clone(), wr["snapped"].clone()), (json!("left"), json!("right")));
+}
+
+#[test]
+fn geometry_rules() {
+    let mut s = session(json!([{ "id": "a", "app": "files", "x": 900, "y": 500, "w": 600, "h": 400 }]), json!([1]), 1);
+    op(&mut s, "move", json!(["a", 10.4, 3]));
+    let w = window(&mut s, "a");
+    assert_eq!((w["x"].clone(), w["y"].clone()), (json!(10), json!(28)), "never above the work area");
+    op(&mut s, "center", json!(["a"]));
+    let w = window(&mut s, "a");
+    assert_eq!((w["x"].clone(), w["y"].clone()), (json!(340), json!(214)));
+    op(&mut s, "liftForKeyboard", json!(["a", { "y": 40 }]));
+    assert_eq!(window(&mut s, "a")["oskFrame"]["y"], json!(214));
+    op(&mut s, "dropFromKeyboard", json!(["a"]));
+    let w = window(&mut s, "a");
+    assert_eq!((w["y"].clone(), w["oskFrame"].clone()), (json!(214), Value::Null));
+    op(&mut s, "patch", json!(["a", { "title": "Doc", "x": 1, "protected": true }]));
+    let w = window(&mut s, "a");
+    assert_eq!((w["title"].clone(), w["protected"].clone(), w["x"].clone()), (json!("Doc"), json!(true), json!(340)), "only its own fields");
+    op(&mut s, "setArgs", json!(["a", { "csd": true }]));
+    op(&mut s, "setArgs", json!(["a", { "k": 1 }]));
+    assert_eq!(window(&mut s, "a")["args"], json!({ "csd": true, "k": 1 }));
+    // a display that is gone: the window comes back on the main one
+    s.debug_load(&[json!({ "id": "far", "app": "files", "x": 5000, "y": 100, "w": 600, "h": 400 })]);
+    op(&mut s, "screen", json!([]));
+    let w = window(&mut s, "far");
+    assert_eq!((w["x"].clone(), w["y"].clone()), (json!(340), json!(214)));
+}
+
+#[test]
+fn pip_fullscreen_and_cycling() {
+    let mut s = session(json!([win("a", 1, json!({})), win("b", 1, json!({})), win("c", 1, json!({}))]), json!([1, 2]), 1);
+    op(&mut s, "setFullscreen", json!(["b", true]));
+    assert_eq!(op(&mut s, "exitFullscreen", json!([]))["result"], json!(true));
+    assert_eq!(op(&mut s, "exitFullscreen", json!([]))["result"], Value::Null);
+    op(&mut s, "cycle", json!(["left"]));
+    assert_eq!(ids(&state(&mut s)["views"]["visible"]), ["b", "c", "a"], "the rearmost comes up");
+    op(&mut s, "cycle", json!(["right"]));
+    assert_eq!(ids(&state(&mut s)["views"]["visible"]), ["a", "b", "c"], "the front one goes under");
+    op(&mut s, "toBack", json!(["c"]));
+    assert_eq!(ids(&state(&mut s)["views"]["visible"])[0], "c");
+    op(&mut s, "setPip", json!(["a", { "x": 1, "y": 1, "w": 200, "h": 120 }]));
+    op(&mut s, "setActiveDesktop", json!([2]));
+    assert_eq!(ids(&state(&mut s)["views"]["desk"]["2"]), ["a"], "on every desktop");
+    op(&mut s, "setPip", json!(["a", null]));
+    assert_eq!(window(&mut s, "a")["desktop"], json!(2), "back on the one in view");
+}
+
+#[test]
+fn desktops_come_and_go() {
+    let mut s = session(json!([win("a", 2, json!({})), win("b", 3, json!({}))]), json!([1, 2, 3]), 2);
+    assert_eq!(op(&mut s, "createDesktop", json!([]))["result"], json!(4));
+    assert_eq!(op(&mut s, "closeDesktop", json!([2]))["result"], json!(true));
+    let st = state(&mut s);
+    assert_eq!((st["desktops"].clone(), st["active"].clone()), (json!([1, 3, 4]), json!(3)), "the next one takes its windows and shows");
+    assert_eq!(window(&mut s, "a")["desktop"], json!(3));
+    op(&mut s, "closeDesktop", json!([4]));
+    op(&mut s, "closeDesktop", json!([3]));
+    assert_eq!(op(&mut s, "closeDesktop", json!([1]))["result"], json!(false), "the last stays");
+    for _ in 0..20 {
+        op(&mut s, "createDesktop", json!([]));
+    }
+    assert_eq!(state(&mut s)["desktops"].as_array().unwrap().len(), 9);
+    assert_eq!(op(&mut s, "createDesktop", json!([]))["result"], Value::Null);
+}
+
+#[test]
+fn the_mirror_gets_only_what_changed() {
+    let mut s = session(json!([win("a", 1, json!({})), win("b", 1, json!({}))]), json!([1]), 1);
+    let first = state(&mut s);
+    assert!(first["windows"].as_array().unwrap().iter().all(|w| w.get("w").is_some()), "everything the first time");
+    let r = op(&mut s, "patch", json!(["b", { "title": "B" }]));
+    let ws = r["state"]["windows"].as_array().unwrap();
+    assert!(ws[0].get("w").is_none() && ws[1]["w"]["title"] == json!("B"), "only b again: {ws:?}");
+    assert!(ws[1]["rev"].as_u64() > ws[0]["rev"].as_u64());
+    assert_eq!(op(&mut s, "patch", json!(["b", { "title": "B" }]))["state"], Value::Null, "nothing changed, nothing sent");
+    assert!(op(&mut s, "raise", json!(["a"]))["state"].is_object(), "the order changed");
+    assert!(s.call("nothing", &[facts()]).is_err());
+}

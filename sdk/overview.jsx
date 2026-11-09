@@ -21,8 +21,8 @@ import { t, direction } from './i18n.js';
 import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
 import { settings } from './settings.js';
-import { windows, wm, getApp, workAreaOf, windowTitle, activeDesktop, desktopList, onActiveDesktop, overviewShowing, setActiveDesktop, createDesktop, closeDesktop, snappedOn, setSnapAssistHook } from './windows.js';
-import { MAX_DESKTOPS, onDesktop, hitRect, overviewPlaceholder } from './desktopmodel.js';
+import { windows, wm, getApp, workAreaOf, windowTitle, activeDesktop, desktopList, onActiveDesktop, onDesktopOf, overviewShowing, windowViews, setActiveDesktop, createDesktop, closeDesktop, snappedOn, setSnapAssistHook } from './windows.js';
+import { MAX_DESKTOPS, hitRect } from './desktopmodel.js';
 import { gridLayout, stripLayout } from './winmodel.js';
 import { launcherIdOf } from './dock.js';
 import { windowIcon } from './apps.js';
@@ -150,7 +150,7 @@ export function OverviewCover({ id, scale, radius }) {
 // window's scaled node, so the sizes are divided by the scale.
 export function OverviewPlaceholder({ win, scale }) {
   const th = useTheme();
-  if (!overviewPlaceholder(win, true)) return null;
+  if (!useStore(windowViews, (v) => v.sets.placeholder.has(win.id))) return null;
   const Icon = windowIcon(win, getApp);
   return h(View, { style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: Math.round(10 / scale),
     padding: Math.round(12 / scale), backgroundColor: th.windowBg, borderRadius: win.maximized ? 0 : 8, overflow: 'hidden', pointerEvents: 'none' } },
@@ -195,7 +195,7 @@ function Card({ c, index, th, active, all, wallpaper, over, canRemove }) {
   const hovered = useStore(cardHover) === c.id;
   const d = mainDisplay();
   const k = c.w / Math.max(1, d.w);
-  const mine = all.filter((w) => !w.minimized && !w.pip && !w.fullscreen && own(w) && onDesktop(w, c.id));
+  const mine = all.filter((w) => !w.minimized && !w.pip && !w.fullscreen && own(w) && onDesktopOf(w, c.id));
   return h(View, { key: c.id, onClick: () => { if (active) closeOverview(); else setActiveDesktop(c.id); },
     onMouseEnter: () => cardHover.set(c.id), onMouseLeave: () => cardHover.set((v) => (v === c.id ? null : v)),
     style: { position: 'absolute', left: c.x, top: c.y, width: c.w, height: c.h + 24, alignItems: 'center' } },

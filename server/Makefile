@@ -185,6 +185,10 @@ build/snap-ffi-test: tests/snap_ffi_test.c src/ui/snap_ffi.h $(RUST_LIB)
 	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/winmodel-ffi-test: tests/winmodel_ffi_test.c src/ui/winmodel_ffi.h $(RUST_LIB)
 	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+# sdk/windows.js over the real bridge and Rust window list, in QuickJS (tests/windows_bridge_test.mjs)
+test: build/windows-bridge-host
+build/windows-bridge-host: tests/windows_bridge/host.c src/ui/js_winmodel.c src/ui/js_winmodel.h src/ui/winmodel_ffi.h $(QJS_OBJ) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -Isrc/ui -o $@ tests/windows_bridge/host.c src/ui/js_winmodel.c $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 build/seat-test: tests/seat_test.c src/platform/seat.c src/platform/seat.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -D_GNU_SOURCE -DLORD_LIBSEAT $(shell pkg-config --cflags libseat) -Isrc -o $@ tests/seat_test.c src/platform/seat.c

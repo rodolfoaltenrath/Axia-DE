@@ -156,6 +156,10 @@ EOF
     # Desktops: what shows and who has the keyboard (sdk/desktopmodel.js)
     if have node; then run "desktop-model-test (sdk/desktopmodel.js)" node tests/desktop_model_test.mjs
     else skip "desktop-model-test" "node"; fi
+    # sdk/windows.js over the real bridge and the Rust window list, in QuickJS (needs esbuild)
+    if have node && [ -d ../node_modules/esbuild ] && [ -x build/windows-bridge-host ]; then
+        run "windows-bridge-test (sdk/windows.js, js_winmodel.c, winmodel/session.rs)" node tests/windows_bridge_test.mjs
+    else skip "windows-bridge-test" "node, node_modules/esbuild"; fi
     # session restore's data rules (sdk/sessionmodel.js)
     if have node; then run "session-model-test (sdk/sessionmodel.js)" node tests/session_model_test.mjs
     else skip "session-model-test" "node"; fi

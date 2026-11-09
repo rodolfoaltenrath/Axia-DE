@@ -8,8 +8,7 @@
 import { screen, onScreenChange, addListener, mainDisplay, displayAt, displayFor } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { appName } from './i18n.js';
-import { FIRST_DESKTOP, onDesktop, visibleOn, mountedOn, focusedOn, windowHidden } from './desktopmodel.js';
-import { addDesktop, removeDesktop } from './winmodel.js';
+import { FIRST_DESKTOP } from './desktopmodel.js';
 
 // Snapping's geometry is Rust's (lord.snap, server/src/ui/js_snap.c). Isolated apps' processes don't
 // have it: there everything about snapping is a no-op.
@@ -68,63 +67,94 @@ export const fxNodes = new Map();
 let linuxPlacement = null;
 export function setLinuxPlacement(fn) { linuxPlacement = fn; }
 export const placeLinuxWindow = (dockId) => (linuxPlacement ? linuxPlacement(dockId) : null);
-let seq = 2;
 const guards = new Map();
 
-// State: list ordered from bottom to top (the last one is in front).
+// ---- the window list, in Rust (lord.windowList: rust/axia-shell/src/winmodel/session.rs) ----
+// Rust keeps the windows (bottom to top: the last one is in front), the desktops and the one showing,
+// and every rule that changes them; it also works out what shows, what is mounted and what is in
+// front, once per change. These stores are its mirror, for React: read them, change them with wm.*.
+// Each window has a revision, and only the objects that changed are replaced, so React keeps the rest.
 export const windows = createStore([]);
-
-// Desktops (docs/DESKTOPS.md, the rules are in desktopmodel.js): each window has w.desktop, and only
-// the windows of activeDesktop show, take the front place and get the keyboard. All displays switch
-// together. desktopList is the order on screen; sdk/desktops.js switches, persists and animates.
+// Desktops (docs/DESKTOPS.md): each window has w.desktop, and only the windows of activeDesktop show,
+// take the front place and get the keyboard. All displays switch together. desktopList is the order on
+// screen; sdk/desktops.js switches, persists and animates.
 export const activeDesktop = createStore(FIRST_DESKTOP);
 export const desktopList = createStore([FIRST_DESKTOP]);
-export const onActiveDesktop = (w) => onDesktop(w, activeDesktop.get());
-const desktopState = () => ({ list: desktopList.get(), active: activeDesktop.get() });
-// The overview shows this desktop's minimized windows too (sdk/overview.jsx sets it).
-export const overviewShowing = createStore(false);
-export function setActiveDesktop(id) {
-  if (desktopList.get().includes(id)) activeDesktop.set(id);
+// The overview shows this desktop's minimized windows too (sdk/overview.jsx turns it on).
+export const overviewShowing = { get: () => overviewOn.get(), subscribe: (fn) => overviewOn.subscribe(fn), set: (on) => { run('setOverview', !!on); } };
+const overviewOn = createStore(false);
+// What the theme draws, from Rust: { visible, mounted, front, top, hidden, parked, placeholder, desk }
+// (ids; desk: desktop → the ids on it, picture-in-picture on all of them).
+const NO_VIEWS = { visible: [], mounted: [], front: null, top: null, hidden: [], parked: [], placeholder: [], desk: {} };
+export const windowViews = createStore({ ...NO_VIEWS, sets: { hidden: new Set(), parked: new Set(), placeholder: new Set(), desk: new Map() } });
+
+const mirror = new Map();           // id → the window object last received
+const rect = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
+// What the rules need that only this side knows: the displays with the theme's work areas (in
+// lord.screen's order: an index into it names a display), the open apps' sizes, and whether the theme snaps.
+function facts() {
+  const apps = {};
+  for (const w of windows.get()) {
+    const a = registry.get(w.app);
+    if (a && !apps[w.app]) apps[w.app] = { size: a.size || null, minSize: a.minSize || null };
+  }
+  const displays = (screen.displays || []).map((d) => ({ id: d.id, x: d.x, y: d.y, w: d.w, h: d.h, main: !!d.main, work: rect(workAreaOf(d)) }));
+  return { displays, apps, snap: snapOn };
 }
-export function createDesktop() {
-  const { state, id } = addDesktop(desktopState());
-  if (id != null) desktopList.set(state.list);
-  return id;
+function apply(st) {
+  const seen = new Set();
+  const next = [];
+  for (const x of st.windows) {
+    seen.add(x.id);
+    if (x.w) mirror.set(x.id, x.w);
+    const w = mirror.get(x.id);
+    if (w) next.push(w);
+  }
+  for (const id of [...mirror.keys()]) if (!seen.has(id)) mirror.delete(id);
+  const v = st.views || NO_VIEWS;
+  windowViews.set({ ...v, sets: {
+    hidden: new Set(v.hidden), parked: new Set(v.parked), placeholder: new Set(v.placeholder),
+    desk: new Map(Object.entries(v.desk || {}).map(([d, ids]) => [Number(d), new Set(ids)])),
+  } });
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  if (!same(desktopList.get(), st.desktops)) desktopList.set(st.desktops);
+  if (activeDesktop.get() !== st.active) activeDesktop.set(st.active);
+  if (overviewOn.get() !== !!st.overview) overviewOn.set(!!st.overview);
+  if (!same(windows.get(), next)) windows.set(next);
 }
-// Closes a desktop: its windows move to the next one. false for the last desktop.
-export function closeDesktop(id) {
-  const { state, target } = removeDesktop(desktopState(), id);
-  if (target == null) return false;
-  windows.set((ws) => ws.map((w) => ((w.desktop ?? FIRST_DESKTOP) === id ? { ...w, desktop: target } : w)));
-  desktopList.set(state.list);
-  activeDesktop.set(state.active);
-  return true;
-}
-// Exactly `list`, in that order (a new session, sdk/desktops.js): no window is on any other desktop yet.
-export function setDesktops(list, active) {
-  desktopList.set(list);
-  activeDesktop.set(active);
+// Runs a rule on the window list; its result. Without lord.windowList (a test, a tool) nothing happens.
+function run(op, ...args) {
+  if (typeof lord === 'undefined' || !lord.windowList) return null;
+  let r;
+  try {
+    r = JSON.parse(lord.windowList.call(op, JSON.stringify([facts(), ...args])));
+  } catch (e) {
+    console.error(`windows: ${op}:`, e && e.message ? e.message : e);
+    return null;
+  }
+  if (r.state) apply(r.state);
+  return r.result;
 }
 
+// Is window `w` on desktop `d` (the one showing, without d)? Picture-in-picture is on all of them.
+export const onDesktopOf = (w, d) => !!w && !!windowViews.get().sets.desk.get(d ?? activeDesktop.get())?.has(w.id);
+export const onActiveDesktop = (w) => !!w && !windowViews.get().sets.parked.has(w.id);
+export function setActiveDesktop(id) { run('setActiveDesktop', id); }
+// A new desktop at the end (null when there are already nine).
+export const createDesktop = () => run('createDesktop');
+// Closes a desktop: its windows move to the next one. false for the last desktop.
+export const closeDesktop = (id) => run('closeDesktop', id) === true;
+// Exactly `list`, in that order (a new session, sdk/desktops.js): no window is on any other desktop yet.
+export function setDesktops(list, active) { run('setDesktops', list, active); }
+
 // The screen size changed: the work area keeps the theme's margins (menu
-// bar, dock) and the windows are rearranged to stay in view.
+// bar, dock) and the windows are rearranged to stay in view (Rust: a window left on a display that is
+// gone moves to the main one, the others stay inside their display's work area).
 onScreenChange((now, old) => {
   if (!areaFn && (old.displays || []).length <= 1 && screen.displays.length <= 1) {
     area = { ...area, w: Math.max(200, area.w + now.width - old.width), h: Math.max(150, area.h + now.height - old.height) };
   }
-  // a window left on a display that is gone (or outside every display) moves to the main one; the
-  // others stay on their display, inside its work area
-  const onSome = (w) => screen.displays.some((d) => w.x < d.x + d.w - 48 && w.x + w.w > d.x + 48 && w.y < d.y + d.h - 24 && w.y + 24 > d.y);
-  windows.set((ws) => ws.map((w) => {
-    const a = onSome(w) ? areaOfWindow(w) : workAreaOf(mainDisplay());
-    const ww = Math.min(w.w, a.w), hh = Math.min(w.h, a.h);
-    const keep = onSome(w) && w.x + ww > a.x && w.x < a.x + a.w;
-    return {
-      ...w, w: ww, h: hh,
-      x: Math.round(keep ? Math.min(Math.max(w.x, a.x - ww + 96), a.x + a.w - 96) : a.x + (a.w - ww) / 2),
-      y: Math.round(keep ? Math.min(Math.max(w.y, a.y), a.y + a.h - Math.min(hh, 48)) : a.y + Math.max(0, (a.h - hh) / 2)),
-    };
-  }));
+  run('screen');
 });
 // Menus of each window: id → [{ label, items: [{ label, hint, onClick, disabled, checked } | '-'] }]
 export const appMenus = createStore({});
@@ -173,36 +203,14 @@ export const listApps = () => [...registry.values()].filter((a) => !a.builtin &&
 export const appCatalogSource = () => [...registry.values()];
 export const workArea = (d) => workAreaOf(d);
 
-function place(appId, count, frame) {
-  if (frame) return { ...frame, minimized: false, maximized: false };
+// What a new window's place comes from (Rust decides): the frame asked for, the place the app was left
+// in (sdk/windowmemory.js), else its size centered and cascaded in the work area where it opens.
+function placeFacts(appId, frame) {
+  if (frame) return { frame };
   const kept = memory && appId !== 'linux' ? memory(appId) : null;
-  if (kept) return { ...kept, minimized: false };
-  const [sw, sh] = registry.get(appId)?.size || [640, 420];
-  const offset = (count % 6) * 30;
-  const area = openingArea(appId);                 // its assigned display, or where the pointer is (docs/DISPLAYS.md)
-  // the whole window stays inside the work area: a cascaded window must not slide under the
-  // Dock, which would cover (and take the clicks of) its bottom edge
-  const w = Math.min(sw, area.w), h = Math.min(sh, area.h);
-  const x = Math.round(area.x + (area.w - w) / 2 - 60 + offset);
-  const y = Math.round(Math.max(area.y + 16, area.y + (area.h - h) / 2 - 40 + offset));
-  return {
-    w, h, minimized: false, maximized: false,
-    x: Math.max(area.x, Math.min(x, area.x + area.w - w)),
-    y: Math.max(area.y, Math.min(y, area.y + area.h - h)),
-  };
+  if (kept) return { memory: kept };
+  return { size: registry.get(appId)?.size || null, area: rect(openingArea(appId)) };   // its assigned display, or where the pointer is
 }
-
-const raise = (ws, id) => {
-  const w = ws.find((x) => x.id === id);
-  return w ? [...ws.filter((x) => x.id !== id), { ...w, minimized: false }] : ws;
-};
-const raiseUnlessTop = (ws, id) => (ws[ws.length - 1]?.id === id && !ws[ws.length - 1].minimized ? ws : raise(ws, id));
-// Bringing a window forward shows its desktop, except picture-in-picture, which is on all of them.
-function showDesktopOf(id) {
-  const w = windows.get().find((x) => x.id === id);
-  if (w && !onActiveDesktop(w)) setActiveDesktop(w.desktop);
-}
-const patch = (id, p) => windows.set((ws) => ws.map((w) => (w.id === id ? { ...w, ...p } : w)));
 
 // ---- dragging in C (lord.wm, docs/WINDOWS.md) ----
 // The theme marks each window's node with ref={wm.frameRef(id, inset)}; inset = how much the
@@ -242,26 +250,11 @@ export function snapZoneAt(x, y, thirds = false) {
   const api = snapApi(), d = displayAt(x, y);
   return api && d ? api.zoneAt(x, y, workAreaOf(d), !!thirds) : null;
 }
-// Snaps window `id` to `zone` in the work area of its display (or of `display`).
+// Snaps window `id` to `zone` in the work area of its display (or of `display`); 'restore' goes back.
+const displayIndex = (d) => (d ? screen.displays.indexOf(d) : -1);
 function snapTo(id, zone, display) {
-  windows.set((ws) => ws.map((w) => {
-    if (w.id !== id) return w;
-    const restore = w.snapped ? w.restore : { x: w.x, y: w.y, w: w.w, h: w.h };
-    if (zone === 'max') return { ...w, maximized: true, minimized: false, snapped: null, restore: null, ...(w.snapped ? restore : null) };
-    const a = workAreaOf(display || displayFor(w));
-    const [minW, minH] = registry.get(w.app)?.minSize || [160, 100];
-    const r = snapRect(zone, a);
-    if (!r) return w;
-    return { ...w, ...r, w: Math.max(r.w, Math.min(minW, a.w)), h: Math.max(r.h, Math.min(minH, a.h)), maximized: false, minimized: false, snapped: zone, restore };
-  }));
-}
-function unsnap(id) {
-  windows.set((ws) => ws.map((w) => {
-    if (w.id !== id) return w;
-    if (w.maximized) return { ...w, maximized: false };
-    if (!w.snapped) return w;
-    return { ...w, ...(w.restore || {}), snapped: null, restore: null };
-  }));
+  const i = displayIndex(display);
+  run('snap', id, zone, i >= 0 ? i : null);
 }
 // The windows snapped on display `d` on this desktop, other than `except`, in stacking order.
 export function snappedOn(d, except) {
@@ -308,45 +301,19 @@ function showZone(d) {
   if (cur && cur.zone === d.zone && cur.rect.x === d.x && cur.rect.y === d.y) return;
   snapPreview.set({ id: grab.id, zone: d.zone, rect: { x: d.x, y: d.y, w: d.w, h: d.h } });
 }
+// The drag ended in C: Rust applies it (a snap where it was dropped, back out of a snapped place
+// under the pointer, the windows resized along a shared line, or the plain change).
 globalThis.__lordWm = (type, d) => {
   if (type === 'zone') { showZone(d); return; }
   if (type !== 'end' || !grab || grab.node !== d.node) return;
   const { id, f, edges, links } = grab;
   grab = null;
   if (snapPreview.get()) snapPreview.set(null);
-  if (!d.dx && !d.dy && !d.dw && !d.dh) return;      // it was a click on the bar
-  const nx = Math.round(f.x + d.dx), ny = Math.round(f.y + d.dy);
-  const moved = Array.isArray(d.links) ? d.links.filter((l) => links.has(l.node)) : [];
-  if (edges && moved.length) {
-    // a linked resize: the windows along the line keep their snapped places, at their new sizes
-    const by = new Map(moved.map((l) => [links.get(l.node), l]));
-    windows.set((ws) => ws.map((w) => {
-      if (w.id === id) return { ...w, x: nx, y: ny, w: Math.round(f.w + d.dw), h: Math.round(f.h + d.dh) };
-      const l = by.get(w.id);
-      return l ? { ...w, x: Math.round(w.x + l.dx), y: Math.round(w.y + l.dy), w: Math.round(w.w + l.dw), h: Math.round(w.h + l.dh) } : w;
-    }));
-    return;
-  }
-  if (snapOn && !edges && typeof lord !== 'undefined' && lord.wm && typeof lord.wm.pointer === 'function') {
-    const p = lord.wm.pointer();
-    const w = windows.get().find((x) => x.id === id);
-    if (d.zone && w) {
-      const display = displayAt(p.x, p.y);
-      if (!w.snapped) patch(id, { x: nx, y: ny, w: f.w, h: f.h });   // the size to go back to: from before the first snap
-      snapTo(id, d.zone, display);
-      offerAssist(id, d.zone, display);
-      return;
-    }
-    if (w && w.snapped && w.restore) {
-      // dragged out of a snapped place: back to its size, under the pointer where it was grabbed
-      const rel = f.w ? Math.min(1, Math.max(0, (p.x - nx) / f.w)) : 0.5;
-      const r = w.restore;
-      patch(id, { x: Math.round(p.x - rel * r.w), y: ny, w: r.w, h: r.h, maximized: false, snapped: null, restore: null });
-      return;
-    }
-  }
-  patch(id, { x: nx, y: ny, w: Math.round(f.w + d.dw), h: Math.round(f.h + d.dh), maximized: false,
-    ...(edges ? { snapped: null, restore: null } : null) });
+  const pointer = typeof lord !== 'undefined' && lord.wm && typeof lord.wm.pointer === 'function' ? lord.wm.pointer() : null;
+  const moved = (Array.isArray(d.links) ? d.links : []).filter((l) => links.has(l.node)).map((l) => ({ id: links.get(l.node), dx: l.dx, dy: l.dy, dw: l.dw, dh: l.dh }));
+  const r = run('grabEnd', { id, f, edges, dx: d.dx, dy: d.dy, dw: d.dw, dh: d.dh, zone: d.zone || null, links: moved,
+    pointer: pointer ? { x: pointer.x, y: pointer.y } : null });
+  if (r && r.assist) offerAssist(id, r.assist, screen.displays[r.display]);
 };
 
 // when each window was opened (lord.now()), for the developer timing log (settings "debugTiming")
@@ -370,14 +337,10 @@ export const wm = {
       console.warn('unknown app:', appId);
       return null;
     }
-    const id = opts.instance ? `${appId}#${opts.instance}` : opts.new ? `${appId}#${seq++}` : appId;
-    const args = opts.args ? { ...opts.args, nonce: seq++ } : null;
-    if (globalThis.__lordTiming && typeof lord !== 'undefined' && lord.now) openedAt.set(id, lord.now());
-    const desktop = desktopList.get().includes(opts.desktop) ? opts.desktop : activeDesktop.get();
-    showDesktopOf(id);                                 // already open: its desktop comes into view
-    windows.set((ws) => (ws.some((w) => w.id === id)
-      ? raise(ws, id).map((w) => (w.id === id && args ? { ...w, args } : w))
-      : [...ws, { id, app: appId, title: null, args, desktop, ...place(appId, ws.length, opts.frame) }]));
+    // already open: it comes up (and its desktop into view) with the new args
+    const id = run('open', { app: appId, instance: opts.instance || null, new: !!opts.new, args: opts.args || null,
+      desktop: opts.desktop ?? null, ...placeFacts(appId, opts.frame) });
+    if (id && globalThis.__lordTiming && typeof lord !== 'undefined' && lord.now) openedAt.set(id, lord.now());
     return id;
   },
   // Closes the window; if the app set a guard and it returns false, it doesn't close.
@@ -392,96 +355,54 @@ export const wm = {
     }
     guards.delete(id);
     appMenus.set((m) => { if (!(id in m)) return m; const n = { ...m }; delete n[id]; return n; });
-    windows.set((ws) => ws.filter((w) => w.id !== id));
+    run('close', id);
     return true;
   },
   // To the front of its desktop, and that desktop comes into view.
-  focus(id) {
-    showDesktopOf(id);
-    windows.set((ws) => raiseUnlessTop(ws, id));
-  },
+  focus: (id) => { run('focus', id); },
   // To the front of its own desktop, whichever is showing.
-  raise: (id) => windows.set((ws) => raiseUnlessTop(ws, id)),
+  raise: (id) => { run('raise', id); },
+  // Under every other window (the app switcher's backward step).
+  toBack: (id) => { run('toBack', id); },
+  // The windows of this desktop take turns: 'left' brings the rearmost up, 'right' sends the front one under.
+  cycle: (dir) => { run('cycle', dir); },
   // To another desktop: the window leaves, and the desktop in view stays.
-  moveToDesktop(id, desktop) {
-    if (desktopList.get().includes(desktop)) patch(id, { desktop });
-  },
-  minimize: (id) => patch(id, { minimized: true }),
-  toggleMaximize: (id) => windows.set((ws) => ws.map((w) => (w.id !== id ? w : w.snapped && w.restore
-    ? { ...w, ...w.restore, snapped: null, restore: null, maximized: true }
-    : { ...w, maximized: !w.maximized }))),
+  moveToDesktop: (id, desktop) => { run('moveToDesktop', id, desktop); },
+  minimize: (id) => { run('minimize', id); },
+  toggleMaximize: (id) => { run('toggleMaximize', id); },
   // Snapping (see "Snapping" above): zone is one of SNAP_ZONES; 'restore' goes back to the size
   // and place from before the first snap (or un-maximizes).
   // opts: { assist: true } offers the rest of the layout to the other windows afterwards (Snap
   // Assist), { layout: [zones] } the layout the zone was picked from; { display } snaps on that
   // display instead of the window's own.
   snap: (id, zone, opts) => {
-    if (zone === 'restore') { unsnap(id); return; }
-    if (!SNAP_ZONES.includes(zone)) return;
-    snapTo(id, zone, opts && opts.display);
+    snapTo(id, zone, opts && opts.display);           // Rust leaves an unknown zone alone
     if (opts && opts.assist) offerAssist(id, zone, opts.display, opts.layout);
   },
   // The Window menu (sdk/windowmenu.js, 0.8.5): centered in its display's work area at its own size.
-  center(id) {
-    const w = windows.get().find((x) => x.id === id);
-    if (!w) return;
-    const a = workAreaOf(displayFor(w)), r = w.snapped && w.restore ? w.restore : w;
-    const ww = Math.min(r.w, a.w), hh = Math.min(r.h, a.h);
-    patch(id, { x: Math.round(a.x + (a.w - ww) / 2), y: Math.round(a.y + (a.h - hh) / 2), w: ww, h: hh, maximized: false, snapped: null, restore: null });
-  },
+  center: (id) => { run('center', id); },
   // To another display: the same place relative to the work area (a snapped window keeps its zone, a
   // maximized one stays maximized), its size kept inside the new area.
-  moveToDisplay(id, displayId) {
-    const w = windows.get().find((x) => x.id === id);
-    const d = screen.displays.find((x) => x.id === displayId);
-    if (!w || !d) return;
-    if (w.snapped) { snapTo(id, w.snapped, d); return; }
-    const from = workAreaOf(displayFor(w)), to = workAreaOf(d);
-    const ww = Math.min(w.w, to.w), hh = Math.min(w.h, to.h);
-    const fx = from.w > w.w ? (w.x - from.x) / (from.w - w.w) : 0, fy = from.h > w.h ? (w.y - from.y) / (from.h - w.h) : 0;
-    const clamp = (v) => Math.max(0, Math.min(1, v));
-    patch(id, { x: Math.round(to.x + clamp(fx) * (to.w - ww)), y: Math.round(to.y + clamp(fy) * (to.h - hh)), w: ww, h: hh });
-  },
+  moveToDisplay: (id, displayId) => { run('moveToDisplay', id, displayId); },
   // Several windows at once on the display of the first: 'left-right', 'right-left', 'top-bottom',
   // 'bottom-top' (two windows) or 'quarters' (up to four).
-  arrange(ids, layout) {
-    const zones = { 'left-right': ['left', 'right'], 'right-left': ['right', 'left'], 'top-bottom': ['top', 'bottom'], 'bottom-top': ['bottom', 'top'],
-      quarters: ['top-left', 'top-right', 'bottom-left', 'bottom-right'] }[layout];
-    const first = windows.get().find((x) => x.id === ids[0]);
-    if (!zones || !first) return;
-    const d = displayFor(first);
-    ids.slice(0, zones.length).forEach((id, i) => { snapTo(id, zones[i], d); });
-    for (const id of [...ids.slice(0, zones.length)].reverse()) wm.focus(id);
-  },
+  arrange: (ids, layout) => { run('arrange', ids, layout); },
   // Super+arrow (dir: 'left' | 'right' | 'up' | 'down'), the moves in Rust (snap_next). From a free
   // window, Snap Assist follows.
   snapKey(id, dir) {
-    const w = windows.get().find((x) => x.id === id);
-    const api = snapApi();
-    if (!w || w.fullscreen || w.pip || !api) return;
-    const to = api.next(w.maximized ? 'max' : w.snapped || null, dir);
-    if (!to) return;
-    if (to === 'minimize') wm.minimize(id);
-    else wm.snap(id, to, { assist: !w.snapped && !w.maximized });
+    const zone = run('snapKey', id, dir);
+    if (zone) offerAssist(id, zone);
   },
-  move: (id, x, y) => patch(id, { x: Math.round(x), y: Math.round(Math.max(workAreaOf(displayAt(x, y)).y, y)), maximized: false, snapped: null, restore: null, oskFrame: null }),
-  resize: (id, w, h) => patch(id, { w: Math.round(w), h: Math.round(h) }),
-  setFrame: (id, f) => patch(id, { ...f, maximized: false, snapped: null, restore: null, oskFrame: null }),
+  move: (id, x, y) => { run('move', id, x, y); },
+  resize: (id, w, h) => { run('resize', id, w, h); },
+  setFrame: (id, f) => { run('setFrame', id, f); },
   // The on-screen keyboard moves the window with the field out of its way, and puts it back as it was
   // (sdk/osk.js). A window the person moves meanwhile stays where they left it.
-  liftForKeyboard(id, f) {
-    const w = windows.get().find((x) => x.id === id);
-    if (!w) return;
-    const oskFrame = w.oskFrame || { x: w.x, y: w.y, w: w.w, h: w.h, maximized: w.maximized, snapped: w.snapped, restore: w.restore };
-    patch(id, { ...f, maximized: false, snapped: null, restore: null, oskFrame });
-  },
-  dropFromKeyboard(id) {
-    const w = windows.get().find((x) => x.id === id);
-    if (w?.oskFrame) patch(id, { ...w.oskFrame, oskFrame: null });
-  },
+  liftForKeyboard: (id, f) => { run('liftForKeyboard', id, f); },
+  dropFromKeyboard: (id) => { run('dropFromKeyboard', id); },
   setTitle: (id, title) => {
-    const w = windows.get().find((x) => x.id === id);
-    if (w && w.title !== title) patch(id, { title });
+    const w = mirror.get(id);
+    if (w && w.title !== title) run('patch', id, { title });
   },
   setCloseGuard(id, fn) {
     guards.set(id, fn);
@@ -493,26 +414,30 @@ export const wm = {
     if (typeof lord !== 'undefined' && typeof lord.appId === 'string') { sendAppMenus(menus); return; }   // only in the app process
     appMenus.set((m) => ({ ...m, [id]: menus }));
   },
-  get: (id) => windows.get().find((w) => w.id === id) || null,
-  // The window in front of the showing desktop.
-  focused: () => focusedOn(windows.get(), activeDesktop.get())?.id ?? null,
+  get: (id) => mirror.get(id) || null,
+  // The window in front of the showing desktop (never another desktop's, never picture-in-picture).
+  focused: () => windowViews.get().front,
+  // The window an app comes back with, of `ids`: on this desktop if it has one, a visible one before a
+  // minimized one, else the top one of any desktop (focusing that one switches desktop).
+  pick: (ids) => run('pick', ids),
   // Protected window (capture protection): it looks normal on screen, but
   // comes out black in screenshots and recordings (docs/MEDIA.md). Used, for
   // example, by a password app.
-  setProtected: (id, on = true) => patch(id, { protected: !!on }),
+  setProtected: (id, on = true) => { run('patch', id, { protected: !!on }); },
   // Merges into a window's args (a Linux app switching between the theme's frame and its own, args.csd).
-  setArgs: (id, a) => windows.set((ws) => ws.map((w) => (w.id === id ? { ...w, args: { ...(w.args || {}), ...a } } : w))),
+  setArgs: (id, a) => { run('setArgs', id, a); },
   // The window menu at a screen point (a Linux app with its own bar asked for it,
   // xdg_toplevel.show_window_menu): the theme draws it from w.windowMenu; null closes it.
-  showWindowMenu: (id, x, y) => patch(id, { windowMenu: { x: Math.round(x), y: Math.round(y) } }),
-  closeWindowMenu: (id) => patch(id, { windowMenu: null }),
+  showWindowMenu: (id, x, y) => { run('patch', id, { windowMenu: { x: Math.round(x), y: Math.round(y) } }); },
+  closeWindowMenu: (id) => { run('patch', id, { windowMenu: null }); },
   // Fullscreen for a LordOS app (Player, Photos): the SDK draws it above everything,
-  // without the theme's frame. Esc or wm.setFullscreen(id, false) goes back.
-  setFullscreen: (id, on = true) => windows.set((ws) => ws.map((w) => (w.id === id ? { ...w, fullscreen: !!on, minimized: false } : w))),
+  // without the theme's frame. Esc (wm.exitFullscreen) or wm.setFullscreen(id, false) goes back.
+  setFullscreen: (id, on = true) => { run('setFullscreen', id, !!on); },
+  exitFullscreen: () => run('exitFullscreen') === true,
   // Picture-in-picture: a small frameless window, always on top (frame = { x, y, w, h } or null).
   // It shows on every desktop; back from it, the window stays on the one in view.
   desktop: () => activeDesktop.get(),
-  setPip: (id, frame) => patch(id, { pip: frame ? { ...frame } : null, fullscreen: false, ...(frame ? null : { desktop: activeDesktop.get() }) }),
+  setPip: (id, frame) => { run('setPip', id, frame ? { ...frame } : null); },
   // Dragging in C (see frameRef above). beginMove/beginResize return false if it wasn't possible (no
   // marked node, maximized, or no button held): the theme can continue with its own JS drag.
   // edges as in xdg_toplevel.resize: 1 top, 2 bottom, 4 left, 8 right (5 = top-left…).
@@ -524,7 +449,7 @@ export const wm = {
   // eight (rx × ry px, one turn every periodMs) through the drag's own path, one step per frame, until
   // stopScript() or pointer input. The store keeps the old place: the scene's window is closed after.
   scriptMove(id, { rx, ry, periodMs }) {
-    const w = windows.get().find((x) => x.id === id);
+    const w = mirror.get(id);
     const f = frameNodes.get(id);
     if (!w || !f || w.maximized || w.fullscreen || typeof lord === 'undefined' || !lord.wm || typeof lord.wm.script !== 'function') return false;
     return !!lord.wm.script(f.node, { rx, ry, periodMs, inset: f.inset, minTop: areaOfWindow(w).y, areas: grabAreas() });
@@ -537,19 +462,30 @@ export const wm = {
 // windows: all of them, every desktop. visible: what shows on this desktop. focused: its front window.
 // mounted: what the theme draws, in stacking order: visible, plus the LordOS apps of hidden desktops
 // (WindowShell keeps those display: none so they keep their state) and, in the overview, the minimized.
+// fullscreen and picture-in-picture windows are drawn by the SDK (FloatingWindows).
+const pickIds = (ids) => ids.map((id) => mirror.get(id)).filter(Boolean);
+let viewsMemo = null;
 export function useWindows() {
   const list = useStore(windows);
   const desktop = useStore(activeDesktop);
-  const overview = useStore(overviewShowing);
-  // fullscreen and picture-in-picture windows are drawn by the SDK (FloatingWindows)
-  const visible = visibleOn(list, desktop);
-  const top = visible.length ? visible[visible.length - 1].id : null;
-  return { windows: list, visible, mounted: mountedOn(list, desktop, overview), focused: top, desktop };
+  const v = useStore(windowViews);
+  if (!viewsMemo || viewsMemo.v !== v || viewsMemo.list !== list) {
+    viewsMemo = { v, list, visible: pickIds(v.visible), mounted: pickIds(v.mounted) };
+  }
+  return { windows: list, visible: viewsMemo.visible, mounted: viewsMemo.mounted, focused: v.top, desktop };
+}
+// The windows that show on this desktop, bottom to top (no fullscreen, no picture-in-picture).
+export const visibleWindows = () => pickIds(windowViews.get().visible);
+// The compositor's view of a Linux window: parked = on a hidden desktop. It loses the keyboard and any
+// fullscreen until it comes back. X11 windows go iconic for both, so X's stacking can't catch the pointer.
+export function surfaceState(w) {
+  const parked = windowViews.get().sets.parked.has(w.id);
+  return { maximized: !!w.maximized, parked, iconic: !!w.minimized || parked };
 }
 // The window is out of sight (minimized or on a hidden desktop): what animates in it should stop.
+export const windowHidden = (id) => !mirror.has(id) || windowViews.get().sets.hidden.has(id);
 export function useWindowHidden(id) {
-  const desktop = useStore(activeDesktop);
-  return useStore(windows, (ws) => windowHidden(ws.find((w) => w.id === id), desktop));
+  return useStore(windowViews, () => windowHidden(id));
 }
 
 // ---- menus of an isolated app: serialize to the broker and receive the clicks ----

@@ -4,7 +4,6 @@ import { View, Text, addListener, displayFor, onCommit, onScreenChange } from '@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useTheme, ThemeScope, appAppearance } from './theme.js';
 import { getApp, windows, openedAt, wm, activeDesktop, onActiveDesktop } from './windows.js';
-import { onDesktop } from './desktopmodel.js';
 import { useStore } from './store.js';
 import { textDirection, direction } from './i18n.js';
 import { SCROLLBAR, scrollbarMode, thumbGeometry, offsetForThumb, nearEdge, hitThumb, barShown, barOpacity, hideTime, barWidth } from './scrollbar.js';
@@ -519,13 +518,12 @@ export function FloatingWindows() {
       if (!d) return;
       const f = d.resize ? { ...d.frame, w: Math.max(160, d.frame.w + e.x - d.x), h: Math.max(90, d.frame.h + e.y - d.y) }
         : { ...d.frame, x: d.frame.x + e.x - d.x, y: d.frame.y + e.y - d.y };
-      windows.set((ws) => ws.map((w) => (w.id === d.id ? { ...w, pip: f } : w)));
+      wm.setPip(d.id, f);
     });
     const offUp = addListener('pointerup', () => { drag.current = null; });
     const offKey = addListener('keydown', (e) => {
       if (e.key !== 'Escape' || hasTextFocus()) return;
-      const top = windows.get().filter((w) => w.fullscreen && onActiveDesktop(w)).pop();
-      if (top) windows.set((ws) => ws.map((w) => (w.id === top.id ? { ...w, fullscreen: false } : w)));
+      wm.exitFullscreen();
     });
     return () => { offMove(); offUp(); offKey(); };
   }, []);
@@ -543,7 +541,7 @@ export function FloatingWindows() {
       ))}
       {fs.map((w) => {
         const d = displayFor(w);              // the display the window was on (docs/DISPLAYS.md)
-        const here = onDesktop(w, desktop);
+        const here = onActiveDesktop(w);
         return (
         <View key={w.id} style={{ position: 'absolute', left: d.x, top: d.y, width: d.w, height: d.h, backgroundColor: '#000', display: here ? 'flex' : 'none' }}>
           <AppHost id={w.id} focused={here} />
