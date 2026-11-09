@@ -165,7 +165,7 @@ function filter(e) {
   if (!e.down) {
     const tap = SUPER(e.code) && superAlone;
     if (SUPER(e.code)) superAlone = false;
-    if (tap) onSuperTap?.();
+    if (tap && !lord.wayland?.fullscreen?.()) onSuperTap?.();
     return taken.delete(e.code) || !!repeating.delete(e.code);
   }
   if (SUPER(e.code)) { if (!e.repeat) superAlone = true; return false; }

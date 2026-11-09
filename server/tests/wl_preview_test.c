@@ -20,6 +20,11 @@ int main(void) {
     for(int i=0;i<4;i++)child_px[i]=0xffee2040u;
     Surf root={.id=100,.node=7,.role=R_TOPLEVEL,.w=4,.h=4,.lw=4,.lh=4,.px=content,.content=1,.opaque=1,.preview_gen=3};
     Surf child={.id=101,.role=R_SUB,.w=2,.h=2,.lw=2,.lh=2,.sx=2,.sy=2,.px=child_px,.content=1,.opaque=1,.preview_gen=4};
+    assert(wl_fullscreen_window()==0);
+    fs_surf=&root;
+    assert(wl_fullscreen_window()==100);
+    root.content=0;assert(wl_fullscreen_window()==0);root.content=1;
+    fs_surf=NULL;
     root.kids[0]=&child;root.nkids=1;surfs[0]=&root;
     int w=0,h=0;assert(wl_preview_size(100,&w,&h));assert(w==4&&h==4);
     assert(!root.mapped); // minimized/unmounted frames still retain client pixels
