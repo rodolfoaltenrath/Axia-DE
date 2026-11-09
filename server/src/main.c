@@ -1053,15 +1053,15 @@ static const TpHost tp_host = { tp_move, tp_warp, tp_button, tp_position, tp_flu
  * one paints it when its flip is not pending (paint_out), at its own scale. */
 /* render_frame: paint_ui skips the JS frame callbacks (hold); they ran in this render (ran) */
 static int ui_js_hold, ui_js_ran;
-static Box paint_ui(Server *s) {
+static int paint_ui(Server *s) {
     Box d = { 0, 0, 0, 0 };
     if (js_anim_active()) js_anim_step(now_ms());      /* native animations (Rust): no JS render */
     if (!ui_js_hold && js_wants_frame()) { js_frame(now_ms()); ui_js_ran = 1; }
     int relayout = ui.dirty;
-    if (!relayout && box_empty(ui.damage)) return d;
+    if (!relayout && box_empty(ui.damage)) return 1;
     ui.dirty = 0;
     double t0 = now_ms();
-    if (relayout) layout_root(ui.root, (float)s->W, (float)s->H);
+    if (relayout && !layout_root(ui.root, (float)s->W, (float)s->H)) return 0;
     double t1 = now_ms();
     if (paint_damage(ui.root)) d = ui.damage;
     ui.damage = (Box){ 0, 0, 0, 0 };
@@ -1089,7 +1089,7 @@ static Box paint_ui(Server *s) {
     ui.layout_ms = t1 - t0;
     s->layout_total += ui.layout_ms;
     s->renders++;
-    return d;
+    return 1;
 }
 
 /* LORD_PAINT_VERIFY=N (checking the partial repaints, docs/LAYERS.md): every N-th frame painted on a
@@ -1863,13 +1863,14 @@ static int render_frame(Server *s) {
             if (fpipe_hold_callbacks(o->prep, o->prep_js)) ui_js_hold = 1;
             o->prep_js = 0;
         }
-    paint_ui(s);
+    int layout_ready = paint_ui(s);
     s->last_render = now_ms();
     cursor_mark(s);
     /* (not while every display waits for its flip: stopping the GPU sets the dumb buffer with a modeset, and a
      * pending flip's buffer must stay; a frame prepared meanwhile is undone at the flip by cpu_takeover) */
-    if (!ready && !prep_only && cpu_switch(s)) paint_ui(s);
+    if (layout_ready && !ready && !prep_only && cpu_switch(s)) layout_ready = paint_ui(s);
     ui_js_hold = 0;
+    if (!layout_ready) return main_shown;
     if (s->headless) {
         Out *o = &s->out[0];
         Rect drawn = paint_out(s, o, 0, 1);

@@ -334,7 +334,7 @@ static void invalidate_all(void) {
 
 static void frame(Canvas *c) {
     invalidate_all();
-    layout_root(root, LB_UI_W, LB_UI_H);
+    if (!layout_root(root, LB_UI_W, LB_UI_H)) return;
     paint_damage(root);
     ui.damage = (Box){ 0, 0, LB_UI_W, LB_UI_H };
     canvas_set_clip(c, (Rect){ 0, 0, LB_UI_W, LB_UI_H });

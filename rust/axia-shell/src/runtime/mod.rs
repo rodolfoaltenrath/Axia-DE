@@ -30,15 +30,18 @@ thread_local! { static LAYOUT: RefCell<layout::Layout> = RefCell::new(layout::La
 
 #[cfg(not(test))]
 #[no_mangle]
-pub unsafe extern "C" fn layout_root(root: *mut Node, w: f32, h: f32) {
+pub unsafe extern "C" fn layout_root(root: *mut Node, w: f32, h: f32) -> i32 {
     with_scene(|s, ui| {
-        if let Some(root) = id(s, root) {
-            LAYOUT.with(|l| {
+        let Some(root) = id(s, root) else {
+            return 1;
+        };
+        LAYOUT.with(|l| {
+            i32::from(
                 l.borrow_mut()
-                    .run(s, ui, root, w, h, &mut layout::NativeMetrics);
-            });
-        }
-    });
+                    .run(s, ui, root, w, h, &mut layout::NativeMetrics),
+            )
+        })
+    })
 }
 
 #[cfg(not(test))]

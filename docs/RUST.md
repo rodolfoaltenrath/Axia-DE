@@ -120,9 +120,27 @@ contêineres intrínsecos simultâneos. Uma cadeia de tamanho fixo não precisa 
 uma pilha proporcional à profundidade. As reservas são falíveis: se falharem,
 a geometria anterior é preservada. A forma da árvore fica em cache até uma
 invalidação, evitando essa varredura em animações de posição/opacidade/transform.
-Resetar a cena libera os buffers. Os testes
-cobrem 8.192 níveis, 1.400 irmãos, mais de 16 itens expansíveis, caches, RTL,
+As reservas incluem as matrizes dos nós transformados e de seus descendentes.
+Ativar uma transformação repete essa preparação sem descartar as medidas.
+`layout_root` retorna sucesso/falha ao host: na falta de memória, compositor
+e aplicativos adiam a pintura, preservam o pedido de atualização e tentam
+novamente. Alocações parciais de matrizes ficam sob propriedade da cena,
+sem publicar alterações de geometria ou flags de transformação.
+
+Resetar a cena libera os buffers. Um vetor auxiliar com mais de 16 KiB também
+é liberado quando sua capacidade supera quatro vezes o número de nós vivos
+na cena. Isso evita reter o pico de uma árvore temporária grande sem descartar
+o espaço que outras raízes ainda precisam. Os buffers menores
+continuam disponíveis para reutilização; isso reduz a memória reservada pelo
+layout, sem garantir que o alocador devolva imediatamente essas páginas ao SO.
+Os testes cobrem 8.192 níveis, 1.400 irmãos, mais de 16 itens expansíveis, caches, RTL,
 aspecto de imagens, matrizes e falhas de alocação; o Miri usa cargas menores.
+O stress de retenção do workspace com 1.400 nós é executado apenas nativamente.
+Regressões também verificam min/max após shrink e em linhas que encaixam
+exatamente, recuperação após falha parcial de alocação das matrizes e liberação
+do workspace excedente. A inversão de matrizes rejeita resultados não finitos
+e usa intermediários `f64` se o caminho habitual `f32` transbordar. Ângulos
+finitos que transbordam na conversão para radianos são reduzidos módulo 360.
 Esses casos grandes e profundos exercitam o layout. `paint.c` ainda usa recursão
 e buffers de 1.024 filhos para pintura/hit testing; esses limites só serão
 removidos na etapa de migração do renderer. As listas reais continuam virtualizadas.

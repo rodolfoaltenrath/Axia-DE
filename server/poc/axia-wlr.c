@@ -320,7 +320,10 @@ static void on_output_frame(struct wl_listener *l, void *data) {
     if (S.dirty && S.px) {
         Canvas c;
         canvas_init(&c, S.px, S.W, S.H, S.W);
-        layout_root(S.root, (float)S.W, (float)S.H);
+        if (!layout_root(S.root, (float)S.W, (float)S.H)) {
+            wlr_output_schedule_frame(o);
+            return;
+        }
         paint_damage(S.root);
         ui.damage = (Box){ 0, 0, (float)S.W, (float)S.H };
         paint_root_clear(&c, S.root, 0);

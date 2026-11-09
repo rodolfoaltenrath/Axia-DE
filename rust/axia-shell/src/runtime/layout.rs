@@ -166,8 +166,17 @@ fn prepare(scene: &mut Scene, id: usize, rtl: u8) {
         edges::resolve(n);
     }
 }
-fn reserve<T>(v: &mut Vec<T>, required: usize) -> bool {
+fn reserve<T>(v: &mut Vec<T>, required: usize, live_nodes: usize) -> bool {
     v.clear();
+    // Release oversized workspaces after a large temporary tree closes. Keep
+    // small buffers and a generous margin so normal resizing does not churn.
+    // Other roots share this workspace: a small window must not discard the
+    // storage a larger live window will need on its next layout.
+    if v.capacity().saturating_mul(std::mem::size_of::<T>()) > 16 * 1024
+        && v.capacity() > live_nodes.max(required).saturating_mul(4)
+    {
+        *v = Vec::new();
+    }
     memory::try_reserve(v, required)
 }
 impl Layout {
@@ -178,11 +187,18 @@ impl Layout {
             + self.measures.capacity() * std::mem::size_of::<Measure>()
             + self.grows.capacity() * std::mem::size_of::<Grow>()
     }
-    fn bounds(scene: &Scene, root: usize) -> Bounds {
+    fn bounds(scene: &mut Scene, root: usize) -> Option<Bounds> {
         let (mut leaves, mut growing, mut active, mut max_depth, mut max_kids) = (0, 0, 0, 0, 0);
+        let mut transformed = 0;
         let mut id = root;
         'visit: loop {
-            let n = scene.node(id).unwrap();
+            let n = scene.node_mut(id).unwrap();
+            transformed += usize::from(n.kind != 3 && n.s.has_transform());
+            if transformed != 0 && n.tf.is_null() {
+                // Publish only initialized, owned storage here. Geometry and
+                // transform flags remain untouched until all allocations pass.
+                n.tf = Box::into_raw(memory::try_box(NodeTf::default())?);
+            }
             active += usize::from(intrinsic_container(n));
             max_depth = max_depth.max(active);
             growing += usize::from(n.s.grow > 0.);
@@ -198,7 +214,9 @@ impl Layout {
             }
             leaves += 1;
             loop {
-                active -= usize::from(intrinsic_container(scene.node(id).unwrap()));
+                let n = scene.node(id).unwrap();
+                active -= usize::from(intrinsic_container(n));
+                transformed -= usize::from(n.kind != 3 && n.s.has_transform());
                 if id == root {
                     break 'visit;
                 }
@@ -209,18 +227,20 @@ impl Layout {
                 id = scene.parent(id);
             }
         }
-        Bounds {
+        Some(Bounds {
             leaves,
             kids: max_kids,
             frames: max_depth,
             growing,
-        }
+        })
     }
     fn reserve_scene(&mut self, scene: &mut Scene, root: usize) -> bool {
         let bounds = match scene.layout_bounds {
             Some((cached_root, bounds)) if cached_root == root => bounds,
             _ => {
-                let bounds = Self::bounds(scene, root);
+                let Some(bounds) = Self::bounds(scene, root) else {
+                    return false;
+                };
                 scene.layout_bounds = Some((root, bounds));
                 bounds
             }
@@ -228,10 +248,11 @@ impl Layout {
         // Pending DFS jobs cannot exceed distinct leaves. Only intrinsic
         // containers need measurement frames. Scene invalidation clears this
         // shape cache; position/opacity/transform-only animations can reuse it.
-        reserve(&mut self.jobs, bounds.leaves)
-            && reserve(&mut self.kids, bounds.kids)
-            && reserve(&mut self.measures, bounds.frames)
-            && reserve(&mut self.grows, bounds.growing)
+        let live_nodes = scene.count();
+        reserve(&mut self.jobs, bounds.leaves, live_nodes)
+            && reserve(&mut self.kids, bounds.kids, live_nodes)
+            && reserve(&mut self.measures, bounds.frames, live_nodes)
+            && reserve(&mut self.grows, bounds.growing, live_nodes)
     }
     pub fn run(
         &mut self,
@@ -688,12 +709,18 @@ impl Layout {
         let k = range.len();
         let mut used = if k > 1 { s.gap * (k - 1) as f32 } else { 0. };
         let (mut grow, mut shrink) = (0., 0.);
+        let mut constrained = false;
         for kid in &self.kids[range.clone()] {
             let c = scene.node(kid.id).unwrap();
             let mg = Edges::of(c).margin;
             used += kid.main + if row { mg[0] + mg[2] } else { mg[1] + mg[3] };
             grow += c.s.grow;
             shrink += c.s.shrink * kid.main;
+            constrained |= if row {
+                c.s.min_w.unit != 0 || c.s.max_w.unit != 0
+            } else {
+                c.s.min_h.unit != 0 || c.s.max_h.unit != 0
+            };
         }
         let mut free = main - used;
         if free > 0. && grow > 0. {
@@ -710,7 +737,7 @@ impl Layout {
             }
             free = 0.;
         }
-        if free != 0. || grow > 0. {
+        if free != 0. || grow > 0. || constrained {
             let mut total = if k > 1 { s.gap * (k - 1) as f32 } else { 0. };
             for kid in &mut self.kids[range.clone()] {
                 let c = scene.node(kid.id).unwrap();
@@ -986,17 +1013,13 @@ impl Layout {
             n.ax = px + n.x + n.s.translate_x;
             n.ay = py + n.y + n.s.translate_y;
             n.own_tf = u8::from(n.kind != 3 && n.s.has_transform());
-            let mut transformed = n.own_tf != 0 || world.is_some();
+            let transformed = n.own_tf != 0 || world.is_some();
             if transformed {
-                if n.tf.is_null() {
-                    if let Some(tf) = memory::try_box(NodeTf::default()) {
-                        n.tf = Box::into_raw(tf);
-                    } else {
-                        n.own_tf = 0;
-                        transformed = false;
-                    }
-                }
-                if transformed {
+                debug_assert!(
+                    !n.tf.is_null(),
+                    "transform storage was reserved in preflight"
+                );
+                {
                     let tf = unsafe { &mut *n.tf };
                     if n.own_tf != 0 {
                         tf.own = n.s.transform(n.ax, n.ay, n.w, n.h);
