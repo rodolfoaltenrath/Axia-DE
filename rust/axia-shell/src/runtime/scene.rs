@@ -1,12 +1,14 @@
 //! Owning scene graph. Links are slot IDs, never dereferenced C pointers.
-//! Boxes keep renderer addresses stable when the slot/table vectors grow.
+//! A native allocation is released to its owning record before any pointer is
+//! published. Moving a slot never reborrows or moves the native node allocation.
+use super::memory;
 use super::types::{Node, Rect, Style, StyleExt, Ui};
-use std::cell::UnsafeCell;
+use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 #[derive(Clone, Copy, Default)]
 struct Links {
@@ -17,15 +19,26 @@ struct Links {
     prev: usize,
 }
 struct OwnedNode {
-    // C temporarily borrows this view to compute layout and paint. These borrows
-    // end before calling back into Scene; access is confined to the UI thread.
-    view: UnsafeCell<Node>,
+    // Keep the original raw allocation provenance for every renderer borrow.
+    // Retaining a Box here would retag its pointee when the slot is moved or
+    // mutably borrowed, invalidating pointers previously published to C.
+    view: NonNull<Node>,
     links: Links,
+}
+impl OwnedNode {
+    fn new(id: usize, kind: i32) -> Option<Self> {
+        let allocation = memory::try_box(Node::new(id as i32, kind))?;
+        Some(Self {
+            view: NonNull::new(Box::into_raw(allocation)).unwrap(),
+            links: Links::default(),
+        })
+    }
 }
 impl Drop for OwnedNode {
     fn drop(&mut self) {
-        let n = self.view.get_mut();
         unsafe {
+            // Reclaim ownership only after the renderer's borrow has ended.
+            let mut n = Box::from_raw(self.view.as_ptr());
             // Image references are still owned by the C image cache. Everything
             // else here is allocated and released by Rust, including rare fields.
             if !n.img.is_null() {
@@ -43,23 +56,28 @@ impl Drop for OwnedNode {
 }
 #[derive(Default)]
 pub struct Scene {
-    slots: Vec<Option<Box<OwnedNode>>>,
-    views: Vec<*mut Node>,
+    slots: Vec<Option<OwnedNode>>,
+    // Cell keeps the published pointer table writable without exclusive slice
+    // reborrows invalidating the table pointer retained by the C host.
+    views: Vec<Cell<*mut Node>>,
     vacant: BinaryHeap<Reverse<usize>>,
     count: usize,
 }
 impl Scene {
     pub fn ptr(&self, id: usize) -> *mut Node {
-        self.views.get(id).copied().unwrap_or(ptr::null_mut())
+        self.views.get(id).map(Cell::get).unwrap_or(ptr::null_mut())
     }
     pub fn node(&self, id: usize) -> Option<&Node> {
         self.slots
             .get(id)?
             .as_ref()
-            .map(|n| unsafe { &*n.view.get() })
+            .map(|n| unsafe { n.view.as_ref() })
     }
     pub fn node_mut(&mut self, id: usize) -> Option<&mut Node> {
-        self.slots.get_mut(id)?.as_mut().map(|n| n.view.get_mut())
+        self.slots
+            .get_mut(id)?
+            .as_mut()
+            .map(|n| unsafe { n.view.as_mut() })
     }
     fn links(&self, id: usize) -> Links {
         self.slots[id].as_ref().unwrap().links
@@ -83,7 +101,7 @@ impl Scene {
         ui.nodes = if self.views.is_empty() {
             ptr::null_mut()
         } else {
-            self.views.as_mut_ptr()
+            self.views.as_ptr().cast_mut().cast()
         };
         ui.cap = self.views.len() as i32;
     }
@@ -91,34 +109,47 @@ impl Scene {
         if !(0..=6).contains(&kind) {
             return 0;
         }
-        if self.slots.is_empty() {
-            self.slots.push(None);
-        }
         let id = self
             .vacant
-            .pop()
-            .map(|Reverse(i)| i)
-            .unwrap_or(self.slots.len());
+            .peek()
+            .map(|Reverse(i)| *i)
+            .unwrap_or(self.slots.len().max(1));
         if id >= i32::MAX as usize {
             return 0;
         }
-        if id >= self.views.len() {
-            let capacity = self.views.len().saturating_mul(2).max(1024);
-            if capacity > i32::MAX as usize {
-                return 0;
-            }
-            self.views.resize(capacity, ptr::null_mut());
-        }
-        let owned = Box::new(OwnedNode {
-            view: UnsafeCell::new(Node::new(id as i32, kind)),
-            links: Links::default(),
-        });
-        self.views[id] = owned.view.get();
-        if id == self.slots.len() {
-            self.slots.push(Some(owned));
+        let capacity = if id >= self.views.len() {
+            self.views.len().saturating_mul(2).max(1024)
         } else {
-            self.slots[id] = Some(owned);
+            self.views.len()
+        };
+        if capacity > i32::MAX as usize {
+            return 0;
         }
+        let Some(owned) = OwnedNode::new(id, kind) else {
+            return 0;
+        };
+        let required = self.slots.len().max(id + 1);
+        // Reserve all metadata before committing a node. Vacancies can then be
+        // recorded during destruction without allocating while freeing memory.
+        if self.slots.try_reserve(required - self.slots.len()).is_err()
+            || self
+                .vacant
+                .try_reserve(required.saturating_sub(self.vacant.len()))
+                .is_err()
+        {
+            return 0;
+        }
+        // This reservation may relocate the published table, so it is last:
+        // everything after success is allocation-free and republishes its pointer.
+        if self.views.try_reserve(capacity - self.views.len()).is_err() {
+            return 0;
+        }
+        self.views
+            .resize_with(capacity, || Cell::new(ptr::null_mut()));
+        self.slots.resize_with(required, || None);
+        self.vacant.pop();
+        self.views[id].set(owned.view.as_ptr());
+        self.slots[id] = Some(owned);
         self.count += 1;
         self.publish(ui);
         ui.dirty = 1;
@@ -212,20 +243,27 @@ impl Scene {
         if self.node(parent).is_none() || self.node(child).is_none() {
             return false;
         }
-        let mut ancestor = parent;
-        while ancestor != 0 {
-            if ancestor == child {
-                return false;
-            }
-            ancestor = self.links(ancestor).parent;
+        if parent == child {
+            return false;
         }
         let before = if self.node(before).is_some() && self.links(before).parent == parent {
             before
         } else {
             0
         };
-        if before == child {
+        let current = self.links(child);
+        if before == child || (current.parent == parent && current.next == before) {
             return true;
+        }
+        // Reordering siblings or inserting a leaf cannot introduce a cycle.
+        if current.first != 0 && current.parent != parent {
+            let mut ancestor = parent;
+            while ancestor != 0 {
+                if ancestor == child {
+                    return false;
+                }
+                ancestor = self.links(ancestor).parent;
+            }
         }
         self.detach(child, ui);
         let previous = if before != 0 {
@@ -257,31 +295,48 @@ impl Scene {
     }
     pub fn destroy(&mut self, root: usize, ui: &mut Ui) {
         self.detach(root, ui);
-        let mut ids = Vec::new();
         let mut id = root;
-        while id != 0 {
-            ids.push(id);
-            id = self.next_in_subtree(root, id, true);
-        }
-        // Iterative postorder: no stack growth with deeply nested UI trees.
-        for id in ids.into_iter().rev() {
+        loop {
+            let links = self.links(id);
+            if links.first != 0 {
+                id = links.first;
+                continue;
+            }
+            // Remove a leaf, then visit its next sibling or its parent. No
+            // recursion and no temporary worklist allocation, even under OOM.
+            if links.parent != 0 {
+                self.links_mut(links.parent).first = links.next;
+                if links.next != 0 {
+                    self.links_mut(links.next).prev = 0;
+                } else {
+                    self.links_mut(links.parent).last = 0;
+                }
+            }
             if ui.root == self.ptr(id) {
                 ui.root = ptr::null_mut();
             }
-            self.views[id] = ptr::null_mut();
+            self.views[id].set(ptr::null_mut());
             self.slots[id] = None;
             self.vacant.push(Reverse(id));
             self.count -= 1;
+            if id == root {
+                break;
+            }
+            id = if links.next != 0 {
+                links.next
+            } else {
+                links.parent
+            };
         }
         ui.dirty = 1;
     }
     pub fn reset(&mut self, ui: &mut Ui) {
-        self.slots.clear();
-        self.slots.shrink_to_fit();
-        self.views.clear();
-        self.views.shrink_to_fit();
-        self.vacant.clear();
-        self.vacant.shrink_to_fit();
+        ui.root = ptr::null_mut();
+        ui.nodes = ptr::null_mut();
+        ui.cap = 0;
+        self.slots = Vec::new();
+        self.views = Vec::new();
+        self.vacant = BinaryHeap::new();
         self.count = 0;
         self.publish(ui);
         ui.root = ptr::null_mut();
@@ -298,7 +353,10 @@ impl Scene {
         if !n.text.is_null() && unsafe { CStr::from_ptr(n.text) } == text {
             return;
         }
-        let next = text.to_owned().into_raw();
+        let Some(next) = memory::try_cstring(text) else {
+            return;
+        };
+        let next = next.into_raw();
         if !n.text.is_null() {
             unsafe {
                 drop(CString::from_raw(n.text));
@@ -322,6 +380,9 @@ impl Scene {
                     dst.write(byte);
                 }
                 used += len;
+            }
+            if used == out.len() - 1 {
+                break;
             }
             id = self.next_in_subtree(root, id, n.kind == 1);
         }
@@ -375,13 +436,26 @@ impl Scene {
         let after = n.s;
         let ext = unsafe { after.ext.as_ref() };
         let ext_changed = ext.is_some_and(|x| ext_before.is_none_or(|b| !x.same_values(b, false)));
-        if before.same_base(&after) && !ext_changed {
+        let same_base = before.same_base(&after);
+        if same_base && !ext_changed {
             return;
         }
         let mut moved = *before;
         moved.pos = after.pos;
         if !ext_changed && after.absolute != 0 && before.absolute != 0 && moved.same_base(&after) {
             self.moved(id, ui);
+            return;
+        }
+        // Most changes cannot use the transform shortcut. Avoid walking all
+        // ancestors for ordinary colors, sizes, text and first-time extensions.
+        if n.kind == 3
+            || n.kind == 1
+            || !same_base
+            || !ext
+                .zip(ext_before)
+                .is_some_and(|(x, b)| x.same_values(b, true))
+        {
+            self.invalidate(id, ui);
             return;
         }
         let mut parent = self.links(id).parent;
@@ -393,15 +467,7 @@ impl Scene {
             }
             parent = self.links(parent).parent;
         }
-        if n.kind != 3
-            && n.kind != 1
-            && before.same_base(&after)
-            && !text_ancestor
-            && ext
-                .zip(ext_before)
-                .is_some_and(|(x, b)| x.same_values(b, true))
-            && self.pure_layout(id)
-        {
+        if !text_ancestor && self.pure_layout(id) {
             let n = self.node_mut(id).unwrap();
             n.paint_dirty = 1;
             unsafe {

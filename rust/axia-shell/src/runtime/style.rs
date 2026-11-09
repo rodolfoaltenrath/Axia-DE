@@ -1,23 +1,111 @@
 //! Typed property dispatch: no byte offsets or untyped writes into style memory.
-use super::types::{Dim, Style, StyleExt};
+use super::{
+    memory,
+    types::{Dim, Style, StyleExt},
+};
 use std::ffi::CStr;
 
-enum Property<'a> {
+enum Value<'a> {
     Dim(&'a mut Dim),
     Float(&'a mut f32),
     Color(&'a mut u32),
     Enum(&'a mut u8, &'static [&'static str]),
     Byte(&'a mut u8),
 }
+struct Property<'a> {
+    value: Value<'a>,
+    extension: Option<(&'a mut u32, u32, &'a mut u8)>,
+}
+impl Property<'_> {
+    fn commit(&mut self) {
+        if let Some((flags, bit, valid)) = &mut self.extension {
+            **flags |= *bit;
+            **valid = 0;
+        }
+    }
+    fn set_number(mut self, value: f64) -> bool {
+        match &mut self.value {
+            Value::Dim(d) if (value as f32).is_finite() => {
+                **d = Dim {
+                    v: value as f32,
+                    unit: 1,
+                }
+            }
+            Value::Float(f) if (value as f32).is_finite() => **f = value as f32,
+            Value::Color(c) => **c = (value as i64) as u32,
+            Value::Byte(n) => **n = value.clamp(0., 255.) as u8,
+            _ => return false,
+        }
+        self.commit();
+        true
+    }
+    fn set_string(mut self, value: &CStr) -> bool {
+        match &mut self.value {
+            Value::Enum(n, values) => {
+                let Some(i) = values.iter().position(|v| v.as_bytes() == value.to_bytes()) else {
+                    return false;
+                };
+                **n = i as u8;
+            }
+            Value::Dim(d) if value.to_bytes() == b"auto" => **d = Dim::default(),
+            Value::Dim(d) => {
+                let Some((n, percent)) = parse_float(value) else {
+                    return false;
+                };
+                **d = Dim {
+                    v: n,
+                    unit: if percent { 2 } else { 1 },
+                };
+            }
+            Value::Float(f) => {
+                let Some((n, _)) = parse_float(value) else {
+                    return false;
+                };
+                **f = n;
+            }
+            Value::Byte(n) => {
+                let mut end = std::ptr::null_mut();
+                let number = unsafe { libc::strtol(value.as_ptr(), &mut end, 10) };
+                if end == value.as_ptr().cast_mut() {
+                    return false;
+                }
+                **n = number.clamp(0, 255) as u8;
+            }
+            _ => return false,
+        }
+        self.commit();
+        true
+    }
+}
+// Keep the existing finite numeric-prefix/px/% grammar; reject missing numbers,
+// NaN and overflow before they can reach integer casts or the C renderer.
+fn parse_float(value: &CStr) -> Option<(f32, bool)> {
+    let mut end = std::ptr::null_mut();
+    let number = unsafe { libc::strtof(value.as_ptr(), &mut end) };
+    if end == value.as_ptr().cast_mut() || !number.is_finite() {
+        return None;
+    }
+    Some((number, unsafe { *end } == b'%' as std::ffi::c_char))
+}
 impl Style {
+    pub fn set_gradient(&mut self, angle: f64, from: f64, to: f64) -> bool {
+        if !(angle as f32).is_finite() || !from.is_finite() || !to.is_finite() {
+            return false;
+        }
+        self.grad_angle = angle as f32;
+        self.grad_from = (from as i64) as u32;
+        self.grad_to = (to as i64) as u32;
+        self.has_gradient = 1;
+        true
+    }
     fn property(&mut self, key: &str) -> Option<Property<'_>> {
-        Some(match key {
-            "display" => Property::Enum(&mut self.display_none, &["flex", "none"]),
-            "position" => Property::Enum(&mut self.absolute, &["relative", "absolute"]),
-            "flexDirection" => Property::Enum(&mut self.row, &["column", "row"]),
-            "flexWrap" => Property::Enum(&mut self.wrap, &["nowrap", "wrap"]),
-            "fontFamily" => Property::Enum(&mut self.mono, &["sans-serif", "monospace", "brand"]),
-            "cursor" => Property::Enum(
+        let value = match key {
+            "display" => Value::Enum(&mut self.display_none, &["flex", "none"]),
+            "position" => Value::Enum(&mut self.absolute, &["relative", "absolute"]),
+            "flexDirection" => Value::Enum(&mut self.row, &["column", "row"]),
+            "flexWrap" => Value::Enum(&mut self.wrap, &["nowrap", "wrap"]),
+            "fontFamily" => Value::Enum(&mut self.mono, &["sans-serif", "monospace", "brand"]),
+            "cursor" => Value::Enum(
                 &mut self.cursor,
                 &[
                     "auto",
@@ -45,7 +133,7 @@ impl Style {
                     "nwse-resize",
                 ],
             ),
-            "justifyContent" => Property::Enum(
+            "justifyContent" => Value::Enum(
                 &mut self.justify,
                 &[
                     "flex-start",
@@ -56,294 +144,178 @@ impl Style {
                     "space-evenly",
                 ],
             ),
-            "alignItems" => Property::Enum(
+            "alignItems" => Value::Enum(
                 &mut self.align_items,
                 &["auto", "stretch", "flex-start", "center", "flex-end"],
             ),
-            "alignSelf" => Property::Enum(
+            "alignSelf" => Value::Enum(
                 &mut self.align_self,
                 &["auto", "stretch", "flex-start", "center", "flex-end"],
             ),
-            "overflow" => Property::Enum(&mut self.overflow_hidden, &["visible", "hidden"]),
-            "pointerEvents" => {
-                Property::Enum(&mut self.pointer_none, &["auto", "none", "box-none"])
-            }
-            "textAlign" => Property::Enum(
+            "overflow" => Value::Enum(&mut self.overflow_hidden, &["visible", "hidden"]),
+            "pointerEvents" => Value::Enum(&mut self.pointer_none, &["auto", "none", "box-none"]),
+            "textAlign" => Value::Enum(
                 &mut self.text_align,
                 &["left", "center", "right", "start", "end"],
             ),
-            "direction" => Property::Enum(&mut self.dir, &["inherit", "ltr", "rtl"]),
-            "objectFit" => Property::Enum(&mut self.object_fit, &["fill", "cover", "contain"]),
-            "whiteSpace" => Property::Enum(&mut self.nowrap, &["normal", "nowrap"]),
-            "textOverflow" => Property::Enum(&mut self.text_overflow, &["clip", "ellipsis"]),
-            "flexBasis" => Property::Dim(&mut self.basis),
-            "width" => Property::Dim(&mut self.width),
-            "height" => Property::Dim(&mut self.height),
-            "minWidth" => Property::Dim(&mut self.min_w),
-            "minHeight" => Property::Dim(&mut self.min_h),
-            "maxWidth" => Property::Dim(&mut self.max_w),
-            "maxHeight" => Property::Dim(&mut self.max_h),
-            "left" => Property::Dim(&mut self.pos[0]),
-            "top" => Property::Dim(&mut self.pos[1]),
-            "right" => Property::Dim(&mut self.pos[2]),
-            "bottom" => Property::Dim(&mut self.pos[3]),
-            "flexGrow" => Property::Float(&mut self.grow),
-            "flexShrink" => Property::Float(&mut self.shrink),
-            "marginLeft" => Property::Float(&mut self.margin[0]),
-            "marginTop" => Property::Float(&mut self.margin[1]),
-            "marginRight" => Property::Float(&mut self.margin[2]),
-            "marginBottom" => Property::Float(&mut self.margin[3]),
-            "paddingLeft" => Property::Float(&mut self.padding[0]),
-            "paddingTop" => Property::Float(&mut self.padding[1]),
-            "paddingRight" => Property::Float(&mut self.padding[2]),
-            "paddingBottom" => Property::Float(&mut self.padding[3]),
-            "gap" => Property::Float(&mut self.gap),
-            "borderRadius" => Property::Float(&mut self.radius),
-            "borderWidth" => Property::Float(&mut self.border_width),
-            "opacity" => Property::Float(&mut self.opacity),
-            "shadowBlur" => Property::Float(&mut self.shadow_blur),
-            "shadowOffsetX" => Property::Float(&mut self.shadow_x),
-            "shadowOffsetY" => Property::Float(&mut self.shadow_y),
-            "backdropBlur" => Property::Float(&mut self.backdrop_blur),
-            "fontSize" => Property::Float(&mut self.font_size),
-            "lineHeight" => Property::Float(&mut self.line_height),
-            "fontWeight" => Property::Float(&mut self.font_weight),
-            "translateX" => Property::Float(&mut self.translate_x),
-            "translateY" => Property::Float(&mut self.translate_y),
-            "zIndex" => Property::Float(&mut self.z_index),
-            "backgroundColor" => Property::Color(&mut self.bg),
-            "borderColor" => Property::Color(&mut self.border_color),
-            "color" => Property::Color(&mut self.color),
-            "shadowColor" => Property::Color(&mut self.shadow_color),
-            "numberOfLines" => Property::Byte(&mut self.line_clamp),
-            _ => {
-                if !matches!(
-                    key,
-                    "borderLeftWidth"
-                        | "borderLeftColor"
-                        | "borderTopWidth"
-                        | "borderTopColor"
-                        | "borderRightWidth"
-                        | "borderRightColor"
-                        | "borderBottomWidth"
-                        | "borderBottomColor"
-                        | "borderStartWidth"
-                        | "borderStartColor"
-                        | "borderEndWidth"
-                        | "borderEndColor"
-                        | "borderTopLeftRadius"
-                        | "borderTopRightRadius"
-                        | "borderBottomRightRadius"
-                        | "borderBottomLeftRadius"
-                        | "borderTopStartRadius"
-                        | "borderTopEndRadius"
-                        | "borderBottomStartRadius"
-                        | "borderBottomEndRadius"
-                        | "marginStart"
-                        | "paddingStart"
-                        | "marginEnd"
-                        | "paddingEnd"
-                        | "start"
-                        | "end"
-                        | "scaleX"
-                        | "scaleY"
-                        | "rotate"
-                        | "transformOriginX"
-                        | "transformOriginY"
-                ) {
-                    return None;
-                }
-                let x = self.extension();
-                x.r.ok = 0;
-                match key {
-                    "borderLeftWidth" => {
-                        x.edge_set |= 1 << 0;
-                        Property::Float(&mut x.border_side[0])
-                    }
-                    "borderLeftColor" => {
-                        x.edge_set |= 1 << 6;
-                        Property::Color(&mut x.border_side_color[0])
-                    }
-                    "borderTopWidth" => {
-                        x.edge_set |= 1 << 1;
-                        Property::Float(&mut x.border_side[1])
-                    }
-                    "borderTopColor" => {
-                        x.edge_set |= 1 << 7;
-                        Property::Color(&mut x.border_side_color[1])
-                    }
-                    "borderRightWidth" => {
-                        x.edge_set |= 1 << 2;
-                        Property::Float(&mut x.border_side[2])
-                    }
-                    "borderRightColor" => {
-                        x.edge_set |= 1 << 8;
-                        Property::Color(&mut x.border_side_color[2])
-                    }
-                    "borderBottomWidth" => {
-                        x.edge_set |= 1 << 3;
-                        Property::Float(&mut x.border_side[3])
-                    }
-                    "borderBottomColor" => {
-                        x.edge_set |= 1 << 9;
-                        Property::Color(&mut x.border_side_color[3])
-                    }
-                    "borderStartWidth" => {
-                        x.edge_set |= 1 << 4;
-                        Property::Float(&mut x.border_side[4])
-                    }
-                    "borderStartColor" => {
-                        x.edge_set |= 1 << 10;
-                        Property::Color(&mut x.border_side_color[4])
-                    }
-                    "borderEndWidth" => {
-                        x.edge_set |= 1 << 5;
-                        Property::Float(&mut x.border_side[5])
-                    }
-                    "borderEndColor" => {
-                        x.edge_set |= 1 << 11;
-                        Property::Color(&mut x.border_side_color[5])
-                    }
-                    "borderTopLeftRadius" => {
-                        x.edge_set |= 1 << 16;
-                        Property::Float(&mut x.radius_corner[0])
-                    }
-                    "borderTopRightRadius" => {
-                        x.edge_set |= 1 << 17;
-                        Property::Float(&mut x.radius_corner[1])
-                    }
-                    "borderBottomRightRadius" => {
-                        x.edge_set |= 1 << 18;
-                        Property::Float(&mut x.radius_corner[2])
-                    }
-                    "borderBottomLeftRadius" => {
-                        x.edge_set |= 1 << 19;
-                        Property::Float(&mut x.radius_corner[3])
-                    }
-                    "borderTopStartRadius" => {
-                        x.edge_set |= 1 << 20;
-                        Property::Float(&mut x.radius_corner[4])
-                    }
-                    "borderTopEndRadius" => {
-                        x.edge_set |= 1 << 21;
-                        Property::Float(&mut x.radius_corner[5])
-                    }
-                    "borderBottomStartRadius" => {
-                        x.edge_set |= 1 << 22;
-                        Property::Float(&mut x.radius_corner[6])
-                    }
-                    "borderBottomEndRadius" => {
-                        x.edge_set |= 1 << 23;
-                        Property::Float(&mut x.radius_corner[7])
-                    }
-                    "marginStart" => {
-                        x.edge_set |= 1 << 12;
-                        Property::Float(&mut x.margin_inline[0])
-                    }
-                    "paddingStart" => {
-                        x.edge_set |= 1 << 14;
-                        Property::Float(&mut x.padding_inline[0])
-                    }
-                    "marginEnd" => {
-                        x.edge_set |= 1 << 13;
-                        Property::Float(&mut x.margin_inline[1])
-                    }
-                    "paddingEnd" => {
-                        x.edge_set |= 1 << 15;
-                        Property::Float(&mut x.padding_inline[1])
-                    }
-                    "start" => {
-                        x.edge_set |= 0;
-                        Property::Dim(&mut x.inset_inline[0])
-                    }
-                    "end" => {
-                        x.edge_set |= 0;
-                        Property::Dim(&mut x.inset_inline[1])
-                    }
-                    "scaleX" => {
-                        x.edge_set |= 0;
-                        Property::Float(&mut x.scale_x)
-                    }
-                    "scaleY" => {
-                        x.edge_set |= 0;
-                        Property::Float(&mut x.scale_y)
-                    }
-                    "rotate" => {
-                        x.edge_set |= 0;
-                        Property::Float(&mut x.rotate)
-                    }
-                    "transformOriginX" => {
-                        x.edge_set |= 0;
-                        Property::Dim(&mut x.origin_x)
-                    }
-                    "transformOriginY" => {
-                        x.edge_set |= 0;
-                        Property::Dim(&mut x.origin_y)
-                    }
-                    _ => unreachable!(),
-                }
-            }
+            "direction" => Value::Enum(&mut self.dir, &["inherit", "ltr", "rtl"]),
+            "objectFit" => Value::Enum(&mut self.object_fit, &["fill", "cover", "contain"]),
+            "whiteSpace" => Value::Enum(&mut self.nowrap, &["normal", "nowrap"]),
+            "textOverflow" => Value::Enum(&mut self.text_overflow, &["clip", "ellipsis"]),
+            "flexBasis" => Value::Dim(&mut self.basis),
+            "width" => Value::Dim(&mut self.width),
+            "height" => Value::Dim(&mut self.height),
+            "minWidth" => Value::Dim(&mut self.min_w),
+            "minHeight" => Value::Dim(&mut self.min_h),
+            "maxWidth" => Value::Dim(&mut self.max_w),
+            "maxHeight" => Value::Dim(&mut self.max_h),
+            "left" => Value::Dim(&mut self.pos[0]),
+            "top" => Value::Dim(&mut self.pos[1]),
+            "right" => Value::Dim(&mut self.pos[2]),
+            "bottom" => Value::Dim(&mut self.pos[3]),
+            "flexGrow" => Value::Float(&mut self.grow),
+            "flexShrink" => Value::Float(&mut self.shrink),
+            "marginLeft" => Value::Float(&mut self.margin[0]),
+            "marginTop" => Value::Float(&mut self.margin[1]),
+            "marginRight" => Value::Float(&mut self.margin[2]),
+            "marginBottom" => Value::Float(&mut self.margin[3]),
+            "paddingLeft" => Value::Float(&mut self.padding[0]),
+            "paddingTop" => Value::Float(&mut self.padding[1]),
+            "paddingRight" => Value::Float(&mut self.padding[2]),
+            "paddingBottom" => Value::Float(&mut self.padding[3]),
+            "gap" => Value::Float(&mut self.gap),
+            "borderRadius" => Value::Float(&mut self.radius),
+            "borderWidth" => Value::Float(&mut self.border_width),
+            "opacity" => Value::Float(&mut self.opacity),
+            "shadowBlur" => Value::Float(&mut self.shadow_blur),
+            "shadowOffsetX" => Value::Float(&mut self.shadow_x),
+            "shadowOffsetY" => Value::Float(&mut self.shadow_y),
+            "backdropBlur" => Value::Float(&mut self.backdrop_blur),
+            "fontSize" => Value::Float(&mut self.font_size),
+            "lineHeight" => Value::Float(&mut self.line_height),
+            "fontWeight" => Value::Float(&mut self.font_weight),
+            "translateX" => Value::Float(&mut self.translate_x),
+            "translateY" => Value::Float(&mut self.translate_y),
+            "zIndex" => Value::Float(&mut self.z_index),
+            "backgroundColor" => Value::Color(&mut self.bg),
+            "borderColor" => Value::Color(&mut self.border_color),
+            "color" => Value::Color(&mut self.color),
+            "shadowColor" => Value::Color(&mut self.shadow_color),
+            "numberOfLines" => Value::Byte(&mut self.line_clamp),
+
+            _ => return self.extended_property(key),
+        };
+        Some(Property {
+            value,
+            extension: None,
         })
     }
-    fn extension(&mut self) -> &mut StyleExt {
-        if self.ext.is_null() {
-            self.ext = Box::into_raw(Box::new(StyleExt::default()));
+    fn extended_property(&mut self, key: &str) -> Option<Property<'_>> {
+        if !matches!(
+            key,
+            "borderLeftWidth"
+                | "borderLeftColor"
+                | "borderTopWidth"
+                | "borderTopColor"
+                | "borderRightWidth"
+                | "borderRightColor"
+                | "borderBottomWidth"
+                | "borderBottomColor"
+                | "borderStartWidth"
+                | "borderStartColor"
+                | "borderEndWidth"
+                | "borderEndColor"
+                | "borderTopLeftRadius"
+                | "borderTopRightRadius"
+                | "borderBottomRightRadius"
+                | "borderBottomLeftRadius"
+                | "borderTopStartRadius"
+                | "borderTopEndRadius"
+                | "borderBottomStartRadius"
+                | "borderBottomEndRadius"
+                | "marginStart"
+                | "paddingStart"
+                | "marginEnd"
+                | "paddingEnd"
+                | "start"
+                | "end"
+                | "scaleX"
+                | "scaleY"
+                | "rotate"
+                | "transformOriginX"
+                | "transformOriginY"
+        ) {
+            return None;
         }
-        // SAFETY: ext is created here and freed only by release(), on the UI thread.
-        unsafe { &mut *self.ext }
+        let x = self.extension()?;
+        let (value, bit) = match key {
+            "borderLeftWidth" => (Value::Float(&mut x.border_side[0]), 1 << 0),
+            "borderLeftColor" => (Value::Color(&mut x.border_side_color[0]), 1 << 6),
+            "borderTopWidth" => (Value::Float(&mut x.border_side[1]), 1 << 1),
+            "borderTopColor" => (Value::Color(&mut x.border_side_color[1]), 1 << 7),
+            "borderRightWidth" => (Value::Float(&mut x.border_side[2]), 1 << 2),
+            "borderRightColor" => (Value::Color(&mut x.border_side_color[2]), 1 << 8),
+            "borderBottomWidth" => (Value::Float(&mut x.border_side[3]), 1 << 3),
+            "borderBottomColor" => (Value::Color(&mut x.border_side_color[3]), 1 << 9),
+            "borderStartWidth" => (Value::Float(&mut x.border_side[4]), 1 << 4),
+            "borderStartColor" => (Value::Color(&mut x.border_side_color[4]), 1 << 10),
+            "borderEndWidth" => (Value::Float(&mut x.border_side[5]), 1 << 5),
+            "borderEndColor" => (Value::Color(&mut x.border_side_color[5]), 1 << 11),
+            "borderTopLeftRadius" => (Value::Float(&mut x.radius_corner[0]), 1 << 16),
+            "borderTopRightRadius" => (Value::Float(&mut x.radius_corner[1]), 1 << 17),
+            "borderBottomRightRadius" => (Value::Float(&mut x.radius_corner[2]), 1 << 18),
+            "borderBottomLeftRadius" => (Value::Float(&mut x.radius_corner[3]), 1 << 19),
+            "borderTopStartRadius" => (Value::Float(&mut x.radius_corner[4]), 1 << 20),
+            "borderTopEndRadius" => (Value::Float(&mut x.radius_corner[5]), 1 << 21),
+            "borderBottomStartRadius" => (Value::Float(&mut x.radius_corner[6]), 1 << 22),
+            "borderBottomEndRadius" => (Value::Float(&mut x.radius_corner[7]), 1 << 23),
+            "marginStart" => (Value::Float(&mut x.margin_inline[0]), 1 << 12),
+            "paddingStart" => (Value::Float(&mut x.padding_inline[0]), 1 << 14),
+            "marginEnd" => (Value::Float(&mut x.margin_inline[1]), 1 << 13),
+            "paddingEnd" => (Value::Float(&mut x.padding_inline[1]), 1 << 15),
+            "start" => (Value::Dim(&mut x.inset_inline[0]), 0),
+            "end" => (Value::Dim(&mut x.inset_inline[1]), 0),
+            "scaleX" => (Value::Float(&mut x.scale_x), 0),
+            "scaleY" => (Value::Float(&mut x.scale_y), 0),
+            "rotate" => (Value::Float(&mut x.rotate), 0),
+            "transformOriginX" => (Value::Dim(&mut x.origin_x), 0),
+            "transformOriginY" => (Value::Dim(&mut x.origin_y), 0),
+            _ => unreachable!(),
+        };
+        Some(Property {
+            value,
+            extension: Some((&mut x.edge_set, bit, &mut x.r.ok)),
+        })
+    }
+    fn extension(&mut self) -> Option<&mut StyleExt> {
+        if self.ext.is_null() {
+            self.ext = Box::into_raw(memory::try_box(StyleExt::default())?);
+        }
+        // SAFETY: ext is created here and freed only by its owner, on the UI thread.
+        Some(unsafe { &mut *self.ext })
     }
     pub fn set_number(&mut self, key: &str, value: f64) -> bool {
-        match self.property(key) {
-            Some(Property::Dim(d)) => {
-                *d = Dim {
-                    v: value as f32,
-                    unit: 1,
-                }
-            }
-            Some(Property::Float(f)) => *f = value as f32,
-            Some(Property::Color(c)) => *c = (value as i64) as u32,
-            Some(Property::Byte(n)) => *n = value.clamp(0., 255.) as u8,
-            _ => return false,
+        if !value.is_finite() {
+            return false;
         }
-        true
+        let fresh = self.ext.is_null();
+        let changed = self.property(key).is_some_and(|p| p.set_number(value));
+        if fresh && !changed {
+            unsafe {
+                self.release();
+            }
+        }
+        changed
     }
     pub fn set_string(&mut self, key: &str, value: &CStr) -> bool {
-        match self.property(key) {
-            Some(Property::Enum(n, values)) => {
-                let Some(i) = values.iter().position(|v| v.as_bytes() == value.to_bytes()) else {
-                    return false;
-                };
-                *n = i as u8;
+        let fresh = self.ext.is_null();
+        let changed = self.property(key).is_some_and(|p| p.set_string(value));
+        if fresh && !changed {
+            unsafe {
+                self.release();
             }
-            Some(Property::Dim(d)) => {
-                if value.to_bytes() == b"auto" {
-                    *d = Dim::default();
-                } else {
-                    let mut end = std::ptr::null_mut();
-                    let n = unsafe { libc::strtof(value.as_ptr(), &mut end) };
-                    if end == value.as_ptr().cast_mut() {
-                        return false;
-                    }
-                    *d = Dim {
-                        v: n,
-                        unit: if unsafe { *end } == b'%' as std::ffi::c_char {
-                            2
-                        } else {
-                            1
-                        },
-                    };
-                }
-            }
-            Some(Property::Float(f)) => {
-                *f = unsafe { libc::strtof(value.as_ptr(), std::ptr::null_mut()) }
-            }
-            Some(Property::Byte(n)) => {
-                *n = unsafe { libc::strtol(value.as_ptr(), std::ptr::null_mut(), 10) }.clamp(0, 255)
-                    as u8
-            }
-            _ => return false,
         }
-        true
+        changed
     }
     pub fn reset(&mut self, key: &str) -> bool {
         let d = Style::default();

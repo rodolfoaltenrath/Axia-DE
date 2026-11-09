@@ -5,6 +5,7 @@
 //! live views returned by node_new/node_get. C cannot free or relink views, text,
 //! style extensions or transforms. Style snapshots never own their ext pointer.
 mod damage;
+mod memory;
 mod scene;
 mod state;
 mod style;
@@ -78,6 +79,16 @@ pub unsafe extern "C" fn style_set_string(
     }
     s.as_mut().zip(key(k)).map_or(-1, |(s, k)| {
         if s.set_string(k, CStr::from_ptr(value)) {
+            0
+        } else {
+            -1
+        }
+    })
+}
+#[no_mangle]
+pub unsafe extern "C" fn style_set_gradient(s: *mut Style, angle: f64, from: f64, to: f64) -> i32 {
+    s.as_mut().map_or(-1, |s| {
+        if s.set_gradient(angle, from, to) {
             0
         } else {
             -1
@@ -178,9 +189,10 @@ pub unsafe extern "C" fn node_restyled(
     ext_before: *const StyleExt,
 ) {
     if let Some(b) = before.as_ref() {
+        let snapshot = (!ext_before.is_null()).then(|| StyleExt::copy_values(ext_before));
         with_scene(|s, ui| {
             if let Some(i) = id(s, n) {
-                s.restyled(i, b, ext_before.as_ref(), ui);
+                s.restyled(i, b, snapshot.as_ref(), ui);
             }
         });
     }
@@ -193,7 +205,10 @@ pub unsafe extern "C" fn node_ensure_transform(n: *mut Node) -> *mut NodeTf {
         };
         let n = s.node_mut(i).unwrap();
         if n.tf.is_null() {
-            n.tf = Box::into_raw(Box::new(NodeTf::default()));
+            let Some(transform) = memory::try_box(NodeTf::default()) else {
+                return ptr::null_mut();
+            };
+            n.tf = Box::into_raw(transform);
         }
         n.tf
     })

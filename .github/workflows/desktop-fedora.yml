@@ -9,6 +9,22 @@ concurrency:
   group: fedora-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  runtime-memory:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        model: [stacked, tree]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned memory checker
+        run: rustup toolchain install nightly-2026-11-09 --profile minimal --component miri --component rust-src
+      - name: Prepare Miri outside the vendored workspace
+        working-directory: ${{ runner.temp }}
+        run: cargo +nightly-2026-11-09 miri setup
+      - name: Rust runtime memory contracts
+        env:
+          MIRIFLAGS: ${{ matrix.model == 'tree' && '-Zmiri-tree-borrows -Zmiri-strict-provenance' || '-Zmiri-strict-provenance' }}
+        run: cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --target-dir '${{ runner.temp }}/axia-runtime-miri' --locked --offline --lib runtime::
   desktop:
     strategy:
       matrix:
@@ -53,7 +69,7 @@ jobs:
       - name: Stage installation
         run: make install PREFIX=/usr DESTDIR="$RUNNER_TEMP/axia-de"
   rpm:
-    needs: desktop
+    needs: [desktop, runtime-memory]
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:44
     steps:

@@ -135,6 +135,23 @@ impl Default for StyleExt {
         }
     }
 }
+impl StyleExt {
+    /// C snapshots initialize only the bytes before `r` (STYLE_EXT_VALUES).
+    /// Never form a reference to the entire source record: its cache is uninitialized.
+    ///
+    /// # Safety
+    /// `source` must hold initialized style values through the start of `r`.
+    /// Padding in that prefix may be uninitialized, just as with a C memcpy.
+    pub unsafe fn copy_values(source: *const Self) -> Self {
+        let mut snapshot = Self::default();
+        std::ptr::copy_nonoverlapping(
+            source.cast::<std::mem::MaybeUninit<u8>>(),
+            std::ptr::addr_of_mut!(snapshot).cast::<std::mem::MaybeUninit<u8>>(),
+            std::mem::offset_of!(Self, r),
+        );
+        snapshot
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Affine {

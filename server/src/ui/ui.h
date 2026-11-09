@@ -178,6 +178,7 @@ NodeTf *node_ensure_transform(Node *n);
 /* Rust runtime styles. Snapshots borrow ext; only the owner calls release. */
 int style_set_number(Style *s, const char *key, double v);
 int style_set_string(Style *s, const char *key, const char *v);
+int style_set_gradient(Style *s, double angle, double from, double to);
 int style_reset(Style *s, const char *key);
 void style_release(Style *s);
 
