@@ -405,7 +405,7 @@ still the Dock's blur.
 
 ## Snapping (0.8.3)
 
-A theme turns it on with `configureWindows({ snap: true })` (Lord Classic does; Lord Flow doesn't);
+A theme turns it on with `configureWindows({ snap: true })` (both Lord Classic and Lord Flow do);
 `snapAssist: false` keeps the snapping without Snap Assist. The rules are in Rust
 (`rust/axia-shell/src/snap/`, tests in `snap/tests.rs`), with the C ABI in `server/src/ui/snap_ffi.h`
 (checked by `server/tests/snap_ffi_test.c`). The session reaches them through `lord.snap`

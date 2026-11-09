@@ -195,7 +195,7 @@ export const appMenus = createStore({});
 // chrome: what the theme's frame adds around the content (borders and title bar);
 // used to open Linux app windows at the size they requested.
 // snap: true turns on window snapping (dragging a window to an edge of the screen, see "Snapping"
-// below); the Classic theme does. snapAssist: false keeps the snapping without Snap Assist.
+// below); both desktop themes do. snapAssist: false keeps the snapping without Snap Assist.
 export function configureWindows({ apps, workArea, chrome: c, snap, snapAssist }) {
   themeApps = apps;
   rebuild();
