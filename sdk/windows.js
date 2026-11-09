@@ -8,7 +8,8 @@
 import { screen, onScreenChange, addListener, mainDisplay, displayAt, displayFor } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { appName } from './i18n.js';
-import { FIRST_DESKTOP, onDesktop, visibleOn, mountedOn, focusedOn, windowHidden, addDesktop, removeDesktop } from './desktopmodel.js';
+import { FIRST_DESKTOP, onDesktop, visibleOn, mountedOn, focusedOn, windowHidden } from './desktopmodel.js';
+import { addDesktop, removeDesktop } from './winmodel.js';
 
 // Snapping's geometry is Rust's (lord.snap, server/src/ui/js_snap.c). Isolated apps' processes don't
 // have it: there everything about snapping is a no-op.

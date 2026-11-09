@@ -6,7 +6,8 @@ window is *parked*.
 
 | Code | Role |
 |---|---|
-| `sdk/desktopmodel.js` | The rules as plain data, no runtime: what shows, what is in front, who has the keyboard, the Overview's layout. `server/tests/desktop_model_test.mjs` |
+| `sdk/desktopmodel.js` | The per-window rules as plain data, no runtime: what shows, what is in front, who has the keyboard. `server/tests/desktop_model_test.mjs` |
+| `rust/axia-shell/src/winmodel` (`sdk/winmodel.js`) | The list of desktops (add, close, neighbors, arrows and swipes in RTL), the saved count and position, and the Overview's grid and strip. `winmodel/tests.rs` |
 | `sdk/windows.js` | `w.desktop`, the stores `activeDesktop` and `desktopList`, `wm.moveToDesktop`, `wm.raise`, `useWindows`, `useWindowHidden` |
 | `sdk/desktops.js` | Switching, the keys, the saved count, the indicator, the animation |
 | `sdk/overview.jsx` | The Overview, the same in both themes (it replaced Lord Classic's task view) |

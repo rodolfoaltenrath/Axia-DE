@@ -28,10 +28,6 @@ int main(void) {
     assert(axia_snap_assist_zones(left, NULL, 0, held, 1, free_zones, 4) == 0);
     int layout[2] = { axia_snap_zone_index("left-two-thirds"), axia_snap_zone_index("right-third") };
     assert(axia_snap_assist_zones(layout[1], layout, 2, NULL, 0, free_zones, 4) == 1 && free_zones[0] == layout[0]);
-    AxiaSnapRect frames[2] = { { 0, 0, 800, 600 }, { 10, 10, 640, 480 } };
-    AxiaSnapPlace places[AXIA_SNAP_ASSIST_MAX];
-    assert(axia_snap_assist_grid(r, frames, 2, places, AXIA_SNAP_ASSIST_MAX) == 2);
-    assert(places[0].x >= r.x && places[1].x + places[1].w <= r.x + r.w && places[0].scale > 0);
 
     AxiaSnapDisplay displays[1] = { { { 0, 0, 1280, 800 }, area } };
     AxiaSnapDrag *d = axia_snap_drag_new(displays, 1);

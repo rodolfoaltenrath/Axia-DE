@@ -40,7 +40,7 @@ function useWidth(ref, fallback) {
 
 // The arrangement (docs/DISPLAYS.md, "Numbers, identify and snapping"): every active display at its
 // place in the desktop, proportional to its logical size, drawn as a small screen with its number
-// (with several displays), name and resolution. Dragging is magnetic (sdk/displaylayout.js): edges
+// (with several displays), name and resolution. Dragging is magnetic (sdk/winmodel.js, in Rust): edges
 // stick edge to edge and tops/bottoms, lefts/rights and centers align within 12 preview px; on drop
 // the display always touches another and never overlaps one, and axia-server keeps that position.
 // A click selects a display and shows its number on the real screen (identifyDisplays). The white bar

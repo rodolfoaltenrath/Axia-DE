@@ -9,10 +9,8 @@
 typedef struct { double x, y, w, h; } AxiaSnapRect;
 typedef struct { AxiaSnapRect bounds, work; } AxiaSnapDisplay;          /* a display and its work area */
 typedef struct { AxiaSnapRect frame; double min_w, min_h, max_w, max_h; } AxiaSnapMember;   /* max 0 = none */
-typedef struct { double x, y, w, h, scale; } AxiaSnapPlace;
 
 enum { AXIA_SNAP_NONE = -1, AXIA_SNAP_RESTORE = 100, AXIA_SNAP_MINIMIZE = 101 };
-#define AXIA_SNAP_ASSIST_MAX 12
 
 int         axia_snap_zone_count(void);
 const char *axia_snap_zone_name(int zone);                 /* static; NULL for an unknown index */
@@ -24,10 +22,8 @@ int         axia_snap_zone_at(double x, double y, AxiaSnapRect work, bool thirds
 int         axia_snap_next(int at, int dir);
 
 /* Snap Assist: the free zones of `zone`'s layout (the `layout` picked, if it has `zone`; may be empty)
- * given the zones other windows hold, and where the candidates' miniatures go inside a zone. Both
- * return how many entries were written. */
+ * given the zones other windows hold; returns how many were written. */
 size_t axia_snap_assist_zones(int zone, const int *layout, size_t nlayout, const int *occupied, size_t n, int *out, size_t max);
-size_t axia_snap_assist_grid(AxiaSnapRect cell, const AxiaSnapRect *frames, size_t n, AxiaSnapPlace *out, size_t max);
 
 /* While a window is moved (grab.c): the zone under the pointer. update returns 1 when it changed. */
 typedef struct AxiaSnapDrag AxiaSnapDrag;

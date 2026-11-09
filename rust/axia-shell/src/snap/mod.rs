@@ -11,7 +11,7 @@ mod resize;
 #[cfg(test)]
 mod tests;
 
-pub use assist::{assist_grid, assist_zones, AssistPlace, ASSIST_MAX};
+pub use assist::assist_zones;
 pub use drag::{DragZones, SnapDisplay};
 pub use resize::{LinkedResize, SnapMember};
 

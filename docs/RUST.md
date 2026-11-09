@@ -503,3 +503,37 @@ de soltura com e sem Shift, várias telas, Super+setas, linhas entre metades e
 quartos, bordas da área de trabalho, mínimos, as zonas oferecidas pelo Assist e a
 grade das miniaturas. Falta validar na sessão física o arraste com preview, o
 Assist com o mouse e o teclado e o redimensionamento conjunto com apps Linux.
+
+## Regras puras do gerenciador de janelas
+
+`winmodel/` substitui `sdk/placemodel.js` e `sdk/displaylayout.js` e a parte do
+`sdk/desktopmodel.js` que não depende da lista de janelas:
+
+- onde cada app reabre (`place.rs`: identidade da tela por nome do monitor e
+  conector, área visível quando a tela sumiu, limite de 200 apps);
+- a lista de desktops (`desktops.rs`: adicionar, fechar, vizinhos, setas e gestos
+  em RTL, valores salvos);
+- o grid de miniaturas e a faixa de desktops do Overview (`layout.rs`). O mesmo
+  grid serve o Snap Assist, que deixou de ter um próprio no `snap/`;
+- a organização de telas em Configurações → Telas (`displays.rs`: numeração,
+  posição magnética e soltura sempre encostada e sem sobreposição).
+
+A ponte é uma chamada só, `lord.winmodel(op, json)` (`server/src/ui/js_winmodel.c`,
+ABI em `winmodel_ffi.h`), envolvida por `sdk/winmodel.js`. Os wrappers enviam só
+os campos que cada regra usa, nunca a janela inteira. Sem estado, a ponte também
+está nos processos de apps isolados. Uma chamada recusada lança `TypeError` com
+o motivo dado pelo Rust.
+
+Os predicados de visibilidade (`onDesktop`, `visibleOn`, `mountedOn`,
+`focusedOn`, `keyboardSurface`...) continuam em `sdk/desktopmodel.js`. Eles rodam
+sobre a lista de janelas a cada render, e atravessar a ponte serializaria essa
+lista a cada chamada. Migram junto com o store do `sdk/windows.js`.
+
+Os testes `place_model_test.mjs` e `display_layout_test.mjs` foram portados para
+`winmodel/tests.rs`, incluindo a varredura de ~25 mil solturas de telas. O
+`desktop_model_test.mjs` ficou com os predicados.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline winmodel::
+make -C server build/winmodel-ffi-test && server/build/winmodel-ffi-test
+```
