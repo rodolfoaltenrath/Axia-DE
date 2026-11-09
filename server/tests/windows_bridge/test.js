@@ -74,6 +74,25 @@ eq('preview', snapPreview.get() && snapPreview.get().zone, 'left');
 offered = null;
 globalThis.__lordWm('end', { node: 77, edges: 0, dx: -300, dy: 0, dw: 0, dh: 0, zone: 'left', links: [] });
 eq('dropped on the left edge', [wm.get('files#2').snapped, snapPreview.get(), offered && offered.zone, offered && offered.display === screen.displays[0]], ['left', null, 'left', true]);
+// REGRESSION: a snapped or maximized window comes loose at its own size as soon as it moves (grab.c),
+// and lands where C left it; it used to keep the snapped size until released, and a maximized one
+// couldn't be grabbed in C at all (Flow's fallback threw it away from the pointer)
+let grabOpts = null;
+globalThis.lord.wm.grab = (node, edges, o) => { grabOpts = o; return true; };
+const own = wm.get('files#2').restore;
+ok('a snapped window grabs', wm.beginMove('files#2'));
+eq('…with its own size to come loose at', grabOpts.detach, { w: own.w, h: own.h });
+globalThis.__lordWm('end', { node: 77, edges: 0, dx: 200, dy: 50, dw: own.w - 640, dh: own.h - 772, zone: null, detached: true, links: [] });
+eq('dropped free at its own size', [wm.get('files#2').snapped, wm.get('files#2').x, wm.get('files#2').y, wm.get('files#2').w, wm.get('files#2').h],
+  [null, 200, 78, own.w, own.h]);
+wm.toggleMaximize('files#2');
+ok('a maximized window grabs to move…', wm.beginMove('files#2'));
+eq('…coming loose at its own size', grabOpts.detach, { w: own.w, h: own.h });
+globalThis.__lordWm('end', { node: 77, edges: 0, dx: 0, dy: 0, dw: 0, dh: 0, zone: null, detached: false, links: [] });
+ok('a click on its bar keeps it maximized', wm.get('files#2').maximized);
+ok('but not to resize', !wm.beginResize('files#2', 8));
+wm.toggleMaximize('files#2');
+globalThis.lord.wm.grab = () => true;
 
 // maximize, fullscreen, picture-in-picture, the keyboard's lift
 wm.toggleMaximize('files');

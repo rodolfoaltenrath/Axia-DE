@@ -567,6 +567,37 @@ fn a_dropped_window_snaps_or_comes_out() {
 }
 
 #[test]
+fn a_window_that_came_loose_lands_where_it_was_dropped() {
+    // maximized (its own frame kept underneath): C shrank it to 500×400 under the pointer while moving
+    let mut s = session(json!([{ "id": "m", "app": "files", "x": 300, "y": 200, "w": 500, "h": 400, "maximized": true }]), json!([1]), 1);
+    state(&mut s);
+    let area = json!({ "x": 0, "y": 28, "w": 1280, "h": 772 });
+    let d = |dx: i64, dy: i64, zone: Value, px: i64, py: i64| json!([{ "id": "m", "f": area, "edges": 0, "dx": dx, "dy": dy,
+        "dw": 500 - 1280, "dh": 400 - 772, "detached": true, "zone": zone, "pointer": { "x": px, "y": py } }]);
+    // only pressed and released, or moved less than the threshold: C reports no change and nothing happens
+    assert_eq!(op(&mut s, "grabEnd", json!([{ "id": "m", "f": area, "edges": 0, "dx": 0, "dy": 0, "dw": 0, "dh": 0, "detached": false }]))["state"], Value::Null);
+    assert_eq!(window(&mut s, "m")["maximized"], json!(true));
+    // dropped free: exactly where it is on screen, at its own size
+    op(&mut s, "grabEnd", d(400, 100, Value::Null, 700, 150));
+    let w = window(&mut s, "m");
+    assert_eq!((w["x"].clone(), w["y"].clone(), w["w"].clone(), w["h"].clone(), w["maximized"].clone()),
+        (json!(400), json!(128), json!(500), json!(400), json!(false)));
+    // maximized again, then dropped on the right side: snapped there, and its own size kept to go back to
+    op(&mut s, "snap", json!(["m", "max"]));
+    let r = op(&mut s, "grabEnd", d(900, 0, json!("right"), 1279, 300));
+    assert_eq!(r["result"], json!({ "assist": "right", "display": 0 }));
+    let w = window(&mut s, "m");
+    assert_eq!((w["snapped"].clone(), w["maximized"].clone(), w["x"].clone(), w["w"].clone()), (json!("right"), json!(false), json!(640), json!(640)));
+    assert_eq!(w["restore"], json!({ "x": 400, "y": 128, "w": 500, "h": 400 }));
+    // snapped, came loose and dropped on the top edge: maximized, and back at its own frame underneath
+    let right = json!({ "x": 640, "y": 28, "w": 640, "h": 772 });
+    op(&mut s, "grabEnd", json!([{ "id": "m", "f": right, "edges": 0, "dx": -100, "dy": -20, "dw": -140, "dh": -372,
+        "detached": true, "zone": "max", "pointer": { "x": 700, "y": 2 } }]));
+    let w = window(&mut s, "m");
+    assert_eq!((w["maximized"].clone(), w["snapped"].clone(), w["x"].clone(), w["w"].clone()), (json!(true), Value::Null, json!(400), json!(500)));
+}
+
+#[test]
 fn a_linked_resize_keeps_both_snapped() {
     let l = json!({ "id": "l", "app": "files", "x": 0, "y": 28, "w": 640, "h": 772, "snapped": "left", "restore": { "x": 1, "y": 1, "w": 1, "h": 1 } });
     let r = json!({ "id": "r", "app": "files", "x": 640, "y": 28, "w": 640, "h": 772, "snapped": "right", "restore": { "x": 1, "y": 1, "w": 1, "h": 1 } });

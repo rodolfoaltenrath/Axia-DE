@@ -7,6 +7,8 @@
  *       moving: __lordWm('zone', { zone, x, y, w, h }) each time the zone under the pointer changes
  *       (zone null: none). links: [{ node, inset, minW, minH, maxW, maxH }] the other windows snapped
  *       in work area `area`; those sharing the dragged edge resize with it (docs/WINDOWS.md).
+ *       detach: { w, h } moving a maximized or snapped window: once the pointer really moves, the node
+ *       takes that size, under the pointer where it was grabbed (as Windows does).
  *   lord.wm.cancel()                 also stops a scripted move
  *   lord.wm.script(node, { rx, ry, periodMs, inset, minTop, areas }) → bool
  *       LordBench's desktop scene (docs/BENCHMARK.md): the node moves along a figure of eight, rx × ry px,
@@ -14,8 +16,9 @@
  *       with no button held; pointer input or cancel() stops it. No end notice: the scene's window closes.
  *   lord.wm.pointer() → { x, y, active, edges }: the pointer now and the drag in progress (no
  *       arguments, read only).
- * On release: __lordWm('end', { node, edges, dx, dy, dw, dh, zone, links: [{ node, dx, dy, dw, dh }] })
- * with the node's change, the zone it was dropped on and the change of each linked window.
+ * On release: __lordWm('end', { node, edges, dx, dy, dw, dh, zone, detached, links: [{ node, dx, dy, dw, dh }] })
+ * with the node's change, the zone it was dropped on, whether it took its detach size and the change
+ * of each linked window.
  *
  *   lord.portal.set({ dark, accent: '#rrggbb', accentName, buttons })
  *       what GTK, GNOME and Qt apps read through org.freedesktop.portal.Settings (portal.c). */
@@ -105,6 +108,14 @@ static GrabLimits limits(JSContext *c, JSValueConst o) {
     lim.area = rect(c, area);
     JS_FreeValue(c, area);
     if (lim.area.w <= 0 || lim.area.h <= 0) lim.nlinks = 0;
+    /* a maximized or snapped window being moved: detach: { w, h } its node's own size */
+    JSValue detach = JS_IsObject(o) ? JS_GetPropertyStr(c, o, "detach") : JS_UNDEFINED;
+    if (JS_IsObject(detach)) {
+        lim.detach_w = (float)num(c, detach, "w", 0, 0, 16384);
+        lim.detach_h = (float)num(c, detach, "h", 0, 0, 16384);
+        if (lim.detach_w < 32 || lim.detach_h < 32) lim.detach_w = lim.detach_h = 0;
+    }
+    JS_FreeValue(c, detach);
     return lim;
 }
 
@@ -360,6 +371,7 @@ static JSValue end_data(JSContext *c, const void *arg) {
     JS_SetPropertyStr(c, d, "dw", JS_NewFloat64(c, e->dw));
     JS_SetPropertyStr(c, d, "dh", JS_NewFloat64(c, e->dh));
     JS_SetPropertyStr(c, d, "zone", zone_value(c, e->zone));
+    JS_SetPropertyStr(c, d, "detached", JS_NewBool(c, e->detached));
     JSValue links = JS_NewArray(c);
     for (int i = 0; i < e->nlinks; i++) {
         JSValue l = JS_NewObject(c);

@@ -511,6 +511,20 @@ impl Session {
             return Value::Null;
         }
         let pointer = (number(get(get(g, "pointer"), "x")), number(get(get(g, "pointer"), "y")));
+        if edges == 0 && get(g, "detached").as_bool() == Some(true) {
+            // a maximized or snapped window that came loose at its own size while it was moved (grab.c):
+            // where it was dropped is its frame, unless that is a zone. Its size to go back to stays.
+            let zone = get(g, "zone").as_str().and_then(Zone::from_name);
+            if let Some(zone) = zone.filter(|_| f.snap && pointer.0.is_finite() && pointer.1.is_finite()) {
+                let display = f.display_at(pointer.0, pointer.1);
+                self.snap_to(f, i, zone, display);
+                return json!({ "assist": zone.name(), "display": display });
+            }
+            let w = &mut self.wins[i];
+            w.set_rect(Rect::new(nx, ny, js_round(start.w + dw), js_round(start.h + dh)));
+            w.patch(json!({ "maximized": false, "snapped": null, "restore": null }));
+            return Value::Null;
+        }
         if f.snap && edges == 0 && pointer.0.is_finite() && pointer.1.is_finite() {
             if let Some(zone) = get(g, "zone").as_str().and_then(Zone::from_name) {
                 let display = f.display_at(pointer.0, pointer.1);

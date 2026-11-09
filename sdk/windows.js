@@ -318,14 +318,18 @@ function grabLinks(w) {
 function beginGrab(id, edges) {
   const w = windows.get().find((x) => x.id === id);
   const f = frameNodes.get(id);
-  if (!w || !f || w.maximized || w.fullscreen || typeof lord === 'undefined' || !lord.wm) return false;
+  if (!w || !f || (w.maximized && edges) || w.fullscreen || typeof lord === 'undefined' || !lord.wm) return false;
   const [minW, minH] = registry.get(w.app)?.minSize || [160, 100];
   const opts = { inset: f.inset, minW, minH, minTop: areaOfWindow(w).y, areas: grabAreas() };
   if (!edges && snapOn && snapApi()) opts.snap = screen.displays.map((d) => ({ x: d.x, y: d.y, w: d.w, h: d.h, work: workAreaOf(d) }));
+  // a maximized or snapped window comes loose at its own size as soon as it really moves (grab.c)
+  const own = w.maximized ? w : w.snapped ? w.restore : null;
+  if (!edges && own && own.w > 0 && own.h > 0) opts.detach = { w: own.w + 2 * f.inset, h: own.h + 2 * f.inset };
   const links = edges ? grabLinks(w) : [];
   if (links.length) { opts.links = links; opts.area = areaOfWindow(w); }
   if (!lord.wm.grab(f.node, edges, opts)) return false;
-  grab = { id, node: f.node, edges, f: { x: w.x, y: w.y, w: w.w, h: w.h }, links: new Map(links.map((l) => [l.node, l.id])) };
+  const on = wm.frame(w);           // where it is on screen (a maximized window: its work area)
+  grab = { id, node: f.node, edges, f: { x: on.x, y: on.y, w: on.w, h: on.h }, links: new Map(links.map((l) => [l.node, l.id])) };
   return true;
 }
 function showZone(d) {
@@ -344,7 +348,7 @@ globalThis.__lordWm = (type, d) => {
   if (snapPreview.get()) snapPreview.set(null);
   const pointer = typeof lord !== 'undefined' && lord.wm && typeof lord.wm.pointer === 'function' ? lord.wm.pointer() : null;
   const moved = (Array.isArray(d.links) ? d.links : []).filter((l) => links.has(l.node)).map((l) => ({ id: links.get(l.node), dx: l.dx, dy: l.dy, dw: l.dw, dh: l.dh }));
-  const r = run('grabEnd', { id, f, edges, dx: d.dx, dy: d.dy, dw: d.dw, dh: d.dh, zone: d.zone || null, links: moved,
+  const r = run('grabEnd', { id, f, edges, dx: d.dx, dy: d.dy, dw: d.dw, dh: d.dh, zone: d.zone || null, detached: !!d.detached, links: moved,
     pointer: pointer ? { x: pointer.x, y: pointer.y } : null });
   if (r && r.assist) offerAssist(id, r.assist, screen.displays[r.display]);
 };
