@@ -115,7 +115,7 @@ fn chart(
     )
 }
 fn values(snapshot: &worker::Snapshot, pick: impl Fn(&Value) -> f64) -> Vec<f64> {
-    snapshot.samples.iter().map(pick).collect()
+    snapshot.samples.iter().map(|s| pick(s)).collect()
 }
 pub fn icon(size: f64) -> Value {
     let size = if size.is_finite() {
@@ -170,7 +170,7 @@ fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -
             ),
         ],
         total,
-        240,
+        worker::SAMPLES,
         170,
         c,
     );
@@ -218,7 +218,7 @@ fn overview(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value)
         "overview-cpu",
         vec![(values(snapshot, |s| n(&s["cpu"])), [10, 132, 255, 255])],
         1.,
-        240,
+        worker::SAMPLES,
         86,
         c,
     );
@@ -230,7 +230,7 @@ fn overview(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value)
             [139, 92, 246, 255],
         )],
         n(&last["mem"]["total"]),
-        240,
+        worker::SAMPLES,
         86,
         c,
     );
@@ -245,7 +245,7 @@ fn overview(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value)
             ),
         ],
         0.,
-        240,
+        worker::SAMPLES,
         86,
         c,
     );
@@ -263,7 +263,7 @@ fn overview(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value)
             ),
         ],
         0.,
-        240,
+        worker::SAMPLES,
         86,
         c,
     );
@@ -337,7 +337,7 @@ fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> V
         "cpu-total",
         vec![(values(snapshot, |s| n(&s["cpu"])), [10, 132, 255, 255])],
         1.,
-        240,
+        worker::SAMPLES,
         160,
         c,
     );
@@ -356,7 +356,7 @@ fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> V
             &format!("cpu-{i}"),
             vec![(values(snapshot, |s| n(&s["cores"][i])), [10, 132, 255, 255])],
             1.,
-            240,
+            worker::SAMPLES,
             54,
             c,
         );
@@ -610,7 +610,7 @@ fn disks(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) ->
                 ),
             ],
             0.,
-            240,
+            worker::SAMPLES,
             130,
             c,
         );
@@ -709,7 +709,7 @@ fn cooling(app: &mut App, snapshot: &worker::Snapshot, c: &Value) -> Vec<Value> 
         "cooling",
         vec![(values(snapshot, |s| n(&s["temp"])), [255, 159, 10, 255])],
         100.,
-        240,
+        worker::SAMPLES,
         150,
         c,
     );
@@ -1315,7 +1315,11 @@ fn apply_text_color(node: &mut Value, color: &Value) {
 }
 pub fn tree(app: &mut App, context: &Value) -> Value {
     let snapshot = app.frozen.clone().unwrap_or_else(|| app.snapshot.clone());
-    let last = snapshot.samples.back().cloned().unwrap_or(Value::Null);
+    let last = snapshot
+        .samples
+        .back()
+        .cloned()
+        .unwrap_or_else(|| std::sync::Arc::new(Value::Null));
     let section = app.section.clone();
     let mut children = if section.is_empty() {
         let tabs = Tab::ALL

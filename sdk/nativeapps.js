@@ -28,9 +28,11 @@ function WidgetHost({ manifest }) {
   const [, refresh] = useReducer(n => n + 1, 0);
   const [preferences] = useSettings();
   const [serviceFacts] = useState(() => ({ at: 0, value: {} }));
+  // `same`: Rust had nothing new and kept its tree; the rendered element is reused as is.
+  const [memo] = useState(() => ({ tree: null, element: null, facts: () => ({}) }));
   useEffect(() => {
     const ms = Math.max(250, Number(manifest.refreshMs) || 0);
-    const timer = manifest.refreshMs ? setInterval(refresh, win.focused ? ms : Math.max(1000, ms)) : null;
+    const timer = manifest.refreshMs ? setInterval(refresh, win.focused ? ms : Math.max(2000, ms * 2)) : null;
     return () => { if (timer) clearInterval(timer); };
   }, [manifest.refreshMs, win.focused]);
   useEffect(() => () => nativeAppRequest(owner, { cmd: 'close' }), [owner]);
@@ -53,21 +55,33 @@ function WidgetHost({ manifest }) {
     settings: manifest.settings ? preferences : undefined, services: serviceFacts.value,
     context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius },
       scale: typeScale, decimal: formatNumber(1.5, 1)[1], width: wm.get(win.id)?.w || manifest.size?.[0] || 1000 } });
+  memo.facts = facts;
   useEffect(() => { if (reply.effect) { nativeAppEffects(owner, reply, manifest); refresh(); } }, [reply.effect]);
   const title = caption(reply.title);
   useEffect(() => { if (win.id && title) wm.setTitle(win.id, title); }, [win.id, title]);
-  const dispatch = input => {
-    const result = nativeAppRequest(owner, { ...input, ...facts() });
-    nativeAppEffects(owner, result, manifest); refresh();
-  };
-  const send = ([cmd, key], extra = {}) => dispatch({ cmd, key, ...extra });
-  const icon = node => {
-    const window = node.window && wm.get(node.window);
-    const Icon = window ? windowIcon(window, getApp) : launcherApp(node.app)?.Icon || getApp(node.app)?.Icon;
-    return Icon ? h(Icon, { size: node.size }) : null;
-  };
-  return h(Fragment, null, manifest.keyboard ? h(KeyboardBinding, { send: dispatch }) : null,
-    h(RustWidget, { node: reply.tree, send, icon, raster: node => owner.pixels(node.image) }));
+  // Stable callbacks: an unchanged tree keeps the same element and React skips the subtree.
+  const [handlers] = useState(() => {
+    const dispatch = input => {
+      const result = nativeAppRequest(owner, { ...input, ...memo.facts() });
+      nativeAppEffects(owner, result, manifest); refresh();
+    };
+    return {
+      dispatch,
+      send: ([cmd, key], extra = {}) => dispatch({ cmd, key, ...extra }),
+      icon: node => {
+        const window = node.window && wm.get(node.window);
+        const Icon = window ? windowIcon(window, getApp) : launcherApp(node.app)?.Icon || getApp(node.app)?.Icon;
+        return Icon ? h(Icon, { size: node.size }) : null;
+      },
+      raster: node => owner.pixels(node.image),
+    };
+  });
+  const tree = reply.same ? memo.tree : reply.tree;
+  if (!memo.element || tree !== memo.tree) {
+    memo.tree = tree;
+    memo.element = h(RustWidget, { node: tree, send: handlers.send, icon: handlers.icon, raster: handlers.raster });
+  }
+  return h(Fragment, null, manifest.keyboard ? h(KeyboardBinding, { send: handlers.dispatch }) : null, memo.element);
 }
 export function nativeApp(manifest) {
   for (const section of manifest.privacy || []) registerPrivacySection({ id: section.id, order: section.order,

@@ -326,7 +326,7 @@ fn fixture() -> worker::Snapshot {
     let s = json!({"t":1000,"cpu":0.2,"cores":[0.1,0.3],"mem":{"total":24e9,"used":6e9,"avail":18e9,"cache":17e9,"free":1e9,"swapTotal":8e9,"swapUsed":0},"net":{"rx":10,"tx":20,"rxTotal":100,"txTotal":200},"disk":{"read":0,"write":0,"disks":[]},"load":[1,2,3],"tasks":{"running":2,"total":100},"volt":true});
     worker::Snapshot {
         seq: 1,
-        samples: VecDeque::from([s.clone(), s]),
+        samples: VecDeque::from([std::sync::Arc::new(s.clone()), std::sync::Arc::new(s)]),
         info: json!({"cpuModel":"test","cores":2}),
         sensors: json!({"temps":[],"fans":[],"voltage":{"chips":[],"supplies":[]}}),
         processes: json!({"list":[]}),
@@ -519,6 +519,43 @@ fn subscription_notifications_do_not_accelerate_metric_sampling() {
     }
     assert!(
         service.snapshot().samples.len()
-            <= before + 1 + (notifications.elapsed().as_millis() / 250) as usize
+            <= before + 1 + (notifications.elapsed().as_millis() / worker::SAMPLE_MS as u128) as usize
     );
+}
+#[test]
+fn unchanged_sync_reuses_the_tree_and_any_command_rebuilds_it() {
+    let tree = Tree::new();
+    tree.put("proc/meminfo", "MemTotal: 100 kB\n");
+    let service = worker::Service::new(tree.0.clone(), PathBuf::new());
+    let mut app = App {
+        lease: Some(service.lease()),
+        ..Default::default()
+    };
+    let sync = json!({"cmd":"sync","context":{"theme":{"mode":"dark"},"width":1180}});
+    let start = Instant::now();
+    while service.snapshot().samples.is_empty() && start.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // A sample may land between two calls; retry until one pair sees the same data.
+    let mut reused = false;
+    for _ in 0..20 {
+        let first = app.request(&sync);
+        assert!(first["tree"].is_object());
+        let seq = service.snapshot().seq;
+        let second = app.request(&sync);
+        if service.snapshot().seq == seq {
+            assert_eq!(second["same"], true);
+            assert!(second["tree"].is_null(), "an unchanged tree is not serialized again");
+            assert_eq!(second["generation"], first["generation"]);
+            reused = true;
+            break;
+        }
+    }
+    assert!(reused);
+    // A new context or a command invalidates the cached tree.
+    let mut wider = sync.clone();
+    wider["context"]["width"] = json!(1400);
+    assert!(app.request(&wider)["tree"].is_object());
+    app.request(&json!({"cmd":"tab","key":"memory"}));
+    assert!(app.request(&wider)["tree"].is_object());
 }

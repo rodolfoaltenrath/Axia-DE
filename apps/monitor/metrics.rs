@@ -178,5 +178,5 @@ pub fn info(root: &Path) -> Value {
             None
         }
     });
-    json!({"cpuModel":model,"cores":cores,"geo":true,"home":home,"tick":250})
+    json!({"cpuModel":model,"cores":cores,"geo":true,"home":home,"tick":super::worker::SAMPLE_MS})
 }
