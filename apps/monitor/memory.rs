@@ -27,7 +27,12 @@ pub fn parse(text: &str) -> Value {
         .copied()
         .unwrap_or_else(|| free.saturating_add(raw_cache))
         .min(total);
-    json!({"total":total,"free":free,"avail":avail,"used":total-avail,
+    // Memory the kernel holds and cannot reclaim: part of `used`, shown apart.
+    let kernel = n("SUnreclaim")
+        .saturating_add(n("KernelStack"))
+        .saturating_add(n("PageTables"))
+        .min(total - avail);
+    json!({"total":total,"free":free,"avail":avail,"used":total-avail,"kernel":kernel,
         "cache":raw_cache.min(avail),"swapTotal":n("SwapTotal"),
         "swapUsed":n("SwapTotal").saturating_sub(n("SwapFree")),
         "dirty":n("Dirty"),"writeback":n("Writeback")})

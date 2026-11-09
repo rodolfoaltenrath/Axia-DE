@@ -1,11 +1,11 @@
 //! Complete Monitor widget tree. The shared host binds widgets, pixels and localization only.
-use super::{arr, charts, worker, App, Tab};
+use super::{arr, charts, dashboard, theme, worker, App, Tab};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, sync::OnceLock};
-fn key(k: &str) -> Value {
+pub(super) fn key(k: &str) -> Value {
     json!({"key":k})
 }
-fn text(label: Value) -> Value {
+pub(super) fn text(label: Value) -> Value {
     json!({"kind":"text","label":label,"style":{"fontSize":12,"textAlign":"start"}})
 }
 fn dim(label: Value) -> Value {
@@ -13,7 +13,7 @@ fn dim(label: Value) -> Value {
     t["style"]["opacity"] = json!(0.65);
     t
 }
-fn view(style: Value, children: Vec<Value>) -> Value {
+pub(super) fn view(style: Value, children: Vec<Value>) -> Value {
     json!({"kind":"view","style":style,"children":children})
 }
 fn row(children: Vec<Value>) -> Value {
@@ -31,15 +31,15 @@ fn selected_button(label: Value, cmd: &str, arg: &str, on: bool) -> Value {
     b
 }
 fn card(label: Value, children: Vec<Value>, context: &Value) -> Value {
-    let dark = context["theme"]["mode"] != "light";
+    let p = theme::palette(context);
     let mut content = vec![{
         let mut t = text(label);
-        t["style"]["fontWeight"] = json!(600);
+        t["style"]["fontWeight"] = json!(700);
         t
     }];
     content.extend(children);
     view(
-        json!({"padding":16,"gap":12,"borderRadius":10,"backgroundColor":if dark{"#26272c"}else{"#f4f4f6"},"border":format!("1px solid {}",context["theme"]["separator"].as_str().unwrap_or("#444")),"minWidth":0}),
+        json!({"padding":16,"gap":12,"borderRadius":12,"backgroundColor":p.card,"shadowColor":p.shadow,"shadowBlur":if p.dark {18} else {14},"shadowOffsetY":2,"borderWidth":if p.dark {1} else {0},"borderColor":p.line,"minWidth":0}),
         content,
     )
 }
@@ -49,10 +49,10 @@ fn big(value: String, label: Value) -> Value {
     t["style"]["fontWeight"] = json!(600);
     view(json!({"gap":4}), vec![t, dim(label)])
 }
-fn n(v: &Value) -> f64 {
+pub(super) fn n(v: &Value) -> f64 {
     v.as_f64().filter(|n| n.is_finite()).unwrap_or(0.)
 }
-fn bytes(v: f64) -> String {
+pub(super) fn bytes(v: f64) -> String {
     let mut v = v.max(0.);
     let units = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut i = 0;
@@ -62,10 +62,10 @@ fn bytes(v: f64) -> String {
     }
     format!("{:.1} {}", v, units[i])
 }
-fn rate(v: f64) -> String {
+pub(super) fn rate(v: f64) -> String {
     format!("{}/s", bytes(v))
 }
-fn pct(v: f64) -> String {
+pub(super) fn pct(v: f64) -> String {
     format!("{:.0}%", v * 100.)
 }
 fn number(v: f64) -> String {
@@ -92,7 +92,39 @@ fn chart(
     height: usize,
     context: &Value,
 ) -> Value {
-    let width = (context["width"].as_f64().unwrap_or(1140.) - 72.).clamp(200., 1840.) as usize;
+    let width = content_width(app, context) - 32.;
+    chart_at(app, id, series, top, capacity, height, width)
+}
+/// Window width minus the sidebar and the content padding.
+fn content_width(app: &App, context: &Value) -> f64 {
+    let side = if app.embedded() {
+        0.
+    } else {
+        dashboard::SIDEBAR
+    };
+    context["width"].as_f64().unwrap_or(1180.) - side - 48.
+}
+/// The chart's top value in its own unit, from the chart id.
+fn scale(id: &str, top: f64) -> String {
+    match id {
+        "memory" => bytes(top),
+        "disk-io" | "network-history" => rate(top),
+        "disk-temp" | "cooling" => format!("{top:.0} °C"),
+        "voltage" => format!("{top:.2} V"),
+        _ if id.starts_with("cpu") => pct(top),
+        _ => number(top),
+    }
+}
+fn chart_at(
+    app: &mut App,
+    id: &str,
+    series: Vec<(Vec<f64>, [u8; 4])>,
+    top: f64,
+    capacity: usize,
+    height: usize,
+    width: f64,
+) -> Value {
+    let width = width.clamp(120., 1840.) as usize;
     let top = if top > 0. {
         top
     } else {
@@ -109,7 +141,7 @@ fn chart(
     view(
         json!({"height":height+22,"gap":4}),
         vec![
-            dim(json!(number(top))),
+            dim(json!(scale(id, top))),
             json!({"kind":"raster","image":id,"generation":app.generation,"style":{"width":"100%","height":height}}),
         ],
     )
@@ -131,14 +163,14 @@ fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -
     let used = n(&m["used"]);
     let cache = n(&m["cache"]);
     let bar = view(
-        json!({"height":22,"borderRadius":6,"overflow":"hidden","backgroundColor":"#555","flexDirection":"row"}),
+        json!({"height":22,"borderRadius":6,"overflow":"hidden","backgroundColor":theme::palette(c).track,"flexDirection":"row"}),
         vec![
             view(
-                json!({"width":format!("{}%",used/total*100.),"height":22,"backgroundColor":"#8b5cf6"}),
+                json!({"width":format!("{}%",used/total*100.),"height":22,"backgroundColor":theme::APPS}),
                 vec![],
             ),
             view(
-                json!({"width":format!("{}%",cache/total*100.),"height":22,"backgroundColor":"#c4b5fd"}),
+                json!({"width":format!("{}%",cache/total*100.),"height":22,"backgroundColor":theme::CACHE}),
                 vec![],
             ),
         ],
@@ -162,11 +194,11 @@ fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -
         vec![
             (
                 values(snapshot, |s| n(&s["mem"]["used"]) + n(&s["mem"]["cache"])),
-                [196, 181, 253, 255],
+                theme::rgba(theme::CACHE),
             ),
             (
                 values(snapshot, |s| n(&s["mem"]["used"])),
-                [139, 92, 246, 255],
+                theme::rgba(theme::APPS),
             ),
         ],
         total,
@@ -212,125 +244,6 @@ fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -
         ]),
     ]
 }
-fn overview(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> Vec<Value> {
-    let cpu = chart(
-        app,
-        "overview-cpu",
-        vec![(values(snapshot, |s| n(&s["cpu"])), [10, 132, 255, 255])],
-        1.,
-        worker::SAMPLES,
-        86,
-        c,
-    );
-    let mem = chart(
-        app,
-        "overview-memory",
-        vec![(
-            values(snapshot, |s| n(&s["mem"]["used"])),
-            [139, 92, 246, 255],
-        )],
-        n(&last["mem"]["total"]),
-        worker::SAMPLES,
-        86,
-        c,
-    );
-    let net = chart(
-        app,
-        "overview-network",
-        vec![
-            (values(snapshot, |s| n(&s["net"]["rx"])), [34, 197, 94, 255]),
-            (
-                values(snapshot, |s| n(&s["net"]["tx"])),
-                [249, 115, 22, 255],
-            ),
-        ],
-        0.,
-        worker::SAMPLES,
-        86,
-        c,
-    );
-    let disk = chart(
-        app,
-        "overview-disk",
-        vec![
-            (
-                values(snapshot, |s| n(&s["disk"]["read"])),
-                [47, 124, 246, 255],
-            ),
-            (
-                values(snapshot, |s| n(&s["disk"]["write"])),
-                [236, 72, 153, 255],
-            ),
-        ],
-        0.,
-        worker::SAMPLES,
-        86,
-        c,
-    );
-    vec![
-        card(
-            key("monitor.cpu"),
-            vec![
-                big(pct(n(&last["cpu"])), json!(snapshot.info["cpuModel"])),
-                cpu,
-            ],
-            c,
-        ),
-        card(
-            key("monitor.memory"),
-            vec![
-                big(bytes(n(&last["mem"]["used"])), key("monitor.memUsed")),
-                mem,
-                row(vec![
-                    stat("monitor.memAvailable", bytes(n(&last["mem"]["avail"]))),
-                    stat("monitor.memCache", bytes(n(&last["mem"]["cache"]))),
-                ]),
-            ],
-            c,
-        ),
-        card(
-            key("monitor.network"),
-            vec![
-                row(vec![
-                    stat("monitor.received", rate(n(&last["net"]["rx"]))),
-                    stat("monitor.sent", rate(n(&last["net"]["tx"]))),
-                ]),
-                net,
-            ],
-            c,
-        ),
-        card(
-            key("monitor.disks"),
-            vec![
-                row(vec![
-                    stat("monitor.read", rate(n(&last["disk"]["read"]))),
-                    stat("monitor.write", rate(n(&last["disk"]["write"]))),
-                ]),
-                disk,
-            ],
-            c,
-        ),
-        row(vec![
-            stat(
-                "monitor.cpuTemp",
-                last["temp"]
-                    .as_f64()
-                    .map(|v| format!("{v:.0} °C"))
-                    .unwrap_or_else(|| "—".into()),
-            ),
-            stat(
-                "monitor.fan",
-                last["fan"]
-                    .as_f64()
-                    .map(|v| format!("{v:.0} RPM"))
-                    .unwrap_or_else(|| "—".into()),
-            ),
-            stat("monitor.load1m", number(n(&last["load"][0]))),
-            stat("monitor.load5m", number(n(&last["load"][1]))),
-            stat("monitor.load15m", number(n(&last["load"][2]))),
-        ]),
-    ]
-}
 fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> Vec<Value> {
     let graph = chart(
         app,
@@ -350,18 +263,20 @@ fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> V
         c,
     )];
     let mut rows = Vec::new();
+    // Four columns with 16-point gaps.
+    let cell = (content_width(app, c) - 48.) / 4.;
     for (i, value) in arr(&last["cores"]).iter().enumerate().take(256) {
-        let graph = chart(
+        let graph = chart_at(
             app,
             &format!("cpu-{i}"),
             vec![(values(snapshot, |s| n(&s["cores"][i])), [10, 132, 255, 255])],
             1.,
             worker::SAMPLES,
             54,
-            c,
+            cell,
         );
         rows.push(view(
-            json!({"width":"23%","gap":6}),
+            json!({"gap":6}),
             vec![
                 text(json!({"key":"monitor.core","params":{"n":i}})),
                 text(json!(pct(n(value)))),
@@ -369,7 +284,7 @@ fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> V
             ],
         ));
     }
-    out.push(row(rows));
+    out.push(dashboard::grid(rows, 4, 16.));
     out.push(row(vec![
         stat("monitor.load1m", number(n(&last["load"][0]))),
         stat(
@@ -1321,21 +1236,34 @@ pub fn tree(app: &mut App, context: &Value) -> Value {
         .cloned()
         .unwrap_or_else(|| std::sync::Arc::new(Value::Null));
     let section = app.section.clone();
-    let mut children = if section.is_empty() {
-        let tabs = Tab::ALL
+    let p = theme::palette(context);
+    let mut children = Vec::new();
+    if !section.is_empty() {
+        // Privacy and firewall panels: also embedded in Settings without the sidebar.
+        let mut entries = vec![
+            ("monitor.privacy.title", "privacy"),
+            ("monitor.net.rule", "firewall"),
+            ("firewall.lists.title", "blocklists"),
+        ];
+        if !app.embedded() {
+            entries.insert(0, ("monitor.title", ""));
+        }
+        let mut tabs = row(entries
             .into_iter()
-            .filter(|t| *t != Tab::Voltage || last["volt"] == true)
-            .map(|tab| selected_button(key(tab.label()), "tab", tab.id(), tab == app.tab))
-            .collect();
-        vec![row(tabs)]
-    } else {
-        vec![row(vec![
-            button(key("monitor.title"), "section", ""),
-            button(key("monitor.privacy.title"), "section", "privacy"),
-            button(key("monitor.net.rule"), "section", "firewall"),
-            button(key("firewall.lists.title"), "section", "blocklists"),
-        ])]
-    };
+            .map(|(k, id)| {
+                selected_button(
+                    key(k),
+                    "section",
+                    id,
+                    section == id || (section == "rules" && id == "firewall"),
+                )
+            })
+            .collect());
+        tabs["style"]["paddingLeft"] = json!(24);
+        tabs["style"]["paddingRight"] = json!(24);
+        tabs["style"]["paddingTop"] = json!(14);
+        children.push(tabs);
+    }
     let content = match section.as_str() {
         "privacy" => privacy(app, context),
         "firewall" => firewall(app, context),
@@ -1346,7 +1274,7 @@ pub fn tree(app: &mut App, context: &Value) -> Value {
                 vec![dim(key("monitor.waiting"))]
             } else {
                 match app.tab {
-                    Tab::Overview => overview(app, &snapshot, &last, context),
+                    Tab::Overview => dashboard::view_cards(app, &snapshot, &last, context),
                     Tab::Cpu => cpu(app, &snapshot, &last, context),
                     Tab::Memory => memory(app, &snapshot, &last, context),
                     Tab::Network => network(app, &snapshot, &last, context),
@@ -1358,9 +1286,18 @@ pub fn tree(app: &mut App, context: &Value) -> Value {
             }
         }
     };
-    children.push(json!({"kind":"scroll","style":{"flex":1},"children":[view(json!({"padding":20,"gap":16}),content)]}));
-    children.push(row(vec![dim(key("monitor.footer")),dim(json!({"key":"monitor.loadFooter","params":{"load":arr(&last["load"]).iter().map(|n|number(n.as_f64().unwrap_or(0.))).collect::<Vec<_>>().join(" · ")}}))]));
-    let mut tree = view(json!({"flex":1,"gap":8}), children);
-    apply_text_color(&mut tree, &context["theme"]["text"]);
+    children.push(json!({"kind":"scroll","style":{"flex":1},"children":[view(json!({"padding":24,"gap":16}),content)]}));
+    let mut tree = if app.embedded() {
+        view(json!({"flex":1,"gap":8}), children)
+    } else {
+        let mut main = vec![dashboard::header(&snapshot, &last, context)];
+        main.extend(children);
+        let sidebar = dashboard::sidebar(app, context, last["volt"] == true);
+        view(
+            json!({"flex":1,"flexDirection":"row","backgroundColor":p.bg}),
+            vec![sidebar, view(json!({"flex":1,"minWidth":0}), main)],
+        )
+    };
+    apply_text_color(&mut tree, &json!(p.text));
     tree
 }

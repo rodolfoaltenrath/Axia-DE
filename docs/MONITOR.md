@@ -71,11 +71,46 @@ A large cache and a small `MemFree` value alone do not establish a memory leak.
 The regression fixture covers the reported case: approximately 23 GiB total,
 17 GiB available, a large file cache and no swap usage.
 
+## Layout and dashboard
+
+Inside the window manager's frame, the Monitor shows a sidebar with the tabs and
+Settings (the privacy and firewall panels), and a header with the Axia logo,
+host name, uptime, distribution and hardware model. The palette in `theme.rs`
+follows the system theme (`context.theme.mode`): light and dark use the same
+data colors, so a series keeps its meaning. Sidebar icons and the summary rings
+are antialiased rasters drawn in Rust (`paint.rs`); icons are cached by colour
+and survive rebuilds, so the host copies their pixels once.
+
+The dashboard (`dashboard.rs`) has these cards, in two columns from about 720
+points of content width and in one column below that:
+
+- **Summary:** rings for memory (kernel, apps, cache), CPU and the system
+  filesystem; the memory split, CPU model with physical and logical cores, and
+  the system filesystem's used, total and available space.
+- **Memory:** a stacked bar and legend: kernel (unreclaimable slab, kernel
+  stacks and page tables, part of "used"), apps, cache, free and other, plus
+  the PSI pressure history.
+- **Disks:** mounted block-device filesystems, one per device, without snaps,
+  `/boot` or images.
+- **Processor:** per-core bars (the 64 busiest above that) and the total history.
+- **Network:** the default-route interface (Wi-Fi or Ethernet), its address and
+  MAC, the gateway and its MAC from the neighbour table, and traffic. No public
+  address is looked up.
+- **Battery:** only with a system battery: level, state, health
+  (`full / design`), cycles and capacity in mAh or Wh as the kernel reports it.
+  Peripheral batteries (`scope=Device`) are ignored.
+
+`system.rs` collects these facts on the worker every five seconds while a window
+is open: `/proc/mounts` with `statvfs`, `/proc/net/route` and `/proc/net/arp`,
+`getifaddrs`, `/sys/class/net`, `/sys/class/power_supply`, `os-release` and the
+DMI or device-tree model. "Show applications…" opens Processes sorted by memory
+or CPU.
+
 ## Tabs
 
 | Tab | Rust-owned behavior |
 | --- | --- |
-| Overview | CPU, memory, network, disk rates, load and sensor summaries |
+| Dashboard | Summary, memory, disks, processor, network and battery cards (above) |
 | CPU | Aggregate and per-core usage, bounded history; guest time is not counted twice |
 | Memory | Available, used, cache, free, swap, dirty/writeback and pressure |
 | Network | Socket ownership, protocol/scope/app filters, TCP lifetime bytes, local country map, traffic history and links to app rules |

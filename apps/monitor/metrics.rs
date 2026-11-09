@@ -162,6 +162,25 @@ pub fn info(root: &Path) -> Value {
         })
         .unwrap_or("");
     let cores = cpu.lines().filter(|l| l.starts_with("processor\t")).count();
+    // Physical cores: distinct (package, core) pairs; ARM boards may list neither.
+    let mut package = "";
+    let mut physical = std::collections::BTreeSet::new();
+    for line in cpu.lines() {
+        if let Some((k, v)) = line.split_once(':') {
+            match k.trim() {
+                "physical id" => package = v.trim(),
+                "core id" => {
+                    physical.insert((package.to_owned(), v.trim().to_owned()));
+                }
+                _ => {}
+            }
+        }
+    }
+    let physical = if physical.is_empty() {
+        cores
+    } else {
+        physical.len()
+    };
     let zone = std::fs::read_link(root.join("etc/localtime"))
         .unwrap_or_default()
         .to_string_lossy()
@@ -178,5 +197,5 @@ pub fn info(root: &Path) -> Value {
             None
         }
     });
-    json!({"cpuModel":model,"cores":cores,"geo":true,"home":home,"tick":super::worker::SAMPLE_MS})
+    json!({"cpuModel":model,"cores":cores,"physical":physical,"geo":true,"home":home,"tick":super::worker::SAMPLE_MS})
 }
