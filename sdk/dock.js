@@ -23,7 +23,6 @@ import { addListener } from '@lordos/runtime';
 import { settings } from './settings.js';
 import { createStore, useStore } from './store.js';
 import { useWindows, wm, windowTitle, appIdOf, getApp, windows, setDisplayAssignment, isLiveSystem, activeDesktop, onActiveDesktop } from './windows.js';
-import { pickWindow } from './desktopmodel.js';
 import { desktopSuffix } from './desktops.js';
 import { screen, onScreenChange } from '@lordos/runtime';
 import { useLauncherApps, launchApp, linuxAppFor, shortAppName, windowAppName, LetterIcon, windowIcon } from './apps.js';
@@ -235,7 +234,7 @@ export function dockActivate(e) {
   const top = wm.focused();
   const here = e.windows.filter(onActiveDesktop);
   const idx = here.findIndex((w) => w.id === top);
-  const next = idx >= 0 && here.length > 1 ? here[(idx + here.length - 1) % here.length] : pickWindow(e.windows, activeDesktop.get());
+  const next = idx >= 0 && here.length > 1 ? here[(idx + here.length - 1) % here.length] : wm.get(wm.pick(e.windows.map((w) => w.id)));
   wm.focus(next.id);
 }
 

@@ -5,5 +5,6 @@
 #include "quickjs.h"
 
 void js_winmodel_register(JSContext *c, JSValue lord);
+void js_windows_register(JSContext *c, JSValue lord);    /* one window list per context */
 
 #endif

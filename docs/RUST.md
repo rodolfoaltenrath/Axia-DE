@@ -537,3 +537,53 @@ Os testes `place_model_test.mjs` e `display_layout_test.mjs` foram portados para
 cargo test --manifest-path rust/Cargo.toml --locked --offline winmodel::
 make -C server build/winmodel-ffi-test && server/build/winmodel-ffi-test
 ```
+
+## Lista de janelas da sessão
+
+`winmodel/session.rs` passa a ser o dono das janelas: a lista em ordem de
+empilhamento, os desktops, o desktop visível e o Overview ligado ou não. Todas as
+regras que os alteram também ficam ali:
+
+- abrir (posição pedida, lembrada ou em cascata), focar, subir, mandar para trás
+  e alternar;
+- minimizar, maximizar, encaixar, desencaixar, Super+setas e organizar;
+- centralizar, mover entre telas e reposicionar quando uma tela some;
+- tela cheia, picture-in-picture e o levantamento pelo teclado da tela;
+- o fim de um arraste em C;
+- criar e fechar desktops.
+
+As visões que os temas desenham são calculadas ali uma vez por mudança: visíveis,
+montadas, a janela da frente (que recebe o teclado), escondidas, estacionadas,
+placeholders do Overview e as janelas de cada desktop. Por isso os predicados de
+`sdk/desktopmodel.js` saíram, e o arquivo ficou só com as constantes e o
+hit-test.
+
+`sdk/windows.js` virou o espelho para o React. `windows`, `activeDesktop`,
+`desktopList` e `overviewShowing` mantêm a mesma API de leitura, e `windowViews`
+traz as visões. Toda mudança passa por `wm.*` (os escritores diretos do store em
+`trackpad.js`, `components.jsx` e `appswitcher.jsx` viraram `wm.cycle`,
+`wm.setPip`, `wm.exitFullscreen` e `wm.toBack`). Cada janela tem uma revisão, e o
+espelho só troca o objeto das que mudaram, então o React mantém os demais.
+
+O JS envia junto de cada chamada os fatos que só ele conhece: as telas com as
+áreas de trabalho do tema, os tamanhos dos apps abertos e se o tema encaixa
+janelas. O registro de apps, os guards de fechamento e os menus continuam no JS,
+porque são funções. A ponte é `lord.windowList.call(op, json)`
+(`js_winmodel.c`), com um estado por contexto: a sessão e cada app isolado têm a
+sua lista.
+
+Testes: `winmodel/tests.rs` traz os casos do antigo `desktop_model_test.mjs`
+(incluindo a regressão das 720 ordens para o teclado) e as operações. O
+`server/tests/windows_bridge_test.mjs` empacota o `sdk/windows.js` real com o
+esbuild e o roda no QuickJS (`build/windows-bridge-host`), com a ponte C real e o
+Rust real. Ele confere stores, objetos mantidos, visões, desktops, encaixe e o
+fim de um arraste. É o único teste que exercita as três camadas juntas sem a
+sessão.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline winmodel::
+make -C server build/windows-bridge-host && (cd server && node tests/windows_bridge_test.mjs)
+```
+
+Ainda precisa de validação na sessão física: temas, Dock, Overview, alternador,
+gestos e apps Linux sobre a lista nova.

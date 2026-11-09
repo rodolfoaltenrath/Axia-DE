@@ -96,6 +96,9 @@ impl Zone {
         "right-two-thirds",
     ];
 
+    pub fn name(self) -> &'static str {
+        Self::NAMES[self as usize]
+    }
     pub fn index(self) -> i32 {
         self as i32
     }

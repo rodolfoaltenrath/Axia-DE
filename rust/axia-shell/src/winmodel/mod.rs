@@ -2,12 +2,14 @@
 //! app's window reopens, the list of desktops, the Overview's and Snap Assist's layouts, and the
 //! arrangement math of Settings → Displays. The session's window list stays in sdk/windows.js; these
 //! rules take its facts as JSON (`lord.winmodel(op, args)`, server/src/ui/js_winmodel.c) and give
-//! JSON back. The per-window visibility predicates (sdk/desktopmodel.js) stay with the list.
+//! JSON back. The session's windows themselves (the list, the desktops and what shows) are a state
+//! of their own (session.rs, `lord.windowList`).
 mod desktops;
 mod displays;
 mod ffi;
 mod layout;
 mod place;
+mod session;
 #[cfg(test)]
 mod tests;
 

@@ -428,6 +428,7 @@ static void session_context(void) {
     js_switcher_register(ctx, lord);   /* session-owned Rust app selector */
     js_snap_register(ctx, lord);       /* lord.snap: window snapping's geometry in Rust */
     js_winmodel_register(ctx, lord);   /* lord.winmodel: the window manager's pure rules in Rust */
+    js_windows_register(ctx, lord);    /* lord.windowList: the session's windows in Rust */
     js_input_register(ctx, lord);      /* lord.input: touchpads and touchscreens (tp/) */
     js_fw_register(ctx, lord);         /* lord.fw: per-app network permissions (axia-netperm, docs/FIREWALL.md) */
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */
@@ -566,6 +567,7 @@ static void app_context(const char *app_id) {
     js_vault_register_app(ctx, lord);              /* Passwords only: its own channel to axia-vault */
     js_sys_register_app(ctx, lord);                /* lord.text (language, direction) and lord.image */
     js_winmodel_register(ctx, lord);               /* lord.winmodel: pure rules, no state or I/O */
+    js_windows_register(ctx, lord);                /* lord.windowList: this app's own windows (app-host.js) */
     js_wasm_register(ctx, g);                      /* WebAssembly for the app's loadWasm */
     JS_SetPropertyStr(ctx, g, "lord", lord);
     JS_FreeValue(ctx, g);
