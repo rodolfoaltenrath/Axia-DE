@@ -56,7 +56,7 @@ void out_logical_box(const OutView *v, Rect r, float *x0, float *y0, float *x1, 
  * stay where they are. Returns the position in *x, *y. */
 void out_snap(const ORect *r, int n, int moving, int want_x, int want_y, int snap, int *x, int *y);
 /* 1 if display `moving` at (x, y) overlaps no other and shares an edge (at least one pixel, not a
- * corner) with one of them: a position Settings computed (sdk/displaylayout.js) that is kept as is. */
+ * corner) with one of them: a position Settings computed (rust/axia-shell/src/winmodel/displays.rs) that is kept as is. */
 int  out_fits(const ORect *r, int n, int moving, int x, int y);
 /* 1 if no two displays overlap and every display is joined to the others through shared edges. */
 int  out_valid(const ORect *r, int n);

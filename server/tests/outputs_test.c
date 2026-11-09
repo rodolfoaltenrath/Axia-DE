@@ -130,7 +130,7 @@ static void arrange_tests(void) {
     ORect g[2] = { { 0, 0, 1024, 768 }, { 1280, 0, 1920, 1080 } };
     out_fix(g, 2);
     CHECK(g[1].x == 1024 && g[1].y == 0);
-    /* fits: Settings' drops (sdk/displaylayout.js) touch an edge and overlap nothing */
+    /* fits: Settings' drops (rust/axia-shell/src/winmodel/displays.rs) touch an edge and overlap nothing */
     ORect q[2] = { { 0, 0, 1280, 800 }, { 0, 0, 1920, 1080 } };
     CHECK(out_fits(q, 2, 1, 1280, 0));
     CHECK(out_fits(q, 2, 1, 1280, 799));            /* one shared pixel */

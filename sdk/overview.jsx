@@ -63,7 +63,7 @@ function assistState(a) {
   if (!places.size) return null;
   return { app: null, list: list.filter((w) => places.has(w.id)), strip: null, area, places, assist: { ...a, target } };
 }
-export function openSnapAssist(a) {
+function openSnapAssist(a) {
   if (blocked() || overview.get()) return;
   const o = assistState(a);
   if (!o) return;
