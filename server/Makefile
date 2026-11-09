@@ -124,8 +124,14 @@ HDR += $(wildcard src/tp/*.h)
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
 test-platform: build/apps-actions-test build/defaults-test build/settings-hw-test
+test test-platform: build/wl-fullscreen-test
+
+build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
+	./$@ || { rm -f $@; exit 1; }
 
 test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+	./build/wl-fullscreen-test
 	./build/ui-damage-test
 	./build/glass-damage-test
 	./build/brframe-test
