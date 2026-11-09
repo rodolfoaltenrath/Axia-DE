@@ -9,8 +9,7 @@ import { useEffect } from 'react';
 import { addListener } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
-import { windows, activeDesktop } from './windows.js';
-import { visibleOn } from './desktopmodel.js';
+import { wm } from './windows.js';
 
 export const TRACKPAD_DEFAULTS = {
   speed: 0.5,               // pointer speed (0..1)
@@ -63,13 +62,7 @@ export function registerGestureActions(map) {
 
 // Switch windows: left brings the rearmost one; right sends the front one behind all the others.
 export function cycleWindows(dir) {
-  windows.set((ws) => {
-    const vis = visibleOn(ws, activeDesktop.get());
-    if (vis.length < 2) return ws;
-    if (dir === 'left') { const back = vis[0]; return [...ws.filter((w) => w !== back), back]; }
-    const front = vis[vis.length - 1];
-    return [front, ...ws.filter((w) => w !== front)];
-  });
+  wm.cycle(dir === 'left' ? 'left' : 'right');
 }
 const DEFAULTS = { left: () => cycleWindows('left'), right: () => cycleWindows('right') };
 

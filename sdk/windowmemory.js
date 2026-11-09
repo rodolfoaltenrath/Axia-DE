@@ -5,7 +5,7 @@ import { screen, displayFor, mainDisplay } from '@lordos/runtime';
 import { settings } from './settings.js';
 import { windows, workAreaOf, getApp, setWindowMemory, assignedDisplayOf, isLiveSystem } from './windows.js';
 import { dockIdOfWindow } from './dock.js';
-import { placeOf, putPlace, restoreFrame } from './placemodel.js';
+import { placeOf, putPlace, restoreFrame } from './winmodel.js';
 
 const SAVE_MS = 800;
 let timer = 0;

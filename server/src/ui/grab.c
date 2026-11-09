@@ -15,9 +15,19 @@ static struct {
     float x, y, w, h;               /* now */
     float ox, oy;                   /* parent's origin on screen */
     GrabLimits lim;
+    AxiaSnapDrag *drag;             /* moving with snapping on: the zone under the pointer (Rust) */
+    /* resizing a snapped window with others along the dragged edge: member 0 is this window */
+    AxiaSnapResize *link;
+    int nmem;
+    struct { int node; float inset, ox, oy; } mem[GRAB_LINKS + 1];
+    AxiaSnapRect start[GRAB_LINKS + 1], out[GRAB_LINKS + 1];   /* the members' frames then and now */
 } g;
 static float ptr_x, ptr_y;
 static int ptr_buttons;
+static int shift_held;
+/* the zone last announced, kept past the drag so its end is announced too */
+static int zone_now = -1, zone_pending;
+static AxiaSnapRect zone_rect;
 
 void grab_note_pointer(float x, float y, int buttons) {
     ptr_x = x;
@@ -47,6 +57,102 @@ static void script_off(void) {
     lbi_stop();
 }
 
+/* ---- snapping (rust/axia-shell/src/snap, docs/WINDOWS.md "Snapping") ---- */
+
+static void zone_check(float px, float py) {
+    if (!g.drag || !axia_snap_drag_update(g.drag, px, py, shift_held)) return;
+    zone_now = axia_snap_drag_zone(g.drag, &zone_rect);
+    zone_pending = 1;
+}
+
+/* the drag's Rust state goes with it; a zone still shown is announced as gone */
+static void snap_release(void) {
+    axia_snap_drag_free(g.drag);
+    g.drag = NULL;
+    axia_snap_resize_free(g.link);
+    g.link = NULL;
+    g.nmem = 0;
+    if (zone_now >= 0) {
+        zone_now = -1;
+        zone_pending = 1;
+    }
+}
+
+/* A node's frame in screen pixels (the node is the frame enlarged by `inset` per side). */
+static AxiaSnapMember member_of(Node *o, float inset, float min_w, float min_h, float max_w, float max_h, int slot) {
+    float left = dim_or(o->s.pos[EDGE_L], o->x), top = dim_or(o->s.pos[EDGE_T], o->y);
+    float w = dim_or(o->s.width, o->w), h = dim_or(o->s.height, o->h);
+    g.mem[slot].inset = inset;
+    g.mem[slot].ox = o->ax - o->x;
+    g.mem[slot].oy = o->ay - o->y;
+    return (AxiaSnapMember){
+        .frame = { g.mem[slot].ox + left + inset, g.mem[slot].oy + top + inset, w - 2 * inset, h - 2 * inset },
+        .min_w = min_w, .min_h = min_h, .max_w = max_w, .max_h = max_h,
+    };
+}
+
+/* Resizing: the windows that share the dragged edge follow it. Without any, the plain resize. */
+static void link_setup(Node *n, const GrabLimits *lim) {
+    AxiaSnapMember m[GRAB_LINKS + 1];
+    int k = 0;
+    g.mem[0].node = g.node;
+    m[k++] = member_of(n, lim->inset, lim->min_w, lim->min_h, lim->max_w, lim->max_h, 0);
+    for (int i = 0; i < lim->nlinks && i < GRAB_LINKS; i++) {
+        int id = lim->links[i].node;
+        Node *o = id == g.node ? NULL : node_get(id);
+        if (!o || !o->s.absolute) continue;
+        g.mem[k].node = id;
+        m[k] = member_of(o, lim->links[i].inset, lim->links[i].min_w, lim->links[i].min_h, lim->links[i].max_w, lim->links[i].max_h, k);
+        k++;
+    }
+    if (k < 2) return;
+    g.link = axia_snap_resize_new(g.edges, m, (size_t)k, lim->area);
+    if (!g.link) return;
+    g.nmem = k;
+    for (int i = 0; i < k; i++) g.start[i] = g.out[i] = m[i].frame;
+}
+
+static void set_node_frame(int i, AxiaSnapRect f) {
+    Node *o = node_get(g.mem[i].node);
+    if (!o) return;
+    float in = g.mem[i].inset;
+    float x = roundf((float)f.x - in - g.mem[i].ox), y = roundf((float)f.y - in - g.mem[i].oy);
+    float w = roundf((float)f.w + 2 * in), h = roundf((float)f.h + 2 * in);
+    float cx = dim_or(o->s.pos[EDGE_L], o->x), cy = dim_or(o->s.pos[EDGE_T], o->y);
+    float cw = dim_or(o->s.width, o->w), ch = dim_or(o->s.height, o->h);
+    if (x == cx && y == cy && w == cw && h == ch) return;
+    o->s.pos[EDGE_L] = (Dim){ x, UNIT_PX };
+    o->s.pos[EDGE_T] = (Dim){ y, UNIT_PX };
+    node_moved(o);
+    if (w != cw || h != ch) {
+        o->s.width = (Dim){ w, UNIT_PX };
+        o->s.height = (Dim){ h, UNIT_PX };
+        node_invalidate(o);
+    }
+    if (i == 0) { g.x = x; g.y = y; g.w = w; g.h = h; }
+    ui.dirty = 1;
+}
+
+static void link_motion(float dx, float dy) {
+    size_t k = axia_snap_resize_apply(g.link, dx, dy, g.out, (size_t)g.nmem);
+    for (size_t i = 0; i < k; i++) set_node_frame((int)i, g.out[i]);
+}
+
+void grab_note_shift(int held) {
+    held = held != 0;
+    if (held == shift_held) return;
+    shift_held = held;
+    if (g.active) zone_check(ptr_x, ptr_y);
+}
+
+int grab_zone_take(int *zone, AxiaSnapRect *rect) {
+    if (!zone_pending) return 0;
+    zone_pending = 0;
+    *zone = zone_now;
+    *rect = zone_rect;
+    return 1;
+}
+
 static int setup(int node, int edges, const GrabLimits *lim) {
     Node *n = node_get(node);
     if (!n || !n->s.absolute) return -1;
@@ -64,7 +170,13 @@ static int setup(int node, int edges, const GrabLimits *lim) {
     g.h = g.h0 = dim_or(n->s.height, n->h);
     g.ox = n->ax - n->x;
     g.oy = n->ay - n->y;
-    paint_layer_begin(node, g.edges != 0);
+    if (!g.edges && lim->nsnap > 0) {
+        g.drag = axia_snap_drag_new(lim->snap, (size_t)(lim->nsnap < GRAB_SNAP_DISPLAYS ? lim->nsnap : GRAB_SNAP_DISPLAYS));
+        zone_check(ptr_x, ptr_y);
+    }
+    if (g.edges && lim->nlinks > 0) link_setup(n, lim);
+    /* the layer keeps what is below one window: windows resizing together repaint as usual */
+    if (!g.link) paint_layer_begin(node, g.edges != 0);
     return 0;
 }
 
@@ -110,6 +222,8 @@ void grab_motion(float px, float py) {
     Node *n = node_get(g.node);
     if (!n) { grab_cancel(); return; }
     float dx = roundf(px - g.px0), dy = roundf(py - g.py0), in = g.lim.inset;
+    if (g.link) { link_motion(dx, dy); return; }
+    if (!g.edges) zone_check(px, py);       /* before the frame's clamping: the pointer decides */
     float x = g.x0, y = g.y0, w = g.w0, h = g.h0;
     /* frame bounds in node coordinates (the parent may not be at 0,0) */
     float top = g.lim.min_top - g.oy - in, sw = ui.width - g.ox, sh = ui.height - g.oy;
@@ -148,16 +262,32 @@ void grab_motion(float px, float py) {
     ui.dirty = 1;                   /* move: only the position layout, without repainting the content */
 }
 
-int grab_finish(int *node, int *edges, float *dx, float *dy, float *dw, float *dh) {
+int grab_finish(GrabEnd *e) {
     if (!g.active || ptr_buttons) return 0;
     if (sc.on) { grab_cancel(); return 0; }         /* the person moved the pointer: the scene stops where it is */
-    *node = g.node;
-    *edges = g.edges;
-    *dx = g.x - g.x0;
-    *dy = g.y - g.y0;
-    *dw = g.w - g.w0;
-    *dh = g.h - g.h0;
+    memset(e, 0, sizeof *e);
+    e->node = g.node;
+    e->edges = g.edges;
+    e->dx = g.x - g.x0;
+    e->dy = g.y - g.y0;
+    e->dw = g.w - g.w0;
+    e->dh = g.h - g.h0;
+    e->zone = -1;
+    if (g.drag) {                                   /* where the button was released */
+        zone_check(ptr_x, ptr_y);
+        e->zone = axia_snap_drag_zone(g.drag, NULL);
+    }
+    for (int i = 1; g.link && i < g.nmem && e->nlinks < GRAB_LINKS; i++) {
+        if (!axia_snap_resize_moves(g.link, (size_t)i)) continue;
+        e->links[e->nlinks].node = g.mem[i].node;
+        e->links[e->nlinks].dx = (float)(g.out[i].x - g.start[i].x);
+        e->links[e->nlinks].dy = (float)(g.out[i].y - g.start[i].y);
+        e->links[e->nlinks].dw = (float)(g.out[i].w - g.start[i].w);
+        e->links[e->nlinks].dh = (float)(g.out[i].h - g.start[i].h);
+        e->nlinks++;
+    }
     g.active = 0;
+    snap_release();
     paint_layer_end();
     return 1;
 }
@@ -166,5 +296,6 @@ void grab_cancel(void) {
     script_off();
     if (!g.active) return;
     g.active = 0;
+    snap_release();
     paint_layer_end();
 }

@@ -10,7 +10,7 @@ RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../apps/*/*.rs ../rust/native_apps.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
-RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/clipboard/*.rs)
+RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/clipboard/*.rs ../rust/axia-shell/src/snap/*.rs ../rust/axia-shell/src/winmodel/*.rs)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
 CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)
@@ -97,7 +97,7 @@ SRC += $(TP_SRC)
 # cursor-shape-v1 needs the tablet-v2 interfaces (they're only linked, not advertised).
 # GTK/GNOME/Qt apps: our own org.freedesktop.portal.Settings (src/ui/portal.c) with the D-Bus client from
 # Passwords (src/vault/dbus.c, docs/PASSWORDS.md).
-WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/js_switcher.c src/ui/portal.c src/ui/portal_files.c src/vault/dbus.c
+WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/js_snap.c src/ui/js_winmodel.c src/ui/js_switcher.c src/ui/portal.c src/ui/portal_files.c src/vault/dbus.c
 SRC += $(WM_SRC)
 # Clock and Help (docs/SYSTEM.md): time zones with our own TZif reader, and the help articles
 CLOCK_SRC := src/ui/tzif.c src/ui/js_help.c
@@ -125,7 +125,7 @@ HDR += $(wildcard src/tp/*.h)
 .PHONY: all clean test test-full test-platform test-rust drag-golden
 test-platform: build/apps-actions-test build/defaults-test build/settings-hw-test
 
-test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/wallpaper-image-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/ui-damage-test
 	./build/glass-damage-test
 	./build/brframe-test
@@ -140,6 +140,8 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 	./build/seat-test
 	./build/platform-admin-test
 	./build/switcher-ffi-test
+	./build/snap-ffi-test
+	./build/winmodel-ffi-test
 	./build/keygrab-test
 	./build/wl-input-region-test
 	./build/cpu-cursor-test
@@ -180,6 +182,14 @@ $(RUST_LIB): $(RUST_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
 build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
 	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/snap-ffi-test: tests/snap_ffi_test.c src/ui/snap_ffi.h $(RUST_LIB)
+	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/winmodel-ffi-test: tests/winmodel_ffi_test.c src/ui/winmodel_ffi.h $(RUST_LIB)
+	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+# sdk/windows.js over the real bridge and Rust window list, in QuickJS (tests/windows_bridge_test.mjs)
+test: build/windows-bridge-host
+build/windows-bridge-host: tests/windows_bridge/host.c src/ui/js_winmodel.c src/ui/js_winmodel.h src/ui/winmodel_ffi.h $(QJS_OBJ) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -Isrc/ui -o $@ tests/windows_bridge/host.c src/ui/js_winmodel.c $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 build/seat-test: tests/seat_test.c src/platform/seat.c src/platform/seat.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -D_GNU_SOURCE -DLORD_LIBSEAT $(shell pkg-config --cflags libseat) -Isrc -o $@ tests/seat_test.c src/platform/seat.c

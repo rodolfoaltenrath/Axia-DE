@@ -273,9 +273,9 @@ async function run(){
   wm.open('linux',{instance:801,args:{surface:801,appId:'isolated',pkg:true}});
   wm.open('linux',{instance:802,args:{surface:802,appId:'isolated',pkg:true}});
   calls=[];const retry=forceQuit('isolated');record('retry',{error:retry,calls});
-  windows.set([]);
+  for (const win of windows.get()) wm.close(win.id, true);
   wm.open('linux',{instance:803,args:{surface:803,appId:'xterm',x11:true}});
-  calls=[];const x11=forceQuit(runningApps()[0].key);record('x11',{error:x11,calls});windows.set([]);
+  calls=[];const x11=forceQuit(runningApps()[0].key);record('x11',{error:x11,calls});for (const win of windows.get()) wm.close(win.id, true);
   wm.open('demo');await pause();click('Demo');await pause();wm.close('demo',true);await pause();
   calls=[];click('Force Quit');await pause();record('selection-removed',{calls});
   wm.open('demo');await pause();click('Demo');await pause();control.setInstance(1);await pause();

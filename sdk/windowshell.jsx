@@ -14,8 +14,7 @@
 import { createElement as h, useRef } from 'react';
 import { View } from '@lordos/runtime';
 import { useStore } from './store.js';
-import { wm, fxNodes, activeDesktop } from './windows.js';
-import { onDesktop } from './desktopmodel.js';
+import { wm, fxNodes, windowViews } from './windows.js';
 import { OverviewCover, OverviewPlaceholder, useOverviewPlace } from './overview.jsx';
 
 export const WINDOW_EDGE = 6;     // px of border outside the frame
@@ -38,7 +37,7 @@ const GRIPS = [
 export function WindowShell({ win, style, children, onMouseDown, resizable = true, leaving = false }) {
   const geo = wm.frame(win);
   const tv = useOverviewPlace(win.id);
-  const here = onDesktop(win, useStore(activeDesktop));
+  const here = useStore(windowViews, (v) => !v.sets.parked.has(win.id));
   const m = resizable && !win.maximized && !tv ? WINDOW_EDGE : 0;
   const inner = useRef(null);
   if (!inner.current) inner.current = (n) => { if (n && n.id) fxNodes.set(win.id, n.id); else fxNodes.delete(win.id); };

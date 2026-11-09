@@ -476,3 +476,137 @@ compiled apps; the compositor and renderer are still C/React. RGBA chart buffers
 use a binary transport through this host. Collection and filesystem work run on
 one Rust worker thread. See [MONITOR.md](MONITOR.md) for the language boundary,
 memory accounting, sampling cadence and validation commands.
+
+## Encaixe de janelas e Snap Assist
+
+`snap/` substitui `sdk/snap.js` e passa a ter toda a regra do encaixe: os
+retângulos das zonas (metades, quartos, terços e dois terços), a zona sob o
+ponteiro durante o arraste, os movimentos de Super+setas, o Snap Assist e o
+redimensionamento conjunto de janelas encaixadas. O teste em node
+`server/tests/snap_test.mjs` foi removido; seus casos estão em `snap/tests.rs`.
+
+- O arraste continua em C (`grab.c`), sem JS por quadro. Cada movimento do
+  ponteiro e cada mudança do Shift vão ao `DragZones`, que diz se a zona mudou.
+  Só então o servidor chama `__lordWm('zone')`. O polling de 90 ms em JS foi
+  removido. Com Shift, as laterais viram os terços externos e o topo o terço do
+  meio.
+- O `LinkedResize` move a linha compartilhada por janelas encaixadas na mesma
+  tela, respeitando o tamanho mínimo de cada uma. O `grab.c` aplica os frames
+  calculados aos nós; essas janelas não usam a camada de arraste, que guarda o
+  fundo de uma janela só.
+- O Snap Assist calcula as zonas livres do layout (ou do layout escolhido no
+  menu do botão maximizar) e a grade das miniaturas dentro da zona. A interface
+  é um modo do Overview, que já desenha as janelas reais em escala.
+
+A ABI está em `server/src/ui/snap_ffi.h` e a ponte para a sessão em
+`server/src/ui/js_snap.c` (`lord.snap`). Rust não guarda ponteiros de nós nem
+objetos JS: o estado do arraste pertence ao grab e é liberado ao terminar ou
+cancelar. A lista de janelas continua em `sdk/windows.js`.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline snap::
+make -C server build/snap-ffi-test && server/build/snap-ffi-test
+```
+
+Os testes cobrem layouts sem sobreposição nem lacunas em áreas ímpares, as zonas
+de soltura com e sem Shift, várias telas, Super+setas, linhas entre metades e
+quartos, bordas da área de trabalho, mínimos, as zonas oferecidas pelo Assist e a
+grade das miniaturas. Falta validar na sessão física o arraste com preview, o
+Assist com o mouse e o teclado e o redimensionamento conjunto com apps Linux.
+
+## Regras puras do gerenciador de janelas
+
+`winmodel/` substitui `sdk/placemodel.js` e `sdk/displaylayout.js` e a parte do
+`sdk/desktopmodel.js` que não depende da lista de janelas:
+
+- onde cada app reabre (`place.rs`: identidade da tela por nome do monitor e
+  conector, área visível quando a tela sumiu, limite de 200 apps);
+- a lista de desktops (`desktops.rs`: adicionar, fechar, vizinhos, setas e gestos
+  em RTL, valores salvos);
+- o grid de miniaturas e a faixa de desktops do Overview (`layout.rs`). O mesmo
+  grid serve o Snap Assist, que deixou de ter um próprio no `snap/`;
+- a organização de telas em Configurações → Telas (`displays.rs`: numeração,
+  posição magnética e soltura sempre encostada e sem sobreposição).
+
+A ponte é uma chamada só, `lord.winmodel(op, json)` (`server/src/ui/js_winmodel.c`,
+ABI em `winmodel_ffi.h`), envolvida por `sdk/winmodel.js`. Os wrappers enviam só
+os campos que cada regra usa, nunca a janela inteira. Sem estado, a ponte também
+está nos processos de apps isolados. Uma chamada recusada lança `TypeError` com
+o motivo dado pelo Rust.
+
+Os predicados de visibilidade (`onDesktop`, `visibleOn`, `mountedOn`,
+`focusedOn`, `keyboardSurface`...) continuam em `sdk/desktopmodel.js`. Eles rodam
+sobre a lista de janelas a cada render, e atravessar a ponte serializaria essa
+lista a cada chamada. Migram junto com o store do `sdk/windows.js`.
+
+Os testes `place_model_test.mjs` e `display_layout_test.mjs` foram portados para
+`winmodel/tests.rs`, incluindo a varredura de ~25 mil solturas de telas. O
+`desktop_model_test.mjs` ficou com os predicados.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline winmodel::
+make -C server build/winmodel-ffi-test && server/build/winmodel-ffi-test
+```
+
+## Lista de janelas da sessão
+
+`winmodel/session.rs` passa a ser o dono das janelas: a lista em ordem de
+empilhamento, os desktops, o desktop visível e o Overview ligado ou não. Todas as
+regras que os alteram também ficam ali:
+
+- abrir (posição pedida, lembrada ou em cascata), focar, subir, mandar para trás
+  e alternar;
+- minimizar, maximizar, encaixar, desencaixar, Super+setas e organizar;
+- centralizar, mover entre telas e reposicionar quando uma tela some;
+- tela cheia, picture-in-picture e o levantamento pelo teclado da tela;
+- o fim de um arraste em C;
+- criar e fechar desktops.
+
+As visões que os temas desenham são calculadas ali uma vez por mudança: visíveis,
+montadas, a janela da frente (que recebe o teclado), escondidas, estacionadas,
+placeholders do Overview e as janelas de cada desktop. Por isso os predicados de
+`sdk/desktopmodel.js` saíram, e o arquivo ficou só com as constantes e o
+hit-test.
+
+`sdk/windows.js` virou o espelho para o React. `windows`, `activeDesktop`,
+`desktopList` e `overviewShowing` mantêm a mesma API de leitura, e `windowViews`
+traz as visões. Toda mudança passa por `wm.*` (os escritores diretos do store em
+`trackpad.js`, `components.jsx` e `appswitcher.jsx` viraram `wm.cycle`,
+`wm.setPip`, `wm.exitFullscreen` e `wm.toBack`). Cada janela tem uma revisão, e o
+espelho só troca o objeto das que mudaram, então o React mantém os demais.
+
+Garantias do espelho:
+
+- **Somente leitura:** `windows`, `activeDesktop` e `desktopList` recusam `set`
+  com um aviso, porque uma escrita por fora separaria o espelho da lista do Rust.
+- **Reentrância:** se um subscriber muda as janelas durante uma atualização (o
+  Overview se fechando quando o desktop muda), o estado mais novo prevalece. A
+  atualização mais antiga para no meio, sem sobrescrevê-lo.
+- **Identidade:** uma janela alterada vira um objeto novo, mas as partes que não
+  mudaram (`args`, `restore`, `pip`...) mantêm o objeto anterior. Um efeito que
+  depende de `args` só dispara quando o conteúdo de fato muda.
+- **Recuperação:** se chegar uma janela numa revisão que o espelho não tem (um
+  estado perdido), ele pede tudo de novo (`resync`).
+
+O JS envia junto de cada chamada os fatos que só ele conhece: as telas com as
+áreas de trabalho do tema, os tamanhos dos apps abertos e se o tema encaixa
+janelas. O registro de apps, os guards de fechamento e os menus continuam no JS,
+porque são funções. A ponte é `lord.windowList.call(op, json)`
+(`js_winmodel.c`), com um estado por contexto: a sessão e cada app isolado têm a
+sua lista.
+
+Testes: `winmodel/tests.rs` traz os casos do antigo `desktop_model_test.mjs`
+(incluindo a regressão das 720 ordens para o teclado) e as operações. O
+`server/tests/windows_bridge_test.mjs` empacota o `sdk/windows.js` real com o
+esbuild e o roda no QuickJS (`build/windows-bridge-host`), com a ponte C real e o
+Rust real. Ele confere stores, objetos mantidos, visões, desktops, encaixe e o
+fim de um arraste. É o único teste que exercita as três camadas juntas sem a
+sessão.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline winmodel::
+make -C server build/windows-bridge-host && (cd server && node tests/windows_bridge_test.mjs)
+```
+
+Ainda precisa de validação na sessão física: temas, Dock, Overview, alternador,
+gestos e apps Linux sobre a lista nova.

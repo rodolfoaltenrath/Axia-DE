@@ -50,8 +50,8 @@ display with most of a window.
 Like macOS's "Arrange Displays", with more than one display (extend mode):
 
 - **Numbers.** Every active display gets a number: the main display is **1**, the others follow in
-  the order `lord.display.list()` gives them (connector order). `displayNumbers(outputs)` in
-  `sdk/displaylayout.js` computes them; the arrangement's tiles show the number in a small circle
+  the order `lord.display.list()` gives them (connector order). `displayNumbers(outputs)` (Rust,
+  `rust/axia-shell/src/winmodel/displays.rs`, through `sdk/winmodel.js`) computes them; the arrangement's tiles show the number in a small circle
   next to the name, and the selected display's header shows "Display 2" next to its name. Making
   another display the main one renumbers them (the main one is always 1). No numbers in mirror mode
   or with a single display.
@@ -87,9 +87,9 @@ Like macOS's "Arrange Displays", with more than one display (extend mode):
   main ← display 3 ← display 2 is no longer re-snapped onto the main display; only an arrangement
   that overlaps or has floating displays (after a scale or resolution change, an unplug, or dragging
   away the display in the middle of a chain) is re-snapped in order.
-- Tests: `server/tests/display_layout_test.mjs` (numbers, touching, the snap targets, drops on top,
+- Tests: `rust/axia-shell/src/winmodel/tests.rs` (numbers, touching, the snap targets, drops on top,
   in empty space, corner-only, three displays, and a sweep of about 25,000 drops that must all touch and
-  never overlap; run by `make -C server test` through `run_suites.sh` when node exists) and the
+  never overlap; run by `make -C server test-rust`) and the
   `out_fits`/`out_valid`/chain checks in `build/outputs-test`.
 - **Untested on real hardware:** the identify badges and the drag were not run on two displays yet
   (no multi-display machine where this was written); VM 118's two virtio-gpu heads are the

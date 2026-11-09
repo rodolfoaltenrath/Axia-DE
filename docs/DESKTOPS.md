@@ -6,8 +6,9 @@ window is *parked*.
 
 | Code | Role |
 |---|---|
-| `sdk/desktopmodel.js` | The rules as plain data, no runtime: what shows, what is in front, who has the keyboard, the Overview's layout. `server/tests/desktop_model_test.mjs` |
-| `sdk/windows.js` | `w.desktop`, the stores `activeDesktop` and `desktopList`, `wm.moveToDesktop`, `wm.raise`, `useWindows`, `useWindowHidden` |
+| `rust/axia-shell/src/winmodel/session.rs` | The windows, the desktops and the one showing, and the rules: what shows, what is mounted, what is in front (who has the keyboard), what is parked. `winmodel/tests.rs`, `server/tests/windows_bridge_test.mjs` |
+| `rust/axia-shell/src/winmodel` (`sdk/winmodel.js`) | The list of desktops (add, close, neighbors, arrows and swipes in RTL), the saved count and position, and the Overview's grid and strip. `winmodel/tests.rs` |
+| `sdk/windows.js` | The mirror of Rust's list for React: `windows`, `activeDesktop`, `desktopList`, `windowViews`; `wm.moveToDesktop`, `wm.raise`, `useWindows`, `useWindowHidden`, `onActiveDesktop` |
 | `sdk/desktops.js` | Switching, the keys, the saved count, the indicator, the animation |
 | `sdk/overview.jsx` | The Overview, the same in both themes (it replaced Lord Classic's task view) |
 | `sdk/windowshell.jsx` | `display: none` on a hidden desktop, the window's place in the Overview |
@@ -36,10 +37,11 @@ changes): its desktop then comes into view, so the question is seen.
 **A window on a hidden desktop never has the keyboard.** A hidden password field must not collect what
 is typed on another desktop, and an app the user can't see must not be able to bring itself forward.
 
-- `keyboardSurface` in `desktopmodel.js` is the only decision, and `sync()` in `sdk/wayland.js` follows it on
-  every change of the windows or the desktop. A regression test goes through every order of a set of windows.
+- The front window of the desktop in view (`front` in Rust's views, `wm.focused()`) is the only decision, and
+  `sync()` in `sdk/wayland.js` follows it on every change of the windows or the desktop. A regression test
+  (`winmodel/tests.rs`) goes through every order of a set of windows.
 - `move`, `resize` and `menu` requests from a Linux app are refused unless its window is on the desktop in view
-  (`acceptsAppRequest`). Otherwise an app could switch the desktop with `xdg_toplevel.move`.
+  (`onActiveDesktop`, from Rust's `parked`). Otherwise an app could switch the desktop with `xdg_toplevel.move`.
 - Fullscreen is presented above everything and keeps the keyboard in `wl.c`, whatever the shell says, so the
   rule needs the compositor: `lord.wayland.state(id, max, 0, iconic, parked)` → `wl_set_parked`. A parked window
   loses the keyboard, `wl_set_focus` refuses it, its menus close, and it leaves fullscreen and gets it back when
@@ -119,7 +121,7 @@ alone, `axia-server` used 0 CPU ticks in 10 s with three desktops and windows op
 
 ## Checked
 
-`server/tests/desktop_model_test.mjs` and `build/keygrab-test`. On VM 116, an isolated headless session driven
+`rust/axia-shell/src/winmodel/tests.rs`, `server/tests/windows_bridge_test.mjs` and `build/keygrab-test`. On VM 116, an isolated headless session driven
 over `remote.sock`, with a small Wayland client that logs keys, focus and `configure` states (2026-10-31):
 
 - Keys reach only the window of the desktop in view, in both directions, with both themes.
