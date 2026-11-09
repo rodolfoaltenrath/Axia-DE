@@ -56,6 +56,7 @@ impl Drop for OwnedNode {
 }
 #[derive(Default)]
 pub struct Scene {
+    pub(super) layout_bounds: Option<(usize, super::layout::Bounds)>,
     slots: Vec<Option<OwnedNode>>,
     // Cell keeps the published pointer table writable without exclusive slice
     // reborrows invalidating the table pointer retained by the C host.
@@ -81,6 +82,22 @@ impl Scene {
     }
     fn links(&self, id: usize) -> Links {
         self.slots[id].as_ref().unwrap().links
+    }
+    pub fn parent(&self, id: usize) -> usize {
+        self.links(id).parent
+    }
+    pub fn first(&self, id: usize) -> usize {
+        self.links(id).first
+    }
+    pub fn next(&self, id: usize) -> usize {
+        self.links(id).next
+    }
+    pub fn forget_layout(&mut self) {
+        for owned in self.slots.iter_mut().flatten() {
+            let n = unsafe { owned.view.as_mut() };
+            n.layout_ok = 0;
+            n.measure_valid = 0;
+        }
     }
     fn links_mut(&mut self, id: usize) -> &mut Links {
         &mut self.slots[id].as_mut().unwrap().links
@@ -151,12 +168,13 @@ impl Scene {
         self.views[id].set(owned.view.as_ptr());
         self.slots[id] = Some(owned);
         self.count += 1;
+        self.layout_bounds = None;
         self.publish(ui);
         ui.dirty = 1;
         id
     }
     // Zero marks the end; slot zero is never allocated.
-    fn next_in_subtree(&self, root: usize, mut id: usize, descend: bool) -> usize {
+    pub fn next_in_subtree(&self, root: usize, mut id: usize, descend: bool) -> usize {
         if descend && self.links(id).first != 0 {
             return self.links(id).first;
         }
@@ -197,6 +215,7 @@ impl Scene {
         }
     }
     fn invalidate_measure(&mut self, mut id: usize, ui: &mut Ui) {
+        self.layout_bounds = None;
         while id != 0 {
             let n = self.node_mut(id).unwrap();
             n.measure_valid = 0;
@@ -311,6 +330,7 @@ impl Scene {
         true
     }
     pub fn destroy(&mut self, root: usize, ui: &mut Ui) {
+        self.layout_bounds = None;
         self.detach(root, ui);
         let mut id = root;
         loop {
@@ -348,6 +368,7 @@ impl Scene {
         ui.dirty = 1;
     }
     pub fn reset(&mut self, ui: &mut Ui) {
+        self.layout_bounds = None;
         ui.root = ptr::null_mut();
         ui.nodes = ptr::null_mut();
         ui.cap = 0;

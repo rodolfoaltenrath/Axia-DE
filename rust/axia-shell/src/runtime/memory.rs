@@ -3,6 +3,13 @@
 use std::alloc::{alloc, Layout};
 use std::ffi::{CStr, CString};
 
+pub fn try_reserve<T>(values: &mut Vec<T>, additional: usize) -> bool {
+    if values.capacity() - values.len() >= additional {
+        return true;
+    }
+    allowed() && values.try_reserve(additional).is_ok()
+}
+
 pub fn try_box<T>(value: T) -> Option<Box<T>> {
     if !allowed() {
         return None;

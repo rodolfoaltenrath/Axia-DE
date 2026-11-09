@@ -62,7 +62,7 @@ typedef struct StyleExt {
     Dim inset_inline[2];            /* insetInlineStart / insetInlineEnd (auto = unset) */
     float radius_corner[8];         /* top-left, top-right, bottom-right, bottom-left, top-start, top-end, bottom-start, bottom-end */
     Dim origin_x, origin_y;         /* transformOrigin, 50% 50% by default */
-    /* not style: the edges resolved for the node's direction (layout.c node_resolve_edges), physical L, T, R, B */
+    /* not style: the edges resolved for the node's direction (Rust node_resolve_edges), physical L, T, R, B */
     struct ResolvedEdges {
         float mg[4], pd[4], bw[4];
         uint32_t bc[4];
@@ -87,7 +87,7 @@ typedef struct Image Image;
 /* Box in screen coordinates; empty if x1 <= x0. */
 typedef struct Box { float x0, y0, x1, y1; } Box;
 
-/* Transforms (layout.c place), only for nodes that have one or are inside one: own = this node's
+/* Transforms (Rust layout placement), only for nodes that have one or are inside one: own = this node's
  * scale/rotate around its origin, in layout coordinates; world = its ancestors' and its own
  * (layout → screen); inv = the inverse of world. */
 typedef struct NodeTf {
@@ -183,22 +183,18 @@ int style_set_gradient(Style *s, double angle, double from, double to);
 int style_reset(Style *s, const char *key);
 void style_release(Style *s);
 
-/* layout.c */
+/* Rust runtime layout */
 void layout_root(Node *root, float w, float h);
 void node_resolve_edges(Node *n);
 
-/* transform.c: affine math shared by layout, paint and hit testing */
+/* Rust affine math shared by layout, paint and hit testing */
 Affine affine_identity(void);
 Affine affine_mul(Affine m, Affine n);              /* m after n: (m ∘ n)(p) = m(n(p)) */
 int    affine_invert(Affine m, Affine *out);         /* 0 if singular */
 void   affine_apply(Affine m, float x, float y, float *ox, float *oy);
 Box    affine_box(Affine m, Box b);                  /* bounding box of the transformed rectangle */
 int    style_rotates(float deg);
-/* inline: layout asks it of every node */
-static inline int style_has_transform(const Style *s) {
-    const struct StyleExt *x = s->ext;
-    return x && (x->scale_x != 1 || x->scale_y != 1 || (x->rotate != 0 && style_rotates(x->rotate)));
-}
+int style_has_transform(const Style *s);
 /* The node's own transform: translate(origin) · rotate · scale · translate(-origin), with the origin
  * resolved against its border box at (x, y, w, h). */
 Affine style_transform(const Style *s, float x, float y, float w, float h);

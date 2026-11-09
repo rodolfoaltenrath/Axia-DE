@@ -700,7 +700,9 @@ fn native_views_match_c_layout() {
             "-fdump-record-layouts-complete",
             "-fsyntax-only",
             "-Iserver/src",
-            "server/src/ui/layout.c",
+            "-x",
+            "c",
+            "server/src/ui/ui.h",
         ])
         .output()
         .expect("clang is required for the explicit ABI check");
