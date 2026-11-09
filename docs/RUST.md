@@ -565,6 +565,19 @@ traz as visões. Toda mudança passa por `wm.*` (os escritores diretos do store 
 `wm.setPip`, `wm.exitFullscreen` e `wm.toBack`). Cada janela tem uma revisão, e o
 espelho só troca o objeto das que mudaram, então o React mantém os demais.
 
+Garantias do espelho:
+
+- **Somente leitura:** `windows`, `activeDesktop` e `desktopList` recusam `set`
+  com um aviso, porque uma escrita por fora separaria o espelho da lista do Rust.
+- **Reentrância:** se um subscriber muda as janelas durante uma atualização (o
+  Overview se fechando quando o desktop muda), o estado mais novo prevalece. A
+  atualização mais antiga para no meio, sem sobrescrevê-lo.
+- **Identidade:** uma janela alterada vira um objeto novo, mas as partes que não
+  mudaram (`args`, `restore`, `pip`...) mantêm o objeto anterior. Um efeito que
+  depende de `args` só dispara quando o conteúdo de fato muda.
+- **Recuperação:** se chegar uma janela numa revisão que o espelho não tem (um
+  estado perdido), ele pede tudo de novo (`resync`).
+
 O JS envia junto de cada chamada os fatos que só ele conhece: as telas com as
 áreas de trabalho do tema, os tamanhos dos apps abertos e se o tema encaixa
 janelas. O registro de apps, os guards de fechamento e os menus continuam no JS,

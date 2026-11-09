@@ -252,7 +252,13 @@ impl Session {
     /// o: { app, instance, new, args, desktop, frame, memory, size, area } → the window's id.
     fn open(&mut self, o: &Value) -> Result<Value, String> {
         let app = get(o, "app").as_str().filter(|a| !a.is_empty()).ok_or("open: no app")?.to_owned();
-        let id = if let Some(inst) = get(o, "instance").as_str().filter(|s| !s.is_empty()) {
+        // a named window: any truthy instance, as JavaScript's template string writes it
+        let inst = match get(o, "instance") {
+            Value::String(s) if !s.is_empty() => Some(s.clone()),
+            Value::Number(n) if truthy(&Value::Number(n.clone())) => Some(n.to_string()),
+            _ => None,
+        };
+        let id = if let Some(inst) = inst {
             format!("{app}#{inst}")
         } else if truthy(get(o, "new")) {
             let id = format!("{app}#{}", self.seq);
@@ -635,6 +641,8 @@ impl Session {
         let mut result = Value::Null;
         match op {
             "state" => {}
+            // the mirror lost track: everything again, in full
+            "resync" => self.sent = 0,
             "open" => result = self.open(a(0))?,
             "close" => {
                 if let Some(i) = win(self) {
@@ -822,7 +830,7 @@ impl Session {
         let changed = self.clock > self.sent || self.wins.len() != before.len()
             || self.wins.iter().zip(&before).any(|(w, b)| w.id() != b.id())
             || self.desktops != desktops || self.active != active || self.overview != overview;
-        let state = if changed || op == "state" { self.snapshot() } else { Value::Null };
+        let state = if changed || op == "state" || op == "resync" { self.snapshot() } else { Value::Null };
         Ok(json!({ "result": result, "state": state }))
     }
 }
