@@ -471,9 +471,8 @@ static void dispatch_pointer(Server *s) {
         else s->held &= ~(1 << s->buttons[i].button);
     }
     grab_note_pointer(x, y, s->held);           /* antes del "down" en JS: ahí puede empezar un arrastre */
-    int gnode = 0, gedges = 0;
-    float gdx = 0, gdy = 0, gdw = 0, gdh = 0;
-    int ended = grabbing && grab_finish(&gnode, &gedges, &gdx, &gdy, &gdw, &gdh);
+    GrabEnd gend;
+    int ended = grabbing && grab_finish(&gend);
     Node *target = hit_test(ui.root, x, y);
     int id = target ? target->id : 0;
     /* apps Wayland: reciben el puntero; el tema también (para enfocar y subir la ventana) */
@@ -485,7 +484,8 @@ static void dispatch_pointer(Server *s) {
     else over = wl_pointer(x, y, target, s->moved, s->nbuttons, down, button, s->wheel);
     double t_wl = now_ms();                 /* the drag line splits Wayland delivery from the theme's JS */
     if (over == 2) id = 0;                  /* sobre un menú de una app Linux: el árbol no lo ve */
-    if (ended) js_wm_end(gnode, gedges, gdx, gdy, gdw, gdh);
+    js_wm_zone_flush();                     /* the snapping preview, only when its zone changed */
+    if (ended) js_wm_end(&gend);
     int shape = over == 2 ? CUR_DEFAULT : node_cursor(target);
     if (shape != s->shape || grabbing != grab_active() || (over != 0) != s->over_app) { s->shape = shape; s->cursor_dirty = 1; }
     s->over_app = over != 0;                /* el cursor de la app solo vale sobre sus superficies */

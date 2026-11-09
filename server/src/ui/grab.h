@@ -8,6 +8,10 @@
 #define LORD_GRAB_H
 
 #include "ui.h"
+#include "snap_ffi.h"
+
+#define GRAB_SNAP_DISPLAYS 8
+#define GRAB_LINKS 8
 
 typedef struct {
     float inset;            /* the node is the frame enlarged by `inset` px per side (edges for resizing) */
@@ -18,7 +22,26 @@ typedef struct {
      * [ax, ax + aw); the frame's center decides which applies (min_top if none) */
     int nareas;
     float ax[4], aw[4], ay[4];
+    /* Snapping while moving (docs/WINDOWS.md): each display and its work area. Rust tracks the zone
+     * under the pointer and grab_zone_take() reports it when it changes. 0 = off. */
+    int nsnap;
+    AxiaSnapDisplay snap[GRAB_SNAP_DISPLAYS];
+    /* Resizing a snapped window: the other windows snapped on its display, which follow an edge they
+     * share with it (rust snap/resize.rs), inside the work area `area`. */
+    int nlinks;
+    struct { int node; float inset, min_w, min_h, max_w, max_h; } links[GRAB_LINKS];
+    AxiaSnapRect area;
 } GrabLimits;
+
+/* A finished drag: the node's change, where a moved window was dropped and the change of each linked
+ * window that resized with it. */
+typedef struct {
+    int node, edges;
+    float dx, dy, dw, dh;
+    int zone;                       /* -1: not over a snapping zone */
+    int nlinks;
+    struct { int node; float dx, dy, dw, dh; } links[GRAB_LINKS];
+} GrabEnd;
 
 /* main.c: where the pointer is and which buttons are pressed (mask, bit = DOM button). */
 void grab_note_pointer(float x, float y, int buttons);
@@ -27,12 +50,17 @@ void grab_note_pointer(float x, float y, int buttons);
 int  grab_begin(int node, int edges, const GrabLimits *lim);
 int  grab_active(void);
 int  grab_cursor(void);                     /* cursor shape during the drag (cursor.h) */
-/* Where the pointer is now and the drag's edges (0 = moving); 1 while a drag is active. Read by the
- * theme a few times per second for the window snapping preview (lord.wm.pointer, docs/WINDOWS.md). */
+/* Where the pointer is now and the drag's edges (0 = moving); 1 while a drag is active
+ * (lord.wm.pointer, docs/WINDOWS.md). */
 int  grab_state(float *x, float *y, int *edges);
 void grab_motion(float x, float y);         /* once per frame, with the accumulated pointer */
-/* Finished (the button was released): 1 and the node's change relative to the start. */
-int  grab_finish(int *node, int *edges, float *dx, float *dy, float *dw, float *dh);
+/* js.c, on every key: Shift held turns the side zones into thirds while a window is moved. */
+void grab_note_shift(int held);
+/* 1 once each time the snapping zone under a moved window changed (or went away with the drag): the
+ * zone (-1 none) and its rectangle. Read after grab_motion and after keys (js_wm_zone_flush). */
+int  grab_zone_take(int *zone, AxiaSnapRect *rect);
+/* Finished (the button was released): 1 and the result. */
+int  grab_finish(GrabEnd *out);
 void grab_cancel(void);
 /* LordBench's desktop scene (bench/lbframes.h, docs/BENCHMARK.md): the window's node moves along a
  * figure of eight (rx, ry px; one turn every period_ms) through the same path as a drag, one step per

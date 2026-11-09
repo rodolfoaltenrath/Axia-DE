@@ -28,6 +28,7 @@
 #include "js_media.h"
 #include "js_wm.h"
 #include "js_switcher.h"
+#include "js_snap.h"
 #include "js_disk.h"
 #include "js_imager.h"
 #include "js_logs.h"
@@ -424,6 +425,7 @@ static void session_context(void) {
     js_mail_register(ctx, lord);       /* lord.mail: Mail, Calendar, Contacts, Reminders via axia-maild (docs/MAIL.md) */
     js_wm_register(ctx, lord);         /* lord.wm: moving and resizing windows in C (grab.c) */
     js_switcher_register(ctx, lord);   /* session-owned Rust app selector */
+    js_snap_register(ctx, lord);       /* lord.snap: window snapping's geometry in Rust */
     js_input_register(ctx, lord);      /* lord.input: touchpads and touchscreens (tp/) */
     js_fw_register(ctx, lord);         /* lord.fw: per-app network permissions (axia-netperm, docs/FIREWALL.md) */
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */
@@ -728,6 +730,8 @@ static void ime_commit(const char *text) {
 void js_key(int code, int value) {
     KeyInfo k;
     kb_key(code, value, &k);
+    grab_note_shift(k.shift);           /* Shift while moving a window: the thirds (grab.c) */
+    js_wm_zone_flush();
     if (!kb_ready()) {
         JSValueConst args[2] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value) };
         JS_FreeValue(ctx, call_global("__lordKey", 2, args));

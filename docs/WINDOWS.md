@@ -405,18 +405,23 @@ still the Dock's blur.
 
 ## Snapping (0.8.3)
 
-A theme turns it on with `configureWindows({ snap: true })` (Lord Classic does; Lord Flow doesn't).
-The geometry is in `sdk/snap.js` (no runtime imports, tested by `server/tests/snap_test.mjs`), the
-window side in `sdk/windows.js`.
+A theme turns it on with `configureWindows({ snap: true })` (Lord Classic does; Lord Flow doesn't);
+`snapAssist: false` keeps the snapping without Snap Assist. The rules are in Rust
+(`rust/axia-shell/src/snap/`, tests in `snap/tests.rs`), with the C ABI in `server/src/ui/snap_ffi.h`
+(checked by `server/tests/snap_ffi_test.c`). The session reaches them through `lord.snap`
+(`server/src/ui/js_snap.c`); `sdk/windows.js` keeps the window list and applies the results.
 
 - **Dropping at an edge:** within 8 px of the left or right side of a display's work area (or past
   it, over a taskbar on that side) a window takes that half; in the top or bottom fifth of the side,
-  a quarter; at the top edge it is maximized. Halves, thirds and quarters round to whole pixels and
+  a quarter; at the top edge it is maximized. **With Shift held** the sides give the left and right
+  thirds and the top edge the middle third. Halves, thirds and quarters round to whole pixels and
   share their middle line, so two snapped windows never overlap or leave a gap.
-- **The preview** while dragging: the window still moves in C (no JS per frame). Only while a move
-  is going on, the SDK reads `lord.wm.pointer()` (`ui/js_wm.c`: the pointer and the drag's edges,
-  no arguments, read only) every 90 ms and sets `snapPreview` when the zone changes; the theme draws
-  it under the moving window. Crossing into a zone costs one rebuild of what is below the window.
+- **The preview** while dragging: the window still moves in C (no JS per frame). `lord.wm.grab`
+  receives each display and its work area (`snap`); `grab.c` hands every pointer motion, and every
+  Shift change (`grab_note_shift` from `js_key`), to Rust (`DragZones`), which says whether the zone
+  under the pointer changed. Only then axia-server calls `__lordWm('zone', { zone, x, y, w, h })`
+  and the SDK sets `snapPreview`; the theme draws it under the moving window. There is no polling:
+  the 90 ms timer that read `lord.wm.pointer()` is gone.
 - **A scripted move (0.8.6, LordBench):** `wm.scriptMove(id, { rx, ry, periodMs })` asks axia-server to move
   the window along a figure of eight through this same path (`lord.wm.script`, `grab_script_begin` in
   `ui/grab.c`: the window painted once into a layer, one step per frame from the main loop, no button held
@@ -425,15 +430,33 @@ window side in `sdk/windows.js`.
   the test also measures pointer-to-screen latency; without that thread the path follows the clock. Pointer
   input or `wm.stopScript()` stops it. Only System Information's desktop
   scene uses it (`apps/sysinfo/scene.jsx`), to measure the compositor ([BENCHMARK.md](BENCHMARK.md)).
-- **On release** (`__lordWm('end')`) the SDK reads the pointer once more and snaps; the size from
-  before the first snap is kept in `w.restore`. Dragging a snapped window away gives it that size
-  back under the pointer, where it was grabbed. Resizing a snapped window keeps its new size.
-- **API:** `wm.snap(id, zone)` (`left`, `right`, `top-left`, `top-right`, `bottom-left`,
-  `bottom-right`, `max`, `left-third`, `center-third`, `right-third`, `left-two-thirds`,
-  `right-two-thirds`, or `restore`), `wm.snapKey(id, 'left' | 'right' | 'up' | 'down')` for
-  Super+arrows (`snapNext` in `snap.js`), and `w.snapped` (the zone) for a theme that squares the
-  corners of a snapped window.
-- **Measured** (VM 119, 1280×800, CPU path, a 960 × 600 Files window dragged in circles for 6 s
+- **On release** `__lordWm('end')` carries the zone the window was dropped on (Rust reads the pointer
+  and Shift once more) and the SDK snaps; the size from before the first snap is kept in `w.restore`.
+  Dragging a snapped window away gives it that size back under the pointer, where it was grabbed.
+- **Snap Assist:** after a window snaps by dragging, from a snap layout or with Super+arrow from a
+  free window, the rest of its layout is offered: halves offer the other half, quarters the other
+  three, thirds the other two, and a layout picked in the flyout its own other cells
+  (`assist_zones`). Zones another snapped window on that display already covers are skipped. The
+  first free zone shows the other windows of the desktop (most recent first, at most 12, minimized
+  ones too, not those already in a layout on that display) as live miniatures: it is a mode of the
+  Overview (`sdk/overview.jsx`, `assist` in its state), which already draws real windows smaller
+  without redrawing the apps; the grid inside the zone is Rust's (`assist_grid`). A click or Enter
+  snaps that window there and the next free zone follows; Escape, a click outside the zone or nothing
+  left to offer ends it.
+- **Resizing snapped windows together:** dragging an edge of a snapped window that another snapped
+  window on the same display touches moves that line for every window along it (two halves; the
+  middle line of four quarters moves all four). `lord.wm.grab` receives the other snapped windows'
+  nodes (`links`) and `grab.c` asks Rust (`LinkedResize`) for every frame on each motion, keeping
+  each window inside its minimum size; those windows aren't painted through the drag layer, which
+  only keeps what is below one window. `__lordWm('end')` reports each one's change and they all stay
+  snapped. An edge on the border of the work area has nobody behind it and resizes only that window;
+  resizing a snapped window that shares no edge unsnaps it, as before.
+- **API:** `wm.snap(id, zone, { assist, layout, display })` (`left`, `right`, `top`, `bottom`,
+  `top-left`, `top-right`, `bottom-left`, `bottom-right`, `max`, `left-third`, `center-third`,
+  `right-third`, `left-two-thirds`, `right-two-thirds`, or `restore`), `wm.snapKey(id, 'left' |
+  'right' | 'up' | 'down')` for Super+arrows (`snap_next` in Rust), `snapZoneAt(x, y, thirds)`, and
+  `w.snapped` (the zone) for a theme that squares the corners of a snapped window.
+- **Measured in 0.8.3**, with the polling preview this section replaced (VM 119, 1280×800, CPU path, a 960 × 600 Files window dragged in circles for 6 s
   three times through QMP, about 52 moves per second): Lord Classic 7.5–7.7 ms of work per frame (JS
   0.35, paint 6.4–6.7) and Lord Flow 13.1–13.4 ms (paint 12.1–12.3, its Dock's blur), both at
   the rate of the input. A drag that keeps crossing the top edge (the preview appearing and going)
