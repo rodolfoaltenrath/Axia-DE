@@ -149,7 +149,7 @@ static void render(AppWin *w) {
     canvas_init(&c, b->px, w->cw, w->ch, w->cw);
     ui.width = (float)w->cw;
     ui.height = (float)w->ch;
-    layout_root(root, (float)w->cw, (float)w->ch);
+    if (!layout_root(root, (float)w->cw, (float)w->ch)) return;
     /* every window shares node coordinates starting at 0,0: no "paint from the video" shortcut
      * (an empty damage box turns off media_cover_node/opaque_cover_node in paint_root) */
     ui.damage = (Box){ 0, 0, 0, 0 };

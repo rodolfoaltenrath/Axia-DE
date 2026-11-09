@@ -225,6 +225,12 @@ impl Scene {
         ui.dirty = 1;
     }
     pub fn moved(&mut self, id: usize, ui: &mut Ui) {
+        let n = self.node(id).unwrap();
+        if n.has_tf == 0 && n.s.has_transform() {
+            // Enabling a transform also needs storage for its descendants.
+            // Preserve measurement caches, but repeat the allocation preflight.
+            self.layout_bounds = None;
+        }
         // The parent places this node again; its own cached layout stays valid.
         let mut id = self.links(id).parent;
         while id != 0 {

@@ -112,6 +112,47 @@ fn flex_growth_shrink_justify_and_wrapping_have_fixed_geometry() {
     close(s.node(b).unwrap().x, 62.);
 }
 #[test]
+fn main_axis_constraints_apply_after_shrink_and_when_the_line_exactly_fits() {
+    for row in [0, 1] {
+        let (mut s, mut ui, mut l, mut m) = (
+            Scene::default(),
+            Ui::empty(),
+            Layout::default(),
+            TestMetrics::default(),
+        );
+        let root = node(&mut s, &mut ui, 0, 0);
+        let child = node(&mut s, &mut ui, 0, root);
+        s.node_mut(root).unwrap().s.row = row;
+        s.node_mut(root).unwrap().s.justify = 1;
+        let cs = &mut s.node_mut(child).unwrap().s;
+        cs.width = px(100.);
+        cs.height = px(100.);
+        cs.shrink = 1.;
+        if row != 0 {
+            cs.min_w = px(120.);
+        } else {
+            cs.min_h = px(120.);
+        }
+        run(&mut l, &mut s, &mut ui, root, 80., 80., &mut m);
+        let n = s.node(child).unwrap();
+        close(if row != 0 { n.w } else { n.h }, 120.);
+        close(if row != 0 { n.x } else { n.y }, -20.);
+        let cs = &mut s.node_mut(child).unwrap().s;
+        if row != 0 {
+            cs.min_w = Dim::default();
+            cs.max_w = px(40.);
+        } else {
+            cs.min_h = Dim::default();
+            cs.max_h = px(40.);
+        }
+        s.invalidate(child, &mut ui);
+        run(&mut l, &mut s, &mut ui, root, 100., 100., &mut m);
+        let n = s.node(child).unwrap();
+        close(if row != 0 { n.w } else { n.h }, 40.);
+        close(if row != 0 { n.x } else { n.y }, 30.);
+    }
+}
+#[test]
 fn logical_edges_and_absolute_percent_insets_follow_direction() {
     let (mut s, mut ui, mut l, mut m) = (
         Scene::default(),
@@ -395,7 +436,63 @@ fn affine_roundtrip_composition_bounds_and_singular_output_are_stable() {
     );
 }
 #[test]
-fn placement_composes_ancestors_and_handles_zero_scale_or_allocation_failure() {
+fn affine_extremes_do_not_publish_invalid_inverses_or_overflow_rotation_angles() {
+    let large = Affine {
+        a: 1e20,
+        d: 1e20,
+        e: 1e20,
+        f: -1e20,
+        ..Affine::default()
+    };
+    let inverse = large.inverse().unwrap();
+    let point = large.point(2., 3.);
+    let back = inverse.point(point.0, point.1);
+    close(back.0, 2.);
+    close(back.1, 3.);
+    for bad in [
+        Affine {
+            a: f32::NAN,
+            ..Affine::identity()
+        },
+        Affine {
+            e: f32::INFINITY,
+            ..Affine::identity()
+        },
+        Affine {
+            a: 1e-7,
+            d: 1.,
+            e: f32::MAX,
+            ..Affine::default()
+        },
+        Affine {
+            a: 1e20,
+            b: 1e20,
+            c: 1e20,
+            d: 1e20,
+            ..Affine::default()
+        },
+    ] {
+        assert!(bad.inverse().is_none());
+        let mut out = Affine::identity();
+        assert_eq!(unsafe { super::transform::affine_invert(bad, &mut out) }, 0);
+        assert_eq!(
+            [out.a, out.b, out.c, out.d, out.e, out.f],
+            [1., 0., 0., 1., 0., 0.]
+        );
+    }
+    let mut style = Style::default();
+    assert!(style.set_number("rotate", f32::MAX as f64));
+    let matrix = style.transform(0., 0., 20., 20.);
+    assert!(matrix.inverse().is_some());
+    let point = matrix.point(2., 3.);
+    assert!(point.0.is_finite() && point.1.is_finite());
+    // Styles do not own their extensions outside a Scene owner.
+    unsafe {
+        drop(Box::from_raw(style.ext));
+    }
+}
+#[test]
+fn placement_composes_ancestors_and_handles_zero_scale() {
     let (mut s, mut ui, mut l, mut m) = (
         Scene::default(),
         Ui::empty(),
@@ -421,15 +518,78 @@ fn placement_composes_ancestors_and_handles_zero_scale_or_allocation_failure() {
     run(&mut l, &mut s, &mut ui, root, 20., 20., &mut m);
     let inv = unsafe { (*s.node(child).unwrap().tf).inv };
     close(inv.e, -1e9);
-    // A fresh descendant must gracefully fall back when allocating its transform fails.
-    let fresh = node(&mut s, &mut ui, 0, child);
-    run(&mut l, &mut s, &mut ui, root, 20., 20., &mut m); // reserve scratch before injecting OOM
-    unsafe {
-        drop(Box::from_raw(s.node(fresh).unwrap().tf));
+}
+
+#[test]
+fn enabling_transform_preflights_every_descendant_and_retries_without_partial_geometry() {
+    for budget in 0..3 {
+        let (mut s, mut ui, mut l, mut m) = (
+            Scene::default(),
+            Ui::empty(),
+            Layout::default(),
+            TestMetrics::default(),
+        );
+        let root = node(&mut s, &mut ui, 0, 0);
+        let child = node(&mut s, &mut ui, 0, root);
+        let leaf = node(&mut s, &mut ui, 0, child);
+        // Allocate the extension before warming the layout, so enabling the
+        // transform exercises the animation shortcut rather than invalidation.
+        assert!(s.node_mut(root).unwrap().s.set_number("scaleX", 1.));
+        run(&mut l, &mut s, &mut ui, root, 20., 20., &mut m);
+        let before = s.node(root).unwrap().s;
+        let ext = unsafe { *before.ext };
+        assert!(s.node_mut(root).unwrap().s.set_number("scaleX", 2.));
+        s.restyled(root, &before, Some(&ext), &mut ui);
+        assert!(s.layout_bounds.is_none());
+        ui.dirty = 0;
+        let geometry = [root, child, leaf].map(|id| {
+            let n = s.node(id).unwrap();
+            (n.w, n.h, n.ax, n.ay, n.has_tf, n.own_tf)
+        });
+        {
+            let _fail = AllocationBudget::new(budget);
+            assert!(!l.run(&mut s, &mut ui, root, 40., 40., &mut m));
+        }
+        assert_eq!(ui.dirty, 1);
+        for (&id, previous) in [root, child, leaf].iter().zip(geometry) {
+            let n = s.node(id).unwrap();
+            assert_eq!((n.w, n.h, n.ax, n.ay, n.has_tf, n.own_tf), previous);
+        }
+        run(&mut l, &mut s, &mut ui, root, 40., 40., &mut m);
+        close(s.node(root).unwrap().w, 40.);
+        for id in [root, child, leaf] {
+            assert_eq!(s.node(id).unwrap().has_tf, 1);
+            assert!(!s.node(id).unwrap().tf.is_null());
+        }
+        let _fail = AllocationBudget::new(0);
+        run(&mut l, &mut s, &mut ui, root, 50., 40., &mut m);
     }
-    s.node_mut(fresh).unwrap().tf = ptr::null_mut();
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "large workspace retention stress; exercised natively")]
+fn closing_a_large_temporary_tree_releases_excess_scratch_and_keeps_warm_reuse() {
+    let (mut s, mut ui, mut l, mut m) = (
+        Scene::default(),
+        Ui::empty(),
+        Layout::default(),
+        TestMetrics::default(),
+    );
+    let root = node(&mut s, &mut ui, 0, 0);
+    let small = node(&mut s, &mut ui, 0, 0);
+    let ids: Vec<_> = (0..1400).map(|_| node(&mut s, &mut ui, 0, root)).collect();
+    run(&mut l, &mut s, &mut ui, root, 100., 100., &mut m);
+    let large = l.scratch_bytes();
+    run(&mut l, &mut s, &mut ui, small, 100., 100., &mut m);
+    {
+        let _fail = AllocationBudget::new(0);
+        run(&mut l, &mut s, &mut ui, root, 100., 100., &mut m);
+    }
+    for &id in &ids[1..] {
+        s.destroy(id, &mut ui);
+    }
+    run(&mut l, &mut s, &mut ui, root, 100., 100., &mut m);
+    assert!(l.scratch_bytes() < large / 2);
     let _fail = AllocationBudget::new(0);
-    run(&mut l, &mut s, &mut ui, root, 20., 20., &mut m);
-    assert_eq!(s.node(fresh).unwrap().has_tf, 0);
-    assert!(s.node(fresh).unwrap().tf.is_null());
+    run(&mut l, &mut s, &mut ui, root, 100., 100., &mut m);
 }

@@ -12,7 +12,7 @@ Ui ui;
 static int layouts,paints;
 int js_wants_frame(void){return 0;}
 void js_frame(double t){(void)t;}
-void layout_root(Node *n,float w,float h){(void)n;(void)w;(void)h;layouts++;}
+int layout_root(Node *n,float w,float h){(void)n;(void)w;(void)h;layouts++;return 1;}
 int paint_damage(Node *n){(void)n;paints++;return !box_empty(ui.damage);}
 int paint_layer_node(void){return 0;}
 Node *node_get(int id){(void)id;return NULL;}
@@ -22,7 +22,7 @@ void dlist_add(DamageList *list,Box b){if(list->n<DAMAGE_MAX)list->r[list->n++]=
 int main(void){
     Server s={.headless=1,.W=800,.H=600};s.out[0].on=1;
     ui.damage=(Box){100,100,200,150};assert(ahead_work(&s.out[0]));
-    Box b=paint_ui(&s);assert(layouts==0 && paints==1 && !box_empty(b));
+    int ok=paint_ui(&s);assert(ok && layouts==0 && paints==1);
     assert(s.out[0].pend.x0==100 && s.out[0].pend.x1==200 && s.out[0].pl.n==1);
     assert(box_empty(ui.damage));paint_ui(&s);assert(paints==1 && layouts==0);
     ui.dirty=1;paint_ui(&s);assert(layouts==1 && paints==2 && !ui.dirty);

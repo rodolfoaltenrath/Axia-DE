@@ -2,6 +2,11 @@
 use super::types::{Affine, Dim, Rect, Style};
 
 impl Affine {
+    fn is_finite(self) -> bool {
+        [self.a, self.b, self.c, self.d, self.e, self.f]
+            .into_iter()
+            .all(f32::is_finite)
+    }
     pub fn identity() -> Self {
         Self {
             a: 1.,
@@ -22,19 +27,43 @@ impl Affine {
     }
     pub fn inverse(self) -> Option<Self> {
         let m = self;
+        if !m.is_finite() {
+            return None;
+        }
         let det = m.a * m.d - m.b * m.c;
         if det.abs() < 1e-8 {
             return None;
         }
         let i = 1. / det;
-        Some(Self {
+        let result = Self {
             a: m.d * i,
             b: -m.b * i,
             c: -m.c * i,
             d: m.a * i,
             e: (m.c * m.f - m.d * m.e) * i,
             f: (m.b * m.e - m.a * m.f) * i,
-        })
+        };
+        if det.is_finite() && result.is_finite() {
+            return Some(result);
+        }
+        // Finite f32 inputs can overflow the determinant or its numerators.
+        // Keep the usual f32 rounding above; use wider intermediates only on
+        // that exceptional path, and never publish a nonfinite inverse.
+        let [a, b, c, d, e, f] = [m.a, m.b, m.c, m.d, m.e, m.f].map(f64::from);
+        let det = a * d - b * c;
+        if det.abs() < 1e-8 {
+            return None;
+        }
+        let i = 1. / det;
+        let result = Self {
+            a: (d * i) as f32,
+            b: (-b * i) as f32,
+            c: (-c * i) as f32,
+            d: (a * i) as f32,
+            e: ((c * f - d * e) * i) as f32,
+            f: ((b * e - a * f) * i) as f32,
+        };
+        result.is_finite().then_some(result)
     }
     pub fn point(self, x: f32, y: f32) -> (f32, f32) {
         (
@@ -81,7 +110,10 @@ impl Style {
         let ox = x + origin(s.origin_x, w);
         let oy = y + origin(s.origin_y, h);
         // Preserve the renderer's f32 operation order (no fused multiply-add).
-        let r = s.rotate * std::f32::consts::PI / 180.;
+        let mut r = s.rotate * std::f32::consts::PI / 180.;
+        if !r.is_finite() && s.rotate.is_finite() {
+            r = (s.rotate % 360.) * std::f32::consts::PI / 180.;
+        }
         let co = r.cos();
         let si = r.sin();
         let mut m = Affine {

@@ -184,7 +184,8 @@ int style_reset(Style *s, const char *key);
 void style_release(Style *s);
 
 /* Rust runtime layout */
-void layout_root(Node *root, float w, float h);
+/* Returns 0 on allocation failure; geometry is preserved and ui.dirty requests a retry. */
+int layout_root(Node *root, float w, float h);
 void node_resolve_edges(Node *n);
 
 /* Rust affine math shared by layout, paint and hit testing */
