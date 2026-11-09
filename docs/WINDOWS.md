@@ -432,7 +432,10 @@ A theme turns it on with `configureWindows({ snap: true })` (both Lord Classic a
   scene uses it (`apps/sysinfo/scene.jsx`), to measure the compositor ([BENCHMARK.md](BENCHMARK.md)).
 - **On release** `__lordWm('end')` carries the zone the window was dropped on (Rust reads the pointer
   and Shift once more) and the SDK snaps; the size from before the first snap is kept in `w.restore`.
-  Dragging a snapped window away gives it that size back under the pointer, where it was grabbed.
+  Dragging a snapped or maximized window away gives it that size back as soon as it moves (past
+  6 px, so a click on its bar changes nothing), under the pointer at the same share of its width, as
+  Windows does: it follows the pointer at the size it will have and can be snapped again. C does it
+  during the drag (`detach` in `lord.wm.grab`, grab.c) and the end reports `detached`.
 - **Snap Assist:** after a window snaps by dragging, from a snap layout or with Super+arrow from a
   free window, the rest of its layout is offered: halves offer the other half, quarters the other
   three, thirds the other two, and a layout picked in the flyout its own other cells

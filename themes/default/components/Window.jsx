@@ -1,7 +1,8 @@
 // Window frame: draggable title bar, traffic lights, shadow. The content is the app
 // (the SDK's AppHost); the theme only decides how the frame looks. Moving and resizing (invisible
 // borders on all 4 sides and 4 corners, <WindowShell>) is done by axia-server in C
-// (docs/WINDOWS.md); the JS drag below is only kept for a maximized window.
+// (docs/WINDOWS.md), a maximized or snapped window coming loose at its own size as soon as it moves;
+// the JS drag below is only a fallback for when the C one can't start.
 import { View, Text, addListener, wm, AppHost, windowTitle, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';

@@ -2,8 +2,8 @@
 // the minimize / maximize / close buttons at the end (on the left in right-to-left languages, the
 // engine mirrors the row). Rounded corners unless maximized or snapped. Hovering over maximize
 // offers the snap layouts (halves, thirds, quarters; sdk/windows.js "Snapping"). Moving and
-// resizing are done in C (<WindowShell>, wm.beginMove; docs/WINDOWS.md); a maximized window is
-// dragged out of its place by JS, and snaps where it is dropped.
+// resizing are done in C (<WindowShell>, wm.beginMove; docs/WINDOWS.md), a maximized or snapped
+// window coming loose at its own size as soon as it moves; the JS drag below is only a fallback.
 // Lord Classic has no global menu bar: an app that declares menus (File, Edit, View, Go…; the same
 // ones Lord Flow shows on top, useAppMenus) gets them in a strip under its title bar, with Window and
 // Help, as desktop apps do on a taskbar layout. Apps without menus of their own get no strip.

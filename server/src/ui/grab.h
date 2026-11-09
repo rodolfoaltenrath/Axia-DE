@@ -31,6 +31,9 @@ typedef struct {
     int nlinks;
     struct { int node; float inset, min_w, min_h, max_w, max_h; } links[GRAB_LINKS];
     AxiaSnapRect area;
+    /* Moving a maximized or snapped window: the node's size once it really moves (past a few px), back
+     * to the window's own size under the pointer where it was grabbed. 0 = it keeps its size. */
+    float detach_w, detach_h;
 } GrabLimits;
 
 /* A finished drag: the node's change, where a moved window was dropped and the change of each linked
@@ -39,6 +42,7 @@ typedef struct {
     int node, edges;
     float dx, dy, dw, dh;
     int zone;                       /* -1: not over a snapping zone */
+    int detached;                   /* it went back to its own size (GrabLimits.detach_w) */
     int nlinks;
     struct { int node; float dx, dy, dw, dh; } links[GRAB_LINKS];
 } GrabEnd;

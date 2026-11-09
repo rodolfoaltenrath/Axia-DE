@@ -7,6 +7,7 @@
 #include <string.h>
 
 #define KEEP 48             /* px of the frame that always stay visible */
+#define DETACH 6            /* px the pointer moves before a maximized or snapped window comes loose */
 
 static struct {
     int active, node, edges;
@@ -14,6 +15,8 @@ static struct {
     float x0, y0, w0, h0;           /* node's left/top/width/height at start */
     float x, y, w, h;               /* now */
     float ox, oy;                   /* parent's origin on screen */
+    float bx, by, bw, bh;           /* the node at start, what the end is measured from (x0… change on detach) */
+    int detach;                     /* 1: waiting to come loose (lim.detach_w), 2: it did */
     GrabLimits lim;
     AxiaSnapDrag *drag;             /* moving with snapping on: the zone under the pointer (Rust) */
     /* resizing a snapped window with others along the dragged edge: member 0 is this window */
@@ -170,9 +173,11 @@ static int setup(int node, int edges, const GrabLimits *lim) {
     g.h = g.h0 = dim_or(n->s.height, n->h);
     g.ox = n->ax - n->x;
     g.oy = n->ay - n->y;
+    g.bx = g.x0; g.by = g.y0; g.bw = g.w0; g.bh = g.h0;
+    g.detach = !g.edges && lim->detach_w > 0 && lim->detach_h > 0;
     if (!g.edges && lim->nsnap > 0) {
         g.drag = axia_snap_drag_new(lim->snap, (size_t)(lim->nsnap < GRAB_SNAP_DISPLAYS ? lim->nsnap : GRAB_SNAP_DISPLAYS));
-        zone_check(ptr_x, ptr_y);
+        if (!g.detach) zone_check(ptr_x, ptr_y);   /* a click on a maximized window's bar shows no zone */
     }
     if (g.edges && lim->nlinks > 0) link_setup(n, lim);
     /* the layer keeps what is below one window: windows resizing together repaint as usual */
@@ -217,12 +222,32 @@ void grab_script_tick(double now_ms) {
 
 static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+/* A maximized or snapped window comes loose: its own size, the point grabbed staying under the pointer
+ * at the same fraction of the width and the top where it was. 0 while the pointer is
+ * still within DETACH px of where it was pressed. */
+static int detach_now(float px, float py) {
+    if (g.detach != 1) return 1;
+    if (fabsf(px - g.px0) + fabsf(py - g.py0) < DETACH) return 0;
+    float in = g.lim.inset, w = g.lim.detach_w, h = g.lim.detach_h;
+    float gx = g.px0 - g.ox;                               /* the point grabbed, in node coordinates */
+    float fw = g.w0 - 2 * in, nw = w - 2 * in;
+    float rel = fw > 0 ? clampf((gx - g.x0 - in) / fw, 0, 1) : 0.5f;
+    g.x0 = roundf(gx - in - rel * nw);                     /* the top stays: so does the title bar */
+    g.w0 = w;
+    g.h0 = h;
+    g.detach = 2;
+    /* the layer held the window at its old size: painted again at the new one */
+    if (!g.link) { paint_layer_end(); paint_layer_begin(g.node, 0); }
+    return 1;
+}
+
 void grab_motion(float px, float py) {
     if (!g.active) return;
     Node *n = node_get(g.node);
     if (!n) { grab_cancel(); return; }
     float dx = roundf(px - g.px0), dy = roundf(py - g.py0), in = g.lim.inset;
     if (g.link) { link_motion(dx, dy); return; }
+    if (!detach_now(px, py)) return;
     if (!g.edges) zone_check(px, py);       /* before the frame's clamping: the pointer decides */
     float x = g.x0, y = g.y0, w = g.w0, h = g.h0;
     /* frame bounds in node coordinates (the parent may not be at 0,0) */
@@ -268,12 +293,13 @@ int grab_finish(GrabEnd *e) {
     memset(e, 0, sizeof *e);
     e->node = g.node;
     e->edges = g.edges;
-    e->dx = g.x - g.x0;
-    e->dy = g.y - g.y0;
-    e->dw = g.w - g.w0;
-    e->dh = g.h - g.h0;
+    e->dx = g.x - g.bx;
+    e->dy = g.y - g.by;
+    e->dw = g.w - g.bw;
+    e->dh = g.h - g.bh;
     e->zone = -1;
-    if (g.drag) {                                   /* where the button was released */
+    e->detached = g.detach == 2;
+    if (g.drag && g.detach != 1) {                                   /* where the button was released */
         zone_check(ptr_x, ptr_y);
         e->zone = axia_snap_drag_zone(g.drag, NULL);
     }
