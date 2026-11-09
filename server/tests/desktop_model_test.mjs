@@ -1,5 +1,6 @@
 // desktop_model_test.mjs — the rules of Desktops (sdk/desktopmodel.js): what shows, what is in front
-// and above all who has the keyboard. Regression: focus never lands on a hidden desktop.
+// and above all who has the keyboard. Regression: focus never lands on a hidden desktop. The list of
+// desktops, the saved values and the Overview's layouts are Rust's (rust/axia-shell/src/winmodel/tests.rs).
 //
 //   node tests/desktop_model_test.mjs        (from server/; run_suites.sh runs it when node exists)
 import path from 'node:path';
@@ -9,8 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const M = await import(path.join(here, '../../sdk/desktopmodel.js'));
 const S = await import(path.join(here, '../../sdk/sessionmodel.js'));
 const {
-  onDesktop, windowHidden, visibleOn, mountedOn, focusedOn, keyboardSurface, acceptsAppRequest, surfaceState, pickWindow, addDesktop, removeDesktop,
-  nextDesktop, neighbor, arrowStep, swipeStep, cleanCount, cleanIndex, gridLayout, stripLayout, hitRect, overviewPlaceholder, MAX_DESKTOPS,
+  onDesktop, windowHidden, visibleOn, mountedOn, focusedOn, keyboardSurface, acceptsAppRequest, surfaceState, pickWindow, hitRect, overviewPlaceholder,
 } = M;
 
 let n = 0, bad = 0;
@@ -88,39 +88,6 @@ eq('minimized is iconic, not parked', surfaceState(L(1, 2, { minimized: true }),
   eq('pick nothing', pickWindow([], 1), null);
 }
 
-// adding and removing
-{
-  let s = { list: [1], active: 1 };
-  const a = addDesktop(s); s = a.state;
-  eq('new id', a.id, 2);
-  eq('list', s.list, [1, 2]);
-  eq('adding does not switch', s.active, 1);
-  let full = { list: Array.from({ length: MAX_DESKTOPS }, (_, i) => i + 1), active: 1 };
-  eq('no more than the maximum', addDesktop(full).id, null);
-  eq('next of first', nextDesktop([1, 2, 3], 1), 2);
-  eq('next of last is the previous', nextDesktop([1, 2, 3], 3), 2);
-  eq('only one has no next', nextDesktop([1], 1), null);
-  eq('unknown', nextDesktop([1], 9), null);
-  eq('closing the active shows the next', removeDesktop({ list: [1, 2, 3], active: 2 }, 2), { state: { list: [1, 3], active: 3 }, target: 3 });
-  eq('closing another keeps the active', removeDesktop({ list: [1, 2, 3], active: 1 }, 3), { state: { list: [1, 2], active: 1 }, target: 2 });
-  eq('the last desktop stays', removeDesktop({ list: [1], active: 1 }, 1).target, null);
-  eq('ids are not reused while in the list', addDesktop({ list: [1, 3], active: 1 }).id, 4);
-}
-
-// moving between desktops; left and right follow the layout
-eq('next', neighbor([1, 2, 3], 2, 1), 3);
-eq('prev', neighbor([1, 2, 3], 2, -1), 1);
-eq('no wrap at the end', neighbor([1, 2], 2, 1), null);
-eq('no wrap at the start', neighbor([1, 2], 1, -1), null);
-eq('arrows ltr', [arrowStep('left', false), arrowStep('right', false)], [-1, 1]);
-eq('arrows rtl', [arrowStep('left', true), arrowStep('right', true)], [1, -1]);
-eq('swipes ltr', [swipeStep('left', false), swipeStep('right', false)], [1, -1]);
-eq('swipes rtl', [swipeStep('left', true), swipeStep('right', true)], [-1, 1]);
-
-// saved values come from a file
-eq('count', [cleanCount(4), cleanCount(0), cleanCount(99), cleanCount('3'), cleanCount(undefined), cleanCount(2.5)], [4, 1, 1, 1, 1, 1]);
-eq('index', [cleanIndex(3), cleanIndex(-1), cleanIndex(99), cleanIndex('1'), cleanIndex(undefined)], [3, 0, 0, 0, 0]);
-
 // session restore keeps each window's desktop, and only a sane number
 {
   const F = { x: 10, y: 20, w: 400, h: 300 };
@@ -131,29 +98,8 @@ eq('index', [cleanIndex(3), cleanIndex(-1), cleanIndex(99), cleanIndex('1'), cle
   eq('negative', 'desk' in S.cleanEntry({ id: 'app:files', f: F, desk: -1 }), false);
 }
 
-// the overview's layout
-{
-  const a = { x: 0, y: 28, w: 1280, h: 700 };
-  const g = gridLayout([{ id: 'x', w: 800, h: 600 }, { id: 'y', w: 300, h: 900 }, { id: 'z', w: 2000, h: 1000 }], a);
-  let inside = true;
-  for (const p of g.values()) if (p.x < a.x || p.y < a.y || p.x + p.w > a.x + a.w || p.y + p.h > a.y + a.h) inside = false;
-  eq('every window fits', inside, true);
-  eq('never larger than 85 %', [...g.values()].every((p) => p.scale <= 0.85), true);
-  eq('empty', gridLayout([], a).size, 0);
-  // a maximized window is drawn at the work area's size: the grid scales by that, not by its own w and h
-  const big = gridLayout([{ id: 's', w: 960, h: 640 }, { id: 'm', w: 1280, h: 800, maximized: true }], a, (w) => (w.maximized ? { w: a.w, h: a.h } : w)).get('m');
-  eq('a maximized window stays in the area', big.x + big.w <= a.x + a.w && big.y + big.h <= a.y + a.h, true);
-  const s = stripLayout([1, 2, 3], a, { canAdd: true });
-  eq('cards', s.cards.map((c) => c.id), [1, 2, 3]);
-  eq('in order', s.cards[0].x < s.cards[1].x && s.cards[1].x < s.add.x, true);
-  const r = stripLayout([1, 2, 3], a, { canAdd: true, rtl: true });
-  eq('mirrored', r.cards[0].x > r.cards[1].x && r.cards[2].x > r.add.x, true);
-  eq('mirror keeps the box', Math.min(...r.cards.map((c) => c.x), r.add.x), Math.min(...s.cards.map((c) => c.x), s.add.x));
-  eq('full: no add button', stripLayout([1, 2, 3, 4, 5, 6, 7, 8, 9], a, { canAdd: false }).add, null);
-  const nine = stripLayout([1, 2, 3, 4, 5, 6, 7, 8, 9], { x: 0, y: 0, w: 1024, h: 700 }, { canAdd: false });
-  eq('nine fit on 1024', nine.cards[8].x + nine.cards[8].w <= 1024 && nine.cards[0].x >= 0, true);
-  eq('hit', [hitRect({ x: 1, y: 1, w: 2, h: 2 }, 2, 2), hitRect({ x: 1, y: 1, w: 2, h: 2 }, 3, 2), hitRect(null, 0, 0)], [true, false, false]);
-}
+// the overview's hit test
+eq('hit', [hitRect({ x: 1, y: 1, w: 2, h: 2 }, 2, 2), hitRect({ x: 1, y: 1, w: 2, h: 2 }, 3, 2), hitRect(null, 0, 0)], [true, false, false]);
 
 // lord.setStyle takes native properties only: a CSS transform there is `js: unsupported style 'transform'`
 // and does nothing (the Desktops animation's slide)

@@ -218,25 +218,6 @@ fn assist_follows_the_layout_picked() {
 }
 
 #[test]
-fn assist_miniatures_fit_their_zone() {
-    let cell = zone_rect(Zone::Right, AREAS[0]);
-    for n in [1usize, 2, 3, 5, 12, 20] {
-        let frames: Vec<SnapRect> = (0..n).map(|i| SnapRect::new(0.0, 0.0, 600.0 + 40.0 * i as f64, 400.0)).collect();
-        let ps = assist_grid(cell, &frames);
-        assert_eq!(ps.len(), n.min(ASSIST_MAX));
-        for (i, p) in ps.iter().enumerate() {
-            let r = SnapRect::new(p.x, p.y - 30.0, p.w, p.h + 30.0);
-            assert!(inside(&r, &cell), "{n} candidates: {i} with its title inside {cell:?}: {r:?}");
-            assert!(p.scale > 0.0 && p.scale <= 0.85);
-            for q in &ps[i + 1..] {
-                assert!(!SnapRect::new(p.x, p.y, p.w, p.h).overlaps(&SnapRect::new(q.x, q.y, q.w, q.h)));
-            }
-        }
-    }
-    assert!(assist_grid(cell, &[]).is_empty());
-}
-
-#[test]
 fn c_abi() {
     unsafe {
         assert_eq!(axia_snap_zone_count(), 14);

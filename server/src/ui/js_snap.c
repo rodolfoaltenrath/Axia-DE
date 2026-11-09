@@ -10,7 +10,6 @@
  *   lord.snap.assist(zone, held, layout)    → the free zones of `zone`'s layout (`layout`, the zones
  *                                             of the layout picked, if it has `zone`), given the zones
  *                                             other windows on that display hold
- *   lord.snap.grid(cell, frames)            → [{ x, y, w, h, scale }] the candidates' miniatures in `cell`
  */
 #include "js_snap.h"
 #include "snap_ffi.h"
@@ -124,34 +123,11 @@ static JSValue f_assist(JSContext *c, JSValueConst t, int argc, JSValueConst *ar
     return list;
 }
 
-static JSValue f_grid(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
-    (void)t;
-    AxiaSnapRect cell, frames[AXIA_SNAP_ASSIST_MAX];
-    AxiaSnapPlace places[AXIA_SNAP_ASSIST_MAX];
-    JSValue list = JS_NewArray(c);
-    if (argc < 2 || !get_rect(c, argv[0], &cell)) return list;
-    uint32_t n = array_len(c, argv[1], AXIA_SNAP_ASSIST_MAX);
-    for (uint32_t i = 0; i < n; i++) {
-        JSValue v = JS_GetPropertyUint32(c, argv[1], i);
-        int ok = get_rect(c, v, &frames[i]);
-        JS_FreeValue(c, v);
-        if (!ok) return list;
-    }
-    size_t k = axia_snap_assist_grid(cell, frames, n, places, AXIA_SNAP_ASSIST_MAX);
-    for (size_t i = 0; i < k; i++) {
-        JSValue p = new_rect(c, places[i].x, places[i].y, places[i].w, places[i].h);
-        JS_SetPropertyStr(c, p, "scale", JS_NewFloat64(c, places[i].scale));
-        JS_SetPropertyUint32(c, list, (uint32_t)i, p);
-    }
-    return list;
-}
-
 static const JSCFunctionListEntry snap_funcs[] = {
     JS_CFUNC_DEF("rect", 2, f_rect),
     JS_CFUNC_DEF("zoneAt", 4, f_zone_at),
     JS_CFUNC_DEF("next", 2, f_next),
     JS_CFUNC_DEF("assist", 3, f_assist),
-    JS_CFUNC_DEF("grid", 2, f_grid),
 };
 
 void js_snap_register(JSContext *c, JSValue lord) {

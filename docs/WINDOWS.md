@@ -440,7 +440,7 @@ A theme turns it on with `configureWindows({ snap: true })` (Lord Classic does; 
   first free zone shows the other windows of the desktop (most recent first, at most 12, minimized
   ones too, not those already in a layout on that display) as live miniatures: it is a mode of the
   Overview (`sdk/overview.jsx`, `assist` in its state), which already draws real windows smaller
-  without redrawing the apps; the grid inside the zone is Rust's (`assist_grid`). A click or Enter
+  without redrawing the apps; the grid inside the zone is the Overview's, in Rust (`winmodel/layout.rs`). A click or Enter
   snaps that window there and the next free zone follows; Escape, a click outside the zone or nothing
   left to offer ends it.
 - **Resizing snapped windows together:** dragging an edge of a snapped window that another snapped
@@ -464,7 +464,7 @@ A theme turns it on with `configureWindows({ snap: true })` (Lord Classic does; 
 
 ## Remembered places (0.8.7)
 
-Each app reopens where it was: size, position, maximized and display, per app, in `settings.windowPlaces` (`sdk/windowmemory.js`, the rules in `sdk/placemodel.js`, tests in `tests/place_model_test.mjs`). Flow and Classic share this, for LordOS apps and for Linux apps, whose position the compositor decides.
+Each app reopens where it was: size, position, maximized and display, per app, in `settings.windowPlaces` (`sdk/windowmemory.js`, the rules in Rust: `rust/axia-shell/src/winmodel/place.rs` through `sdk/winmodel.js`, tests in `winmodel/tests.rs`). Flow and Classic share this, for LordOS apps and for Linux apps, whose position the compositor decides.
 
 - **Which display:** a place is kept relative to its display, and a display is known by its name from the EDID plus its connector, never by index. The same monitor on another port still matches, unless two identical monitors make that ambiguous. Monitors with the same name on the same connector can't be told apart.
 - **Display gone, or the place off screen:** the window goes to a visible area of a display that exists, sized to fit.

@@ -117,25 +117,6 @@ pub unsafe extern "C" fn axia_snap_assist_zones(
     k
 }
 
-/// Snap Assist: the candidates' miniatures inside `cell`; returns how many places were written.
-#[no_mangle]
-pub unsafe extern "C" fn axia_snap_assist_grid(
-    cell: SnapRect,
-    frames: *const SnapRect,
-    n: usize,
-    out: *mut AssistPlace,
-    max: usize,
-) -> usize {
-    if frames.is_null() || out.is_null() || n == 0 {
-        return 0;
-    }
-    let places = assist_grid(cell, std::slice::from_raw_parts(frames, n.min(ASSIST_MAX)));
-    let out = std::slice::from_raw_parts_mut(out, max);
-    let k = places.len().min(max);
-    out[..k].copy_from_slice(&places[..k]);
-    k
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn axia_snap_drag_new(displays: *const SnapDisplay, n: usize) -> *mut DragZones {
     let list = if displays.is_null() || n == 0 {

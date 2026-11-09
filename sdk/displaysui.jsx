@@ -1,6 +1,6 @@
 // displaysui.jsx — "Identify" for Settings → Displays (docs/DISPLAYS.md, "Numbers, identify and snapping"):
 //
-//   identifyDisplays(ids?)   shows each display's number (1, 2, 3…; sdk/displaylayout.js displayNumbers),
+//   identifyDisplays(ids?)   shows each display's number (1, 2, 3…; sdk/winmodel.js displayNumbers),
 //                            big, centered on that real display for 2 s, the screens slightly dimmed. `ids` are
 //                            lord.display.list() output ids (one or an array); none = every active display.
 //                            Returns false when there is nothing to show (no display API, mirror mode).
@@ -13,7 +13,7 @@ import { createElement as h } from 'react';
 import { View, Text, screen as desk, displays as screenDisplays } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { displays } from './hardware.jsx';
-import { displayNumbers } from './displaylayout.js';
+import { displayNumbers } from './winmodel.js';
 
 export const IDENTIFY_MS = 2000;
 

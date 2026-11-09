@@ -5,7 +5,7 @@
 //
 // Snap Assist (docs/WINDOWS.md, "Snapping") is a mode of it: after a window snaps, the free zones of
 // its layout (Rust, lord.snap.assist) are offered one at a time, with the other windows of the desktop
-// drawn smaller inside the zone (lord.snap.grid). A click or Enter snaps that window there and goes on
+// drawn smaller inside the zone (winmodel's grid). A click or Enter snaps that window there and goes on
 // to the next free zone; Escape, a click elsewhere or nothing left to offer ends it.
 //
 // The windows are the real ones drawn smaller: WindowShell gives each one a transform (axia-server paints
@@ -22,7 +22,8 @@ import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
 import { settings } from './settings.js';
 import { windows, wm, getApp, workAreaOf, windowTitle, activeDesktop, desktopList, onActiveDesktop, overviewShowing, setActiveDesktop, createDesktop, closeDesktop, snappedOn, setSnapAssistHook } from './windows.js';
-import { MAX_DESKTOPS, onDesktop, gridLayout, stripLayout, hitRect, overviewPlaceholder, OVERVIEW_LABEL } from './desktopmodel.js';
+import { MAX_DESKTOPS, onDesktop, hitRect, overviewPlaceholder } from './desktopmodel.js';
+import { gridLayout, stripLayout } from './winmodel.js';
 import { launcherIdOf } from './dock.js';
 import { windowIcon } from './apps.js';
 import { findWallpaper, wallpaperThumb } from './wallpapers.js';
@@ -58,9 +59,7 @@ function assistState(a) {
   // most recent first; windows already placed in a layout on this display aren't offered
   const list = windows.get().filter((w) => own(w) && w.id !== a.id && !w.fullscreen && !w.pip && onActiveDesktop(w)
     && !(w.snapped && displayFor(w).id === a.display.id)).reverse().slice(0, 12);
-  const grid = list.length ? api.grid(area, list.map((w) => wm.frame(w))) : [];
-  const places = new Map();
-  list.forEach((w, i) => { if (grid[i]) places.set(w.id, grid[i]); });
+  const places = gridLayout(list, area, wm.frame, 'assist');
   if (!places.size) return null;
   return { app: null, list: list.filter((w) => places.has(w.id)), strip: null, area, places, assist: { ...a, target } };
 }
@@ -182,7 +181,7 @@ function Labels({ o, th }) {
     const Icon = windowIcon(w, getApp);
     const on = hover === w.id;
     return h(View, { key: w.id, onMouseEnter: () => hoverStore.set(w.id),
-      style: { position: 'absolute', left: p.x, top: p.y - OVERVIEW_LABEL, width: p.w, height: OVERVIEW_LABEL - 4, flexDirection: 'row', alignItems: 'center', gap: 8,
+      style: { position: 'absolute', left: p.x, top: p.ly, width: p.w, height: p.lh, flexDirection: 'row', alignItems: 'center', gap: 8,
         paddingHorizontal: 6, borderRadius: 6, backgroundColor: on ? th.windowBg : 'transparent' } },
     Icon ? h(Icon, { size: 16 }) : null,
     h(Text, { style: { flex: 1, fontSize: 12, color: on ? th.text : '#ffffff', whiteSpace: 'nowrap', textOverflow: 'ellipsis', textAlign: 'start' } }, windowTitle(w)),
