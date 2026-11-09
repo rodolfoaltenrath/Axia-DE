@@ -1751,9 +1751,11 @@ static void enter_fullscreen(Surf *s) {
     }
     if (fs_surf) { fs_surf->fullscreen = 0; send_toplevel_configure(fs_surf); }
     fs_surf = s;
+    if (!s->fullscreen) {
+        s->fs_saved_w = s->conf_w;
+        s->fs_saved_h = s->conf_h;
+    }
     s->fullscreen = 1;
-    s->fs_saved_w = s->conf_w;
-    s->fs_saved_h = s->conf_h;
     Node *fn = s->node ? node_get(s->node) : NULL;
     fs_slot = fn ? slot_for_box(fn->ax, fn->ay, fn->ax + fn->w, fn->ay + fn->h) : out_main;
     if (fs_slot < 0) fs_slot = out_main;
@@ -1769,12 +1771,23 @@ static void enter_fullscreen(Surf *s) {
 
 static void leave_fullscreen(Surf *s) {
     if (s) s->fs_resume = 0;
-    if (!s || s != fs_surf) return;
-    fs_surf = NULL;
+    if (!s || !s->fullscreen) return;
+    if (s == fs_surf) fs_surf = NULL;
     s->fullscreen = 0;
     if (s->fs_saved_w > 16) { s->conf_w = s->fs_saved_w; s->conf_h = s->fs_saved_h; }
     send_toplevel_configure(s);
     if (s->mapped) emit(s, "unfullscreen", "{}");
+    damage_add((Box){ 0, 0, ui.width, ui.height });
+    ui.dirty = 1;
+}
+
+/* Switching apps hides the fullscreen plane, not the client's fullscreen mode. Keeping its size,
+ * saved window size and buffers avoids a windowed/fullscreen swapchain rebuild on each Alt+Tab.
+ * An explicit unset_fullscreen still goes through leave_fullscreen, even while suspended. */
+static void suspend_fullscreen(Surf *s) {
+    if (!s || s != fs_surf) return;
+    fs_surf = NULL;
+    s->fs_resume = 1;
     damage_add((Box){ 0, 0, ui.width, ui.height });
     ui.dirty = 1;
 }
@@ -2361,12 +2374,12 @@ void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, f
     if (!paint_capture_mode) s->node = node;
     int iw = (int)(w + 0.5f), ih = (int)(h + 0.5f);
     /* the theme's frame decides the size: if it changed, the app is asked (except in fullscreen) */
-    if (!paint_capture_mode && s->mapped && s != fs_surf && iw > 16 && ih > 16 && (iw != s->conf_w || ih != s->conf_h)) {
+    if (!paint_capture_mode && s->mapped && !s->fullscreen && iw > 16 && ih > 16 && (iw != s->conf_w || ih != s->conf_h)) {
         s->conf_w = iw;
         s->conf_h = ih;
         send_toplevel_configure(s);
     }
-    if (s->xw && s->mapped && s != fs_surf && !paint_capture_mode) xwm_place(s->xw, (int)lroundf(x), (int)lroundf(y));   /* X routes the pointer by it */
+    if (s->xw && s->mapped && !s->fullscreen && !paint_capture_mode) xwm_place(s->xw, (int)lroundf(x), (int)lroundf(y));   /* X routes the pointer by it */
     if (s == fs_surf) return;                   /* presented by the compositor, on top of everything */
     Rect box = { (int)floorf(x), (int)floorf(y), (int)ceilf(x + w), (int)ceilf(y + h) };
     Rect clip = tfv.on ? box : rect_and(node_clip(node), box);  /* node_clip is the untransformed tree's */
@@ -3495,15 +3508,14 @@ void wl_set_state(int id, int maximized, int fullscreen) {
 
 /* Minimized by the theme: an X11 window goes to the bottom of X's stack (it never catches the
  * pointer there) and is marked iconic. Wayland apps aren't told (xdg-shell has no such event).
- * Fullscreen is presented above everything, so it would stay on screen with the keyboard: it stops
- * here and comes back with the window, as on a hidden desktop (wl_set_parked). */
+ * Fullscreen is presented above everything, so its plane is suspended here and comes back with the
+ * window. Its client-side mode and size stay intact, as on a hidden desktop (wl_set_parked). */
 void wl_set_minimized(int id, int minimized) {
     Surf *s = find(id);
     if (!s) return;
     s->xmin = minimized;
     if (minimized && s == fs_surf) {
-        leave_fullscreen(s);
-        s->fs_resume = 1;
+        suspend_fullscreen(s);
     } else if (!minimized && s->fs_resume && !s->parked) {
         s->fs_resume = 0;
         enter_fullscreen(s);
@@ -3520,9 +3532,7 @@ void wl_set_parked(int id, int parked) {
     if (!s || (!s->top && !s->xw) || s->parked == !!parked) return;
     s->parked = !!parked;
     if (parked) {
-        int resume = s == fs_surf || s->fs_resume;      /* wl_set_minimized runs first and may have kept it */
-        if (s == fs_surf) leave_fullscreen(s);
-        s->fs_resume = resume;
+        if (s == fs_surf) suspend_fullscreen(s);
         if (s == key_focus) wl_set_focus(0);
         for (int i = npopups - 1; i >= 0; i--)
             if (toplevel_of(popups[i]) == s && popups[i]->popup) xdg_popup_send_popup_done(popups[i]->popup);

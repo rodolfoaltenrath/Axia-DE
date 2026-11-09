@@ -96,6 +96,9 @@ state whichever window ends up in front. A key pressed before the switcher opene
 in the app. A fullscreen Linux app is temporarily minimized before the selector is drawn, releasing
 its pointer lock. Choosing another app leaves it minimized; returning to it restores fullscreen.
 Esc cancels the selection and restores the original fullscreen app as well.
+The compositor suspends presentation while minimized without changing the client's fullscreen mode
+or dimensions. This avoids a windowed/fullscreen resize cycle on every switch; the app may still
+throttle rendering when unfocused. Explicitly leaving fullscreen restores its original window size.
 
 ## ❖ as Ctrl in Linux apps (Lord Flow)
 
