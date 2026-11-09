@@ -2,16 +2,16 @@
 // The theme builds the desktop (wallpaper, bar, dock, app launcher, Control Center) and the
 // window frames. Apps come from apps/ through the SDK.
 import {
-  startShell, View, Text, Image, screen, ThemeProvider, useSettings, useWindows, configureWindows, getApp, wm, addListener, t as tr,
+  startShell, View, Text, Image, screen, ThemeProvider, useSettings, useWindows, useStore, configureWindows, getApp, wm, addListener, t as tr,
   RustLauncher, launchApp, useDockEntries, dockActivate, dockMenu, dockPrefs, DOCK_LAUNCHER,
   useTrash, openTrash, emptyTrash, trashMenu, ConfirmDialog,
   DesktopWidgets, registerGestureActions, screenDisplays, mainDisplay, settings, Layer, PowerDialog,
   findWallpaper, wallpaperSrc, useShortcuts, AppSwitcher, hideApp, hideOthers,
   toggleShowDesktop, appSettingsItem, flowDesktopKeys, flowGrabs, desktopSwipe, DesktopHud, OverviewBackdrop, OverviewChrome,
-  openOverview, closeOverview, toggleOverview, whenAnimDone, nativeAnim,
+  openOverview, closeOverview, toggleOverview, whenAnimDone, nativeAnim, snapPreview,
 } from '@lordos/sdk';
 import { apps } from '@lordos/apps';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { makeTheme } from './tokens.js';
 import { MenuBar } from './components/MenuBar.jsx';
 import { Dock, LaunchpadIcon, dockThickness } from './components/Dock.jsx';
@@ -40,7 +40,7 @@ function workAreaFor(p, d, menuAll) {
 const areaFn = (d) => { const s = settings.get(); return workAreaFor(dockPrefs(s), d, !!s.menuBarAllDisplays); };
 
 // chrome: borders (1 + 1) and title bar (40 + 1 separator) of Window.jsx's frame
-configureWindows({ apps, workArea: areaFn, chrome: { w: 2, h: 43 } });
+configureWindows({ apps, workArea: areaFn, chrome: { w: 2, h: 43 }, snap: true });
 
 // Pinned by default (the user changes the Dock by dragging and with «Keep in Dock»: settings.dockPinned).
 const DOCK_DEFAULT = [...DOCK_ORDER, ...apps.filter((a) => a.dock && !DOCK_ORDER.includes(a.id)).map((a) => a.id)];
@@ -104,6 +104,7 @@ function App() {
   const [s] = useSettings();
   const t = makeTheme(s);
   const { windows, mounted, focused } = useWindows();
+  const preview = useStore(snapPreview);
   const [launchpad, setLaunchpad] = useState(false);
   const [control, setControl] = useState(null);         // the display whose menu bar opened it
   const [context, setContext] = useState(null);
@@ -148,7 +149,16 @@ function App() {
         ))}
         <DesktopWidgets layer="below" />
         <OverviewBackdrop />
-        {mounted.map((w) => <Window key={w.id} win={w} app={getApp(w.id)} t={t} focused={w.id === focused} leaving={minimizing.includes(w)} />)}
+        {mounted.map((w) => (
+          <Fragment key={w.id}>
+            {preview?.id === w.id && (
+              <View style={{ position: 'absolute', left: preview.rect.x + 6, top: preview.rect.y + 6,
+                width: preview.rect.w - 12, height: preview.rect.h - 12, borderRadius: 8, pointerEvents: 'none',
+                backgroundColor: t.mode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.35)', border: `2px solid ${t.accent}` }} />
+            )}
+            <Window win={w} app={getApp(w.id)} t={t} focused={w.id === focused} leaving={minimizing.includes(w)} />
+          </Fragment>
+        ))}
         {minimizing.filter((w) => !mounted.includes(w)).map((win) => <Window key={win.id} win={win} app={getApp(win.id)} t={t} focused={false} leaving />)}
         <DesktopWidgets layer="above" />
         {/* Everything above the windows goes in its layer (sdk/layers.js, docs/LAYERS.md): the
