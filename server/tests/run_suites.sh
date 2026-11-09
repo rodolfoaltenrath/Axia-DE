@@ -160,9 +160,6 @@ EOF
     # session restore's data rules (sdk/sessionmodel.js)
     if have node; then run "session-model-test (sdk/sessionmodel.js)" node tests/session_model_test.mjs
     else skip "session-model-test" "node"; fi
-    # window snapping geometry (sdk/snap.js): zones without gaps or overlaps, drop zones, Super+arrows
-    if have node; then run "snap-test (sdk/snap.js)" node tests/snap_test.mjs
-    else skip "snap-test" "node"; fi
     # smartctl's JSON → the Disks/Monitor SMART model (sdk/smartparse.js), with real smartctl output
     if have node; then run "smart-parse-test (sdk/smartparse.js)" node tests/smart_parse_test.mjs
     else skip "smart-parse-test" "node"; fi

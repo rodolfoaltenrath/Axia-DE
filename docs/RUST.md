@@ -466,3 +466,40 @@ precedência, teclado, estados independentes e as origens dos aplicativos. A
 integração real usa botões e teclado da Calculadora, provoca divisão por zero,
 reabre a janela e confere os títulos e versões do Sobre. Os quatro apps compilados
 são abertos nos temas padrão e clássico pelo teste headless.
+
+## Encaixe de janelas e Snap Assist
+
+`snap/` substitui `sdk/snap.js` e passa a ter toda a regra do encaixe: os
+retângulos das zonas (metades, quartos, terços e dois terços), a zona sob o
+ponteiro durante o arraste, os movimentos de Super+setas, o Snap Assist e o
+redimensionamento conjunto de janelas encaixadas. O teste em node
+`server/tests/snap_test.mjs` foi removido; seus casos estão em `snap/tests.rs`.
+
+- O arraste continua em C (`grab.c`), sem JS por quadro. Cada movimento do
+  ponteiro e cada mudança do Shift vão ao `DragZones`, que diz se a zona mudou.
+  Só então o servidor chama `__lordWm('zone')`. O polling de 90 ms em JS foi
+  removido. Com Shift, as laterais viram os terços externos e o topo o terço do
+  meio.
+- O `LinkedResize` move a linha compartilhada por janelas encaixadas na mesma
+  tela, respeitando o tamanho mínimo de cada uma. O `grab.c` aplica os frames
+  calculados aos nós; essas janelas não usam a camada de arraste, que guarda o
+  fundo de uma janela só.
+- O Snap Assist calcula as zonas livres do layout (ou do layout escolhido no
+  menu do botão maximizar) e a grade das miniaturas dentro da zona. A interface
+  é um modo do Overview, que já desenha as janelas reais em escala.
+
+A ABI está em `server/src/ui/snap_ffi.h` e a ponte para a sessão em
+`server/src/ui/js_snap.c` (`lord.snap`). Rust não guarda ponteiros de nós nem
+objetos JS: o estado do arraste pertence ao grab e é liberado ao terminar ou
+cancelar. A lista de janelas continua em `sdk/windows.js`.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline snap::
+make -C server build/snap-ffi-test && server/build/snap-ffi-test
+```
+
+Os testes cobrem layouts sem sobreposição nem lacunas em áreas ímpares, as zonas
+de soltura com e sem Shift, várias telas, Super+setas, linhas entre metades e
+quartos, bordas da área de trabalho, mínimos, as zonas oferecidas pelo Assist e a
+grade das miniaturas. Falta validar na sessão física o arraste com preview, o
+Assist com o mouse e o teclado e o redimensionamento conjunto com apps Linux.

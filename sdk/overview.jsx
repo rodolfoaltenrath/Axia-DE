@@ -3,6 +3,11 @@
 // to a desktop in the strip (or to the add button) to move it, add and remove desktops there. With
 // Ctrl+Down it shows only the windows of the app in front, with no strip.
 //
+// Snap Assist (docs/WINDOWS.md, "Snapping") is a mode of it: after a window snaps, the free zones of
+// its layout (Rust, lord.snap.assist) are offered one at a time, with the other windows of the desktop
+// drawn smaller inside the zone (lord.snap.grid). A click or Enter snaps that window there and goes on
+// to the next free zone; Escape, a click elsewhere or nothing left to offer ends it.
+//
 // The windows are the real ones drawn smaller: WindowShell gives each one a transform (axia-server paints
 // it from a cached raster, so no app redraws) and what you see is live. Other desktops in the strip are
 // miniatures of their windows' frames with the app icon, over the wallpaper: their windows aren't drawn.
@@ -10,13 +15,13 @@
 // A theme mounts <OverviewBackdrop /> below its windows and <OverviewChrome /> above them, inside its
 // ThemeProvider. Nothing here runs unless it is open.
 import { createElement as h, useEffect } from 'react';
-import { View, Text, Image, addListener, mainDisplay } from '@lordos/runtime';
+import { View, Text, Image, addListener, mainDisplay, displayFor } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { t, direction } from './i18n.js';
 import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
 import { settings } from './settings.js';
-import { windows, wm, getApp, workAreaOf, windowTitle, activeDesktop, desktopList, onActiveDesktop, overviewShowing, setActiveDesktop, createDesktop, closeDesktop } from './windows.js';
+import { windows, wm, getApp, workAreaOf, windowTitle, activeDesktop, desktopList, onActiveDesktop, overviewShowing, setActiveDesktop, createDesktop, closeDesktop, snappedOn, setSnapAssistHook } from './windows.js';
 import { MAX_DESKTOPS, onDesktop, gridLayout, stripLayout, hitRect, overviewPlaceholder, OVERVIEW_LABEL } from './desktopmodel.js';
 import { launcherIdOf } from './dock.js';
 import { windowIcon } from './apps.js';
@@ -26,7 +31,8 @@ import { clearTextFocus } from './components.jsx';
 const DRAG_START = 6;
 const own = (w) => !(getApp(w.id)?.builtin && !String(w.id).startsWith('linux#'));   // not the theme's panels
 
-// null, or { app, list, places: Map id → { x, y, scale, w, h }, strip, area }
+// null, or { app, list, places: Map id → { x, y, scale, w, h }, strip, area, assist }
+// (assist: { id, zone, display, layout, target } in Snap Assist: `id` snapped to `zone`, offering `target`)
 export const overview = createStore(null);
 const hoverStore = createStore(null);      // the window under the pointer or the keyboard
 const dragStore = createStore(null);       // { id, x, y, over } while a window is dragged
@@ -41,9 +47,37 @@ function compute(app) {
   const top = strip ? strip.h : 14;
   return { app, list, strip, area, places: gridLayout(list, { x: area.x, y: area.y + top, w: area.w, h: area.h - top }, wm.frame) };
 }
+// Snap Assist: the next free zone of the layout and the windows offered for it, or null.
+function assistState(a) {
+  const api = typeof lord !== 'undefined' && lord.snap;
+  const snapped = wm.get(a.id);
+  if (!api || !snapped || snapped.snapped !== a.zone || !onActiveDesktop(snapped)) return null;
+  const target = api.assist(a.zone, snappedOn(a.display, a.id).map((w) => w.snapped), a.layout || [])[0];
+  const area = target ? api.rect(target, workAreaOf(a.display)) : null;
+  if (!area) return null;
+  // most recent first; windows already placed in a layout on this display aren't offered
+  const list = windows.get().filter((w) => own(w) && w.id !== a.id && !w.fullscreen && !w.pip && onActiveDesktop(w)
+    && !(w.snapped && displayFor(w).id === a.display.id)).reverse().slice(0, 12);
+  const grid = list.length ? api.grid(area, list.map((w) => wm.frame(w))) : [];
+  const places = new Map();
+  list.forEach((w, i) => { if (grid[i]) places.set(w.id, grid[i]); });
+  if (!places.size) return null;
+  return { app: null, list: list.filter((w) => places.has(w.id)), strip: null, area, places, assist: { ...a, target } };
+}
+export function openSnapAssist(a) {
+  if (blocked() || overview.get()) return;
+  const o = assistState(a);
+  if (!o) return;
+  clearTextFocus();
+  overviewShowing.set(true);
+  overview.set(o);
+}
 const refresh = () => {
   const o = overview.get();
-  if (o) overview.set(compute(o.app));
+  if (!o) return;
+  if (!o.assist) { overview.set(compute(o.app)); return; }
+  const next = assistState(o.assist);
+  if (next) overview.set(next); else closeOverview();
 };
 windows.subscribe(refresh);
 activeDesktop.subscribe(refresh);
@@ -54,6 +88,7 @@ const blocked = () => typeof lord !== 'undefined' && !!lord.wayland?.fullscreen?
 
 export function openOverview({ app = null } = {}) {
   if (blocked()) return;
+  if (overview.get()?.assist) closeOverview();
   clearTextFocus();                       // its keys are the overview's
   overviewShowing.set(true);
   overview.set(compute(app));
@@ -77,7 +112,14 @@ export function toggleAppWindows() {
 }
 
 function pick(id) {
+  const a = overview.get()?.assist;
   closeOverview();
+  if (a) {
+    wm.snap(id, a.target, { display: a.display });
+    wm.focus(id);
+    openSnapAssist(a);                    // the next free zone, if any
+    return;
+  }
   wm.focus(id);
 }
 
@@ -215,6 +257,10 @@ export function OverviewChrome() {
       else if (e.key === 'ArrowLeft') hoverStore.set(list[(i - 1 + list.length) % list.length].id);
       else if (e.key === 'Enter' && hoverStore.get()) pick(hoverStore.get());
     });
+    // Snap Assist ends with a click outside its windows; the release that dropped the snapped window
+    // (it arrives after the assist opened) isn't one
+    let downs = 0;
+    const offDown = addListener('pointerdown', () => { downs++; });
     const offMove = addListener('pointermove', (e) => {
       if (!press) return;
       if (!dragStore.get() && Math.abs(e.x - press.x) + Math.abs(e.y - press.y) < DRAG_START) return;
@@ -224,8 +270,9 @@ export function OverviewChrome() {
       const p = press, d = dragStore.get();
       press = null;
       if (d) { dragStore.set(null); drop(d.id, dropAt(e.x, e.y)); } else if (p) pick(p.id);
+      else if (downs && overview.get()?.assist && !hitRect(overview.get().area, e.x, e.y)) closeOverview();
     });
-    return () => { offKey(); offMove(); offUp(); };
+    return () => { offKey(); offDown(); offMove(); offUp(); };
   }, [open]);
   if (!o) return null;
   return [
@@ -236,3 +283,5 @@ export function OverviewChrome() {
     h(Layer, { key: 'drag', name: 'drag' }, h(Ghost, { th })),
   ];
 }
+
+setSnapAssistHook(openSnapAssist);
