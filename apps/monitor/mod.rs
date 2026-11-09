@@ -3,16 +3,20 @@ mod charts;
 pub mod compat;
 mod connections;
 mod countries;
+mod dashboard;
 mod fan;
 mod geo;
 mod history;
 mod memory;
 mod metrics;
+mod paint;
 mod processes;
 mod rules;
 mod sensors;
+mod system;
 #[cfg(test)]
 mod tests;
+mod theme;
 mod ui;
 mod worker;
 use serde_json::{json, Value};
@@ -91,20 +95,6 @@ impl Tab {
             Self::Voltage => "voltage",
         }
     }
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Overview => "monitor.tab.overview",
-            Self::Cooling => "monitor.tab.cooling",
-            Self::Voltage => "monitor.tab.voltage",
-            _ => match self {
-                Self::Cpu => "monitor.cpu",
-                Self::Memory => "monitor.memory",
-                Self::Network => "monitor.network",
-                Self::Disks => "monitor.disks",
-                _ => "monitor.processes",
-            },
-        }
-    }
     pub fn parse(id: &str) -> Self {
         Self::ALL
             .into_iter()
@@ -133,6 +123,8 @@ pub struct App {
     pub map_lon: f64,
     pub map_lat: f64,
     pub images: charts::Images,
+    /// Icon rasters survive rebuilds; they only change with the theme.
+    pub icons: charts::Images,
     pub snapshot: Arc<worker::Snapshot>,
     pub frozen: Option<Arc<worker::Snapshot>>,
     pub prefs: Value,
@@ -185,6 +177,7 @@ impl Default for App {
             map_lon: -180.,
             map_lat: 90.,
             images: Default::default(),
+            icons: Default::default(),
             snapshot: Default::default(),
             frozen: None,
             prefs: json!({}),
@@ -215,7 +208,14 @@ impl App {
         self.lease.as_ref().unwrap().service.clone()
     }
     pub fn pixels(&self, id: &str) -> Option<&charts::Raster> {
-        self.images.get(id).map(Arc::as_ref)
+        self.images
+            .get(id)
+            .or_else(|| self.icons.get(id))
+            .map(Arc::as_ref)
+    }
+    /// A privacy panel shown inside Settings: no sidebar or header.
+    pub fn embedded(&self) -> bool {
+        self.args["section"].as_str().is_some_and(|s| !s.is_empty())
     }
     fn effect(&mut self, kind: &str, args: Value) {
         let mut effect = args;
@@ -323,6 +323,16 @@ impl App {
                 self.query.clear();
                 self.section.clear();
                 self.frozen = None;
+            }
+            "showApps" => {
+                // "Show applications…" on a dashboard card: the busiest first.
+                self.tab = Tab::Processes;
+                self.section.clear();
+                self.query.clear();
+                if ["cpu", "rss"].contains(&key) {
+                    self.sort = key.into();
+                    self.reverse = true;
+                }
             }
             "query" => self.query = key.chars().take(256).collect(),
             "mine" => self.mine = !self.mine,

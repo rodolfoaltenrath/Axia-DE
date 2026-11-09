@@ -33,6 +33,8 @@ pub struct Snapshot {
     pub sensors: Value,
     pub fan: Value,
     pub info: Value,
+    /// Host, filesystems, addresses and battery (`system::collect`).
+    pub system: Value,
     pub details: BTreeMap<(i32, u64), Value>,
     pub history: Value,
     pub result: Value,
@@ -215,6 +217,7 @@ impl Service {
         let mut last_second = Instant::now() - Duration::from_secs(5);
         let mut last_sensor = Instant::now() - Duration::from_secs(5);
         let mut last_history = Instant::now() - Duration::from_secs(5);
+        let mut last_system = Instant::now() - Duration::from_secs(30);
         let mut geo = None;
         let mut geo_tried = false;
         loop {
@@ -347,6 +350,11 @@ impl Service {
                 }
                 snapshot.sensors["t"] = json!(now);
                 last_sensor = Instant::now();
+                changed = true;
+            }
+            if active && last_system.elapsed() >= Duration::from_secs(5) {
+                snapshot.system = super::system::collect(&root);
+                last_system = Instant::now();
                 changed = true;
             }
             let sample_interval = Duration::from_millis(if active { SAMPLE_MS } else { 30_000 });

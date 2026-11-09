@@ -327,7 +327,8 @@ fn fixture() -> worker::Snapshot {
     worker::Snapshot {
         seq: 1,
         samples: VecDeque::from([std::sync::Arc::new(s.clone()), std::sync::Arc::new(s)]),
-        info: json!({"cpuModel":"test","cores":2}),
+        info: json!({"cpuModel":"test","cores":2,"physical":1}),
+        system: json!({"host":"axia","os":"Axia Linux","model":"","filesystems":[{"mount":"/","total":1e12,"used":2e11,"avail":8e11},{"mount":"/home","total":5e11,"used":1e11,"avail":4e11}],"network":{"gateway":"192.168.0.1","gatewayMac":"aa:bb:cc:dd:ee:ff","ifs":[{"name":"wlan0","mac":"11:22:33:44:55:66","wireless":true,"up":true,"primary":true,"addrs":["192.168.0.5"]}]},"battery":{"capacity":87.0,"status":"Charging","cycles":18.0,"full":4879.0,"design":4993.0,"unit":"mAh"}}),
         sensors: json!({"temps":[],"fans":[],"voltage":{"chips":[],"supplies":[]}}),
         processes: json!({"list":[]}),
         connections: json!({"list":[]}),
@@ -519,7 +520,9 @@ fn subscription_notifications_do_not_accelerate_metric_sampling() {
     }
     assert!(
         service.snapshot().samples.len()
-            <= before + 1 + (notifications.elapsed().as_millis() / worker::SAMPLE_MS as u128) as usize
+            <= before
+                + 1
+                + (notifications.elapsed().as_millis() / worker::SAMPLE_MS as u128) as usize
     );
 }
 #[test]
@@ -545,7 +548,10 @@ fn unchanged_sync_reuses_the_tree_and_any_command_rebuilds_it() {
         let second = app.request(&sync);
         if service.snapshot().seq == seq {
             assert_eq!(second["same"], true);
-            assert!(second["tree"].is_null(), "an unchanged tree is not serialized again");
+            assert!(
+                second["tree"].is_null(),
+                "an unchanged tree is not serialized again"
+            );
             assert_eq!(second["generation"], first["generation"]);
             reused = true;
             break;
@@ -558,4 +564,211 @@ fn unchanged_sync_reuses_the_tree_and_any_command_rebuilds_it() {
     assert!(app.request(&wider)["tree"].is_object());
     app.request(&json!({"cmd":"tab","key":"memory"}));
     assert!(app.request(&wider)["tree"].is_object());
+}
+#[test]
+fn filesystems_keep_one_entry_per_device_and_skip_virtual_mounts() {
+    let tree = Tree::new();
+    tree.put("mnt/My Disk/.keep", "");
+    tree.put("home/.keep", "");
+    tree.put(
+        "proc/mounts",
+        "/dev/sdb1 /mnt/My\\040Disk ext4 rw 0 0\n\
+         /dev/sda2 / btrfs rw 0 0\n\
+         /dev/sda2 /home btrfs rw 0 0\n\
+         tmpfs /tmp tmpfs rw 0 0\n\
+         /dev/loop0 /snap/core squashfs ro 0 0\n\
+         /dev/sda1 /boot/efi vfat rw 0 0\n",
+    );
+    let list = system::filesystems(&tree.0);
+    let mounts: Vec<_> = arr(&list).iter().map(|f| f["mount"].clone()).collect();
+    assert_eq!(mounts, [json!("/"), json!("/mnt/My Disk")]);
+    for fs in arr(&list) {
+        assert!(fs["total"].as_u64().unwrap() > 0);
+        assert!(fs["used"].as_u64().unwrap() <= fs["total"].as_u64().unwrap());
+    }
+}
+#[test]
+fn network_facts_read_the_default_route_gateway_and_interfaces() {
+    let tree = Tree::new();
+    // 192.168.2.1 as the kernel prints the network-order word.
+    let gw = u32::from_ne_bytes([192, 168, 2, 1]);
+    tree.put(
+        "proc/net/route",
+        &format!("Iface\tDestination\tGateway\tFlags\nwlan0\t00000000\t{gw:08X}\t0003\n"),
+    );
+    tree.put(
+        "proc/net/arp",
+        "IP address HW type Flags HW address Mask Device\n192.168.2.1 0x1 0x2 aa:bb:cc:00:11:22 * wlan0\n",
+    );
+    tree.put("sys/class/net/eth0/address", "00:11:22:33:44:55\n");
+    tree.put("sys/class/net/eth0/operstate", "down\n");
+    tree.put("sys/class/net/wlan0/address", "66:77:88:99:aa:bb\n");
+    tree.put("sys/class/net/wlan0/operstate", "up\n");
+    tree.put("sys/class/net/wlan0/wireless/.keep", "");
+    tree.put("sys/class/net/lo/address", "00:00:00:00:00:00\n");
+    tree.put("sys/class/net/docker0/address", "02:42:00:00:00:00\n");
+    tree.put("sys/devices/virtual/net/docker0/.keep", "");
+    let net = system::network(&tree.0);
+    assert_eq!(net["gateway"], "192.168.2.1");
+    assert_eq!(net["gatewayMac"], "aa:bb:cc:00:11:22");
+    let names: Vec<_> = arr(&net["ifs"]).iter().map(|i| i["name"].clone()).collect();
+    assert_eq!(
+        names,
+        [json!("wlan0"), json!("eth0")],
+        "primary first; no lo or virtual"
+    );
+    assert_eq!(net["ifs"][0]["wireless"], true);
+    assert_eq!(net["ifs"][0]["up"], true);
+    assert_eq!(net["ifs"][1]["wireless"], false);
+}
+#[test]
+fn battery_reports_charge_in_mah_and_skips_peripherals() {
+    let tree = Tree::new();
+    for (k, v) in [("type", "Battery"), ("scope", "Device"), ("capacity", "40")] {
+        tree.put(&format!("sys/class/power_supply/hidpp_battery_0/{k}"), v);
+    }
+    for (k, v) in [
+        ("type", "Battery\n"),
+        ("status", "Charging\n"),
+        ("capacity", "87\n"),
+        ("cycle_count", "18\n"),
+        ("charge_full", "4879000\n"),
+        ("charge_full_design", "4993000\n"),
+        ("charge_now", "4250000\n"),
+    ] {
+        tree.put(&format!("sys/class/power_supply/BAT0/{k}"), v);
+    }
+    let b = system::battery(&tree.0);
+    assert_eq!(b["name"], "BAT0");
+    assert_eq!(b["capacity"], 87.);
+    assert_eq!(b["status"], "Charging");
+    assert_eq!(b["cycles"], 18.);
+    assert_eq!(b["unit"], "mAh");
+    assert!((b["full"].as_f64().unwrap() - 4879.).abs() < 1e-6);
+    assert!((b["design"].as_f64().unwrap() - 4993.).abs() < 1e-6);
+    // Energy-reporting batteries use Wh; no battery at all is null.
+    let tree = Tree::new();
+    for (k, v) in [
+        ("type", "Battery"),
+        ("energy_full", "50000000"),
+        ("energy_now", "25000000"),
+    ] {
+        tree.put(&format!("sys/class/power_supply/BAT1/{k}"), v);
+    }
+    let b = system::battery(&tree.0);
+    assert_eq!(b["unit"], "Wh");
+    assert_eq!(b["capacity"], 50.);
+    assert!(b["cycles"].is_null());
+    assert!(system::battery(&Tree::new().0).is_null());
+}
+#[test]
+fn os_name_and_model_ignore_firmware_placeholders() {
+    let tree = Tree::new();
+    tree.put(
+        "etc/os-release",
+        "NAME=Axia\nPRETTY_NAME=\"Axia Linux 1.0\"\n",
+    );
+    tree.put("sys/class/dmi/id/product_name", "To Be Filled By O.E.M.\n");
+    tree.put("sys/class/dmi/id/board_name", "B450M\n");
+    assert_eq!(system::os_name(&tree.0), "Axia Linux 1.0");
+    assert_eq!(system::model(&tree.0), "B450M");
+    tree.put("sys/class/dmi/id/product_name", "20XW\n");
+    tree.put(
+        "sys/class/dmi/id/product_version",
+        "ThinkPad X1 Carbon Gen 9\n",
+    );
+    assert_eq!(system::model(&tree.0), "ThinkPad X1 Carbon Gen 9");
+}
+#[test]
+fn kernel_memory_is_part_of_used_and_bounded_by_it() {
+    let m = memory::parse(
+        "MemTotal: 1000 kB\nMemFree: 100 kB\nMemAvailable: 600 kB\nSUnreclaim: 50 kB\nKernelStack: 10 kB\nPageTables: 20 kB\n",
+    );
+    assert_eq!(m["used"], 400 * 1024);
+    assert_eq!(m["kernel"], 80 * 1024);
+    let m = memory::parse("MemTotal: 100 kB\nMemAvailable: 90 kB\nSUnreclaim: 500 kB\n");
+    assert_eq!(m["kernel"], 10 * 1024);
+}
+#[test]
+fn icons_and_rings_are_antialiased_and_transparent_outside_the_shapes() {
+    for icon in [
+        paint::Icon::Dashboard,
+        paint::Icon::Processes,
+        paint::Icon::Cpu,
+        paint::Icon::Memory,
+        paint::Icon::Storage,
+        paint::Icon::Network,
+        paint::Icon::Cooling,
+        paint::Icon::Voltage,
+        paint::Icon::Settings,
+        paint::Icon::Laptop,
+        paint::Icon::Router,
+    ] {
+        let r = paint::icon(icon, 40, [10, 132, 255, 255]);
+        let alpha: Vec<u8> = r.data.chunks_exact(4).map(|p| p[3]).collect();
+        assert_eq!(alpha[0], 0, "{icon:?}: corner");
+        assert!(alpha.iter().any(|&a| a == 255), "{icon:?}: solid strokes");
+        assert!(
+            alpha.iter().any(|&a| a > 0 && a < 255),
+            "{icon:?}: antialiased edges"
+        );
+        for p in r.data.chunks_exact(4).filter(|p| p[3] > 0) {
+            assert_eq!(&p[..3], &[10, 132, 255], "{icon:?}: one colour");
+        }
+    }
+    let rings = paint::rings(
+        100,
+        &[(40., 8.)],
+        &[paint::Ring {
+            radius: 40.,
+            width: 8.,
+            start: 0.,
+            end: 0.25,
+            color: [255, 0, 0, 255],
+        }],
+        [0, 0, 0, 40],
+        1,
+    );
+    let at = |x: usize, y: usize| &rings.data[(y * 100 + x) * 4..(y * 100 + x) * 4 + 4];
+    assert_eq!(at(50, 50)[3], 0, "centre");
+    assert_eq!(at(78, 22), &[255, 0, 0, 255], "inside the first quarter");
+    assert_eq!(at(22, 78)[3], 40, "track only in the third quarter");
+}
+#[test]
+fn dashboard_links_open_sorted_processes_and_settings_panels_hide_the_chrome() {
+    let mut app = App::default();
+    app.snapshot = Arc::new(fixture());
+    let context = json!({"theme":{"mode":"light","accent":"#ff0000"},"width":1180});
+    let tree = ui::tree(&mut app, &context).to_string();
+    for k in [
+        "monitor.dash.summary",
+        "monitor.dash.battery",
+        "monitor.bat.charging",
+        "monitor.dash.wifi",
+        "monitor.nav.dashboard",
+        "axia-icon-128.png",
+        "192.168.0.5",
+    ] {
+        assert!(tree.contains(k), "{k}");
+    }
+    // Icons are drawn once in the accent colour and survive rebuilds.
+    assert!(app.icons.keys().any(|k| k.contains("ff0000")));
+    let icons = app.icons.len();
+    ui::tree(&mut app, &context);
+    assert_eq!(app.icons.len(), icons);
+    assert!(app.pixels("summary-rings").is_some());
+    app.request(&json!({"cmd":"showApps","key":"rss"}));
+    assert_eq!(
+        (app.tab, app.sort.as_str(), app.reverse),
+        (Tab::Processes, "rss", true)
+    );
+    app.request(&json!({"cmd":"showApps","key":"name; rm"}));
+    assert_eq!(app.sort, "rss", "only known columns");
+    // Inside Settings: no sidebar, header or Monitor entry.
+    app.args = json!({"section":"privacy"});
+    app.section = "privacy".into();
+    let embedded = ui::tree(&mut app, &context).to_string();
+    assert!(!embedded.contains("monitor.nav.dashboard"));
+    assert!(!embedded.contains("axia-icon-128.png"));
+    assert!(!embedded.contains("\"monitor.title\""));
 }
