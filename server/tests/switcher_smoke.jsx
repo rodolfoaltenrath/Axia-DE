@@ -6,6 +6,7 @@ import { openSwitcher, switcherKey, switcherState, cancelSwitcher, AppSwitcher }
 import { useShortcuts, shortcutList, resetShortcuts } from '../../sdk/shortcuts.js';
 import { findWallpaper } from '../../sdk/wallpapers.js';
 import { settings } from '../../sdk/settings.js';
+import { defaultOpenerId } from '../../sdk/defaults.js';
 import { askPower, canPower, powerAsk, PowerDialog } from '../../sdk/power.jsx';
 
 const check = (ok, message) => { if (!ok) throw new Error('switcher smoke: ' + message); };
@@ -118,10 +119,32 @@ function runTests() {
         check(rejected, 'invalid keys rejected at the bridge');
         cancelSwitcher();
         fullscreenTests();
+        mimeTests();
         console.log('switcher integration: passed');
       }, 100);
     }, 100);
   }, 100);
+}
+
+function mimeTests() {
+  const nativeMime = lord.mime;
+  registerBuiltinApp({ id: 'pdf', name: 'PDF', builtin: true });
+  registerBuiltinApp({ id: 'player', name: 'Player', builtin: true });
+  const handlers = {
+    'application/x-rpm': { id: 'package-installer.desktop', source: 'declared' },
+    'application/vnd.example.document': { id: 'office.desktop', source: 'declared' },
+  };
+  lord.mime = { ...nativeMime, get: () => null, resolve: (mime) => handlers[mime] || null };
+  try {
+    check(defaultOpenerId('application/x-rpm') === 'package-installer.desktop', 'RPM uses its installer, not the PDF category');
+    check(defaultOpenerId('application/vnd.example.document') === 'office.desktop', 'other application types keep their own handlers');
+    check(defaultOpenerId('application/octet-stream') === null, 'unknown binary is not classified as PDF');
+    check(defaultOpenerId('application/pdf') === 'lordos-pdf.desktop', 'PDF keeps its native fallback');
+    check(defaultOpenerId('audio/example') === 'lordos-player.desktop', 'media keeps its family fallback');
+    handlers['application/x-rpm'] = { id: 'chosen-installer.desktop', source: 'user', explicit: true };
+    check(defaultOpenerId('application/x-rpm') === 'chosen-installer.desktop', 'explicit package handler takes priority');
+    console.log('MIME category integration: passed');
+  } finally { lord.mime = nativeMime; }
 }
 
 // Keep the real Rust window list, selector and shortcut dispatcher. Only the native fullscreen

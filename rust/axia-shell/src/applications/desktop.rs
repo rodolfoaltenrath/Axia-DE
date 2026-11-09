@@ -544,6 +544,48 @@ pub(super) fn find(id: &[u8]) -> Option<DesktopApp> {
         c.apps.iter().find(|a| value(&a.id) == id).cloned()
     })
 }
+/// MIME handlers may have NoDisplay=true (for example a local package installer). They remain
+/// absent from the launcher, but a registered file association must still be able to open them.
+pub(super) fn find_for_open(id: &[u8]) -> Option<DesktopApp> {
+    if let Some(app) = find(id) {
+        return Some(app);
+    }
+    if !id_valid(id) {
+        return None;
+    }
+    let dirs = [
+        defaults::home()?.join(".local/share/applications"),
+        defaults::system(b"/usr/share/applications"),
+    ];
+    let filename = [id, b".desktop"].concat();
+    for (i, dir) in dirs.iter().enumerate() {
+        let path = dir.join(OsStr::from_bytes(&filename));
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return None,
+        }
+        // A user entry shadows the system entry even if hidden, malformed or unusable.
+        let mut e = read(path.as_os_str().as_bytes(), &language())?;
+        if !e.nodisplay
+            || !e.is_app
+            || e.hidden
+            || e.terminal
+            || !e.has_name
+            || e.exec.is_empty()
+            || (!e.only.is_empty() && !list_has(&e.only, b"Axia"))
+            || list_has(&e.not, b"Axia")
+            || (!e.tryexec.is_empty() && program(&e.tryexec, i == 0).is_none())
+        {
+            return None;
+        }
+        e.app.id = field(id);
+        e.app.user = (i == 0) as i32;
+        e.app.bin = field(&exec_bin(&e.exec));
+        return Some(e.app);
+    }
+    None
+}
 #[no_mangle]
 pub unsafe extern "C" fn apps_generation(lang: *const c_char) -> u64 {
     generation(bytes(lang))

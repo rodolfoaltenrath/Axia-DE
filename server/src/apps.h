@@ -33,8 +33,8 @@ int apps_launch_child_main(void);
 /* Only axia-server calls this (its main handles --launch): other programs linking the launcher keep
  * starting apps from a small fork of themselves and are never re-executed with a flag they don't know. */
 void apps_set_launch_helper(const char *exe);
-/* Same, but opening a file or folder (only apps with MimeType and paths in the
- * home folder or the user's mounts, as a single argument). */
+/* Same, but opening a file or folder (apps with MimeType, including registered NoDisplay helpers,
+ * and paths in the home folder or the user's mounts, as a single argument). */
 int apps_launch_with(const char *id, const char *path);
 int apps_launch_uri(const char *id, const char *uri);    /* http:// or https:// for the app that declares the scheme */
 /* The app that opens files of a MIME type, as apps_launch_with(id = "") picks it: out gets its desktop
@@ -43,7 +43,8 @@ int apps_launch_uri(const char *id, const char *uri);    /* http:// or https:// 
  * /usr/local/share/applications, /usr/share/applications, then defaults.list), then their [Added
  * Associations], then the installed apps whose MimeType declares the type, in mimeinfo.cache order
  * (~/.local/share/applications, then /usr/share/applications) and then by desktop id. Only apps this
- * launcher lists and can open a file with count; [Removed Associations] are honoured.
+ * launcher can open a file with count, including registered NoDisplay MIME helpers;
+ * [Removed Associations] are honoured.
  * Returns APPS_DEFAULT_USER (the user's own [Default Applications] choice: "explicit"),
  * APPS_DEFAULT_LISTED (a system default or an added association: "automatic") or
  * APPS_DEFAULT_DECLARED (the first installed app that declares the type: "automatic"), or 0 if no

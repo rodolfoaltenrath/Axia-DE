@@ -105,7 +105,11 @@ export function defaultOpenerId(mime) {
   // the user's choice or the system's default, if that app is installed
   const r = resolve(mime);
   if (r && r.source !== 'declared') return r.id;
-  const c = DEFAULT_CATEGORIES.find((x) => x.mimes.includes(mime) || (x.mimes[0] && mime.startsWith(`${x.mimes[0].split('/')[0]}/`) && x.id !== 'browser' && x.id !== 'mail'));
+  // Media and text have category-wide fallbacks. application/* does not: a package, PDF, office
+  // document and arbitrary binary need their own handlers, even when only a declared app exists.
+  const family = mime.split('/')[0];
+  const c = DEFAULT_CATEGORIES.find((x) => x.mimes.includes(mime) ||
+    (['audio', 'video', 'image', 'text'].includes(family) && x.mimes[0]?.startsWith(`${family}/`) && x.id !== 'browser'));
   const d = c ? defaultFor(c.id) : null;
   // then the category's (LordOS's own app), then the first installed app that declares the type
   return d || (r ? r.id : null);

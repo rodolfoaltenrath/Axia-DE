@@ -357,9 +357,9 @@ and the Linux apps whose `.desktop` `MimeType` covers the category (terminals: `
   `[Removed Associations]` applied. File types come from shared-mime-info's `globs2` (highest
   weight, longest pattern, case-sensitive patterns first).
 - **Automatic default (0.8.6).** When the user never chose an app for a type,
-  `apps_default_for()` (`server/src/apps.c`) still finds one, using only apps the launcher itself
+  `apps_default_for()` (`rust/axia-shell/src/applications/launch.rs`) still finds one, using apps the launcher
   would run (a `.desktop` in `/usr/share/applications` or `~/.local/share/applications` that
-  `apps_list` lists: not `Hidden`/`NoDisplay`/`Terminal`, `TryExec` found, `OnlyShowIn`/`NotShowIn`
+  can open: not `Hidden`/`Terminal`, `TryExec` found, `OnlyShowIn`/`NotShowIn`
   honoured, a `MimeType`, and an `Exec` with `%f`/`%F`/`%u`/`%U` naming a program that exists).
   The order:
   1. `[Default Applications]` of the files above, file by file and entry by entry, skipping entries
@@ -376,12 +376,17 @@ and the Linux apps whose `.desktop` `MimeType` covers the category (terminals: `
   No MIME subclasses or aliases are followed (`text/html` does not match an app that only lists
   `application/xhtml+xml`). No app → nothing opens, as before. No path or argument was added:
   the folders are the launcher's, the file still goes through `launchWith`'s checks.
+  `NoDisplay=true` helpers registered in MIME associations or `mimeinfo.cache` can open files
+  without appearing in the launcher. This includes Fedora's local RPM installer. A hidden or
+  unusable user entry still shadows its system counterpart.
 - **The JS side.** `lord.mime.resolve(mime)` returns `{ id, explicit, source }` (`source`:
   `user`, `system` for a system default or added association, `declared` for the first app that
   declares the type) or `null`; `lord.mime.unset(mime)` removes the user's line for that type
   from `[Default Applications]` and `[Added Associations]` of `~/.config/mimeapps.list` (as
   GLib's reset does; `[Removed Associations]` and every other line are kept). `lord.mime.get`
   still returns the first `[Default Applications]` entry without checking it is installed.
+  Category-wide fallbacks apply to audio, video, images and text. `application/*` is not a PDF
+  family: RPM packages, office documents and other application types keep their registered handlers.
 - **What Settings shows.** A category the user never chose shows **Automatic (<app>)**: the
   system's default if there is one, else LordOS's own app for the category (Photos, Player, PDF
   Viewer, Text Editor, Mail), else the first installed app that declares the type (the web
