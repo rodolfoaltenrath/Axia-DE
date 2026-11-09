@@ -9,6 +9,11 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+/// Interval between metric samples while a Monitor window or the shell needs them.
+/// One second keeps the figures readable and the compositor's UI thread idle.
+pub const SAMPLE_MS: u64 = 1000;
+/// Samples retained for the charts: two minutes at `SAMPLE_MS`.
+pub const SAMPLES: usize = 120;
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Want {
     pub processes: bool,
@@ -21,7 +26,8 @@ pub struct Want {
 #[derive(Clone, Default)]
 pub struct Snapshot {
     pub seq: u64,
-    pub samples: VecDeque<Value>,
+    /// Shared samples: publishing a snapshot clones handles, not every sample's JSON.
+    pub samples: VecDeque<Arc<Value>>,
     pub processes: Value,
     pub connections: Value,
     pub sensors: Value,
@@ -242,6 +248,8 @@ impl Service {
             let collect_procs = wants.iter().any(|w| w.processes);
             let collect_conns = wants.iter().any(|w| w.connections);
             let locate = wants.iter().any(|w| w.connections && w.geo);
+            // Readers rebuild their views when `seq` moves: publish only new data.
+            let mut changed = !jobs.is_empty();
             for job in jobs {
                 match job {
                     Job::FanForce(on) => {
@@ -339,8 +347,9 @@ impl Service {
                 }
                 snapshot.sensors["t"] = json!(now);
                 last_sensor = Instant::now();
+                changed = true;
             }
-            let sample_interval = Duration::from_millis(if active { 250 } else { 30_000 });
+            let sample_interval = Duration::from_millis(if active { SAMPLE_MS } else { 30_000 });
             if (active || watch) && last_sample.elapsed() >= sample_interval {
                 last_sample = Instant::now();
                 let sample = sampler.sample(
@@ -349,9 +358,11 @@ impl Service {
                     now,
                     &snapshot.sensors,
                 );
+                let sample = Arc::new(sample);
+                changed = true;
                 if active {
                     snapshot.samples.push_back(sample);
-                    while snapshot.samples.len() > 240 {
+                    while snapshot.samples.len() > SAMPLES {
                         snapshot.samples.pop_front();
                     }
                 } else {
@@ -387,6 +398,7 @@ impl Service {
                         .insert((pid, st), processes::detail(&root, pid, st));
                 }
                 last_second = Instant::now();
+                changed |= collect_procs || collect_conns || !snapshot.details.is_empty();
             }
             if enabled && last_history.elapsed() >= Duration::from_secs(5) {
                 let nets = metrics::net(&read(&root.join("proc/net/dev"), 65536));
@@ -411,11 +423,13 @@ impl Service {
             } else if !enabled {
                 previous_net = None;
             }
-            snapshot.seq = snapshot.seq.wrapping_add(1);
             let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-            state.snapshot = Arc::new(snapshot.clone());
+            if changed {
+                snapshot.seq = snapshot.seq.wrapping_add(1);
+                state.snapshot = Arc::new(snapshot.clone());
+            }
             let delay = if active {
-                Duration::from_millis(250).saturating_sub(last_sample.elapsed())
+                Duration::from_millis(SAMPLE_MS).saturating_sub(last_sample.elapsed())
             } else if enabled {
                 Duration::from_secs(5)
             } else {

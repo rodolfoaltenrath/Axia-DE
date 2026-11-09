@@ -151,6 +151,16 @@ pub struct App {
     pub form_error: Option<String>,
     pub map_request: String,
     pub disk_history: std::collections::BTreeMap<String, VecDeque<(u64, f64)>>,
+    /// What the last widget tree was built from; an identical sync reuses it.
+    built: Option<Built>,
+}
+#[derive(PartialEq)]
+struct Built {
+    seq: u64,
+    context: Value,
+    settings: Value,
+    services: Value,
+    catalog: Value,
 }
 impl Default for App {
     fn default() -> Self {
@@ -193,6 +203,7 @@ impl Default for App {
             form_error: None,
             map_request: String::new(),
             disk_history: Default::default(),
+            built: None,
         }
     }
 }
@@ -225,6 +236,7 @@ impl App {
     fn sync(&mut self, input: &Value) {
         if input["args"] != self.args {
             self.args = input["args"].clone();
+            self.built = None;
             if let Some(tab) = input["args"]["tab"].as_str() {
                 self.tab = Tab::parse(tab)
             }
@@ -302,6 +314,7 @@ impl App {
             "close" => {
                 self.lease = None;
                 self.images.clear();
+                self.built = None;
                 return Value::Null;
             }
             "sync" => self.sync(input),
@@ -547,8 +560,30 @@ impl App {
             _ => {}
         }
         if cmd != "sync" {
+            // Any command can change what is shown: the next sync rebuilds.
+            self.built = None;
             return json!({"effect":self.effects.pop_front(),"error":self.error});
         }
+        // The host re-renders for reasons unrelated to Monitor (window list, theme,
+        // timers). Without new samples, input or context, reuse the previous tree.
+        let shown = self.frozen.as_ref().unwrap_or(&self.snapshot).seq;
+        let unchanged = self.built.as_ref().is_some_and(|b| {
+            b.seq == shown
+                && b.context == input["context"]
+                && b.settings == input["settings"]
+                && b.services == input["services"]
+                && b.catalog == input["catalog"]
+        });
+        if unchanged {
+            return json!({"same":true,"effect":self.effects.pop_front(),"title":{"key":"monitor.title"},"generation":self.generation});
+        }
+        self.built = Some(Built {
+            seq: shown,
+            context: input["context"].clone(),
+            settings: input["settings"].clone(),
+            services: input["services"].clone(),
+            catalog: input["catalog"].clone(),
+        });
         self.generation = self.generation.wrapping_add(1);
         self.images.clear();
         let tree = ui::tree(self, &input["context"]);

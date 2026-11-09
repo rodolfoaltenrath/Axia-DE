@@ -35,8 +35,17 @@ socket collection, map rendering and history writes occur outside that mutex.
 Opening a window subscribes to the sampler and immediately renders the most
 recent snapshot; the UI does not synchronously wait for a procfs walk.
 
-- Active windows collect at most four samples per second, retaining 240 samples.
-  Subscription updates do not increase the sampling rate.
+- Active windows collect one sample per second (`worker::SAMPLE_MS`), retaining
+  120 samples (two minutes). Figures stay readable instead of changing several
+  times a second. Subscription updates do not increase the sampling rate.
+- The worker publishes a new snapshot, and increments `seq`, only when it
+  collected new data. Samples are shared `Arc` values, so publishing does not
+  deep-copy the chart history.
+- The widget tree runs on the compositor's UI thread, so it is rebuilt only when
+  needed. A `sync` with the same snapshot `seq`, context, settings, services and
+  catalog, and no command since the last build, returns `{"same": true}` without
+  a tree; the host keeps the previous React element. The host polls every second
+  while focused and every two seconds otherwise.
 - Process and connection details refresh at most once per second, only when the
   corresponding tab needs them. Closing the last window drops its subscription.
 - Hardware sensors refresh every two seconds while active. Disk temperatures

@@ -29,10 +29,10 @@ pub fn request(input: &Value) -> Value {
         "historyEnable"=>{service.history(args[0]==true);json!(args[0]==true)},
         "historyClear"=>{service.job(Job::Clear);json!(true)},
         "history"=>{service.job(Job::Query(args[0].clone()));service.snapshot().history.clone()},
-        "info"=>{let snapshot=service.snapshot();if snapshot.info.is_null(){json!({"cpuModel":"","cores":unsafe{libc::sysconf(libc::_SC_NPROCESSORS_ONLN)},"geo":true,"tick":250,"home":null})}else{snapshot.info.clone()}},
+        "info"=>{let snapshot=service.snapshot();if snapshot.info.is_null(){json!({"cpuModel":"","cores":unsafe{libc::sysconf(libc::_SC_NPROCESSORS_ONLN)},"geo":true,"tick":super::worker::SAMPLE_MS,"home":null})}else{snapshot.info.clone()}},
         "netTotals"=>{service.job(Job::Totals);service.snapshot().totals.clone()},
         "sample"|"processes"|"connections"|"voltage"|"diskTemps"|"detailInfo"=>{let snapshot=service.snapshot();let seq=client.seq.entry(cmd.into()).or_default();if *seq==snapshot.seq{return Value::Null}*seq=snapshot.seq;match cmd{
-            "sample"=>snapshot.samples.back().cloned().unwrap_or(Value::Null),"processes"=>snapshot.processes.clone(),"connections"=>snapshot.connections.clone(),"voltage"=>snapshot.sensors["voltage"].clone(),"diskTemps"=>json!({"t":wall(),"disks":snapshot.samples.back().map(|s|&s["disk"]["disks"])}),_=>client.want.detail.and_then(|id|snapshot.details.get(&id).cloned()).unwrap_or(Value::Null)
+            "sample"=>snapshot.samples.back().map(|s|(**s).clone()).unwrap_or(Value::Null),"processes"=>snapshot.processes.clone(),"connections"=>snapshot.connections.clone(),"voltage"=>snapshot.sensors["voltage"].clone(),"diskTemps"=>json!({"t":wall(),"disks":snapshot.samples.back().map(|s|&s["disk"]["disks"])}),_=>client.want.detail.and_then(|id|snapshot.details.get(&id).cloned()).unwrap_or(Value::Null)
         }},
         _=>Value::Null,
     }})

@@ -123,6 +123,7 @@ function keepParts(old, w) {
 // changes): that newer state is applied in full, and this older one must not overwrite what is left.
 let applied = 0;
 let resyncing = false;
+let lastViews = '';
 function apply(st) {
   // a window the mirror doesn't have at that revision (it can't happen unless a state was lost): ask
   // for all of them again
@@ -141,10 +142,16 @@ function apply(st) {
   }
   for (const id of [...mirror.keys()]) if (!seen.has(id)) { mirror.delete(id); revs.delete(id); }
   const v = st.views || NO_VIEWS;
-  windowViews.set({ ...v, sets: {
-    hidden: new Set(v.hidden), parked: new Set(v.parked), placeholder: new Set(v.placeholder),
-    desk: new Map(Object.entries(v.desk || {}).map(([d, ids]) => [Number(d), new Set(ids)])),
-  } });
+  // Most operations (a title, a move) leave the views as they were: keep the store, so
+  // useWindows() subscribers don't re-render for nothing.
+  const viewsKey = JSON.stringify(v);
+  if (viewsKey !== lastViews) {
+    lastViews = viewsKey;
+    windowViews.set({ ...v, sets: {
+      hidden: new Set(v.hidden), parked: new Set(v.parked), placeholder: new Set(v.placeholder),
+      desk: new Map(Object.entries(v.desk || {}).map(([d, ids]) => [Number(d), new Set(ids)])),
+    } });
+  }
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
   if (gen !== applied) return;
   if (!same(listStore.get(), st.desktops)) listStore.set(st.desktops);
