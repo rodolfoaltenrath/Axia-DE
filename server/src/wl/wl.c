@@ -2538,6 +2538,7 @@ void wl_paint_fullscreen(Canvas *out) {
 }
 
 int wl_fullscreen_active(void) { return fs_surf && fs_surf->content; }
+int wl_fullscreen_window(void) { return wl_fullscreen_active() ? fs_surf->id : 0; }
 int wl_wants_frame(void) { return need_frame; }
 
 /* Direct scanout: the fullscreen window has a dmabuf the size of the output, there are no
@@ -2844,7 +2845,6 @@ int wl_key(int code, int value, const KeyInfo *k) {
     if (value == 1 && was_grabbed) {
         char letter = keygrab_letter(code, k->base);
         int how = keygrab_match(code, letter, mods);
-        if (how == KG_HOLD && fs_surf && fs_surf->content) how = KG_PASS;   /* presented above the switcher */
         if (how != KG_PASS) {
             *was_grabbed = 1;
             if (how == KG_HOLD) grab_hold = mods & (KG_ALT | KG_META);

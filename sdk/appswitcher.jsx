@@ -65,17 +65,26 @@ function listApps() {
 }
 
 export function openSwitcher(hold, back = false) {
-  if (typeof lord !== 'undefined' && lord.wayland?.fullscreen?.()) return;    // a fullscreen app is presented above every layer
+  const fullscreen = typeof lord !== 'undefined' && lord.wayland?.fullscreen?.();
+  const surface = fullscreen ? lord.wayland?.fullscreenWindow?.() : 0;
+  const origin = surface ? wm.get(`linux#${surface}`) : null;
+  // An older compositor cannot identify the fullscreen surface. Do not open an invisible overlay.
+  if (fullscreen && !origin) return;
   const items = listApps();
   if (!items.length) return;
-  const top = wm.get(wm.focused());
+  const top = origin || wm.get(wm.focused());
   const state = lord.switcher.begin(items.map((it) => it.key), top ? keyOf(top) : '', back);
-  switcherState.set({ items: state.order.map((i) => items[i]), index: state.index, hold });
+  switcherState.set({ items: state.order.map((i) => items[i]), index: state.index, hold, fullscreen: origin?.id });
+  // Fullscreen is drawn above the shell and owns the pointer lock. The compositor already restores
+  // fullscreen when a minimized window returns; use that same path for Alt+Tab, including Escape.
+  if (origin) wm.minimize(origin.id);
 }
 
 export function cancelSwitcher() {
+  const origin = switcherState.get()?.fullscreen;
   lord.switcher?.finish(false);
   switcherState.set(null);
+  if (origin && wm.get(origin)) wm.focus(origin);
 }
 function commit() {
   const s = switcherState.get();
@@ -83,6 +92,7 @@ function commit() {
   switcherState.set(null);
   const it = s?.items[index];
   if (it && wm.get(it.win)) wm.focus(it.win);
+  else if (s?.fullscreen && wm.get(s.fullscreen)) wm.focus(s.fullscreen);
 }
 function move(step) {
   const index = lord.switcher.step(step);

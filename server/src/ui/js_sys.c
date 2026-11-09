@@ -1572,10 +1572,15 @@ static JSValue f_wl_fullscreen(JSContext *c, JSValueConst this_val, int argc, JS
     (void)this_val; (void)argc; (void)argv;
     return JS_NewBool(c, wl_fullscreen_active());
 }
+static JSValue f_wl_fullscreen_window(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val; (void)argc; (void)argv;
+    return JS_NewInt32(c, wl_fullscreen_window());
+}
 
 static const JSCFunctionListEntry wayland_funcs[] = {
     JS_CFUNC_DEF("grabKeys", 1, f_wl_grab_keys),
     JS_CFUNC_DEF("fullscreen", 0, f_wl_fullscreen),
+    JS_CFUNC_DEF("fullscreenWindow", 0, f_wl_fullscreen_window),
     JS_CFUNC_DEF("paste", 0, f_wl_paste),
     JS_CFUNC_DEF("hasKeyboard", 0, f_wl_has_focus),
     JS_CFUNC_DEF("focus", 2, f_wl_focus),

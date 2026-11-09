@@ -1,7 +1,7 @@
 // Runs inside a real axia-server/QuickJS process against the Rust bridge.
 import { createElement as h, useEffect } from 'react';
 import { render, View } from '@lordos/runtime';
-import { configureWindows, wm } from '../../sdk/windows.js';
+import { configureWindows, registerBuiltinApp, wm } from '../../sdk/windows.js';
 import { openSwitcher, switcherKey, switcherState, cancelSwitcher, AppSwitcher } from '../../sdk/appswitcher.jsx';
 import { useShortcuts, shortcutList, resetShortcuts } from '../../sdk/shortcuts.js';
 import { findWallpaper } from '../../sdk/wallpapers.js';
@@ -10,10 +10,11 @@ import { askPower, canPower, powerAsk, PowerDialog } from '../../sdk/power.jsx';
 
 const check = (ok, message) => { if (!ok) throw new Error('switcher smoke: ' + message); };
 function Harness() {
-  useShortcuts({ grabs: 'flow' });
+  useShortcuts({ grabs: 'flow', onSuperTap: () => { superTaps++; } });
   useEffect(() => { const timer = setTimeout(runTests, 100); return () => clearTimeout(timer); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#487383' } }, h(AppSwitcher), h(PowerDialog));
 }
+let superTaps = 0;
 resetShortcuts();                       // the dispatcher, as startShell installs it in a session
 render(h(Harness));
 function runTests() {
@@ -116,8 +117,58 @@ function runTests() {
         try { lord.switcher.begin([null], '', false); } catch { rejected = true; }
         check(rejected, 'invalid keys rejected at the bridge');
         cancelSwitcher();
+        fullscreenTests();
         console.log('switcher integration: passed');
       }, 100);
     }, 100);
   }, 100);
+}
+
+// Keep the real Rust window list, selector and shortcut dispatcher. Only the native fullscreen
+// owner is simulated here; the compositor's surface-id query is checked before replacing it.
+function fullscreenTests() {
+  const nativeWayland = lord.wayland;
+  check(nativeWayland.fullscreenWindow() === 0, 'headless bridge has no fullscreen owner');
+  registerBuiltinApp({ id: 'linux', name: 'Linux', builtin: true });
+  const game = wm.open('linux', { instance: '777', args: { surface: 777, appId: 'fullscreen-test' } });
+  check(game === 'linux#777', 'fullscreen surface maps to its managed window');
+  lord.wayland = {
+    ...nativeWayland,
+    fullscreen: () => !!wm.get(game) && !wm.get(game).minimized,
+    fullscreenWindow: () => 777,
+  };
+  try {
+    const before = superTaps;
+    __lordKey(125, 1, 'Meta', '', '', 16);
+    __lordKey(125, 0, 'Meta', '', '', 0);
+    check(superTaps === before, 'Super alone cannot open a hidden launcher in fullscreen');
+    openSwitcher(2);
+    check(wm.get(game).minimized && switcherState.get(), 'fullscreen yields to the selector');
+    switcherKey({ mods: 2, down: true, key: 'Escape' });
+    check(!wm.get(game).minimized && wm.focused() === game, 'Escape restores the fullscreen origin');
+    openSwitcher(2, true);
+    const other = switcherState.get().items[switcherState.get().index].win;
+    check(other !== game, 'backwards selection leaves fullscreen');
+    switcherKey({ mods: 0, down: false, key: 'Alt' });
+    check(wm.focused() === other && wm.get(game).minimized, 'Alt release commits the chosen app');
+    __lordKey(125, 1, 'Meta', '', '', 16);
+    __lordKey(125, 0, 'Meta', '', '', 0);
+    check(superTaps === before + 1, 'Super alone works again outside fullscreen');
+    openSwitcher(2);
+    const current = switcherState.get();
+    const target = current.items.findIndex((it) => it.win === game);
+    check(target >= 0, 'minimized fullscreen game stays in the selector');
+    lord.switcher.select(target);
+    switcherKey({ mods: 0, down: false, key: 'Alt' });
+    check(wm.focused() === game && !wm.get(game).minimized, 'selecting the game restores its window');
+    openSwitcher(2);
+    wm.close(game, true);
+    cancelSwitcher();
+    check(!switcherState.get(), 'closing fullscreen during selection can be cancelled safely');
+    console.log('fullscreen switcher integration: passed');
+  } finally {
+    cancelSwitcher();
+    lord.wayland = nativeWayland;
+    if (wm.get(game)) wm.close(game, true);
+  }
 }

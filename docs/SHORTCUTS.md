@@ -68,6 +68,8 @@ replaces its keys there; an entry with no `label` is not listed. A held key runs
 `repeat: true`, and its repeats and its release are taken as well.
 
 ❖ pressed and released alone calls the theme's `onSuperTap`: Lord Flow's launcher, Lord Classic's start menu.
+While a Linux app is fullscreen this tap is ignored, so a game cannot open a hidden launcher and blur
+behind itself. Super combinations, including the app switcher and the fullscreen escape shortcut, remain available.
 
 ## The keys kept from apps
 
@@ -91,8 +93,9 @@ every theme keeps.
 **Hold.** The switcher needs the modifier's release. After a *hold* key, every other key goes to the shell
 until the modifier that started it is up, while modifier keys go to both, so an app keeps a correct
 state whichever window ends up in front. A key pressed before the switcher opened still gets its release
-in the app. With a fullscreen Linux app the switcher does not open and ⌥Tab stays with the app: a
-fullscreen surface is presented above every layer.
+in the app. A fullscreen Linux app is temporarily minimized before the selector is drawn, releasing
+its pointer lock. Choosing another app leaves it minimized; returning to it restores fullscreen.
+Esc cancels the selection and restores the original fullscreen app as well.
 
 ## ❖ as Ctrl in Linux apps (Lord Flow)
 
