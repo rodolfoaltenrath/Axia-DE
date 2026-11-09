@@ -156,7 +156,7 @@ fn opens(id: &[u8], mime_type: &[u8], declared: bool) -> bool {
     if !mime::desktop_valid(id) {
         return false;
     }
-    let Some(a) = desktop::find(&id[..id.len() - 8]) else {
+    let Some(a) = desktop::find_for_open(&id[..id.len() - 8]) else {
         return false;
     };
     if value(&a.mime).is_empty() || (declared && !list_has(value(&a.mime), mime_type)) {
@@ -1006,7 +1006,12 @@ fn launch(id: &[u8], file: Option<&[u8]>, action: Option<&[u8]>) -> i32 {
     if file.is_some() && action.is_some() {
         return -1;
     }
-    let Some(a) = desktop::find(id) else {
+    let app = if file.is_some() {
+        desktop::find_for_open(id)
+    } else {
+        desktop::find(id)
+    };
+    let Some(a) = app else {
         return -1;
     };
     let Some(e) = desktop::read(value(&a.file), &desktop::language()) else {

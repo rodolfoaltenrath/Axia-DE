@@ -4,11 +4,12 @@
  * /etc/xdg and /usr/share/mime/globs2, and a temporary HOME.
  *
  * Covers: no app → nothing (the old behaviour); the first installed app that declares the type
- * (by desktop id, then mimeinfo.cache order); Hidden, NoDisplay, Terminal, a missing TryExec, an Exec
+ * (by desktop id, then mimeinfo.cache order); Hidden, Terminal, a missing TryExec, an Exec
  * without a file code or with a missing program skipped; the system's mimeapps.list/defaults.list
  * (in the specification's order, an uninstalled entry skipped); the user's choice wins, also as
  * "lordos-<app>.desktop"; [Removed Associations]; going back to automatic; ids and paths outside
- * the launcher's folders ignored. The launched app copies the file it was given to a marker. */
+ * the launcher's folders ignored; registered NoDisplay MIME helpers can open files without appearing
+ * in the launcher. The launched app copies the file it was given to a marker. */
 #include "apps.h"
 #include "fsops.h"
 #include "fw/rules.h"
@@ -116,7 +117,7 @@ int main(void) {
     char real[PATH_MAX];
     if (!realpath(home, real)) { perror(home); return 1; }
     fsops_init(real, "nobody-here");            /* the roots launchWith accepts */
-    sysfile("/usr/share/mime/globs2", "50:text/html:*.html\n50:text/plain:*.txt\n50:image/png:*.png\n");
+    sysfile("/usr/share/mime/globs2", "50:text/html:*.html\n50:text/plain:*.txt\n50:image/png:*.png\n50:application/x-rpm:*.rpm\n");
     restrict_set_store(fw_store_new());
     char page[256];
     snprintf(page, sizeof page, "%s/page.html", home);
@@ -204,6 +205,28 @@ int main(void) {
     CHECK("unset with no file", defaults_unset("text/html") == 0);
     CHECK("unset refuses a bad type", defaults_unset("../x") != 0);
     CHECK("launchWith('') opens the automatic app", apps_launch_with("", page) == 0 && opened("zeta-browser"));
+
+    /* Package installers use NoDisplay: MIME associations can use them without launcher entries. */
+    app(0, "package-installer", "application/x-rpm;", "NoDisplay=true\n", NULL);
+    sysfile("/usr/share/applications/mimeinfo.cache", "[MIME Cache]\napplication/x-rpm=package-installer.desktop;\n");
+    CHECK("NoDisplay MIME handler resolves", is("application/x-rpm", "package-installer.desktop", APPS_DEFAULT_DECLARED));
+    const DesktopApp *listed;
+    int count = apps_list("en", &listed), hidden_listed = 0;
+    for (int i = 0; i < count; i++) if (!strcmp(listed[i].id, "package-installer")) hidden_listed = 1;
+    CHECK("NoDisplay helper stays out of launcher", !hidden_listed);
+    CHECK("NoDisplay helper cannot be launched without a file", apps_launch("package-installer") != 0);
+    char package[256];
+    snprintf(package, sizeof package, "%s/package with spaces.rpm", home);
+    put(package, "harmless file association test\n");
+    CHECK("RPM opens registered helper with the intact filename", apps_launch_with("", package) == 0 && opened("package-installer"));
+    app(1, "package-installer", "application/x-rpm;", "Hidden=true\nNoDisplay=true\n", NULL);
+    CHECK("Hidden user entry masks system handler", is("application/x-rpm", NULL, 0));
+    CHECK("Hidden user entry cannot launch explicitly", apps_launch_with("package-installer", package) != 0);
+    app(1, "package-installer", "application/x-rpm;", "NoDisplay=true\nTryExec=/nonexistent/installer\n", NULL);
+    CHECK("NoDisplay still honors TryExec", is("application/x-rpm", NULL, 0));
+    app(1, "package-installer", "application/x-rpm;", "NoDisplay=true\n", NULL);
+    snprintf(path, sizeof path, "%s/opened-package-installer", home); unlink(path);
+    CHECK("user NoDisplay MIME handler launches", apps_launch_with("", package) == 0 && opened("package-installer"));
 
     char cmd[600];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", root);
