@@ -401,7 +401,7 @@ static void test_transform_math(void) {
     CHECK(fabsf(x - 20) < 1e-4f && fabsf(y - 20) < 1e-4f, "origin fixed: %g %g", x, y);
     affine_apply(m, 10, 10, &x, &y);
     CHECK(fabsf(x) < 1e-4f && fabsf(y) < 1e-4f, "corner scaled: %g %g", x, y);
-    free(st.ext);
+    style_release(&st);
     style_defaults(&st);
     style_set_number(&st, "rotate", 90);                /* clockwise on screen */
     m = style_transform(&st, 0, 0, 20, 20);
@@ -410,7 +410,7 @@ static void test_transform_math(void) {
     style_set_number(&st, "transformOriginX", 0);
     style_set_number(&st, "transformOriginY", 0);
     m = style_transform(&st, 0, 0, 20, 20);
-    free(st.ext);
+    style_release(&st);
     affine_apply(m, 10, 0, &x, &y);
     CHECK(fabsf(x) < 1e-4f && fabsf(y - 10) < 1e-4f, "rotate around the top-left: %g %g", x, y);
     style_defaults(&st);
@@ -419,7 +419,7 @@ static void test_transform_math(void) {
     CHECK(fabsf((b.x1 - b.x0) - 14.142f) < 0.01f, "rotated bounding box %g", b.x1 - b.x0);
     style_set_number(&st, "rotate", 360);
     CHECK(style_has_transform(&st) == 0, "rotate 360 is no transform");
-    free(st.ext);
+    style_release(&st);
 }
 
 /* Shell layers (sdk/layers.js, docs/LAYERS.md): full-screen root children with zIndex and

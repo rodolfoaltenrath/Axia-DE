@@ -17,6 +17,7 @@ mod native_apps;
 mod flip_pacing;
 mod stall;
 mod clipboard;
+mod runtime;
 mod applications;
 mod launcher;
 mod search;

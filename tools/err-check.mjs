@@ -22,7 +22,7 @@ const SRC = path.join(root, 'server/src');
 
 // Out of this pass's scope (engine and app-mode work): warnings until converted.
 export const PENDING = [
-  'ui/paint.c', 'ui/layout.c', 'ui/text.c', 'ui/style.c',
+  'ui/paint.c', 'ui/layout.c', 'ui/text.c',
 ];
 
 const CODE = /^[a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+$/;

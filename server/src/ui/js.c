@@ -152,10 +152,7 @@ static JSValue f_set_style(JSContext *c, JSValueConst this_val, int argc, JSValu
                 JS_ToFloat64(c, &a[i], e);
                 JS_FreeValue(c, e);
             }
-            n->s.has_gradient = 1;
-            n->s.grad_angle = (float)a[0];
-            n->s.grad_from = (uint32_t)(int64_t)a[1];
-            n->s.grad_to = (uint32_t)(int64_t)a[2];
+            err = style_set_gradient(&n->s, a[0], a[1], a[2]);
         } else n->s.has_gradient = 0;
     } else if (JS_IsUndefined(v) || JS_IsNull(v)) {
         err = style_reset(&n->s, key);
@@ -170,7 +167,7 @@ static JSValue f_set_style(JSContext *c, JSValueConst this_val, int argc, JSValu
     }
     if (err) style_warn(key);
     JS_FreeCString(c, key);
-    node_restyled(n, &before, before.ext ? &ext_before : NULL);     /* node.c (engine-test does the same) */
+    node_restyled(n, &before, before.ext ? &ext_before : NULL);     /* Rust runtime (engine-test does the same) */
     return JS_UNDEFINED;
 }
 
