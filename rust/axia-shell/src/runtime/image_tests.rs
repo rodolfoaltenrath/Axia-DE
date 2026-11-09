@@ -255,6 +255,114 @@ fn clipped_and_nonfinite_draws_do_not_need_pixel_buffers_or_allocations() {
     }
     let draw = draw_bounds(clip, -0.5, 1.5, 8.5, 7.5).unwrap();
     assert_eq!((draw.x, draw.y, draw.w, draw.h), (-1, 2, 9, 8));
+    for empty in [
+        Clip {
+            x0: 5,
+            x1: 5,
+            ..clip
+        },
+        Clip {
+            y0: 7,
+            y1: 7,
+            ..clip
+        },
+        Clip {
+            x0: 8,
+            x1: 2,
+            ..clip
+        },
+        Clip {
+            y0: 8,
+            y1: 2,
+            ..clip
+        },
+    ] {
+        assert!(draw_bounds(empty, 0., 0., 50., 50.).is_none());
+    }
+}
+#[test]
+fn recycled_scaling_buffers_clear_contain_margins_and_unknown_fit_is_not_opaque() {
+    let source = solid(4, 2, 0xff123456);
+    for fit in [2, 3, -1] {
+        let dst = solid(8, 8, 0xffffffff);
+        let scaled = source.rescale(dst, 4, 4, fit).ok().unwrap();
+        assert_eq!(&scaled.data[..4], &[0; 4]);
+        assert_eq!(&scaled.data[4..12], &[0xff123456; 8]);
+        assert_eq!(&scaled.data[12..], &[0; 4]);
+        assert!(!scaled.opaque);
+    }
+}
+#[test]
+fn mixed_axis_scaling_keeps_exact_area_averages_and_transparency() {
+    for transpose in [false, true] {
+        let (w, h) = if transpose { (2, 4) } else { (4, 2) };
+        let mut source = Pixels::empty(w, h).unwrap();
+        // Two independent rows, or columns, with a partially transparent pair.
+        let colors = [0xff000000, 0xffffffff, 0x80000000, 0x80808080];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                source.data[y * w as usize + x] = colors[if transpose { y } else { x }];
+            }
+        }
+        let (w, h) = if transpose { (8, 2) } else { (2, 8) };
+        let scaled = source.rescale(Pixels::default(), w, h, 0).ok().unwrap();
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let pair = if transpose { y } else { x };
+                assert_eq!(
+                    scaled.data[y * w as usize + x],
+                    [0xff7f7f7f, 0x80404040][pair]
+                );
+            }
+        }
+    }
+}
+#[test]
+#[cfg_attr(miri, ignore = "extreme mixed-axis scaling; exercised natively")]
+fn extreme_mixed_axis_scaling_reuses_identical_footprints_in_both_axes() {
+    for (w, h) in [(32768, 1), (1, 32768)] {
+        let mut source = Pixels::empty(w, h).unwrap();
+        for (i, p) in source.data.iter_mut().enumerate() {
+            *p = if i % 2 == 0 { 0xffffffff } else { 0xff000000 };
+        }
+        let scaled = source.rescale(Pixels::default(), h, w, 0).ok().unwrap();
+        assert_eq!(scaled.data, vec![0xff7f7f7f; 32768]);
+    }
+}
+#[test]
+fn failed_scale_requeues_every_owner_without_discarding_layout_or_allocating() {
+    use super::super::{scene::Scene, types::Ui};
+    let mut scene = Scene::default();
+    let mut ui = Ui::empty();
+    let a = scene.create(2, &mut ui);
+    let b = scene.create(2, &mut ui);
+    let other = scene.create(2, &mut ui);
+    let mut image = Image::new(solid(4, 4, 0xff123456));
+    let pointer = &mut image as *mut Image;
+    for id in [a, b, other] {
+        let n = scene.node_mut(id).unwrap();
+        n.paint_dirty = 0;
+        n.gen = 10;
+        n.layout_ok = 1;
+        n.measure_valid = 1;
+        if id != other {
+            n.img = pointer.cast();
+        }
+    }
+    ui.dirty = 0;
+    let _fail = AllocationBudget::new(0);
+    assert!(image.scaled(32, 32, 1).is_none());
+    scene.retry_image(pointer, &mut ui);
+    assert_eq!(ui.dirty, 1);
+    for id in [a, b, other] {
+        let n = scene.node(id).unwrap();
+        assert_eq!(n.paint_dirty, u8::from(id != other));
+        assert_eq!(n.gen, if id != other { 11 } else { 10 });
+        assert_eq!((n.layout_ok, n.measure_valid), (1, 1));
+    }
+    // These borrowed test handles are not owned by the scene.
+    scene.node_mut(a).unwrap().img = ptr::null_mut();
+    scene.node_mut(b).unwrap().img = ptr::null_mut();
 }
 #[test]
 fn simple_fit_modes_and_downscaling_have_fixed_expected_pixels() {

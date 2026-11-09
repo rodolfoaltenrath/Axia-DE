@@ -182,6 +182,12 @@ evicto se houver capacidade; reservas são exatas e um buffer com capacidade
 superior a duas vezes a nova necessidade é descartado. `managedImageKB`
 contabiliza a capacidade dos buffers de pixels, incluindo as duas versões.
 
+Desenhos com opacidade zero ou clip vazio são descartados antes de reservar
+buffers. O filtro por área reaproveita médias de footprints idênticos ao ampliar
+um eixo e reduzir o outro, sem mudar o arredondamento dos canais. Buffers
+reciclados sobrescrevem seus pixels e limpam as margens de contain sem uma
+segunda inicialização completa.
+
 Atualizações RGBA/ARGB do mesmo tamanho reaproveitam a imagem e invalidam as
 versões redimensionadas. Trocar tamanho ou substituir uma imagem compartilhada
 só consome a referência antiga depois de concluir a nova alocação. Falhas
@@ -191,6 +197,10 @@ regulares, lidos com limite de 64 MiB e dimensões verificadas antes da decodifi
 No preview da dock, uma captura que falhou mantém a imagem anterior, mas não
 confirma sua assinatura como atualizada. A próxima tentativa respeita o cooldown
 agregado existente, mesmo quando o conteúdo e a imagem anterior são os mesmos.
+Se o redimensionamento falhar durante a pintura, os nós que compartilham a
+imagem são marcados para outra tentativa, com nova geração de pintura para
+invalidar também os rasters de transformações e as camadas de arraste. Isso
+não depende de outra interação do usuário nem descarta as medições do layout.
 
 O decodificador PNG/JPEG vendorizado `stb` permanece para preservar os pixels;
 é uma dependência de terceiros, também utilizada pelas fontes. O blit ainda
@@ -200,9 +210,11 @@ substituem `wallpaper_image_test.c`, removido do build e do repositório.
 `image_tests.rs` cobre referências, caches, troca de tamanho, OOM, ordem de
 destruição, handles após rehash, clipping e o overflow corrigido ao reduzir
 imagens grandes. O teste nativo `image_runtime.rs` liga os consumidores reais
-e compara 13 hashes registrados do renderer C antes da remoção, sem atualizar
+e compara 13 hashes registrados do renderer C antes da remoção, além de um
+digest de 90 quadros de amostragem obtido da mesma referência congelada, sem atualizar
 resultados esperados a partir da implementação Rust. Ele também verifica PNG,
-JPEG, caminhos não UTF-8, arquivos inválidos e vida útil de wallpapers em dois
+JPEG, caminhos não UTF-8, arquivos excessivos/truncados, FIFOs, desenhos
+invisíveis sem alocação de escalas e vida útil de wallpapers em dois
 consumidores. O `make -C server test-platform` executa esse teste após o build:
 
 ```sh
