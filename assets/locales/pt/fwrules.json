@@ -91,5 +91,7 @@
   },
   "pickAddress": "Escolha um endereço para permiti-lo ou bloqueá-lo para este app.",
   "recent": "conexão recente",
-  "recentDenied": "negada há pouco"
+  "recentDenied": "negada há pouco",
+  "err.app": "Escolha um aplicativo que aceite regras de rede.",
+  "err.invalid": "Escolha protocolo, direção e ação válidos."
 }

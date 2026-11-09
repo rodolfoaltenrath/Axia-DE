@@ -16,7 +16,7 @@ the components below, each under its own license.
 
 | Data | Used for | License |
 |---|---|---|
-| DB-IP Lite Country (`assets/monitor/geoip-country.mmdb.xz`) | offline IP→country in Monitor | CC BY 4.0 — IP geolocation by DB-IP (https://db-ip.com) |
+| DB-IP Lite Country (`assets/monitor/geoip-country.mmdb`) | offline IP→country in Monitor | CC BY 4.0 — IP geolocation by DB-IP (https://db-ip.com) |
 | Natural Earth (`assets/monitor/land.bin`) | world map in Monitor | public domain |
 | Unicode Character Database / CLDR (generated tables) | text, bidi, emoji names | Unicode License v3 |
 | Inter (`assets/fonts/Inter-*.ttf`) | UI text | SIL OFL 1.1 (`assets/fonts/Inter-LICENSE.txt`) |

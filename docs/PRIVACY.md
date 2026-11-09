@@ -393,7 +393,7 @@ its own section (see connections per app, locate them on the map) through
 
 A **green** dot in the menu bar while the camera is in use and an **orange** one for the
 microphone (`default` and `classic` themes); tapping it shows which app is using it. Sources: the
-broker (isolated apps) and, for Linux apps, the Monitor's `sdk/monitor.js` (via PipeWire, phase 2)
+broker (isolated apps) and, for Linux apps, the shared firewall transport `sdk/firewall.js` (via PipeWire, phase 2)
 through `globalThis.__lordos.monitorDevices`.
 
 | | |

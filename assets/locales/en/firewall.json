@@ -102,5 +102,6 @@
   "lists.name.scam": "Scam sites",
   "lists.name.ransomware": "Ransomware",
   "lists.name.cryptomining": "Hidden crypto mining",
-  "lists.name.attackers": "Attacking addresses"
+  "lists.name.attackers": "Attacking addresses",
+  "lists.enabled": "Enabled"
 }

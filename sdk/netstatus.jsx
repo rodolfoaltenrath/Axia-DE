@@ -20,7 +20,7 @@ import { formatBytes } from './system.js';
 import { registerStatusItem } from './statusitems.js';
 import { Overlay } from './layers.js';
 import { Segmented } from './components.jsx';
-import { firewall, firewallState } from './monitor.js';
+import { firewall, firewallState } from './firewall.js';
 import { wm } from './windows.js';
 import { useLauncherApps } from './apps.js';
 import { COMPONENTS } from './netmodel.js';

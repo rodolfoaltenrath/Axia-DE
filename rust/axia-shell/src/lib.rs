@@ -10,6 +10,8 @@ mod calculator;
 #[path = "../../../apps/appabout/mod.rs"]
 mod appabout;
 mod native_apps_host;
+#[path = "../../../apps/monitor/mod.rs"]
+mod monitor;
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod flip_pacing;

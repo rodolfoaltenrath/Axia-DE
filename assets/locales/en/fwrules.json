@@ -91,5 +91,7 @@
   },
   "pickAddress": "Select an address to allow or block it for this app.",
   "recent": "recent connection",
-  "recentDenied": "recently denied"
+  "recentDenied": "recently denied",
+  "err.app": "Choose an app that supports network rules.",
+  "err.invalid": "Choose a valid protocol, direction and action."
 }

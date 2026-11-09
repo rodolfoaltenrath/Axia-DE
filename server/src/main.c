@@ -58,7 +58,7 @@
 #include "stall_ffi.h"
 #include "apps.h"
 #include "ui/js_anim.h"
-#include "monitor/netrec.h"
+#include "monitor_ffi.h"
 #include "sec/codesig.h"
 #include "sec/netconn.h"
 #include "bench/lbframes.h"

@@ -1,13 +1,5 @@
-/* fwdest_test.c — the destinations of server/tests/fw_dest_cases.txt through the store's parser
- * (fw_parse_dest, then fw_format_dest): each one must be refused ("!") or come back as the canonical
- * text. The same file is checked against the Settings sheet's parser (sdk/fwrule.js) by
- * tests/fwrule_input_test.mjs, so what the sheet accepts is what lord.fw.addRule stores.
- *
- * It also runs tests/fw_domain_cases.txt (0.8.2): one destination's verdict through fw_decide, as the
- * Monitor's per-domain switch shows it with sdk/fwrule.js decide(), once from the store and once after
- * a round trip through the firewall.json text (fw_to_json → fw_from_json), the file axia-netperm reads.
- *
- *   build/fwdest-test [cases file]      (default: tests/fw_dest_cases.txt, run from server/) */
+/* Firewall engine contract tests. The Rust Monitor editor also consumes fw_dest_cases.txt.
+ * This engine remains shared by the system firewall and is outside the Monitor migration. */
 #include "../src/fw/rules.h"
 
 #include <stdio.h>

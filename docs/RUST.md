@@ -466,3 +466,13 @@ precedência, teclado, estados independentes e as origens dos aplicativos. A
 integração real usa botões e teclado da Calculadora, provoca divisão por zero,
 reabre a janela e confere os títulos e versões do Sobre. Os quatro apps compilados
 são abertos nos temas padrão e clássico pelo teste headless.
+
+## Monitor application
+
+`apps/monitor/*.rs` owns all eight Monitor tabs, privacy panels, collection,
+process actions, history, charts and map. Its application-specific C/JS sources
+and tests have been removed. The existing native widget host remains shared by
+compiled apps; the compositor and renderer are still C/React. RGBA chart buffers
+use a binary transport through this host. Collection and filesystem work run on
+one Rust worker thread. See [MONITOR.md](MONITOR.md) for the language boundary,
+memory accounting, sampling cadence and validation commands.

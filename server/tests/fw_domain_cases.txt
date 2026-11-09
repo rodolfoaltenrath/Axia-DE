@@ -1,6 +1,4 @@
-# One destination's verdict, as the Monitor's per-domain switch shows it (sdk/fwrule.js decide) and
-# as the store decides it (fw_decide). Checked by build/fwdest-test (C, also after a JSON round trip
-# through the firewall.json text) and by tests/fwrule_input_test.mjs (JS).
+# Firewall destination verdicts checked by build/fwdest-test, including JSON round trips.
 # rules (action dst [port] [proto]; ...  or -) | names (comma-separated or -) | address | proto port | restrictions (comma-separated or -) | expected: allow | deny | none (no rule: the mode) | restricted
 - | example.com | 93.184.216.34 | tcp 443 | - | none
 deny example.com | example.com | 93.184.216.34 | tcp 443 | - | deny

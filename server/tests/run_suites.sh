@@ -138,18 +138,14 @@ EOF
     fi
     run "fsops-test" build/fsops-test
     run "sign-test" build/sign-test
-    run "mmdb-test" build/mmdb-test
     run "canvas-test" build/canvas-test
     run "arcpath-test" build/arcpath-test
     run "ipp-test" build/ipp-test
     run "tp-test" build/tp-test
     run "fan-test" build/fan-test
-    # the firewall rule sheet's parser (sdk/fwrule.js) against the same cases as build/fwdest-test
     if have node; then run "place-model-test (sdk/placemodel.js)" node tests/place_model_test.mjs; fi
-    if have node; then run "fwrule-input-test (sdk/fwrule.js)" node tests/fwrule_input_test.mjs
-    else skip "fwrule-input-test" "node"; fi
     # the Dock's pinned-list model (sdk/dockmodel.js)
-    if have node; then run "files-model-test (apps/files)" node tests/files_model_test.mjs; fi
+    # Files model tests are part of test-rust; the former JS suite was removed.
     if have node; then run "osk-model-test (sdk/oskmodel.js)" node tests/osk_model_test.mjs
     else skip "osk-model-test (sdk/oskmodel.js)" node; fi
     if have node; then run "dock-model-test (sdk/dockmodel.js)" node tests/dock_model_test.mjs
@@ -175,9 +171,6 @@ EOF
     # (0.8.5) Monitor → Network's model (sdk/netmodel.js): search tokens, filters, the tree, sorting
     if have node; then run "netmodel-test (sdk/netmodel.js)" node tests/netmodel_test.mjs
     else skip "netmodel-test" "node"; fi
-    # (0.8.7) Monitor → Voltage's model (apps/monitor/voltmodel.js): the rpi-pmic line, states, sources, the trace
-    if have node; then run "voltage-model-test (apps/monitor/voltmodel.js)" node tests/voltage_model_test.mjs
-    else skip "voltage-model-test" "node"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.js): GPU layers, CPU reasons, Compatibility
     if have node; then run "sysinfo-model-test (apps/sysinfo/model.js)" node tests/sysinfo_model_test.mjs
     else skip "sysinfo-model-test" "node"; fi

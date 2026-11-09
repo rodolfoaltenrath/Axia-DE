@@ -54,7 +54,7 @@
   "swapValue": "{used} de {total}",
   "last60": "Últimos 60 segundos",
   "usedCache": "Usada + cache",
-  "cacheHint": "O cache de arquivos acelera leituras repetidas dos discos. O Linux o libera sozinho quando um app precisa de memória, então não conta como ocupada.",
+  "cacheHint": "A memória disponível é a estimativa do Linux de quanto os apps podem usar sem swap, incluindo cache recuperável. Um cache alto, sozinho, não indica falta de RAM.",
   "allDisks": "Total de todos os discos",
   "diskCol": "Disco",
   "device": "Dispositivo",
@@ -445,5 +445,18 @@
   "volt.rail.HDMI": "HDMI 5 V",
   "volt.rail.BATT": "Bateria do relógio",
   "comp.lan": "Procura na rede de Arquivos",
-  "comp.lanHint": "Arquivos → Rede: computadores e compartilhamentos na rede local."
+  "comp.lanHint": "Arquivos → Rede: computadores e compartilhamentos na rede local.",
+  "memAvailable": "disponíveis para apps",
+  "memoryPressure": "Pressão de memória (10 s)",
+  "dirty": "Aguardando gravação em disco",
+  "writeback": "Gravando em disco",
+  "pause": "Pausar gráfico",
+  "resume": "Retomar gráfico",
+  "hist.title": "Histórico de tráfego",
+  "openInDisks": "Abrir em Discos",
+  "volt.noSources": "Nenhum sensor de tensão informado.",
+  "volt.voltage": "Tensão",
+  "majorFaults": "Faltas de página maiores",
+  "minorFaults": "Faltas de página menores",
+  "net.outgoing": "Saída"
 }

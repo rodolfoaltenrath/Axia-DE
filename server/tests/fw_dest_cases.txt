@@ -1,7 +1,7 @@
 # fw_dest_cases.txt — destinations a user may type for a firewall rule, and what the store keeps.
 # One case per line: input, a tab, then the canonical destination or "!" if it must be refused.
 # Both parsers read this file: the C one (fw_parse_dest + fw_format_dest, build/fwdest-test) and
-# the JS one the Settings sheet uses (sdk/fwrule.js, tests/fwrule_input_test.mjs), so they can't
+# the Rust editor (apps/monitor/rules.rs and tests.rs), so they cannot
 # drift apart.
 example.com	example.com
 Example.COM	example.com
