@@ -1,7 +1,8 @@
 // defaults.js — default applications (Settings → Default Apps, docs/SETTINGS.md). They are kept
 // in ~/.config/mimeapps.list (freedesktop spec, so GNOME/KDE apps and xdg-open agree) through
-// lord.mime; the terminal goes in ~/.config/xdg-terminals.list. LordOS's own apps are written as
-// "lordos-<app>.desktop".
+// lord.mime; the terminal goes in ~/.config/xdg-terminals.list, and the screenshot app (no MIME
+// type: the one the capture keys open) in settings.json "screenshotApp". LordOS's own apps are
+// written as "lordos-<app>.desktop".
 //
 //   DEFAULT_CATEGORIES                  [{ id, mimes, natives }]
 //   defaultFor(categoryId)              'lordos-photos.desktop' | 'org.gnome.Loupe.desktop' | null
@@ -10,7 +11,9 @@
 //   resetDefaultFor(categoryId)         back to automatic (removes the user's lines)
 //   candidatesFor(categoryId, linux)    [{ id, name, Icon, native }] that can be chosen
 //   defaultOpenerId(mime)               the default for one type (Files: "Open With", double click)
+//   screenshotLauncher()                the Linux app the capture keys open, or null for Screenshots
 import { getApp } from './windows.js';
+import { settings } from './settings.js';
 import { appName } from './i18n.js';
 
 const NATIVE = (id) => `lordos-${id}.desktop`;
@@ -26,7 +29,14 @@ export const DEFAULT_CATEGORIES = [
   { id: 'pdf', mimes: ['application/pdf'], natives: ['pdf'] },
   { id: 'text', mimes: ['text/plain', 'text/markdown', 'text/x-log'], natives: ['editor'] },
   { id: 'terminal', mimes: [], natives: ['terminal'], terminal: true },
+  { id: 'screenshots', mimes: [], natives: ['screenshots'], setting: 'screenshotApp' },
 ];
+
+// A Linux app that takes screenshots: by its names and keywords (there is no freedesktop category).
+const SCREENSHOT_APP = /screen ?shot|screen ?capture|captura de (tela|pantalla)|flameshot|spectacle|ksnip|shutter/i;
+const isScreenshotApp = (a) => SCREENSHOT_APP.test([a.name, a.genericName, a.keywords, a.desktopId].filter(Boolean).join(';'));
+// the choice kept in settings.json for a category without MIME types, or null
+const chosen = (c) => { const v = settings.get()[c.setting]; return typeof v === 'string' && /^[\w.+-]+\.desktop$/.test(v) ? v : null; };
 
 const cat = (id) => DEFAULT_CATEGORIES.find((c) => c.id === id);
 const api = () => typeof lord !== 'undefined' && lord.mime;
@@ -35,6 +45,7 @@ export function defaultFor(id) {
   const c = cat(id);
   if (!c || !api()) return null;
   if (c.terminal) return lord.mime.terminal() || NATIVE('terminal');
+  if (c.setting) return chosen(c) || NATIVE(c.natives[0]);
   for (const m of c.mimes) { const d = lord.mime.get(m); if (d) return d; }
   return c.natives.find((n) => getApp(n)) ? NATIVE(c.natives.find((n) => getApp(n))) : null;
 }
@@ -49,6 +60,7 @@ const resolve = (mime) => (api() && lord.mime.resolve ? lord.mime.resolve(mime) 
 // app that declares the type), so the order is the same as defaultOpenerId's.
 export function defaultInfo(id) {
   const c = cat(id);
+  if (c && c.setting) return chosen(c) ? { id: chosen(c), auto: false } : { id: NATIVE(c.natives[0]), auto: true };
   if (!c || !api()) return null;
   if (c.terminal) return { id: defaultFor(id), auto: false };
   const rs = c.mimes.map(resolve);
@@ -65,6 +77,7 @@ export function defaultInfo(id) {
 // Back to automatic: the user's lines for the category's types leave ~/.config/mimeapps.list.
 export function resetDefaultFor(id) {
   const c = cat(id);
+  if (c && c.setting) { const { [c.setting]: _, ...rest } = settings.get(); settings.set(rest); return true; }
   if (!c || c.terminal || !api() || !lord.mime.unset) return false;
   let ok = true;
   for (const m of c.mimes) ok = lord.mime.unset(m) && ok;
@@ -73,6 +86,11 @@ export function resetDefaultFor(id) {
 
 export function setDefaultFor(id, desktopId) {
   const c = cat(id);
+  if (c && c.setting && desktopId) {
+    if (!/^[\w.+-]+\.desktop$/.test(desktopId)) return false;
+    settings.set({ ...settings.get(), [c.setting]: desktopId });
+    return true;
+  }
   if (!c || !api() || !desktopId) return false;
   if (c.terminal) return lord.mime.setTerminal(desktopId);
   let ok = true;
@@ -94,7 +112,8 @@ export function candidatesFor(id, linuxApps = []) {
   const out = c.natives.map((n) => getApp(n)).filter(Boolean).map((a) => ({ id: NATIVE(a.id), name: appName(a), Icon: a.Icon, native: true }));
   for (const a of linuxApps) {
     if (a.kind !== 'linux') continue;
-    const ok = c.terminal ? /(^|;)TerminalEmulator(;|$)/.test(a.categories || '') : covers(a.mimeTypes, c);
+    const ok = c.terminal ? /(^|;)TerminalEmulator(;|$)/.test(a.categories || '')
+      : c.id === 'screenshots' ? isScreenshotApp(a) : covers(a.mimeTypes, c);
     if (ok) out.push({ id: `${a.desktopId}.desktop`, name: a.name, Icon: a.Icon, native: false });
   }
   return out;
@@ -113,4 +132,11 @@ export function defaultOpenerId(mime) {
   const d = c ? defaultFor(c.id) : null;
   // then the category's (LordOS's own app), then the first installed app that declares the type
   return d || (r ? r.id : null);
+}
+
+// The capture keys (Print Screen, ❖⇧3/4/5) open the chosen screenshot app: null while that is
+// LordOS's own Screenshots (its captures run as usual), else the launcher id of the Linux app.
+export function screenshotLauncher() {
+  const c = cat('screenshots'), id = chosen(c);
+  return id && !nativeOf(id) ? `desktop:${id.replace(/\.desktop$/, '')}` : null;
 }
