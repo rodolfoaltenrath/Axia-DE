@@ -170,10 +170,18 @@ fn transfer_limits_close_rejected_descriptors_and_release_budget() {
             readers.push(reader);
         }
         let (r, w) = pipe();
-        drop(w);
         let fd = std::os::fd::IntoRawFd::into_raw_fd(r);
         assert!(axia_native_read_new(fd, 0, ptr::null(), false).is_null());
-        assert_eq!(libc::fcntl(fd, libc::F_GETFD), -1);
+        // Other tests can reopen the same descriptor number immediately after
+        // rejection closes it. Observe this pipe instead: its writer reports
+        // POLLERR exactly when no readers remain, regardless of descriptor reuse.
+        let mut writer = libc::pollfd {
+            fd: w.as_raw_fd(),
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        assert_eq!(libc::poll(&mut writer, 1, 0), 1);
+        assert_ne!(writer.revents & libc::POLLERR, 0);
         for r in readers {
             axia_native_read_free(r);
         }

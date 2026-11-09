@@ -64,12 +64,13 @@ Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
 
-## Núcleo do runtime: árvore de nós e estilos
+## Núcleo do runtime: árvore, estilos e layout
 
 `runtime/` contém a implementação da árvore e dos estilos. Os antigos
-`server/src/ui/node.c` e `style.c` foram removidos do repositório e do build.
-O React continua enviando as mesmas operações; layout, texto, pintura e o
-cache de imagens continuam integrados ao renderer existente.
+`server/src/ui/node.c`, `style.c`, `layout.c` e `transform.c` foram removidos
+do repositório e do build. O React continua enviando as mesmas operações.
+Medição de texto, shaping, pintura e o cache de imagens continuam integrados
+ao renderer C; a árvore, os estilos e a geometria são calculados em Rust.
 
 Para revisar o código:
 
@@ -81,6 +82,12 @@ Para revisar o código:
   participam da comparação. As extensões são alocadas somente quando usadas.
 - `damage.rs` mantém as regiões de repintura, incluindo a união de regiões
   sobrepostas e o limite de 16 retângulos.
+- `layout.rs` mede e distribui os nós com flexbox, wrap, min/max, porcentagens,
+  posicionamento absoluto e RTL. Pilhas explícitas de trabalho substituem a
+  recursão; buffers reutilizáveis são reservados antes de alterar a geometria.
+  A medição chama os serviços existentes de texto e imagens através de `Metrics`.
+- `edges.rs` resolve bordas, margens, padding e cantos físicos/lógicos.
+  `transform.rs` contém a matemática afim compartilhada com pintura e hit testing.
 - `types.rs` define as views `repr(C)` e `mod.rs` contém a ABI e seus contratos.
   `state.rs` fornece o armazenamento do estado global compartilhado.
 
@@ -102,10 +109,28 @@ O callback `node_destroy_hook` continua disponível para cancelar animações
 antes de liberar os nós; resetar a cena também notifica todos os IDs liberados,
 para que uma animação antiga não atinja um novo nó que reutilize o mesmo ID.
 
+O layout não limita mais cada contêiner a 1.024 filhos nem a correção da altura
+de linhas expansíveis a 16 itens. Todos os filhos são distribuídos e o texto
+dessas linhas é medido na largura resultante. Mudanças de fontes ou direção
+invalidam também as medidas de texto, em todas as raízes da cena. A colocação
+absoluta e a propagação das transformações percorrem a árvore sem recursão.
+
+O workspace dimensiona a fila pelo número de folhas e a pilha de medição pelos
+contêineres intrínsecos simultâneos. Uma cadeia de tamanho fixo não precisa de
+uma pilha proporcional à profundidade. As reservas são falíveis: se falharem,
+a geometria anterior é preservada. A forma da árvore fica em cache até uma
+invalidação, evitando essa varredura em animações de posição/opacidade/transform.
+Resetar a cena libera os buffers. Os testes
+cobrem 8.192 níveis, 1.400 irmãos, mais de 16 itens expansíveis, caches, RTL,
+aspecto de imagens, matrizes e falhas de alocação; o Miri usa cargas menores.
+Esses casos grandes e profundos exercitam o layout. `paint.c` ainda usa recursão
+e buffers de 1.024 filhos para pintura/hit testing; esses limites só serão
+removidos na etapa de migração do renderer. As listas reais continuam virtualizadas.
+
 Os testes novos são Rust e cobrem crescimento/reuso de IDs, endereços estáveis,
 reparentamento, ciclos, descarte de subárvores profundas, limites de buffers,
 ordem de pintura, invalidação, estilos e regiões de repintura. O teste de ABI
-usa Clang para inspecionar o arquivo C de layout existente e verificar tamanho,
+usa Clang para inspecionar o header C existente e verificar tamanho,
 alinhamento e offset de todos os campos compartilhados, sem gerar teste C.
 
 ```sh
@@ -116,9 +141,9 @@ cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --lock
 make -C server build/engine-test GPU=1
 ```
 
-Essa etapa migra a árvore e os estilos. O motor de layout, pintura e as pontes
-QuickJS são etapas seguintes; não há promessa de redução de RAM ou latência
-apenas pela troca de linguagem.
+Essa etapa migra a árvore, os estilos, o layout e as transformações. Texto,
+shaping, pintura e as pontes QuickJS são etapas seguintes; não há promessa de
+redução de RAM ou latência apenas pela troca de linguagem.
 
 Na fronteira com o renderer, a propriedade de cada nó é transferida de `Box`
 para um registro RAII com `NonNull`, antes de publicar qualquer ponteiro.

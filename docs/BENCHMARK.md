@@ -251,7 +251,7 @@ development package.
     `xz -9`), instead of the deflate in the design above; QuickJS running a fixed script (strings, JSON,
     sorting, objects, a regular expression), one runtime per thread.
   - LordOS's own interface work (`bench/lbui.c`), with the engine's real code linked into `axia-bench`
-    (Rust scene graph/styles, `ui/layout.c`, `paint.c`, `text.c`, `canvas.c`, the shaper `otf.c`, `shape*.c`,
+    (Rust scene graph/styles/layout, `paint.c`, `text.c`, `canvas.c`, the shaper `otf.c`, `shape*.c`,
     `bidi.c`; the Wayland, terminal, media and GPU hooks of `paint.c` are stubs, as in `tests/engine_test.c`):
     - **Layout and paint** (`cpu.ui.1`, `cpu.ui.n`, frames per second): a fixed 1920×1080 scene built in C,
       529 nodes: a translucent top bar with backdrop blur, a file manager (title bar, a 14-item sidebar, a
@@ -286,7 +286,7 @@ development package.
       from a file. A trace of a run shows these workloads open nothing; the helper's sandbox, seccomp list and fds
       are unchanged. `axia-bench` grows from 1.48 to 2.42 MB of code (about 0.63 MB of fonts) and 0.46 MB of
       static data.
-    - **They measure LordOS's engine together with the machine.** An optimisation of `paint.c`, `layout.c` or the
+    - **They measure LordOS's engine together with the machine.** An optimisation of `paint.c`, the Rust layout or the
       shaper changes these four numbers on the same hardware. So a reference value of one of them carries the
       LordOS version it was measured with (`"lordos"` in `apps/sysinfo/references.js`; `ENGINE_IDS` in
       `perf.js`) and gives a "×N" only to a result of that same version; a release re-measures them on the

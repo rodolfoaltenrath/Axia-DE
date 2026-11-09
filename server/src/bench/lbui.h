@@ -1,5 +1,5 @@
 /* lbui.h — LordBench's workloads on LordOS's own interface code (docs/BENCHMARK.md, "Workloads"): the UI
- * engine's layout and paint (Rust scene graph, layout.c, paint.c, text.c, canvas.c) on a fixed scene, and the
+ * engine's layout and paint (Rust scene graph/layout, paint.c, text.c, canvas.c) on a fixed scene, and the
  * shaper (ui/otf.c, shape*.c, bidi.c) on fixed paragraphs in five scripts. Everything they use is built
  * into axia-bench: the scene is made in C from fixed data, the fonts are bytes in the binary
  * (build/gen/lb_fonts.h: LordOS's Inter and the subset Noto fonts of src/bench/fonts), and nothing is

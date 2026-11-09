@@ -1,16 +1,21 @@
 //! Native scene ownership and styles. The renderer still borrows the C-layout
-//! views synchronously; its layout, image cache and painting are separate stages.
+//! views synchronously; image decoding, text shaping and painting remain in C.
 //!
 //! FFI contract: UI thread only, no reentrant calls. Node pointers are null or
 //! live views returned by node_new/node_get. C cannot free or relink views, text,
 //! style extensions or transforms. Style snapshots never own their ext pointer.
 mod damage;
+mod edges;
+mod layout;
+#[cfg(test)]
+mod layout_tests;
 mod memory;
 mod scene;
 mod state;
 mod style;
 #[cfg(test)]
 mod tests;
+mod transform;
 mod types;
 
 use scene::Scene;
@@ -21,6 +26,20 @@ use std::{
 };
 use types::*;
 thread_local! { static SCENE: RefCell<Scene> = RefCell::new(Scene::default()); }
+thread_local! { static LAYOUT: RefCell<layout::Layout> = RefCell::new(layout::Layout::default()); }
+
+#[cfg(not(test))]
+#[no_mangle]
+pub unsafe extern "C" fn layout_root(root: *mut Node, w: f32, h: f32) {
+    with_scene(|s, ui| {
+        if let Some(root) = id(s, root) {
+            LAYOUT.with(|l| {
+                l.borrow_mut()
+                    .run(s, ui, root, w, h, &mut layout::NativeMetrics);
+            });
+        }
+    });
+}
 
 #[cfg(not(test))]
 unsafe fn release_image(image: *mut c_void) {
@@ -275,5 +294,6 @@ pub unsafe extern "C" fn ui_reset() {
             s.visit_destroying(None, |id| notify(id));
         }
         s.reset(ui);
+        LAYOUT.with(|l| *l.borrow_mut() = layout::Layout::default());
     });
 }
