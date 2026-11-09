@@ -8,7 +8,7 @@
 #include "otf.h"
 
 enum { UNIT_AUTO = 0, UNIT_PX, UNIT_PCT };
-typedef struct { float v; uint8_t unit; } Dim;
+typedef struct Dim { float v; uint8_t unit; } Dim;
 
 enum { NODE_VIEW, NODE_TEXT, NODE_IMAGE, NODE_RAW, NODE_TERM, NODE_SURFACE, NODE_MEDIA };
 enum { JUSTIFY_START, JUSTIFY_CENTER, JUSTIFY_END, JUSTIFY_BETWEEN, JUSTIFY_AROUND, JUSTIFY_EVENLY };
@@ -18,8 +18,10 @@ enum { EDGE_L, EDGE_T, EDGE_R, EDGE_B };
 enum { DIR_INHERIT, DIR_LTR, DIR_RTL };
 enum { POINTER_AUTO, POINTER_NONE, POINTER_BOX_NONE };   /* pointerEvents; box-none: only the children are hit */
 
-/* Subset of CSS the engine understands (the JS names are in style.c). */
-typedef struct {
+/* Borrowed renderer views. Rust owns nodes, text, style extensions and transforms;
+ * C may update layout/paint fields but must not free or relink these records.
+ * Layout verified by the Rust runtime ABI test. */
+typedef struct Style {
     uint8_t display_none, absolute, row, justify, align_items, align_self;
     uint8_t overflow_hidden, pointer_none, text_align, object_fit, nowrap;   /* pointer_none: POINTER_* */
     uint8_t dir;                /* DIR_INHERIT / DIR_LTR / DIR_RTL (CSS direction) */
@@ -61,7 +63,7 @@ typedef struct StyleExt {
     float radius_corner[8];         /* top-left, top-right, bottom-right, bottom-left, top-start, top-end, bottom-start, bottom-end */
     Dim origin_x, origin_y;         /* transformOrigin, 50% 50% by default */
     /* not style: the edges resolved for the node's direction (layout.c node_resolve_edges), physical L, T, R, B */
-    struct {
+    struct ResolvedEdges {
         float mg[4], pd[4], bw[4];
         uint32_t bc[4];
         float rad[4];               /* top-left, top-right, bottom-right, bottom-left */
@@ -78,17 +80,17 @@ enum { SIDE_START = 4, SIDE_END = 5 };
 #define ES_RADIUS(i)  (1u << (16 + (i)))    /* corner i (0..7) */
 
 /* 2D affine transform: (x, y) → (a x + c y + e, b x + d y + f). */
-typedef struct { float a, b, c, d, e, f; } Affine;
+typedef struct Affine { float a, b, c, d, e, f; } Affine;
 
 typedef struct Image Image;
 
 /* Box in screen coordinates; empty if x1 <= x0. */
-typedef struct { float x0, y0, x1, y1; } Box;
+typedef struct Box { float x0, y0, x1, y1; } Box;
 
 /* Transforms (layout.c place), only for nodes that have one or are inside one: own = this node's
  * scale/rotate around its origin, in layout coordinates; world = its ancestors' and its own
  * (layout → screen); inv = the inverse of world. */
-typedef struct {
+typedef struct NodeTf {
     Affine own, world, inv;
     uint64_t sig;               /* paint.c: geometry of its subtree in the last damage pass (own_tf) */
     uint8_t live, live_known;   /* paint.c: what decided its raster's kind in the last damage pass */
@@ -127,9 +129,9 @@ static inline int node_edges_plain(const Node *n) { return !n->s.ext || n->s.ext
  * dots) are repainted one by one instead of the box around all of them. dlist_add merges a
  * rectangle into the ones it overlaps and, past DAMAGE_MAX, the pair that wastes the least area. */
 #define DAMAGE_MAX 16
-typedef struct { Box r[DAMAGE_MAX]; int n; } DamageList;
+typedef struct DamageList { Box r[DAMAGE_MAX]; int n; } DamageList;
 
-typedef struct {
+typedef struct Ui {
     Node **nodes;
     int cap;
     Node *root;
@@ -149,7 +151,7 @@ typedef struct {
 
 extern Ui ui;
 
-/* node.c */
+/* Rust runtime scene graph */
 void  style_defaults(Style *s);
 Node *node_new(int type);
 Node *node_get(int id);
@@ -172,11 +174,14 @@ void  dlist_add(DamageList *l, Box b);
 float box_area(Box b);
 void  damage_subtree(Node *n);
 void  ui_reset(void);
+NodeTf *node_ensure_transform(Node *n);
 
-/* style.c */
+/* Rust runtime styles. Snapshots borrow ext; only the owner calls release. */
 int style_set_number(Style *s, const char *key, double v);
 int style_set_string(Style *s, const char *key, const char *v);
+int style_set_gradient(Style *s, double angle, double from, double to);
 int style_reset(Style *s, const char *key);
+void style_release(Style *s);
 
 /* layout.c */
 void layout_root(Node *root, float w, float h);

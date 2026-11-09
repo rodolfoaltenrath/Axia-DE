@@ -64,6 +64,93 @@ Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
 única e testes próprios. A interface de usuário continua no runtime existente;
 a migração do núcleo pode prosseguir por módulos.
 
+## Núcleo do runtime: árvore de nós e estilos
+
+`runtime/` contém a implementação da árvore e dos estilos. Os antigos
+`server/src/ui/node.c` e `style.c` foram removidos do repositório e do build.
+O React continua enviando as mesmas operações; layout, texto, pintura e o
+cache de imagens continuam integrados ao renderer existente.
+
+Para revisar o código:
+
+- `scene.rs` possui as alocações nativas por RAII, mantém as relações por IDs, valida
+  reparentamento e libera subárvores iterativamente. A tabela de views mantém
+  os endereços estáveis e a fila de vagas reaproveita o menor ID disponível.
+- `style.rs` resolve propriedades por tipos, sem offsets de bytes. Snapshots
+  comparam os campos e os bits dos floats; padding e caches derivados não
+  participam da comparação. As extensões são alocadas somente quando usadas.
+- `damage.rs` mantém as regiões de repintura, incluindo a união de regiões
+  sobrepostas e o limite de 16 retângulos.
+- `types.rs` define as views `repr(C)` e `mod.rs` contém a ABI e seus contratos.
+  `state.rs` fornece o armazenamento do estado global compartilhado.
+
+Rust possui e libera nós, texto, extensões de estilo e transformações. O cache
+C ainda possui as imagens; o dono do nó devolve cada referência ao cache ao
+ser destruído. Views C são empréstimos síncronos na thread da interface:
+o renderer pode atualizar geometria e pintura, mas não liberar os dados nem
+alterar as relações da árvore. Os blocos `unsafe` nessa fronteira continuam
+necessários enquanto layout e pintura usam as views C.
+
+Criação de nós não varre mais toda a tabela desde o início; a contagem de nós
+é direta. Repetir um texto idêntico preserva suas alocações e caches. Resetar
+a árvore libera também as tabelas, e operações que criariam ciclos são
+recusadas. IDs e operações da interface continuam compatíveis.
+
+A integração com as animações nativas preserva os caches em alterações de
+opacidade e translação, e marca a geração de pintura quando o conteúdo muda.
+O callback `node_destroy_hook` continua disponível para cancelar animações
+antes de liberar os nós; resetar a cena também notifica todos os IDs liberados,
+para que uma animação antiga não atinja um novo nó que reutilize o mesmo ID.
+
+Os testes novos são Rust e cobrem crescimento/reuso de IDs, endereços estáveis,
+reparentamento, ciclos, descarte de subárvores profundas, limites de buffers,
+ordem de pintura, invalidação, estilos e regiões de repintura. O teste de ABI
+usa Clang para inspecionar o arquivo C de layout existente e verificar tamanho,
+alinhamento e offset de todos os campos compartilhados, sem gerar teste C.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline runtime::
+# Requer Clang; também executado no CI Fedora:
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline runtime::tests::native_views_match_c_layout -- --ignored --nocapture
+# Regressões existentes de layout, texto, pintura e frames de arraste:
+make -C server build/engine-test GPU=1
+```
+
+Essa etapa migra a árvore e os estilos. O motor de layout, pintura e as pontes
+QuickJS são etapas seguintes; não há promessa de redução de RAM ou latência
+apenas pela troca de linguagem.
+
+Na fronteira com o renderer, a propriedade de cada nó é transferida de `Box`
+para um registro RAII com `NonNull`, antes de publicar qualquer ponteiro.
+Isso permite mover os slots sem retaggear a alocação observada pelo C. O dono
+reconstitui o `Box` somente na destruição. A tabela publicada usa `Cell` para
+atualizar suas entradas sem invalidar empréstimos anteriores da tabela.
+Snapshots C de `StyleExt` inicializam apenas `STYLE_EXT_VALUES`: o adaptador
+copia esse prefixo para um snapshot inicializado, sem referenciar o cache C
+que não foi copiado.
+
+As reservas de metadados e as alocações de nós, texto, estilos e transformações
+são falíveis. Uma falha preserva os dados anteriores; a destruição não precisa
+de worklist nem de alocação para registrar vagas. Valores sem número ou não
+finitos, e dimensões/floats que transbordam `f32`, são rejeitados antes da
+alteração. Uma propriedade inválida não modifica overrides ou invalida o
+cache existente. Inserções que já correspondem à ordem atual não repintam.
+
+Os contratos de memória rodam no Miri, com proveniência estrita, nos modelos
+Stacked Borrows e Tree Borrows. O CI fixa `nightly-2026-11-09`. O teste da ABI
+continua sendo nativo com Clang, e dois testes que chamam o parser numérico da
+libc rodam nativamente, pois o Miri não interpreta `strtof`. Os casos de stress
+usam árvores menores no interpretador e mantêm a carga completa nativamente.
+
+```sh
+rustup toolchain install nightly-2026-11-09 --profile minimal --component miri --component rust-src
+# Executar fora do repositório para preparar a std sem o override de rust/vendor:
+cargo +nightly-2026-11-09 miri setup
+# De volta à raiz do repositório:
+MIRIFLAGS=-Zmiri-strict-provenance cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --locked --offline --lib runtime::
+MIRIFLAGS='-Zmiri-tree-borrows -Zmiri-strict-provenance' cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --locked --offline --lib runtime::
+```
+
 ## Aplicativos Linux e associações de arquivos
 
 `applications/` substitui integralmente `apps.c`, `hw/mimeapps.c` e

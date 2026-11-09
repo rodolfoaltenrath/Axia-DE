@@ -21,7 +21,7 @@ covers the Dock goes to the menu.
 
 ## Why it broke
 
-The engine's `zIndex` only orders **siblings** (`node_children_ordered` in `server/src/ui/node.c`),
+The engine's `zIndex` only orders **siblings** (`node_children_ordered` in `rust/axia-shell/src/runtime/scene.rs`),
 and hit testing walks the same order (`hit` in `paint.c`). The theme drew the menu bar, then the
 Dock, and each menu bar menu was a child of the menu bar: with the Dock on the left, the Dock came
 later in the tree and covered the crown menu, and also took its clicks. Inside apps, a select
