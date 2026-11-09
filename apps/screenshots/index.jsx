@@ -4,13 +4,14 @@
 // Shortcuts (global, also with a Linux app in front):
 //   ❖⇧3 / Print Screen  entire screen        ❖⇧4  area (or window, with Space)
 //   ❖⇧5                 the Screenshots panel (and stop a recording in progress)
+// With another screenshot app chosen in Settings → Default Apps, these keys open that app instead.
 // Protected windows (wm.setProtected) come out black: the server does that, not this app.
 // After each capture a floating thumbnail shows up; a click opens the markup editor (arrow, box,
 // text, blur). They are saved in ~/Pictures/Screenshots or to the clipboard.
 import {
   View, Text, MediaView, Button, Toggle, Segmented, TextInput, Toolbar, ToolbarButton, ToolbarGroup, ToolbarDivider, ToolbarSpacer, GroupBox, FormRow,
   useTheme, useAppWindow, useKeyboard, useStore, useWindows, wm, windows, typeScale,
-  t as tr, media, userDirs, fs, addListener, addShortcuts, createStore, windowTitle, settings, useSettings, notify, toast, errorText, dndActive, appNotifyPrefs,
+  t as tr, media, userDirs, fs, addListener, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, useSettings, notify, toast, errorText, dndActive, appNotifyPrefs,
 } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 
@@ -142,13 +143,18 @@ export const capture = {
 
 // global shortcuts
 const hasMedia = () => typeof lord !== 'undefined' && !!lord.media;
-const captureFull = () => capture.full();
-const captureArea = () => capture.area('area');
-const openPanelOrStop = () => { if (recording.get()) capture.record(); else wm.open(APP); };
+// the screenshot app chosen in Settings → Default Apps, when it isn't this one: the keys open it
+const other = () => screenshotLauncher();
+const usable = () => !!other() || hasMedia();
+const orOther = (fn) => () => { const id = other(); if (id) launchApp(id); else fn(); };
+const captureFull = orOther(() => capture.full());
+const captureArea = orOther(() => capture.area('area'));
+// a recording in progress is this app's, whatever is chosen now: the key still stops it
+const openPanelOrStop = () => { if (recording.get()) capture.record(); else orOther(() => wm.open(APP))(); };
 addShortcuts([
-  { id: 'capture.full', keys: ['Meta+Shift+3', 'PrintScreen'], when: hasMedia, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
-  { id: 'capture.area', keys: ['Meta+Shift+4'], when: hasMedia, run: captureArea, label: 'shell.shortcuts.captureArea', group: 'system' },
-  { id: 'capture.panel', keys: ['Meta+Shift+5'], when: hasMedia, run: openPanelOrStop, label: 'shell.shortcuts.capturePanel', group: 'system' },
+  { id: 'capture.full', keys: ['Meta+Shift+3', 'PrintScreen'], when: usable, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
+  { id: 'capture.area', keys: ['Meta+Shift+4'], when: usable, run: captureArea, label: 'shell.shortcuts.captureArea', group: 'system' },
+  { id: 'capture.panel', keys: ['Meta+Shift+5'], when: usable, run: openPanelOrStop, label: 'shell.shortcuts.capturePanel', group: 'system' },
 ]);
 
 // ---- the app's windows ----

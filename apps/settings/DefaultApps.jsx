@@ -1,8 +1,9 @@
-// Settings → Default Apps: browser, mail, music, video, images, PDF, text editor and terminal, from
+// Settings → Default Apps: browser, mail, music, video, images, PDF, text editor, terminal and the
+// screenshot app (what Print Screen and ❖⇧3/4/5 open; settings.json "screenshotApp"), from
 // LordOS's own apps and the installed Linux apps (.desktop with MimeType). Saved in
 // ~/.config/mimeapps.list (and ~/.config/xdg-terminals.list), so Files' "Open With", double
 // clicks, lord.apps.launchWith and Linux apps (xdg-open) agree. See docs/SETTINGS.md.
-import { View, Text, useTheme, useLocale, useLauncherApps, DEFAULT_CATEGORIES, defaultInfo, setDefaultFor, resetDefaultFor, candidatesFor } from '@lordos/sdk';
+import { View, Text, useTheme, useLocale, useLauncherApps, useSettings, DEFAULT_CATEGORIES, defaultInfo, setDefaultFor, resetDefaultFor, candidatesFor, screenshotLauncher } from '@lordos/sdk';
 import { useState } from 'react';
 import { GroupBox, SettingRow, PopUp, Note, Stack, Badge } from './ui.jsx';
 
@@ -17,7 +18,7 @@ function nameOf(desktopId, list, apps) {
 
 const LOOK = {
   browser: ['◎', '#0a84ff'], mail: ['✉', '#30a0ff'], music: ['♪', '#ff375f'], video: ['▶', '#bf5af2'], images: ['▣', '#ff9f0a'],
-  pdf: ['⎙', '#ff453a'], text: ['✎', '#8e8e93'], terminal: ['>_', '#2c2c2e'],
+  pdf: ['⎙', '#ff453a'], text: ['✎', '#8e8e93'], terminal: ['>_', '#2c2c2e'], screenshots: ['⬚', '#30b0c7'],
 };
 
 export function DefaultAppsSettings() {
@@ -25,6 +26,7 @@ export function DefaultAppsSettings() {
   const apps = useLauncherApps();
   const [rev, setRev] = useState(0);
   const [err, setErr] = useState('');
+  useSettings();                      // the screenshot app's choice lives in settings.json
   return (
     <Stack>
       <GroupBox footer={tr('prefs.defaults.footer')}>
@@ -55,6 +57,7 @@ export function DefaultAppsSettings() {
         })}
       </GroupBox>
       {err ? <Note tone="warn">{err}</Note> : null}
+      {screenshotLauncher() ? <Note tone="warn">{tr('prefs.defaults.screenshotsExternal')}</Note> : null}
       <Note>{tr('prefs.defaults.filesHint')}</Note>
     </Stack>
   );

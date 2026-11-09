@@ -344,14 +344,20 @@ it from LordOS would make dpkg ask about it on every package update (or drop the
 
 ![Default Apps](settings-default-apps-dark.png)
 
-Browser, mail, music, video, images, PDF, text editor and terminal. Candidates are LordOS's own apps
-and the Linux apps whose `.desktop` `MimeType` covers the category (terminals: `Categories` with
-`TerminalEmulator`).
+Browser, mail, music, video, images, PDF, text editor, terminal and screenshots. Candidates are
+LordOS's own apps and the Linux apps whose `.desktop` `MimeType` covers the category (terminals:
+`Categories` with `TerminalEmulator`; screenshots: a name, generic name or keyword that says so,
+since freedesktop has no category for them).
 
 - Saved in `~/.config/mimeapps.list` (freedesktop spec: the `[Default Applications]` line is
   replaced and the app goes first in `[Added Associations]`, as GLib does; every other line is
   kept), so `xdg-open` and GNOME/KDE apps agree. LordOS apps are written as `lordos-<app>.desktop`.
   The terminal goes in `~/.config/xdg-terminals.list`.
+- **Screenshots** has no MIME type: the choice is settings.json `screenshotApp` (unset: Screenshots,
+  shown as automatic). Print Screen and ❖⇧3/4/5 (and Classic's ❖⇧S) open the chosen Linux app
+  instead of capturing (`screenshotLauncher()`, `apps/screenshots/index.jsx`); a recording in
+  progress is still stopped by ❖⇧5. axia-server offers no screen capture to Linux apps yet (no
+  screencopy protocol nor Screenshot portal), so the page warns that they can't capture for now.
 - Lookup follows the spec's order (`$XDG_CONFIG_HOME`, `/etc/xdg`, `~/.local/share/applications`,
   `/usr/local/share/applications`, `/usr/share/applications`, `defaults.list`), with the user's
   `[Removed Associations]` applied. File types come from shared-mime-info's `globs2` (highest
