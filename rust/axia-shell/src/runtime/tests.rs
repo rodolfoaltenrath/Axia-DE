@@ -24,18 +24,19 @@ fn growth_preserves_addresses_reuses_lowest_vacancy_and_releases_tables() {
     let (mut s, mut ui) = (Scene::default(), Ui::empty());
     let a = create(&mut s, &mut ui, 0);
     let first = s.ptr(a);
-    for _ in 0..3000 {
+    let extra = if cfg!(miri) { 64 } else { 3000 };
+    for _ in 0..extra {
         create(&mut s, &mut ui, 0);
     }
-    assert_eq!(s.count(), 3001);
+    assert_eq!(s.count(), extra + 1);
     assert_eq!(s.ptr(a), first);
-    assert!(ui.cap >= 3002);
+    assert!(ui.cap as usize >= extra + 2);
     assert_eq!(unsafe { *ui.nodes.add(a) }, first);
     s.destroy(9, &mut ui);
     s.destroy(3, &mut ui);
     assert_eq!(create(&mut s, &mut ui, 0), 3);
     assert_eq!(create(&mut s, &mut ui, 0), 9);
-    assert_eq!(s.count(), 3001);
+    assert_eq!(s.count(), extra + 1);
     assert_eq!(create(&mut s, &mut ui, 7), 0);
     s.reset(&mut ui);
     assert_eq!(s.count(), 0);
@@ -77,7 +78,7 @@ fn destroying_deep_subtrees_releases_resources_without_recursive_drop() {
     let root = create(&mut s, &mut ui, 0);
     ui.root = s.ptr(root);
     let mut parent = root;
-    for _ in 0..2048 {
+    for _ in 0..if cfg!(miri) { 64 } else { 2048 } {
         let n = create(&mut s, &mut ui, 0);
         s.insert(parent, n, 0, &mut ui);
         parent = n;
@@ -99,7 +100,9 @@ fn destroying_deep_subtrees_releases_resources_without_recursive_drop() {
 #[test]
 fn mixed_tree_edits_preserve_renderer_links_and_single_parent_ownership() {
     let (mut s, mut ui) = (Scene::default(), Ui::empty());
-    for _ in 0..64 {
+    let population = if cfg!(miri) { 16 } else { 64 };
+    let rounds = if cfg!(miri) { 80 } else { 1200 };
+    for _ in 0..population {
         create(&mut s, &mut ui, 0);
     }
     let mut seed = 0x24b1_784d_u32;
@@ -107,14 +110,14 @@ fn mixed_tree_edits_preserve_renderer_links_and_single_parent_ownership() {
         seed ^= seed << 13;
         seed ^= seed >> 17;
         seed ^= seed << 5;
-        seed as usize % 64 + 1
+        seed as usize % population + 1
     };
-    for step in 0..1200 {
+    for step in 0..rounds {
         let (p, c, b) = (random(), random(), random());
         match step % 11 {
             0 => {
                 s.destroy(c, &mut ui);
-                while s.count() < 64 {
+                while s.count() < population {
                     create(&mut s, &mut ui, 0);
                 }
             }
@@ -124,7 +127,7 @@ fn mixed_tree_edits_preserve_renderer_links_and_single_parent_ownership() {
             }
         }
         let mut attached = std::collections::HashSet::new();
-        for id in 1..=64 {
+        for id in 1..=population {
             let n = s.node(id).unwrap();
             let (mut child, mut previous) = (n.first, ptr::null_mut());
             while !child.is_null() {
@@ -143,17 +146,17 @@ fn mixed_tree_edits_preserve_renderer_links_and_single_parent_ownership() {
             let (mut ancestor, mut depth) = (n.parent, 0);
             while !ancestor.is_null() {
                 depth += 1;
-                assert!(depth < 64, "cycle at step {step}");
+                assert!(depth < population, "cycle at step {step}");
                 ancestor = unsafe { (*ancestor).parent };
             }
         }
         assert_eq!(
             attached.len(),
-            (1..=64)
+            (1..=population)
                 .filter(|&id| !s.node(id).unwrap().parent.is_null())
                 .count()
         );
-        assert_eq!(s.count(), 64);
+        assert_eq!(s.count(), population);
     }
 }
 #[test]
@@ -246,6 +249,7 @@ fn moving_absolute_nodes_and_rotating_pure_subtrees_keep_their_measurements() {
     assert_eq!(s.node(id).unwrap().measure_valid, 0);
 }
 #[test]
+#[cfg_attr(miri, ignore = "host libc numeric parsing is covered by native tests")]
 fn style_values_cover_units_colors_enums_logical_edges_and_reset() {
     let mut s = Style::default();
     assert_eq!(s.opacity, 1.);
@@ -311,6 +315,222 @@ fn style_comparison_ignores_padding_and_resolved_cache_but_preserves_float_bits(
     assert!(!x.same_values(&before, true));
     unsafe {
         a.release();
+    }
+}
+
+#[test]
+fn c_style_snapshots_need_only_the_initialized_value_prefix() {
+    let source = StyleExt {
+        rotate: 27.,
+        edge_set: 1 << 12,
+        ..StyleExt::default()
+    };
+    let mut partial = MaybeUninit::<StyleExt>::uninit();
+    unsafe {
+        ptr::copy_nonoverlapping(
+            ptr::addr_of!(source).cast::<MaybeUninit<u8>>(),
+            partial.as_mut_ptr().cast::<MaybeUninit<u8>>(),
+            std::mem::offset_of!(StyleExt, r),
+        );
+        let snapshot = StyleExt::copy_values(partial.as_ptr());
+        assert!(snapshot.same_values(&source, false));
+        assert_eq!(snapshot.r.ok, 0);
+        assert_eq!(snapshot.r.mg, [0.; 4]);
+    }
+}
+
+#[test]
+fn renderer_borrows_survive_slot_growth_edits_and_node_deletion() {
+    let (mut s, mut ui) = (Scene::default(), Ui::empty());
+    let root = create(&mut s, &mut ui, 0);
+    let child = create(&mut s, &mut ui, 0);
+    let (p, c) = (s.ptr(root), s.ptr(child));
+    s.insert(root, child, 0, &mut ui);
+    for _ in 0..32 {
+        create(&mut s, &mut ui, 0);
+    }
+    s.node_mut(root).unwrap().w = 42.;
+    unsafe {
+        assert_eq!((*p).first, c);
+        assert_eq!((*p).w, 42.);
+        (*c).x = 9.;
+    }
+    assert_eq!(s.node(child).unwrap().x, 9.);
+    s.destroy(child, &mut ui);
+    unsafe {
+        assert!((*p).first.is_null());
+        assert_eq!(*ui.nodes.add(root), p);
+        assert!((*ui.nodes.add(child)).is_null());
+    }
+    assert_eq!(create(&mut s, &mut ui, 0), child);
+    unsafe {
+        assert_eq!((*(*ui.nodes.add(child))).id, child as i32);
+    }
+}
+
+#[test]
+fn failed_allocations_preserve_nodes_vacancies_text_and_style_ownership() {
+    use super::memory::AllocationBudget;
+    let (mut s, mut ui) = (Scene::default(), Ui::empty());
+    let root = create(&mut s, &mut ui, 0);
+    let hole = create(&mut s, &mut ui, 0);
+    s.set_text(root, c"kept", &mut ui);
+    s.destroy(hole, &mut ui);
+    ui.dirty = 0;
+    let view = s.ptr(root);
+    {
+        let _failure = AllocationBudget::new(0);
+        assert_eq!(create(&mut s, &mut ui, 0), 0);
+        s.set_text(root, c"replacement", &mut ui);
+        assert_eq!(s.count(), 1);
+        assert_eq!(ui.dirty, 0);
+        assert!(s.ptr(hole).is_null());
+        unsafe {
+            assert_eq!(std::ffi::CStr::from_ptr((*view).text), c"kept");
+        }
+        let mut style = Style::default();
+        assert!(!style.set_number("borderStartWidth", 7.));
+        assert!(style.ext.is_null());
+        assert!(style.set_number("width", 7.)); // a base property needs no allocation
+    }
+    assert_eq!(create(&mut s, &mut ui, 0), hole);
+    s.insert(root, hole, 0, &mut ui);
+    {
+        let _failure = AllocationBudget::new(0);
+        s.destroy(root, &mut ui);
+        assert_eq!(s.count(), 0);
+        s.reset(&mut ui);
+        assert!(ui.nodes.is_null());
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "host libc numeric parsing is covered by native tests")]
+fn invalid_style_values_do_not_allocate_or_change_overrides_and_caches() {
+    let mut s = Style::default();
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, f64::MAX] {
+        assert!(!s.set_number("borderStartWidth", value));
+        assert!(s.ext.is_null());
+        assert!(!s.set_number("width", value));
+    }
+    for value in [c"bad", c"nan", c"inf", c"1e999", c""] {
+        assert!(!s.set_string("start", value));
+        assert!(s.ext.is_null());
+        assert!(!s.set_string("fontSize", value));
+        assert_eq!(s.font_size, 14.);
+    }
+    assert!(!s.set_string("borderStartColor", c"unsupported"));
+    assert!(s.ext.is_null());
+    assert!(!s.set_string("numberOfLines", c"bad"));
+    s.set_number("borderWidth", 3.);
+    s.set_number("borderStartWidth", 5.);
+    unsafe {
+        (*s.ext).r.ok = 1;
+        let before = *s.ext;
+        assert!(!s.set_string("start", c"invalid"));
+        assert!((*s.ext).same_values(&before, false));
+        assert_eq!((*s.ext).r.ok, 1);
+        s.release();
+    }
+}
+
+#[test]
+fn no_op_insertions_preserve_damage_and_layout_caches() {
+    let (mut s, mut ui) = (Scene::default(), Ui::empty());
+    let root = create(&mut s, &mut ui, 0);
+    let a = create(&mut s, &mut ui, 0);
+    let b = create(&mut s, &mut ui, 0);
+    s.insert(root, a, 0, &mut ui);
+    s.insert(root, b, 0, &mut ui);
+    ui.dirty = 0;
+    s.node_mut(root).unwrap().layout_ok = 1;
+    let previous = Rect {
+        x0: 1.,
+        y0: 2.,
+        x1: 3.,
+        y1: 4.,
+    };
+    s.node_mut(a).unwrap().prev_box = previous;
+    assert!(s.insert(root, a, b, &mut ui));
+    assert!(s.insert(root, b, 0, &mut ui));
+    assert_eq!(ui.dirty, 0);
+    assert_eq!(s.node(root).unwrap().layout_ok, 1);
+    assert_eq!(s.node(a).unwrap().prev_box, previous);
+    assert_eq!(ui.dlist.n, 0);
+}
+
+#[test]
+fn gradient_validation_preserves_the_previous_style_on_invalid_input() {
+    let mut s = Style::default();
+    assert!(s.set_gradient(90., 0xff123456_u32 as f64, 0xffabcdef_u32 as f64));
+    let previous = s;
+    for (angle, from, to) in [
+        (f64::NAN, 0., 0.),
+        (f64::INFINITY, 0., 0.),
+        (f64::MAX, 0., 0.),
+        (90., f64::NAN, 0.),
+        (90., 0., f64::INFINITY),
+    ] {
+        assert!(!s.set_gradient(angle, from, to));
+        assert!(s.same_base(&previous));
+    }
+    assert_eq!(s.has_gradient, 1);
+    assert_eq!(s.grad_angle, 90.);
+    assert_eq!(s.grad_from, 0xff123456);
+}
+
+#[test]
+fn host_ffi_handles_partial_snapshots_uninitialized_outputs_and_allocation_failure() {
+    // This is the only runtime unit test using the UI-thread host singleton.
+    // All other unit tests use independent local Scene/Ui instances.
+    unsafe {
+        super::ui_reset();
+        let root = super::node_new(0);
+        let raw = super::node_new(3);
+        assert!(!root.is_null() && !raw.is_null());
+        super::node_append(root, raw);
+        super::node_set_text(raw, c"ffi".as_ptr());
+        let mut text = [MaybeUninit::<u8>::uninit(); 4];
+        assert_eq!(
+            super::node_gather_text(root, text.as_mut_ptr().cast(), 4),
+            3
+        );
+        assert_eq!(text.map(|b| b.assume_init()), *b"ffi\0");
+        let mut children = [MaybeUninit::<*mut Node>::uninit(); 1];
+        assert_eq!(
+            super::node_children_ordered(root, children.as_mut_ptr().cast(), 1),
+            1
+        );
+        assert_eq!(children[0].assume_init(), raw);
+        let mut style = MaybeUninit::<Style>::uninit();
+        super::style_defaults(style.as_mut_ptr());
+        let mut style = style.assume_init();
+        assert_eq!(style.opacity, 1.);
+        super::style_release(&mut style);
+        super::style_set_number(ptr::addr_of_mut!((*root).s), c"rotate".as_ptr(), 0.);
+        let before = (*root).s;
+        let mut prefix = MaybeUninit::<StyleExt>::uninit();
+        ptr::copy_nonoverlapping(
+            before.ext.cast::<MaybeUninit<u8>>(),
+            prefix.as_mut_ptr().cast(),
+            std::mem::offset_of!(StyleExt, r),
+        );
+        super::style_set_number(ptr::addr_of_mut!((*root).s), c"rotate".as_ptr(), 30.);
+        super::node_restyled(root, &before, prefix.as_ptr());
+        {
+            let _failure = super::memory::AllocationBudget::new(0);
+            assert!(super::node_new(0).is_null());
+            assert!(super::node_ensure_transform(root).is_null());
+            assert!((*root).tf.is_null());
+            assert_eq!(super::node_count(), 2);
+            super::node_destroy(root);
+            assert_eq!(super::node_count(), 0);
+        }
+        assert!(super::node_get(0).is_null());
+        assert!(super::node_get(-1).is_null());
+        super::node_destroy(ptr::null_mut());
+        assert_eq!(super::node_gather_text(ptr::null(), ptr::null_mut(), 0), 0);
+        super::ui_reset();
     }
 }
 #[test]

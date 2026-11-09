@@ -73,7 +73,7 @@ cache de imagens continuam integrados ao renderer existente.
 
 Para revisar o código:
 
-- `scene.rs` possui os nós em `Box`, mantém as relações por IDs, valida
+- `scene.rs` possui as alocações nativas por RAII, mantém as relações por IDs, valida
   reparentamento e libera subárvores iterativamente. A tabela de views mantém
   os endereços estáveis e a fila de vagas reaproveita o menor ID disponível.
 - `style.rs` resolve propriedades por tipos, sem offsets de bytes. Snapshots
@@ -113,6 +113,37 @@ make -C server build/engine-test GPU=1
 Essa etapa migra a árvore e os estilos. O motor de layout, pintura e as pontes
 QuickJS são etapas seguintes; não há promessa de redução de RAM ou latência
 apenas pela troca de linguagem.
+
+Na fronteira com o renderer, a propriedade de cada nó é transferida de `Box`
+para um registro RAII com `NonNull`, antes de publicar qualquer ponteiro.
+Isso permite mover os slots sem retaggear a alocação observada pelo C. O dono
+reconstitui o `Box` somente na destruição. A tabela publicada usa `Cell` para
+atualizar suas entradas sem invalidar empréstimos anteriores da tabela.
+Snapshots C de `StyleExt` inicializam apenas `STYLE_EXT_VALUES`: o adaptador
+copia esse prefixo para um snapshot inicializado, sem referenciar o cache C
+que não foi copiado.
+
+As reservas de metadados e as alocações de nós, texto, estilos e transformações
+são falíveis. Uma falha preserva os dados anteriores; a destruição não precisa
+de worklist nem de alocação para registrar vagas. Valores sem número ou não
+finitos, e dimensões/floats que transbordam `f32`, são rejeitados antes da
+alteração. Uma propriedade inválida não modifica overrides ou invalida o
+cache existente. Inserções que já correspondem à ordem atual não repintam.
+
+Os contratos de memória rodam no Miri, com proveniência estrita, nos modelos
+Stacked Borrows e Tree Borrows. O CI fixa `nightly-2026-11-09`. O teste da ABI
+continua sendo nativo com Clang, e dois testes que chamam o parser numérico da
+libc rodam nativamente, pois o Miri não interpreta `strtof`. Os casos de stress
+usam árvores menores no interpretador e mantêm a carga completa nativamente.
+
+```sh
+rustup toolchain install nightly-2026-11-09 --profile minimal --component miri --component rust-src
+# Executar fora do repositório para preparar a std sem o override de rust/vendor:
+cargo +nightly-2026-11-09 miri setup
+# De volta à raiz do repositório:
+MIRIFLAGS=-Zmiri-strict-provenance cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --locked --offline --lib runtime::
+MIRIFLAGS='-Zmiri-tree-borrows -Zmiri-strict-provenance' cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --locked --offline --lib runtime::
+```
 
 ## Aplicativos Linux e associações de arquivos
 
