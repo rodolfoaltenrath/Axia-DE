@@ -210,7 +210,7 @@ static Surf *popups[32];
 static int npopups;
 
 /* GPU path: what is drawn below (layer 0) and above (layer 1) the UI, in order */
-typedef struct { int sid; float x, y; Rect clip; float op; float sx, sy; } Draw;   /* sx, sy: a transformed window's scale */
+typedef struct { int sid; float x, y; Rect clip; float op; float sx, sy; GpuRoundClip round; } Draw;   /* sx, sy: a transformed window's scale */
 static Draw draws[2][128];
 static int ndraws[2];
 static int need_frame;              /* an app changed its content: must present */
@@ -2152,8 +2152,10 @@ static Rect rect_and(Rect a, Rect b) {
     return r;
 }
 
+static GpuRoundClip window_round;  /* scoped to wl_paint; shared by all subsurfaces */
+
 static void add_draw(int layer, Surf *s, float x, float y, Rect clip, float op) {
-    if (ndraws[layer] < 128) draws[layer][ndraws[layer]++] = (Draw){ s->id, x, y, clip, op, 1, 1 };
+    if (ndraws[layer] < 128) draws[layer][ndraws[layer]++] = (Draw){ s->id, x, y, clip, op, 1, 1, window_round };
 }
 
 /* Is the node (or an ancestor) a protected window? (screenshots, media/capture.c) */
@@ -2368,6 +2370,31 @@ void wl_preview_paint(Canvas *c,int id,float x,float y,float w,float h,float op)
     canvas_set_clip(c,old);
 }
 
+/* Read the shared shell's clipping box rather than the client buffer: CSD shadows,
+ * xdg window geometry and subsurfaces must all meet the same outer corners. */
+static GpuRoundClip maximized_round(const Surf *s, int node) {
+    if (!s->maximized || s->fullscreen) return (GpuRoundClip){0};
+    for (Node *n = node_get(node); n; n = n->parent) {
+        if (!n->s.overflow_hidden) continue;
+        float radius = node_edges_plain(n) ? n->s.radius : fminf(n->s.ext->r.rad[2], n->s.ext->r.rad[3]);
+        if (radius <= 0) continue;
+        GpuRoundClip r = {n->ax, n->ay, n->w, n->h, radius, radius};
+        if (tfv.on) {
+            r.x = r.x * tfv.sx + tfv.tx; r.y = r.y * tfv.sy + tfv.ty;
+            r.w *= tfv.sx; r.h *= tfv.sy; r.rx *= tfv.sx; r.ry *= tfv.sy;
+        }
+        return r;
+    }
+    return (GpuRoundClip){0};
+}
+
+static GpuRoundClip physical_round(GpuRoundClip r) {
+    r.x = PVX(r.x); r.y = PVY(r.y);
+    r.w *= paint_view.k; r.h *= paint_view.k;
+    r.rx *= paint_view.k; r.ry *= paint_view.k;
+    return r;
+}
+
 void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, float op) {
     Surf *s = find(id);
     if (!s || s->role != R_TOPLEVEL) return;
@@ -2384,7 +2411,9 @@ void wl_paint(Canvas *c, int id, int node, float x, float y, float w, float h, f
     Rect box = { (int)floorf(x), (int)floorf(y), (int)ceilf(x + w), (int)ceilf(y + h) };
     Rect clip = tfv.on ? box : rect_and(node_clip(node), box);  /* node_clip is the untransformed tree's */
     Rect old = canvas_push_clip(c, PVX(x), PVY(y), w * paint_view.k, h * paint_view.k);
+    window_round = maximized_round(s, node);
     paint_tree(c, s, x - s->gx, y - s->gy, op, clip);
+    window_round = (GpuRoundClip){0};
     canvas_set_clip(c, old);
 }
 
@@ -2457,7 +2486,28 @@ static uint64_t glass_backdrop(int x0,int y0,int x1,int y1,int step,int w,int h,
             sx+(x0+ix0*step-dx)*sw/dw,sy+(y0+iy0*step-dy)*sh/dh,
             rw*step*sw/dw,rh*step*sh/dh):-1;
         if(result){free(sample);return 0;}
-        canvas_blit(&under,sample,rw,rh,ix0,iy0,0,d->op,s->opaque);
+        int opaque = s->opaque;
+        if (d->round.rx > 0 && d->round.ry > 0) {
+            GpuRoundClip r = physical_round(d->round);
+            r.rx = fminf(r.rx, r.w * 0.5f); r.ry = fminf(r.ry, r.h);
+            /* Glass samples the composited shape, including the background in its corners. */
+            for (int py = 0; py < rh; py++) {
+                float bottom = r.y + r.h - (y0 + (iy0 + py + 0.5f) * step);
+                if (bottom >= r.ry) continue;
+                for (int px = 0; px < rw; px++) {
+                    float x = x0 + (ix0 + px + 0.5f) * step - r.x;
+                    float edge = fminf(x, r.w - x);
+                    if (edge >= r.rx) continue;
+                    float dist = (hypotf((edge - r.rx) / r.rx, (bottom - r.ry) / r.ry) - 1) * fminf(r.rx, r.ry);
+                    unsigned a = (unsigned)(fminf(1, fmaxf(0, 0.5f - dist / step)) * 255 + 0.5f);
+                    uint32_t v = sample[py * rw + px], out = 0;
+                    for (int shift = 0; shift < 32; shift += 8) out |= ((((v >> shift) & 255) * a + 127) / 255) << shift;
+                    sample[py * rw + px] = out;
+                }
+            }
+            opaque = 0;
+        }
+        canvas_blit(&under,sample,rw,rh,ix0,iy0,0,d->op,opaque);
         free(sample);
     }
     return hits?(key?key:1):0;
@@ -2499,12 +2549,21 @@ void wl_gpu_draw_layer(int layer) {
             Draw *d = &draws[0][i];
             Surf *s = find(d->sid);
             if (!s || !s->content) continue;
-            if (d->sx == 1 && d->sy == 1) { draw_surface(s, d->x, d->y, (float)s->lw, (float)s->lh, d->clip, d->op); continue; }
+            if (d->sx == 1 && d->sy == 1 && d->round.rx <= 0) {
+                draw_surface(s, d->x, d->y, (float)s->lw, (float)s->lh, d->clip, d->op);
+                continue;
+            }
             Rect p = tf_pixels(d->x, d->y, s->lw * d->sx, s->lh * d->sy);
             GpuTex *t = surface_tex(s);
             float sx, sy, sw, sh;
             source_rect(s, &sx, &sy, &sw, &sh);
-            if (t) gpu_draw(t, (float)p.x0, (float)p.y0, (float)(p.x1 - p.x0), (float)(p.y1 - p.y0), sx, sy, sw, sh, phys_rect(d->clip), d->op);
+            GpuRoundClip round = physical_round(d->round);
+            float dx = p.x0, dy = p.y0, dw = p.x1 - p.x0, dh = p.y1 - p.y0;
+            if (d->sx == 1 && d->sy == 1) {
+                dx = PVX(d->x); dy = PVY(d->y);
+                dw = s->lw * paint_view.k; dh = s->lh * paint_view.k;
+            }
+            if (t) gpu_draw_clipped(t, dx, dy, dw, dh, sx, sy, sw, sh, phys_rect(d->clip), d->op, &round);
         }
         return;
     }

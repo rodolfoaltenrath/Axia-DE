@@ -348,6 +348,39 @@ static void test_borders(void) {
     CHECK(in->x == 1 && in->y == 0 && in->w == 49 && in->h == 28, "content box %g %g %g %g", in->x, in->y, in->w, in->h);
 }
 
+/* A maximized frame clips opaque native content and Wayland content equally. */
+static void test_maximized_corners(void) {
+    for (int external = 0; external < 2; external++) {
+        ui_reset(); test_gpu = 0;
+        Node *root = view(NULL); ui.root = root;
+        sn(root, "backgroundColor", 0xff102030);
+        Node *shell = view(root);
+        ss(shell, "position", "absolute");
+        sn(shell, "width", 96); sn(shell, "height", 64);
+        sn(shell, "borderBottomLeftRadius", 12); sn(shell, "borderBottomRightRadius", 12);
+        ss(shell, "overflow", "hidden");
+        Node *content = external ? node_new(NODE_SURFACE) : node_new(NODE_VIEW);
+        node_append(shell, content); content->term = 9;
+        sn(content, "flexGrow", 1); sn(content, "backgroundColor", 0xffe04020);
+        render(root, 96, 64);
+        CHECK(pix(0, 0) != 0x102030 && pix(95, 0) != 0x102030,
+              "maximized %d: top corners must stay square", external);
+        /* Existing canvas corner blending can truncate each saved channel by one. */
+        for (int side = 0; side < 2; side++) for (int shift = 0; shift < 24; shift += 8) {
+            int channel = (pix(side ? 95 : 0, 63) >> shift) & 255;
+            int background = (0x102030 >> shift) & 255;
+            CHECK(abs(channel - background) <= 1,
+                  "maximized %d: content leaked into bottom corner %d: %06x", external, side, pix(side ? 95 : 0, 63));
+        }
+        CHECK(pix(48, 63) != 0x102030, "maximized %d: bottom edge shrank", external);
+        /* Restoration removes the bottom-only policy without retaining stale corner pixels. */
+        sn(shell, "borderBottomLeftRadius", 0); sn(shell, "borderBottomRightRadius", 0);
+        render(root, 96, 64);
+        CHECK(pix(0, 63) != 0x102030 && pix(95, 63) != 0x102030,
+              "maximized %d: old corner mask survived restore", external);
+    }
+}
+
 static void test_logical(void) {
     ui_reset();
     Node *root = view(NULL);
@@ -3083,6 +3116,11 @@ int main(int argc, char **argv) {
 #ifdef ENGINE_BEFORE
     return 0;
 #else
+    if (argc > 1 && !strcmp(argv[1], "window-corners")) {
+        test_maximized_corners();
+        printf("window-corners: %d checks, %d failures\n", checks, fails);
+        return fails ? 1 : 0;
+    }
     if (argc > 1 && !strcmp(argv[1], "drag-golden")) { test_drag_exact(1); return fails ? 1 : 0; }
     test_drag_exact(0);                     /* first: the transform cache is keyed by node id */
     CHECK(!gc_all.bad, "scissor over the GPU drag runs: %d frames differ", gc_all.bad);
@@ -3090,6 +3128,7 @@ int main(int argc, char **argv) {
     test_drag_corners();
     test_ellipsis();
     test_borders();
+    test_maximized_corners();
     test_logical();
     test_transform_math();
     test_transform_paint_hit();

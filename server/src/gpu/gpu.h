@@ -10,6 +10,9 @@
 
 typedef struct GpuTex GpuTex;
 
+/* Bottom-only window clip, in output pixels. rx/ry also follow overview/minimize scaling. */
+typedef struct { float x, y, w, h, rx, ry; } GpuRoundClip;
+
 /* An app's dmabuf buffer (up to 4 planes). */
 typedef struct {
     int width, height, nplanes;
@@ -141,6 +144,8 @@ void gpu_gdrag_stats(long *below_px, long *layer_px, long *quads);
 int  gpu_add_output(Kms *k);
 void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh,
               float sx, float sy, float sw, float sh, Rect clip, float opacity);
+void gpu_draw_clipped(GpuTex *t, float dx, float dy, float dw, float dh,
+                      float sx, float sy, float sw, float sh, Rect clip, float op, const GpuRoundClip *round);
 
 /* Direct scanout of a fullscreen dmabuf (without composing). done(data) is called when
  * the buffer leaves the screen. 0 if the flip was sent. */

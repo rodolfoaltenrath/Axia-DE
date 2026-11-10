@@ -16,6 +16,26 @@ and the cursor shows the arrow for each direction.
 The screenshots are from VM 118 before CPU cursor-plane support. A hardware cursor is not part of
 the primary framebuffer, so `screendump` does not show it.
 
+## Maximized window corners
+
+`WindowShell` applies a shared 12 logical-pixel radius to both bottom corners of
+maximized windows. The top corners stay square and the work-area geometry stays
+unchanged. This applies to native applications and external Wayland/XWayland
+clients, including clients with their own decorations, in both bundled themes.
+Fullscreen has its separate presentation path and does not use this mask.
+
+The CPU renderer clips the shell's children using its per-corner radii. The GPU
+surface list retains the shell's rounded clipping box for every subsurface;
+the regular and external-texture shaders apply it after viewport cropping, with
+output scale and overview/minimize transforms included. Texture readbacks reset
+the mask so screenshots and retained client pixels do not inherit a previous draw.
+
+Regression checks: `build/engine-test window-corners` (native and external CPU content;
+also included in the full engine suite),
+`build/wl-preview-test` (surface trees, geometry, transforms and fullscreen), and
+`make -C server GPU=1 build/gpu-round-test && server/build/gpu-round-test`
+(real shaders in surfaceless Mesa, with `mesa-dri-drivers` installed).
+
 ## Cursor plane with CPU composition (Fedora)
 
 The Fedora package composes the desktop on the CPU. Previously only GPU composition enabled the

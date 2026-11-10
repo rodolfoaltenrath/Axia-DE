@@ -64,6 +64,9 @@ int  gpu_fence_time(int out, uint64_t *ns) { (void)out; *ns = 0; return 0; }
 void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh, Rect c, float o) {
     (void)t; (void)dx; (void)dy; (void)dw; (void)dh; (void)sx; (void)sy; (void)sw; (void)sh; (void)c; (void)o;
 }
+void gpu_draw_clipped(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh, Rect c, float o, const GpuRoundClip *r) {
+    (void)r; gpu_draw(t, dx, dy, dw, dh, sx, sy, sw, sh, c, o);
+}
 int  gpu_scanout(const GpuDmabuf *d, void (*done)(void *), void *data) { (void)d; (void)done; (void)data; return -1; }
 int  gpu_can_scanout(const GpuDmabuf *d, int w, int h) { (void)d; (void)w; (void)h; return 0; }
 
@@ -151,7 +154,7 @@ static struct {
     GOut out[OUT_MAX];
     GOut *cur;                          /* the display being drawn (gpu_draw) */
     GLuint prog[2], vbo;                /* 0 = sampler2D, 1 = samplerExternalOES */
-    GLint u_tex[2], u_op[2], u_opaque[2], u_swap[2];
+    GLint u_tex[2], u_op[2], u_opaque[2], u_swap[2], u_round_box[2], u_round_radius[2];
     int bgra, have_external;
     int unpack_sub;                     /* GL_EXT_unpack_subimage: GL_UNPACK_ROW_LENGTH_EXT exists */
     char renderer[160];
@@ -251,17 +254,30 @@ static int gdrag_setup(void);
 static const char *vs_src =
     "attribute vec2 a_pos; attribute vec2 a_uv; varying vec2 v_uv;\n"
     "void main() { v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+/* gl_FragCoord is bottom-up; the box is uploaded in the same coordinate space.
+ * Scale RGB and alpha together: clients can supply opaque buffers or premultiplied alpha. */
+#define ROUND_SHADER \
+    "uniform highp vec4 u_round_box; uniform highp vec2 u_round_radius;\n" \
+    "highp float window_coverage() {\n" \
+    "  highp vec2 r = u_round_radius; if (r.x <= 0.0 || r.y <= 0.0) return 1.0;\n" \
+    "  highp vec2 p = gl_FragCoord.xy - u_round_box.xy;\n" \
+    "  highp float x = min(p.x, u_round_box.z - p.x);\n" \
+    "  if (p.y >= r.y || x >= r.x) return 1.0;\n" \
+    "  highp float d = (length((vec2(x, p.y) - r) / r) - 1.0) * min(r.x, r.y);\n" \
+    "  return clamp(0.5 - d, 0.0, 1.0); }\n"
 static const char *fs_2d =
     "precision mediump float; varying vec2 v_uv; uniform sampler2D u_tex;\n"
     "uniform float u_op; uniform float u_opaque; uniform float u_swap;\n"
+    ROUND_SHADER
     "void main() { vec4 c = texture2D(u_tex, v_uv); c = mix(c, c.bgra, u_swap);\n"
-    "  if (u_opaque > 0.5) c.a = 1.0; gl_FragColor = c * u_op; }\n";
+    "  if (u_opaque > 0.5) c.a = 1.0; gl_FragColor = c * (u_op * window_coverage()); }\n";
 static const char *fs_ext =
     "#extension GL_OES_EGL_image_external : require\n"
     "precision mediump float; varying vec2 v_uv; uniform samplerExternalOES u_tex;\n"
     "uniform float u_op; uniform float u_opaque; uniform float u_swap;\n"
+    ROUND_SHADER
     "void main() { vec4 c = texture2D(u_tex, v_uv);\n"
-    "  if (u_opaque > 0.5) c.a = 1.0; gl_FragColor = c * u_op; }\n";
+    "  if (u_opaque > 0.5) c.a = 1.0; gl_FragColor = c * (u_op * window_coverage()); }\n";
 
 /* GPU drag: the layer over the copy of what is below, with blit_row's integer arithmetic (canvas.c, k = 256)
  * in 24-bit floats: every value is an integer below 2^24 and scaling by 2^-8 or 2^-16 is exact, so
@@ -330,6 +346,8 @@ static int make_prog(int i, const char *fs) {
     G.u_op[i] = glGetUniformLocation(p, "u_op");
     G.u_opaque[i] = glGetUniformLocation(p, "u_opaque");
     G.u_swap[i] = glGetUniformLocation(p, "u_swap");
+    G.u_round_box[i] = glGetUniformLocation(p, "u_round_box");
+    G.u_round_radius[i] = glGetUniformLocation(p, "u_round_radius");
     return 0;
 }
 
@@ -779,6 +797,7 @@ static int tex_read_region(const GpuTex *t, uint32_t *px, int w, int h, float x,
         glBindTexture(t->external ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D, t->id);
         glUniform1i(G.u_tex[p], 0);
         glUniform1f(G.u_op[p], 1.0f);
+        glUniform2f(G.u_round_radius[p], 0, 0);
         glUniform1f(G.u_opaque[p], t->opaque ? 1.0f : 0.0f);
         glUniform1f(G.u_swap[p], t->swap ? 1.0f : 0.0f);
         /* the image's first row at y = -1: glReadPixels returns it first */
@@ -821,6 +840,10 @@ int gpu_tex_read_region(const GpuTex *t,uint32_t *px,int w,int h,float x,float y
 /* ---- drawing ---- */
 
 void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh, Rect clip, float op) {
+    gpu_draw_clipped(t, dx, dy, dw, dh, sx, sy, sw, sh, clip, op, NULL);
+}
+
+void gpu_draw_clipped(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh, Rect clip, float op, const GpuRoundClip *round) {
     if (!G.on || !G.cur || !t || t->gen != G.gen || dw <= 0 || dh <= 0 || op <= 0.004f) return;
     const int W = G.cur->W, H = G.cur->H;           /* the display being drawn */
     if (clip.x0 < 0) clip.x0 = 0;
@@ -834,6 +857,10 @@ void gpu_draw(GpuTex *t, float dx, float dy, float dw, float dh, float sx, float
     glBindTexture(t->external ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D, t->id);
     glUniform1i(G.u_tex[p], 0);
     glUniform1f(G.u_op[p], op);
+    if (round && round->rx > 0 && round->ry > 0) {
+        glUniform4f(G.u_round_box[p], round->x, H - round->y - round->h, round->w, round->h);
+        glUniform2f(G.u_round_radius[p], fminf(round->rx, round->w * 0.5f), fminf(round->ry, round->h));
+    } else glUniform2f(G.u_round_radius[p], 0, 0);
     glUniform1f(G.u_opaque[p], t->opaque ? 1.0f : 0.0f);
     glUniform1f(G.u_swap[p], t->swap ? 1.0f : 0.0f);
     glEnable(GL_SCISSOR_TEST);

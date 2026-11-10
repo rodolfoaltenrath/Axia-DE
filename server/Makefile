@@ -181,6 +181,9 @@ build/wl-preview-test: tests/wl_preview_test.c src/wl/wl.c $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -lwayland-client -ldl -lpthread -lm
 build/gpu-capture-test: tests/gpu_capture_test.c src/wl/wl.c src/gpu/gpu.c $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/gpu/gpu.c src/kms.c src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS) -ldl
+# Optional surfaceless Mesa probe (mesa-dri-drivers), without opening a display.
+build/gpu-round-test: tests/gpu_round_test.c src/gpu/gpu.c $(HDR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< $(shell pkg-config --libs gbm egl glesv2) -lm
 build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:

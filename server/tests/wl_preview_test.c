@@ -46,6 +46,27 @@ int main(void) {
     paint_capture_mode=0;canvas_clear(&c,0xff000000);ndraws[0]=0;
     paint_tree(&c,&root,0,0,1,(Rect){0,0,4,4});assert(reads==2 && ndraws[0]==2);
     root.dmabuf=NULL;gpu_on=0;
+    /* The compositor clips to the frame geometry, including CSD shadows and children,
+     * with logical coordinates retained until the output/animation is known. */
+    privacy.ax=20;privacy.ay=30;privacy.w=800;privacy.h=600;
+    StyleExt edges={0};edges.r.rad[2]=edges.r.rad[3]=12;
+    privacy.s.ext=&edges;privacy.s.overflow_hidden=1;
+    root.maximized=1;root.csd=1;
+    GpuRoundClip round=maximized_round(&root,7);
+    assert(round.x==20 && round.y==30 && round.w==800 && round.h==600 && round.rx==12);
+    window_round=round;ndraws[0]=0;gpu_on=1;
+    paint_tree(&c,&root,0,0,1,(Rect){0,0,4,4});
+    assert(ndraws[0]==2 && draws[0][0].round.rx==12 && draws[0][1].round.rx==12);
+    window_round=(GpuRoundClip){0};gpu_on=0;
+    tfv.on=1;tfv.sx=0.5f;tfv.sy=0.25f;tfv.tx=100;tfv.ty=200;
+    round=maximized_round(&root,7);tfv.on=0;
+    assert(round.x==110 && round.y==207.5f && round.w==400 && round.h==150 && round.rx==6 && round.ry==3);
+    paint_view=(PaintView){10,20,1.5f,0,0,0};
+    round=physical_round(maximized_round(&root,7));
+    assert(round.x==15 && round.y==15 && round.w==1200 && round.rx==18);
+    root.fullscreen=1;assert(maximized_round(&root,7).rx==0);
+    root.fullscreen=0;root.maximized=0;assert(maximized_round(&root,7).rx==0);
+    privacy.s.ext=NULL;
     puts("wl-preview: retained pixels, subsurfaces, geometry, privacy and unchanged mapping passed");
     return 0;
 }
