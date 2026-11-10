@@ -21,6 +21,12 @@ export const WINDOW_EDGE = 6;     // px of border outside the frame
 const INSIDE = 3;                 // and inside
 const CORNER = 16;
 
+// Shared by both themes, including clients that draw their own decorations.
+const MAXIMIZED_CORNERS = {
+  borderRadius: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0,
+  borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden',
+};
+
 // [xdg edges, cursor, style]
 const GRIPS = [
   [1, 'ns-resize', (t) => ({ left: CORNER, right: CORNER, top: 0, height: t })],
@@ -45,7 +51,7 @@ export function WindowShell({ win, style, children, onMouseDown, resizable = tru
   return (
     <View ref={wm.frameRef(win.id, m)} onMouseDown={tv ? undefined : onMouseDown}
       style={{ position: 'absolute', left: geo.x - m, top: geo.y - m, width: geo.w + 2 * m, height: geo.h + 2 * m, display: here && (!win.minimized || tv || leaving) ? 'flex' : 'none', ...(tv ? { pointerEvents: 'box-none' } : null) }}>
-      <View ref={inner.current} style={{ position: 'absolute', left: m, top: m, right: m, bottom: m, ...style, ...place }}>
+      <View ref={inner.current} style={{ position: 'absolute', left: m, top: m, right: m, bottom: m, ...style, ...(win.maximized && !win.fullscreen ? MAXIMIZED_CORNERS : null), ...place }}>
         {tv ? h(OverviewPlaceholder, { win, scale: tv.scale }) : null}
         {children}
         {tv ? h(OverviewCover, { id: win.id, scale: tv.scale, radius: win.maximized ? 0 : 8 }) : null}
