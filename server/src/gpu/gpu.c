@@ -255,15 +255,18 @@ static const char *vs_src =
     "attribute vec2 a_pos; attribute vec2 a_uv; varying vec2 v_uv;\n"
     "void main() { v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
 /* gl_FragCoord is bottom-up; the box is uploaded in the same coordinate space.
- * Scale RGB and alpha together: clients can supply opaque buffers or premultiplied alpha. */
+ * Scale RGB and alpha together: clients can supply opaque buffers or premultiplied alpha.
+ * highp is optional in GLES2 fragment shaders: these are the only surface programs, so a GPU
+ * without it falls back to mediump (coarser corner edges) instead of failing to compile. */
 #define ROUND_SHADER \
-    "uniform highp vec4 u_round_box; uniform highp vec2 u_round_radius;\n" \
-    "highp float window_coverage() {\n" \
-    "  highp vec2 r = u_round_radius; if (r.x <= 0.0 || r.y <= 0.0) return 1.0;\n" \
-    "  highp vec2 p = gl_FragCoord.xy - u_round_box.xy;\n" \
-    "  highp float x = min(p.x, u_round_box.z - p.x);\n" \
+    "#ifdef GL_FRAGMENT_PRECISION_HIGH\n#define RP highp\n#else\n#define RP mediump\n#endif\n" \
+    "uniform RP vec4 u_round_box; uniform RP vec2 u_round_radius;\n" \
+    "RP float window_coverage() {\n" \
+    "  RP vec2 r = u_round_radius; if (r.x <= 0.0 || r.y <= 0.0) return 1.0;\n" \
+    "  RP vec2 p = gl_FragCoord.xy - u_round_box.xy;\n" \
+    "  RP float x = min(p.x, u_round_box.z - p.x);\n" \
     "  if (p.y >= r.y || x >= r.x) return 1.0;\n" \
-    "  highp float d = (length((vec2(x, p.y) - r) / r) - 1.0) * min(r.x, r.y);\n" \
+    "  RP float d = (length((vec2(x, p.y) - r) / r) - 1.0) * min(r.x, r.y);\n" \
     "  return clamp(0.5 - d, 0.0, 1.0); }\n"
 static const char *fs_2d =
     "precision mediump float; varying vec2 v_uv; uniform sampler2D u_tex;\n"
