@@ -460,7 +460,17 @@ impl Layout {
                         cw += mh;
                         ch += mv;
                         if f.wrap {
-                            let (cm, cc) = if s.row != 0 { (cw, ch) } else { (ch, cw) };
+                            let (mut cm, cc) = if s.row != 0 { (cw, ch) } else { (ch, cw) };
+                            // A definite basis decides the line, as in `layout_node`.
+                            let cs = scene.node(id).unwrap().s;
+                            let basis = res(cs.basis, f.lim);
+                            if !basis.is_nan() {
+                                cm = if s.row != 0 {
+                                    clamp(basis, cs.min_w, cs.max_w, f.lim) + mh
+                                } else {
+                                    clamp(basis, cs.min_h, cs.max_h, f.lim) + mv
+                                };
+                            }
                             if f.in_line != 0 && f.line_m + s.gap + cm > f.lim + 0.5 {
                                 if f.line_m > f.tot_m {
                                     f.tot_m = f.line_m;
@@ -947,9 +957,17 @@ impl Layout {
                 let (mut end, mut len, mut lc) = (start, 0., 0.);
                 while end < k {
                     let kid = self.kids[end];
-                    let mg = Edges::of(scene.node(kid.id).unwrap()).margin;
+                    let c = scene.node(kid.id).unwrap();
+                    let mg = Edges::of(c).margin;
                     let mm = if row { mg[0] + mg[2] } else { mg[1] + mg[3] };
-                    let add = if end > start { s.gap } else { 0. } + kid.main + mm;
+                    // Lines break on the hypothetical size: the basis within min/max,
+                    // as `measure` counts it ("flex: 1" has a zero basis).
+                    let hypothetical = if row {
+                        clamp(kid.main, c.s.min_w, c.s.max_w, main)
+                    } else {
+                        clamp(kid.main, c.s.min_h, c.s.max_h, main)
+                    };
+                    let add = if end > start { s.gap } else { 0. } + hypothetical + mm;
                     if end > start && len + add > main + 0.5 {
                         break;
                     }
