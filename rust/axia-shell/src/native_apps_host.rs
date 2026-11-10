@@ -1,11 +1,12 @@
-//! Shared ownership/FFI for compiled applications. Application behavior stays in apps/<id>.
+//! Shared ownership/FFI for compiled applications drawn by the React widget host.
+//! Application behavior stays in apps/<id>. Monitor is a native view instead
+//! (native_view/): Rust mounts it into the scene and this host never creates it.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 pub enum NativeApp {
     ForceQuit(crate::forcequit::App),
     Calculator(crate::calculator::App),
     AppAbout(crate::appabout::App),
-    Monitor(crate::monitor::App),
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
@@ -15,8 +16,6 @@ impl NativeApp {
             Some(Self::Calculator(Default::default()))
         } else if id == crate::native_apps::appabout::ID.as_bytes() {
             Some(Self::AppAbout(Default::default()))
-        } else if id == crate::native_apps::monitor::ID.as_bytes() {
-            Some(Self::Monitor(Default::default()))
         } else {
             None
         }
@@ -40,35 +39,8 @@ impl NativeApp {
             Self::ForceQuit(app) => app.request(input),
             Self::Calculator(app) => app.request(input),
             Self::AppAbout(app) => app.request(input),
-            Self::Monitor(app) => app.request(input),
         }
     }
-}
-
-// The main-thread host immediately copies these borrowed RGBA bytes into an ArrayBuffer.
-// No pointer survives a request or a change to the application's image cache.
-#[no_mangle]
-pub unsafe extern "C" fn axia_native_app_pixels(
-    app: *const NativeApp,
-    id: *const c_char,
-    width: *mut i32,
-    height: *mut i32,
-) -> *const u8 {
-    if id.is_null() || width.is_null() || height.is_null() {
-        return std::ptr::null();
-    }
-    let Some(NativeApp::Monitor(app)) = app.as_ref() else {
-        return std::ptr::null();
-    };
-    let Ok(id) = CStr::from_ptr(id).to_str() else {
-        return std::ptr::null();
-    };
-    let Some(image) = app.pixels(id) else {
-        return std::ptr::null();
-    };
-    *width = image.width as i32;
-    *height = image.height as i32;
-    image.data.as_ptr()
 }
 
 // The host owns this opaque app through a QuickJS finalizer. No JS values or process IDs

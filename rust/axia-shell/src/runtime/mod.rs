@@ -13,6 +13,7 @@ mod layout;
 #[cfg(test)]
 mod layout_tests;
 mod memory;
+pub mod native;
 mod scene;
 mod state;
 mod style;

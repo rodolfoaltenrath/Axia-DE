@@ -12,11 +12,8 @@ import { RustWidget, caption } from './rustwidgets.js';
 import { RustFiles, RustFileIcon } from './rustfiles.js';
 import { useSettings } from './settings.js';
 import { registerPrivacySection } from './privacy.js';
+import { NativeView, appFacts } from './nativeview.js';
 
-// Copy serializable facts; localized names and callable icons belong to the host.
-const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
-  comment: app.comment, description: app.description, genericName: app.genericName,
-  package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon });
 function KeyboardBinding({ send }) {
   useKeyboard(event => send({ cmd: 'key', event: event.key, char: event.char || '' }));
   return null;
@@ -73,17 +70,24 @@ function WidgetHost({ manifest }) {
         const Icon = window ? windowIcon(window, getApp) : launcherApp(node.app)?.Icon || getApp(node.app)?.Icon;
         return Icon ? h(Icon, { size: node.size }) : null;
       },
-      raster: node => owner.pixels(node.image),
     };
   });
   const tree = reply.same ? memo.tree : reply.tree;
   if (!memo.element || tree !== memo.tree) {
     memo.tree = tree;
-    memo.element = h(RustWidget, { node: tree, send: handlers.send, icon: handlers.icon, raster: handlers.raster });
+    memo.element = h(RustWidget, { node: tree, send: handlers.send, icon: handlers.icon });
   }
   return h(Fragment, null, manifest.keyboard ? h(KeyboardBinding, { send: handlers.dispatch }) : null, memo.element);
 }
 export function nativeApp(manifest) {
+  // Mounted by Rust into the scene: no React widget tree (sdk/nativeview.js).
+  if (manifest.nativeView === 'rust') {
+    for (const section of manifest.privacy || []) registerPrivacySection({ id: section.id, order: section.order,
+      Component: function NativePrivacySection() { return h(NativeView, { manifest, args: { section: section.section } }); } });
+    return { ...manifest, system: true, native: true,
+      Component: function NativeAppHost() { const { args } = useAppWindow(); return h(NativeView, { manifest, args }); },
+      Icon: function NativeAppIcon({ size }) { return h(NativeView, { manifest, icon: size || 32 }); } };
+  }
   for (const section of manifest.privacy || []) registerPrivacySection({ id: section.id, order: section.order,
     Component: function NativePrivacySection() { return h(WidgetHost, { manifest: { ...manifest, defaultArgs: { section: section.section } } }); } });
   const Component = manifest.nativeView === 'files'

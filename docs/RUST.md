@@ -659,11 +659,60 @@ são abertos nos temas padrão e clássico pelo teste headless.
 
 `apps/monitor/*.rs` owns all eight Monitor tabs, privacy panels, collection,
 process actions, history, charts and map. Its application-specific C/JS sources
-and tests have been removed. The existing native widget host remains shared by
-compiled apps; the compositor and renderer are still C/React. RGBA chart buffers
-use a binary transport through this host. Collection and filesystem work run on
-one Rust worker thread. See [MONITOR.md](MONITOR.md) for the language boundary,
-memory accounting, sampling cadence and validation commands.
+and tests have been removed. Monitor is the first native view (below): React
+draws no part of it. Collection and filesystem work run on one Rust worker
+thread. See [MONITOR.md](MONITOR.md) for the language boundary, memory
+accounting, sampling cadence and validation commands.
+
+## Visões nativas
+
+Um app compilado com `"nativeView": "rust"` é montado pelo Rust diretamente na
+cena do runtime, sem React. O host fica em `rust/axia-shell/src/native_view/`:
+
+- `host.rs` espelha a árvore de widgets do app (`view`, `text`, `button`,
+  `scroll`, `input`, `image`, `raster`) em nós da cena e a reconcilia por chave:
+  só os estilos, textos e pixels que mudaram são aplicados, e os nós são
+  reaproveitados. Botão (hover e pressão locais, sem reconstruir a árvore),
+  rolagem (roda, touchpad e arraste da barra) e campo de texto (cursor
+  piscando, colar pelo shell) são do host. Uma árvore igual à anterior
+  (`{"same": true}`) não toca a cena.
+- `style.rs` converte os objetos de estilo como `runtime/style.js` (cores,
+  `padding`, `flex`, `border`, `boxShadow`, gradientes…) e envia só as diferenças.
+- `i18n.rs` traduz as legendas como `t()` e `errorText()`: pacote do usuário,
+  depois os assets, inglês como reserva, plurais de `meta.json`.
+- `runtime/native.rs` é a API segura da cena usada pelo host (criar, inserir,
+  estilo, texto em nó RAW como o React faz, imagens por caminho ou RGBA, caixa
+  do último layout).
+
+O C entrega cada evento de ponteiro e gesto ao host antes do JS
+(`server/src/ui/js_nativeview.c`, `js_pointer`/`js_gesture`): o host trata os
+seus nós e o JS recebe o mesmo evento no nó de montagem, então foco e elevação
+da janela e os ouvintes do shell continuam funcionando. As teclas passam
+primeiro pelos atalhos do shell (`runtime/events.js`) e depois pelo campo de
+texto nativo focado; Ctrl, Alt e Super seguem para o shell, exceto colar. O
+laço principal chama `axia_view_tick`/`axia_view_timeout` para a atualização
+periódica, redimensionamento, cursor e barras de rolagem.
+
+`sdk/nativeview.js` é a parte do shell: dá o nó de montagem dentro da moldura do
+gerenciador de janelas, envia os fatos (configurações, tema, serviços do
+firewall, catálogo, foco da janela) e executa os efeitos do shell: abrir apps,
+gravar configurações, chamadas ao firewall, área de transferência e título da
+janela. O mesmo host monta o ícone da Dock e os painéis de privacidade dentro
+das Configurações. Calculadora, Force Quit e Sobre continuam no host React
+(`sdk/rustwidgets.js`): o Force Quit mostra ícones de apps, que são componentes
+do shell.
+
+```sh
+cargo test --manifest-path rust/Cargo.toml --locked --offline --lib native_view
+make -C server
+cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust \
+  --locked --offline --test native_apps_runtime -- --ignored --nocapture
+```
+
+Os testes unitários cobrem a conversão de estilos, traduções, reconciliação no
+lugar, clique, pressão que termina fora, campo de texto, colar, foco da janela,
+ícones sem temporizador e a desmontagem. A integração abre o Monitor numa sessão
+real e verifica que nenhum texto ou pixel dele passa pelo React.
 
 ## Encaixe de janelas e Snap Assist
 

@@ -116,6 +116,12 @@ globalThis.__lordKey = (code, value, key, chr, base, flags) => {
   // each listener on its own: one that throws doesn't take the key from the others (a text field)
   run(DiscreteEventPriority, () => {
     if (keyFilter) { try { if (keyFilter(ev)) return; } catch (e) { console.error('key filter:', e); } }
+    // After the shortcuts: a focused text field of a native view (Rust) takes the key.
+    const views = typeof lord !== 'undefined' ? lord.nativeViews : null;
+    if (ev.down && views) {
+      const flags = (ev.ctrl ? 2 : 0) | (ev.alt ? 4 : 0) | (ev.altgr ? 8 : 0) | (ev.meta ? 16 : 0);
+      if (views.key((ev.ctrl || ev.meta) && ev.base ? ev.base : ev.key, ev.char || '', flags)) { globalThis.__lordNativeView?.(); return; }
+    }
     for (const fn of listeners[ev.down ? 'keydown' : 'keyup']) { try { fn(ev); } catch (e) { console.error('key listener:', e); } }
   });
 };
