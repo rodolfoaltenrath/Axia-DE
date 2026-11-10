@@ -112,6 +112,59 @@ fn flex_growth_shrink_justify_and_wrapping_have_fixed_geometry() {
     close(s.node(b).unwrap().x, 62.);
 }
 #[test]
+fn wrapped_lines_break_on_the_clamped_basis_in_measure_and_layout() {
+    // `flex: 1` (basis 0) with a minimum width: lines must break where the minimum
+    // no longer fits, and the measured height must match the lines laid out.
+    let (mut s, mut ui, mut l, mut m) = (
+        Scene::default(),
+        Ui::empty(),
+        Layout::default(),
+        TestMetrics::default(),
+    );
+    let root = node(&mut s, &mut ui, 0, 0);
+    let wrapper = node(&mut s, &mut ui, 0, root);
+    {
+        let w = s.node_mut(wrapper).unwrap();
+        w.s.row = 1;
+        w.s.wrap = 1;
+        w.s.gap = 8.;
+    }
+    let items: Vec<_> = (0..5)
+        .map(|_| {
+            let id = node(&mut s, &mut ui, 0, wrapper);
+            let n = s.node_mut(id).unwrap();
+            n.s.grow = 1.;
+            n.s.shrink = 1.;
+            n.s.basis = px(0.);
+            n.s.min_w = px(96.);
+            n.s.height = px(10.);
+            id
+        })
+        .collect();
+    run(&mut l, &mut s, &mut ui, root, 260., 400., &mut m);
+    // Two items per line (96 + 8 + 96 <= 260 < 304): three lines.
+    close(s.node(wrapper).unwrap().h, 3. * 10. + 2. * 8.);
+    let at = |s: &Scene, i: usize| {
+        let n = s.node(items[i]).unwrap();
+        (n.x, n.y, n.w)
+    };
+    for (i, (x, y, w)) in [
+        (0., 0., 126.),
+        (134., 0., 126.),
+        (0., 18., 126.),
+        (134., 18., 126.),
+        (0., 36., 260.),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (ax, ay, aw) = at(&s, i);
+        close(ax, x);
+        close(ay, y);
+        close(aw, w);
+    }
+}
+#[test]
 fn main_axis_constraints_apply_after_shrink_and_when_the_line_exactly_fits() {
     for row in [0, 1] {
         let (mut s, mut ui, mut l, mut m) = (
