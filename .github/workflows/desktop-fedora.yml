@@ -24,7 +24,8 @@ jobs:
       - name: Rust runtime memory contracts
         env:
           MIRIFLAGS: ${{ matrix.model == 'tree' && '-Zmiri-tree-borrows -Zmiri-strict-provenance' || '-Zmiri-strict-provenance' }}
-        run: cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --target-dir '${{ runner.temp }}/axia-runtime-miri' --locked --offline --lib runtime::
+        run: |
+          cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --target-dir '${{ runner.temp }}/axia-runtime-miri' --locked --offline --lib runtime::
   desktop:
     strategy:
       matrix:
