@@ -7,18 +7,23 @@ are Rust tests in `apps/monitor/tests.rs`.
 
 ## Application and host boundary
 
-`rust/native_apps.rs` registers the compiled manifest. The shared native app
-host owns a Monitor controller for each window and invokes it through the same
-request interface as Calculator, About and Force Quit. Rust emits widget trees;
-`sdk/nativeapps.js` and `sdk/rustwidgets.js` translate the shared widget vocabulary
-into the desktop's existing React renderer. The compositor, rendering engine,
-firewall service and fan daemon retain their existing implementations. Migrating
-Monitor does not migrate these shared services.
+`rust/native_apps.rs` registers the compiled manifest with `"nativeView": "rust"`.
+Monitor is a **native view** (see "Native views" in [RUST.md](RUST.md)): the
+host in `rust/axia-shell/src/native_view/` mounts its widget trees straight into
+the runtime scene, with keyed reconciliation, and owns the buttons, scroll views
+and text fields, pointer and wheel input, caption translation and the refresh
+timer. React does not draw any part of it, and no Monitor text or pixel goes
+through JavaScript. Charts, rings and icons are rasterized in Rust and handed to
+the runtime's image store directly.
 
-Charts and maps are rasterized in Rust. RGBA buffers are borrowed by the C
-bridge for the duration of a call and copied into a JavaScript ArrayBuffer before
-returning. Pixel loops and JSON arrays of pixels are absent from the JS host.
-The adapter exposes no Rust-owned pointer to JavaScript.
+The shell keeps only what belongs to the shell: `sdk/nativeview.js` gives the
+view a mount node inside the window manager's frame (the frame, its buttons and
+window focus stay as they are), sends the facts the app reads (settings, theme,
+firewall services, the app catalog, window focus) and runs the effects that
+belong to the shell (opening apps, saving settings, firewall calls, the
+clipboard and the window title). The same view is mounted for the dock icon and
+for the privacy and firewall panels inside Settings. The compositor, rendering
+engine, firewall service and fan daemon retain their existing implementations.
 
 The former `apps/monitor/*.jsx` and JavaScript models, `sdk/monitor.js`,
 `sdk/fwrule.js`, `server/src/monitor/` and their application-specific C/JS tests

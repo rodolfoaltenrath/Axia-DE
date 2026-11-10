@@ -32,6 +32,7 @@
 #include "drmcard.h"
 #include "term/term.h"
 #include "ui/js.h"
+#include "ui/js_nativeview.h"
 #include "ui/clipboard_ffi.h"
 #include "ui/js_input.h"
 #include "ui/ui.h"
@@ -2354,6 +2355,11 @@ int main(int argc, char **argv) {
         netrec_tick();                      /* traffic history: every 5 s while on (monitor/netrec.c) */
         double nrd = netrec_timeout();
         if (nrd >= 0 && (delay < 0 || nrd < delay)) delay = nrd;
+        /* Native views (rust/axia-shell/src/native_view): refresh, resize, caret and scroll bars */
+        axia_view_tick(now_ms());
+        double nvd = axia_view_timeout(now_ms());
+        if (nvd >= 0 && (delay < 0 || nvd < delay)) delay = nvd;
+        js_native_view_notify();
         double tpd = tp_timeout(now_ms());
         if (tpd >= 0 && (delay < 0 || tpd < delay)) delay = tpd;
         int unseen = !s.headless && display_is_off();

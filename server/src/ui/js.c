@@ -12,6 +12,7 @@
 #include "js_pkg.h"
 #include "js_sound.h"
 #include "js_monitor.h"
+#include "js_nativeview.h"
 #include "js_sec.h"
 #include "js_doc.h"
 #include "js_print.h"
@@ -415,6 +416,7 @@ static void session_context(void) {
     js_wasm_register(ctx, g);           /* the WebAssembly global (our own interpreter, src/wasm) */
     js_net_register(ctx, lord);
     js_monitor_register(ctx, lord, js_sys_assets());   /* lord.monitor (app Monitor) */
+    js_nativeview_register(ctx, lord, js_sys_assets()); /* lord.nativeViews: apps Rust mounts */
     js_sec_register(ctx, lord);        /* lord.perms, lord.sign and lord.code (privacy, signing, verified code) */
     js_media_register(ctx, lord);      /* lord.media (video, photos, screenshots, camera, recorder) */
     js_doc_register(ctx, lord);        /* lord.doc: PDF, archives and fonts through the axia-doc helper */
@@ -673,7 +675,17 @@ void js_frame(double now) {
     drain_jobs();
 }
 
+/* Native views produced effects for the shell (open an app, save settings…): it runs them. */
+void js_native_view_notify(void) {
+    if (ctx && axia_view_pending()) {
+        JS_FreeValue(ctx, call_global("__lordNativeView", 0, NULL));
+        drain_jobs();
+    }
+}
+
 void js_pointer(const char *type, int target, float x, float y, int button) {
+    /* A native view handles its own nodes; JS gets the event on the view's mount node. */
+    target = axia_view_pointer(type, target, x, y, button);
     JSValueConst args[5] = {
         JS_NewString(ctx, type), JS_NewInt32(ctx, target),
         JS_NewFloat64(ctx, x), JS_NewFloat64(ctx, y), JS_NewInt32(ctx, button),
@@ -681,10 +693,12 @@ void js_pointer(const char *type, int target, float x, float y, int button) {
     JS_FreeValue(ctx, call_global("__lordEvent", 5, args));
     JS_FreeValue(ctx, args[0]);
     drain_jobs();
+    js_native_view_notify();
 }
 
 void js_gesture(const char *kind, const char *phase, int target, float x, float y, double a, double b, double c, double d) {
     if (!ctx) return;
+    target = axia_view_gesture(kind, phase, target, a, b);
     JSValueConst args[9] = {
         JS_NewString(ctx, kind), JS_NewString(ctx, phase), JS_NewInt32(ctx, target), JS_NewFloat64(ctx, x), JS_NewFloat64(ctx, y),
         JS_NewFloat64(ctx, a), JS_NewFloat64(ctx, b), JS_NewFloat64(ctx, c), JS_NewFloat64(ctx, d),

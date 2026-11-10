@@ -63,8 +63,9 @@ QJS_DIR := ../third_party/quickjs
 QJS_OBJ := $(patsubst %,build/qjs/%.o,quickjs libregexp libunicode cutils dtoa)
 
 # .lpk app isolation, permissions and signing (src/sec, see docs/PRIVACY.md and docs/SIGNING.md)
-# Monitor is implemented in apps/monitor/*.rs; C only binds the shell compatibility ABI.
-MON_SRC := src/ui/js_monitor.c
+# Monitor is implemented in apps/monitor/*.rs; C only binds the shell compatibility ABI and the
+# native views that Rust mounts (js_nativeview.c, rust/axia-shell/src/native_view).
+MON_SRC := src/ui/js_monitor.c src/ui/js_nativeview.c
 # Media (src/media, docs/MEDIA.md): only the axia-server side. Only axia-media links FFmpeg.
 MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/capture.c src/media/annot.c src/media/maudio.c src/media/mpulse.c src/media/proto.c src/ui/js_media.c
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c

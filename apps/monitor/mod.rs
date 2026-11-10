@@ -200,6 +200,15 @@ impl Default for App {
         }
     }
 }
+/// Mounted directly into the scene by the native view host (no React).
+impl crate::native_view::NativeApp for App {
+    fn request(&mut self, input: &Value) -> Value {
+        App::request(self, input)
+    }
+    fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])> {
+        App::pixels(self, id).map(|r| (r.width, r.height, r.data.as_slice()))
+    }
+}
 impl App {
     fn service(&mut self) -> Arc<worker::Service> {
         if self.lease.is_none() {

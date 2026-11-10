@@ -197,7 +197,23 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("appabout-missing")["title"], "About missing");
     assert!(!has_text("appabout-missing", "Version 0.9.0"));
     assert!(has_text("monitor-memory", "available for apps"));
-    assert!(get("monitor-memory")["pixels"].as_u64().unwrap_or(0) > 0);
+    assert_eq!(
+        get("monitor-memory")["react"],
+        0,
+        "no Monitor text goes through React"
+    );
+    assert_eq!(
+        get("monitor-memory")["pixels"],
+        0,
+        "rasters reach the scene from Rust"
+    );
+    assert_eq!(get("monitor-memory")["title"], "Monitor");
+    assert!(has_text("monitor-overview", "SUMMARY"));
+    assert_eq!(
+        get("monitor-unmounted")["texts"],
+        0,
+        "closing the window unmounts the view"
+    );
     for tab in [
         "overview",
         "cpu",
@@ -215,7 +231,7 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount, About metadata/title, Monitor tabs/RGBA/memory and catalog passed");
+    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount, About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
 }
 
 const DRIVER: &str = r#"
@@ -292,13 +308,19 @@ async function run(){
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
+  // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
+  const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
+  const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
-  for(let i=0;i<30&&!texts().some(n=>n.text==='available for apps');i++)await pause();
-  record('monitor-memory',{text:texts().map(n=>n.text),texts:texts().length,pixels:pixelBytes});
+  for(let i=0;i<30&&!nativeTexts().includes('available for apps');i++)await pause();
+  record('monitor-memory',{text:nativeTexts(),texts:nativeTexts().length,react:texts().filter(n=>n.text==='available for apps').length,
+    pixels:pixelBytes-reactPixels,title:wm.get('monitor')?.title});
   for(const tab of ['overview','cpu','network','disks','processes','cooling','voltage']){
     control.setArgs({tab});await pause();await pause();
-    record('monitor-'+tab,{text:texts().map(n=>n.text),texts:texts().length,pixels:pixelBytes});
+    record('monitor-'+tab,{text:nativeTexts(),texts:nativeTexts().length});
   }
+  control.setMode('calculator');await pause();
+  record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

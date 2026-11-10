@@ -10,6 +10,7 @@ mod calculator;
 #[path = "../../../apps/appabout/mod.rs"]
 mod appabout;
 mod native_apps_host;
+mod native_view;
 #[path = "../../../apps/monitor/mod.rs"]
 mod monitor;
 #[path = "../../native_apps.rs"]
