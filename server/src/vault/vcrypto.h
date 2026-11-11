@@ -3,7 +3,7 @@
  *     "dh-ietf1024-sha256-aes128-cbc-pkcs7" encryption of Secret Service;
  *   - SHA-1 and HMAC-SHA1 (TOTP, RFC 6238/4226), HMAC-SHA256 (CTAP2, KDBX, TOTP-SHA256),
  *     HMAC-SHA512 (TOTP-SHA512) and HKDF-SHA256 (RFC 5869).
- * The native vault uses RustCrypto primitives (XChaCha20-Poly1305, Argon2id, BLAKE2b).
+ * Native vault file encryption uses RustCrypto primitives (XChaCha20-Poly1305, Argon2id, BLAKE2b).
  * SHA-256/512 are those of server/src/pkg/crypto.c. */
 #ifndef LORD_VAULT_VCRYPTO_H
 #define LORD_VAULT_VCRYPTO_H

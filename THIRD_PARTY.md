@@ -8,10 +8,9 @@ the components below, each under its own license.
 | Component | Used for | License |
 |---|---|---|
 | QuickJS | JavaScript engine for the UI | MIT (`third_party/quickjs/LICENSE`) |
-| Monocypher 4 | vault and keyring cryptography | CC0-1.0 or BSD-2-Clause (`third_party/monocypher/LICENCE.md`) |
 | EFF large wordlist, SecLists common passwords | passphrase generator, weak-password check | CC BY 3.0 (EFF), MIT (SecLists, `third_party/wordlists/LICENSE-SecLists`) |
 
-## Rust codecs (`rust/vendor/`)
+## Rust codecs and cryptography (`rust/vendor/`)
 
 The stb headers were replaced by `rust/axia-codecs`. Its dependencies are
 vendored for offline, locked builds; their upstream license files are retained.
@@ -23,6 +22,9 @@ vendored for offline, locked builds; their upstream license files are retained.
 | ttf-parser 0.25.1 | checked font tables, face metrics and GPOS kerning | MIT or Apache-2.0 |
 | flate2 / miniz_oxide | bounded gzip and raw DEFLATE | MIT or Apache-2.0 / MIT or Zlib or Apache-2.0 |
 | core_maths / libm | portable font arithmetic | MIT |
+| RustCrypto argon2, blake2, chacha20, chacha20poly1305, poly1305 and support crates | vault, keyring, KeePass imports and encrypted backups (`rust/axia-crypto`) | MIT or Apache-2.0; see each vendored crate |
+| zeroize | erase temporary keys and work buffers | MIT or Apache-2.0 |
+| subtle | constant-time 16-byte comparisons | BSD-3-Clause |
 
 ## Data files
 
@@ -30,6 +32,7 @@ vendored for offline, locked builds; their upstream license files are retained.
 |---|---|---|
 | DB-IP Lite Country (`assets/monitor/geoip-country.mmdb`) | offline IP→country in Monitor | CC BY 4.0 — IP geolocation by DB-IP (https://db-ip.com) |
 | Natural Earth (`assets/monitor/land.bin`) | world map in Monitor | public domain |
+| Monocypher 4.0.2 test vectors (`rust/axia-crypto/tests/fixtures/`) | compatibility regression data only; no Monocypher code is built or bundled | CC0-1.0 or BSD-2-Clause (`LICENSE-Monocypher-vectors.md` alongside fixtures) |
 | Unicode Character Database / CLDR (generated tables) | text, bidi, emoji names | Unicode License v3 |
 | Inter (`assets/fonts/Inter-*.ttf`) | UI text | SIL OFL 1.1 (`assets/fonts/Inter-LICENSE.txt`) |
 | Plus Jakarta Sans 2.7.1 (`assets/fonts/PlusJakartaSans-ExtraBold.ttf`, `-Medium.ttf`) | the LordOS wordmark: live text in the UI (fontFamily `brand`) and outlined in `assets/brand/*.svg` | SIL OFL 1.1 (`assets/fonts/PlusJakartaSans-LICENSE.txt`) |
@@ -44,6 +47,14 @@ updated. Nothing else in `third_party/` differs from upstream.
 | Component (upstream version) | Change | Files | Why | Since |
 |---|---|---|---|---|
 | QuickJS 2025-04-26 (`third_party/quickjs/VERSION`) | Adds `size_t JS_GetMallocSize(JSRuntime *rt)`, which returns `rt->malloc_state.malloc_size`: the same `malloc_size` that `JS_ComputeMemoryUsage` reports, without walking every object, string and shape of the runtime. No existing function or structure changes. | `quickjs.c` (7 lines, just before `JS_ComputeMemoryUsage`), `quickjs.h` (its prototype, after `JS_ComputeMemoryUsage`'s) | `lord.stats()` (`f_stats` in `server/src/ui/js.c`) gives `jsKB` from it in O(1); About, Settings → General and System Information poll it while open, and the full walk grew with the number of objects. Checked equal to `JS_ComputeMemoryUsage`'s `malloc_size` on a runtime with 100,000 objects, a 50,000-entry Map and after GC | 0.8.6 |
+
+The Rust Argon2 crate has one local API extension, marked `Axia patch` in
+`rust/vendor/argon2-0.6.0/src/lib.rs`: `hash_password_into_with_memory_and_ad`
+borrows arbitrary-length associated data rather than using the PHC string's
+32-byte parameter field. It preserves existing KDBX inputs; the Argon2 algorithm
+and encoding are unchanged. The vendored checksum manifest records the patched
+file hash and upstream package identity. Reapply and rerun compatibility vectors
+when updating that crate; see `docs/RUST-CRYPTO.md`.
 
 ## npm packages (bundled into the theme JavaScript at build time)
 

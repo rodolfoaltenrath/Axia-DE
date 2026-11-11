@@ -60,7 +60,7 @@ editor, generator, first run); the shots below are from the first version.
         ▼
  axia-vault  (src/vault/vault.c, keyring.c, …) — sandbox_apply_helper:
    no network, no new sockets, no exec, threads only, Landlock: only the vault folder (fd)
-   - XChaCha20-Poly1305 + Argon2id (Monocypher), the .lvault format
+   - XChaCha20-Poly1305 + Argon2id (RustCrypto), the .lvault format
    - decrypted vaults in the secret arena (mlock, MADV_DONTDUMP, wiped on lock)
    - search, security report, TOTP, generator, QR encode/decode, importers, KDBX reader
    - CTAP2 client over the hidraw fd (thread waits for the touch)
@@ -368,7 +368,7 @@ fuzzed (truncation at every offset and random byte flips under ASan/UBSan).
 
 | Format | How |
 |---|---|
-| KeePass / KeePassXC **KDBX 4.0/4.1** | own reader: Argon2d/Argon2id (Monocypher), AES-KDF, AES-256-CBC or ChaCha20, header SHA-256 + HMAC, HMAC-SHA256 block stream, gzip, inner header and binaries, ChaCha20 protected values, KeePass XML (groups → category tree, tags, times, custom and protected fields, attachments, TOTP in `otp`/legacy keys) |
+| KeePass / KeePassXC **KDBX 4.0/4.1** | own reader: Argon2d/Argon2id (RustCrypto), AES-KDF, AES-256-CBC or ChaCha20, header SHA-256 + HMAC, HMAC-SHA256 block stream, gzip, inner header and binaries, ChaCha20 protected values, KeePass XML (groups → category tree, tags, times, custom and protected fields, attachments, TOTP in `otp`/legacy keys) |
 | KeePass **KDBX 3.1** | same reader (Salsa20 inner stream, hashed blocks); AES-KDF uses AES-NI when present |
 | KeePassXC CSV | supported as a fallback; it loses tags, custom fields and attachments |
 | Bitwarden JSON / CSV | logins, notes, cards, identities, custom fields, folders; encrypted exports are refused with a clear message |
@@ -438,7 +438,7 @@ many tags (with colours), favourite, archived, trash, history, attachments and a
 
 | Test | What |
 |---|---|
-| `build/monocypher-test` | Monocypher's official test vectors (`tests/test.c` + `vectors.h` of 4.0.2) |
+| `make test-crypto test-crypto-native` | Rust primitive vectors, allocation/erasure checks and existing vault/backup file compatibility (`RUST-CRYPTO.md`) |
 | `build/vcrypto-test` (27) | AES (FIPS-197, SP 800-38A CBC), SHA-1, HMAC (RFC 2202/4231), HKDF (RFC 5869), the arena |
 | `build/vault-test` (74) | vault round trip, every unlock method, wrong password, **every byte flipped** (1165/1165 detected), **truncated at every length**, unknown version, atomic save + `.bak`, model upsert/keep/history, 10k-item search < 10 ms, RFC 6238/4226 vectors, otpauth parsing, generator and strength, JSON, chunked messages with fds, Argon2 timing |
 | `build/ctap-test` (135) | CBOR (RFC 8949 Appendix A), 200,000 random mutations, P-256 vectors from python-cryptography, PIN protocol math, CTAPHID reassembly |
@@ -472,7 +472,7 @@ whose only verification is built in (fingerprint) are not implemented/tested.
 
 | Path | What |
 |---|---|
-| `third_party/monocypher/` | Monocypher 4.0.2 (CC0/BSD-2), official tests and vectors |
+| `rust/axia-crypto/` | RustCrypto primitives; retained data-only vectors and old-backend file fixtures |
 | `third_party/wordlists/` | EFF large word list (CC BY 3.0 US), 10k common passwords (SecLists, MIT) |
 | `server/src/vault/vault.c`, `vault_int.h` | `axia-vault`: process, sandbox, channels, requests |
 | `server/src/vault/keyring.c` | session keyring, `kr-*` requests, Secret Service backend |

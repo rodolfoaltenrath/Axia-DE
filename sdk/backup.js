@@ -70,7 +70,7 @@ export const backup = {
     return lord.backup.restore(id, rel, { suffix: t('backup.restoredSuffix'), ...opts });
   },
   remove: (id) => lord.backup.remove(id),
-  // encryption (Monocypher): the passphrase becomes the key in the backup thread; kept only in memory
+  // encryption (RustCrypto): the passphrase becomes the key in the backup thread; kept only in memory
   unlock: (pass, create = false) => lord.backup.unlock(String(pass), !!create),
   lock: () => lord.backup.lock(),
 };

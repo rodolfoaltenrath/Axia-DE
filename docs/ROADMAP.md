@@ -387,7 +387,7 @@ with screenshots (`backup-*`, `disks-*`, `logs-*`, `clock-*`, `help-*` `.png` fi
   rename, erase, bootable USB from an ISO/IMG verified with SHA-256; closed `disk-*` actions that
   never touch the system disk.
 - [x] **Backups** (`apps/backup`): scheduled hard-link snapshots of the home, hourly/daily/weekly
-  retention, browse by date and restore, exclusions, optional encryption with Monocypher; a
+  retention, browse by date and restore, exclusions, optional encryption with RustCrypto; a
   axia-server thread at nice 19 and idle I/O, paused on battery (`build/backup-test`).
 - [x] **Logs** (`apps/logs`): our own systemd journal reader, the user's own journal and LordOS
   logs, system logs for admins through a closed action, filters, search, live follow and export
@@ -412,7 +412,7 @@ Details in `PASSWORDS.md`. Tested on VM 116 with a real `lord-sessiond` session
 (`passwords-*.png`).
 
 - [x] **`axia-vault`**, sandboxed helper (no network, no sockets, no exec, fd-only files); the only
-  binary with Monocypher; decrypted data in an mlock/MADV_DONTDUMP arena, wiped on lock.
+  binary with RustCrypto primitives; decrypted data in an mlock/MADV_DONTDUMP arena, wiped on lock.
 - [x] **Own `.lvault` format:** XChaCha20-Poly1305, vault key wrapped per unlock method (Argon2id
   tuned per machine, BLAKE2b), attachments sealed separately, atomic save with `.bak`; every flipped
   byte and every truncation detected (`vault-test`, 74/74).
