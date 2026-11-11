@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, Calculator, Emoji & Symbols, Clock, Help, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -23,14 +23,20 @@ Unicode data in `assets/emoji.json` also supplies the shell picker. Clock mounts
 all four tabs in Rust and shares its Rust session engine with the menu bar and
 notifications, so alarms, the timer and stopwatch keep running with the window closed. Files shares its Rust
 service with the file dialogs; `sdk/rustfiles.js` transports those shared widgets
-and desktop effects. Process termination still passes through the compositor's
-Wayland credential checks.
+and desktop effects. About App and Force Quit now mount directly into the Rust scene too. The
+former keeps app metadata, provenance, versions and window titles; the latter
+keeps grouping, selection, disabled actions and errors. Native windows only send
+a group key for termination: the shared Rust controller rechecks current shell
+facts, then the compositor applies its Wayland credential checks. File and
+letter icon descriptors preserve package and Linux-window artwork. The generic
+React widget host for compiled apps has been removed; Files still uses its
+separate browser/dialog renderer.
 
 Help mounts its sidebar, search field, reading column, Markdown and six-step
 welcome tour directly in Rust. `apps/help/content.rs` owns the translated
 catalogs, English fallback, ranking, snippets and internal links; `markdown.rs`
 keeps the article formatting and clickable navigation. Its remaining app-icon
-artwork is Rust too. `sdk/help.js` remains the shell's shared content API and
+artwork uses the shared Rust icon library too. `sdk/help.js` remains the shell's shared content API and
 window-effects adapter; the Help window does not use it or the React Markdown
 renderer. There are no Help JSX or JSON manifest sources.
 

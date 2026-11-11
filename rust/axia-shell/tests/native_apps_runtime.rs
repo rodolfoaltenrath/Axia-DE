@@ -196,12 +196,13 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("external-activation")["focused"], true);
     assert_eq!(get("external-activation")["minimized"], false);
     assert_eq!(get("empty")["groups"], 0);
+    assert_eq!(get("empty")["react"],0);
     assert!(get("empty")["text"]
         .as_array()
         .unwrap()
         .iter()
         .any(|s| s == "No app is open"));
-    assert_eq!(get("closed")["windows"], 0);
+    assert_eq!(get("closed")["windows"], 0,"{}",get("closed"));
     assert_eq!(get("closed")["guards"], 0);
     assert_eq!(get("closed")["calls"], json!([]));
     assert_eq!(get("retry")["error"], "app.forceQuitRefused");
@@ -248,6 +249,8 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("calculator-keyboard", "3"));
     assert!(has_text("calculator-remount", "0"));
     assert_eq!(get("appabout")["title"], "About Calculator");
+    assert_eq!(get("appabout")["react"],0);
+    assert_eq!(get("appabout-missing")["react"],0);
     assert!(has_text("appabout", "Version 0.9.0"));
     assert_eq!(get("appabout-missing")["title"], "About missing");
     assert!(!has_text("appabout-missing", "Version 0.9.0"));
@@ -263,6 +266,7 @@ fn real_compiled_app_widgets_and_effects() {
         "rasters reach the scene from Rust"
     );
     assert_eq!(get("monitor-memory")["title"], "Monitor");
+    assert!(get("monitor-memory")["handle"].as_u64().unwrap_or(0)>0);
     assert!(has_text("monitor-overview", "SUMMARY"));
     assert_eq!(
         get("monitor-unmounted")["texts"],
@@ -341,12 +345,18 @@ for(const method of ['createNode','appendChild','insertBefore','removeChild','de
 }
 const alive=n=>{for(let i=0;n&&i<100;i++,n=nodes.get(n.parent))if(n.id===root)return true;return false;};
 const texts=()=>[...nodes.values()].filter(n=>n.text&&alive(n));
+const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
 const click=label=>{
-  const node=texts().find(n=>n.text===label);
-  if(!node)throw new Error('native app driver: missing '+label);
-  const [x,y,w,height]=lord.getLayout(node.parent);
-  __lordEvent('down',node.parent,x+w/2,y+height/2,0);
-  __lordEvent('up',node.parent,x+w/2,y+height/2,0);
+  let target=0;
+  for(let h=1;h<256&&!target;h++)target=lord.nativeViews.findText(h,label);
+  if(!target){const node=texts().find(n=>n.text===label);target=node?.parent||0;}
+  if(!target)throw new Error('native app driver: missing '+label);
+  const [x,y,w,height]=lord.getLayout(target);
+  for(const type of ['down','up']) {
+    const mount=lord.nativeViews.pointer(type,target,x+w/2,y+height/2,0);
+    __lordEvent(type,mount,x+w/2,y+height/2,0);
+  }
+  __lordNativeView();
 };
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
@@ -356,7 +366,7 @@ render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
-  record('empty',{groups:runningApps().length,text:texts().map(n=>n.text)});
+  record('empty',{groups:runningApps().length,text:nativeTexts(),react:texts().length});
   const english=help.read('clock'),count=help.list().length,score=help.search('clock')[0]?.score;
   const originalLocale=locale.get();
   locale.set({...originalLocale,lang:'pt-BR'});
@@ -392,7 +402,6 @@ async function run(){
   wm.open('demo');await pause();click('Demo');await pause();control.setInstance(1);await pause();
   calls=[];click('Force Quit');await pause();record('remount',{calls});
   control.setMode('calculator');await pause();
-  const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
   const key=(name,char='')=>{__lordKey(0,1,name,char,name,0);__lordKey(0,0,name,'',name,0);};
   for(const label of ['2','+','3','×','4','Enter']){key(label,label);await pause();}
   record('calculator-precedence',{text:nativeTexts(),react:texts().length});
@@ -402,8 +411,9 @@ async function run(){
   record('calculator-keyboard',{text:nativeTexts()});
   control.setInstance(2);await pause();record('calculator-remount',{text:nativeTexts()});
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
-  record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
-  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
+  record('appabout',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
+  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
+  wm.close('appabout',true);
   wm.open('about');control.setArgs({});control.setMode('about');await pause();
   record('about',{text:nativeTexts(),react:texts().length});
   wm.open('characters');control.setArgs({});control.setMode('characters');await pause();
@@ -425,14 +435,15 @@ async function run(){
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
   for(let i=0;i<30&&!nativeTexts().includes('available for apps');i++)await pause();
-  record('monitor-memory',{text:nativeTexts(),texts:nativeTexts().length,react:texts().filter(n=>n.text==='available for apps').length,
+  let monitorHandle=0;for(let h=1;h<256&&!monitorHandle;h++)if(lord.nativeViews.findText(h,'available for apps'))monitorHandle=h;
+  record('monitor-memory',{handle:monitorHandle,text:nativeTexts(),texts:nativeTexts().length,react:texts().filter(n=>n.text==='available for apps').length,
     pixels:pixelBytes-reactPixels,title:wm.get('monitor')?.title});
   for(const tab of ['overview','cpu','network','disks','processes','cooling','voltage']){
     control.setArgs({tab});await pause();await pause();
     record('monitor-'+tab,{text:nativeTexts(),texts:nativeTexts().length});
   }
   control.setMode('forcequit');await pause();
-  record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
+  record('monitor-unmounted',{texts:(lord.nativeViews.text(monitorHandle)||'').length,reactTexts});
   // Axia Store: a native view too, with the sidebar, the editorial cards and the apps.
   wm.open('store');control.setArgs({});control.setMode('store');
   for(let i=0;i<30&&!nativeTexts().includes('Discover');i++)await pause();

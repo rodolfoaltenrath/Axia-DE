@@ -191,28 +191,7 @@ pub fn hero(seed: u64, w: usize, h: usize) -> Image {
     }
     out
 }
-/// The fallback icon colours for an app without a PNG, as `LetterIcon` (sdk/apps.js):
-/// a hue from the name, light to dark.
-pub fn letter_colors(name: &str) -> (String, String) {
-    let hue = name
-        .chars()
-        .fold(0u32, |h, c| h.wrapping_mul(31).wrapping_add(c as u32))
-        % 360;
-    let hsl = |l: f64| {
-        let a = 0.55 * l.min(1. - l);
-        let f = |n: f64| {
-            let k = (n + hue as f64 / 30.) % 12.;
-            l - a * (k - 3.).min(9. - k).min(1.).max(-1.)
-        };
-        format!(
-            "#{:02x}{:02x}{:02x}",
-            (f(0.) * 255.).round() as u8,
-            (f(8.) * 255.).round() as u8,
-            (f(4.) * 255.).round() as u8
-        )
-    };
-    (hsl(0.52), hsl(0.36))
-}
+pub use crate::native_view::icons::letter_colors;
 /// The Axia Store's own icon (Dock, launcher): a blue tile with a shopping bag.
 pub fn store_icon(size: f64) -> Value {
     let s = if size.is_finite() {

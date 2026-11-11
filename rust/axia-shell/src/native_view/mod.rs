@@ -6,6 +6,7 @@
 //! clipboard). The compositor delivers pointer events here before JS sees them
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
+pub mod icons;
 pub mod i18n;
 pub mod paint;
 pub mod style;
@@ -35,6 +36,8 @@ pub trait NativeApp {
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
+        crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
+        crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App)),
         crate::native_apps::help::ID => Some(Box::new(crate::help::App::default())),
         crate::native_apps::clock::ID => Some(Box::new(crate::clock_app::App::default())),
         crate::native_apps::characters::ID => Some(Box::new(crate::characters::App::default())),
@@ -162,6 +165,13 @@ pub unsafe extern "C" fn axia_view_paste(handle: u32, value: *const c_char) {
 #[no_mangle]
 pub extern "C" fn axia_view_text(handle: u32) -> *mut c_char {
     with_host(handle, |h| owned(h.text())).unwrap_or(std::ptr::null_mut())
+}
+/// A mounted caption's node, bounded to this view (0 if absent).
+#[no_mangle]
+pub unsafe extern "C" fn axia_view_find_text(handle: u32, label: *const c_char) -> i32 {
+    let label = text(label);
+    if label.len() > 65536 { return 0; }
+    with_host(handle, |h|h.find_text(label)).unwrap_or(0)
 }
 fn handles() -> Vec<u32> {
     with(|r| r.hosts.keys().copied().collect())

@@ -602,18 +602,19 @@ suprime apenas as outras janelas do mesmo app isolado; uma falha permite tentar
 a próxima superfície. Janelas X11 recebem pedido de fechamento, nunca SIGKILL
 contra o XWayland. A primeira mensagem de erro é preservada.
 
-Cada janela do app possui um estado Rust independente, pertencente a um objeto
-QuickJS com finalizador. O adaptador conserva referências do renderizador e aplica
-os efeitos usando as APIs existentes; o compositor continua verificando usuário,
-cliente Wayland e PID antes de encerrar um processo. Nenhum PID vindo do app é
-aceito. `runningApps()` e `forceQuit()` também usam esse modelo Rust compartilhado.
+Cada janela do Force Quit possui um estado no host nativo Rust: conteúdo,
+ícones e entrada não passam pelo React. O clique envia somente a chave do grupo;
+`forceQuit()` obtém os fatos atuais da sessão antes de chamar o controlador Rust
+compartilhado com `runningApps()` e com os menus do shell. A FFI de controle
+continua pertencendo a um objeto QuickJS com finalizador. O compositor verifica
+usuário, cliente Wayland e PID antes de encerrar um processo; nenhum PID vindo
+do app é aceito.
 
 Files mantém seu serviço e sua interface Rust, agora fisicamente em `apps/files/`.
 Navegador e seletores continuam compartilhando o mesmo modelo. `sdk/rustfiles.js`
-e `sdk/rustwidgets.js` são adaptadores comuns, escritos sem sintaxe JSX, para os
-componentes já existentes da DE. O renderizador compartilhado ainda usa React;
-essa mudança elimina a implementação própria dos apps em JSX, não substitui o
-renderizador de toda a sessão.
+é seu adaptador comum para os componentes já existentes do Axia. Esse
+renderizador de navegador e diálogos ainda usa React; o antigo `WidgetHost` dos
+outros apps compilados foi removido de `sdk/nativeapps.js`.
 
 Os testes Rust verificam política de encerramento, falhas, seleção obsoleta,
 isolamento entre instâncias, metadados e ausência dos fontes legados. A integração
@@ -631,10 +632,9 @@ além dos testes existentes de navegação, seletores e operações de arquivos.
 ## Calculadora e Sobre o aplicativo
 
 `apps/calculator/` e `apps/appabout/` também são fontes Rust completas, com
-metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. A Calculadora
-pertence ao host de visões nativas em Rust, incluindo seus nós e entrada.
-O Sobre ainda usa a FFI de `rust/axia-shell/src/native_apps_host.rs`, com uma
-variante Rust tipada liberada pelo finalizador QuickJS.
+metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. Ambos pertencem
+ao host de visões nativas em Rust, incluindo seus nós, ícones e entrada. O Sobre
+não usa mais a FFI de objetos do antigo renderizador React.
 
 A Calculadora mantém expressão, resultado, erro, hover e pressionamento em
 Rust. O parser limita o tamanho e a profundidade e exige consumir toda a entrada.
@@ -647,8 +647,10 @@ LTR, atalhos e cores dos dois estilos são conservados.
 O Sobre recebe fatos serializáveis do catálogo e do registro. Rust escolhe nome,
 versão, descrição, origem, indicação de isolamento, ícone e título da janela.
 Dados de um alvo anterior não são conservados ao mudar para um app inexistente.
-O host comum resolve traduções, ícones e teclado/foco e aplica o título, sem
-wrappers específicos por app. Os fatos necessários vêm dos metadados Rust;
+O host comum resolve traduções e teclado/foco e aplica o título, sem wrappers
+específicos por app. `native_view/icons.rs` compartilha os desenhos dos apps; os
+ícones de pacotes e janelas Linux recebem descritores de arquivo ou de letra,
+sem transportar componentes React. Os fatos necessários vêm dos metadados Rust;
 a Calculadora trata teclas diretamente no host nativo, sem adaptador JS
 específico nem transporte do catálogo a cada tecla.
 

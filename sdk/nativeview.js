@@ -10,18 +10,20 @@ import { useAppWindow } from './components.jsx';
 import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
 import { useWindows, wm, appCatalogSource } from './windows.js';
-import { useLauncherApps, launchApp } from './apps.js';
+import { useLauncherApps, launchApp, appIconFacts } from './apps.js';
 import { refreshPackages } from './packages.js';
 import { useSettings, settings } from './settings.js';
 import { appName } from './i18n.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
+import { appControlFacts, forceQuit } from './appcontrol.js';
 const emptyClock = { get: () => null, subscribe: () => () => {} };
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
   comment: app.comment, description: app.description, genericName: app.genericName,
   package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
+  iconData: appIconFacts(app),
   category: typeof app.category === 'string' ? app.category : undefined });
 
 const runners = new Map();          // handle → runs one effect
@@ -50,6 +52,10 @@ function runner(handle, manifest, winId) {
       switch (effect.kind) {
         case 'settings': settings.set(effect.patch); break;
         case 'openApp': wm.open(effect.app, { args: effect.args || {} }); break;
+        case 'forceQuit':
+          if (manifest.id !== 'forcequit') throw new Error('app.invalidRequest');
+          result = forceQuit(effect.key);
+          break;
         case 'nativeCall':
           if (!manifest.calls?.[effect.service]?.includes(effect.method)) throw new Error('app.invalidRequest');
           result = lord[effect.service][effect.method](...(effect.args || []));
@@ -105,6 +111,7 @@ export function NativeView({ manifest, args, icon, style }) {
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
     services: { ...polled, ...(clock ? { $clock: clock } : {}) },
+    ...(manifest.facts === 'windows' ? { windows: appControlFacts() } : {}),
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
     context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },

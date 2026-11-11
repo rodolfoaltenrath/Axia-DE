@@ -36,8 +36,20 @@ export function LetterIcon({ size: s = 32, name = '?' }) {
 
 // Icon from a PNG (or the initial if there is none).
 export function iconFromFile(path, name) {
-  if (!path) return ({ size }) => h(LetterIcon, { size, name });
-  return ({ size = 32 }) => h(Image, { src: path, style: { width: size, height: size, objectFit: 'contain' } });
+  const Icon = !path ? ({ size }) => h(LetterIcon, { size, name })
+    : ({ size = 32 }) => h(Image, { src: path, style: { width: size, height: size, objectFit: 'contain' } });
+  // Native windows receive resources, not callable React components.
+  Icon.nativeIcon = { kind: path ? 'image' : 'letter', ...(path ? { path } : {}), name };
+  return Icon;
+}
+export function appIconFacts(app) {
+  return app?.Icon?.nativeIcon || { kind: 'app', id: app?.id, name: app?.name };
+}
+export function windowIconFacts(win) {
+  const Icon = windowIcon(win, registryApp);
+  if (Icon?.nativeIcon) return Icon.nativeIcon;
+  const app = registryApp(win?.args?.appId) || registryApp(win?.id);
+  return { kind: 'app', id: app?.id || win?.app, name: app ? appName(app) : windowAppName(win) };
 }
 
 const linux = createStore([]);
@@ -172,9 +184,9 @@ export function windowIcon(w, getApp) {
     const pkg = appId ? registryApp(appId) : null;
     if (pkg && (pkg.package || pkg.isolated) && pkg.Icon) return pkg.Icon;
     const a = linuxAppFor(appId);
-    return a ? a.Icon : ({ size }) => h(LetterIcon, { size, name: appId || w?.title || 'Linux' });
+    return a ? a.Icon : iconFromFile('', appId || w?.title || 'Linux');
   }
-  return getApp(w?.id)?.Icon || (({ size }) => h(LetterIcon, { size, name: w?.id }));
+  return getApp(w?.id)?.Icon || iconFromFile('', w?.id);
 }
 
 linux.subscribe(scheduleSync);

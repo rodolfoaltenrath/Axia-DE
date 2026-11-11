@@ -769,3 +769,46 @@ fn help_native_search_enter_escape_tour_and_open_app_use_scene_input() {
     assert!(!host.text().contains("Get started"));
     drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
 }
+
+#[test]
+fn force_quit_native_rows_disabled_button_and_error_result_use_scene_input() {
+    let assets=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount=scene::create(scene::VIEW);
+    let mut host=Host::new(mount,super::app("forcequit").unwrap(),assets.to_str().unwrap(),None);
+    let mut facts=json!({"lang":"en","focused":true,"windows":[
+        {"id":"notes#1","key":"notes","name":"Notes","iconData":{"kind":"app","id":"notes"}},
+        {"id":"notes#2","key":"notes","name":"Notes","iconData":{"kind":"app","id":"notes"}}],
+        "context":{"theme":{"text":"#fff","textDim":"#aaa","accent":"#3584e4","control":"#333","separator":"#444","controlRadius":6}}});
+    host.facts(facts.clone());
+    let click=|host:&mut Host,label:&str| {
+        let node=host.find_text(label);assert_ne!(node,0,"missing {label}");
+        host.pointer("down",node,0.,0.,0);host.pointer("up",node,0.,0.,0);
+    };
+    click(&mut host,"Force Quit");assert!(host.take().is_none());
+    assert!(host.text().contains("2 windows"));
+    click(&mut host,"Notes");click(&mut host,"Force Quit");
+    assert_eq!(host.take(),Some(json!([{"kind":"forceQuit","key":"notes"}])));
+    host.result(json!("app.forceQuitX11"));assert!(host.text().contains("X11"));
+    facts["windows"]=json!([]);host.facts(facts);
+    assert_eq!(host.find_text("Notes"),0);click(&mut host,"Force Quit");assert!(host.take().is_none());
+    assert_eq!(host.find_text(""),0);
+    drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
+}
+
+#[test]
+fn app_about_native_metadata_title_and_target_changes_do_not_retain_old_content() {
+    let assets=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount=scene::create(scene::VIEW);
+    let mut host=Host::new(mount,super::app("appabout").unwrap(),assets.to_str().unwrap(),None);
+    let mut facts=json!({"lang":"en","args":{"key":"calculator"},
+        "catalog":[{"id":"calculator","name":"Calculator","icon":true}],
+        "registry":[{"id":"calculator","version":"0.9.0","system":true}],
+        "context":{"theme":{"text":"#fff","textDim":"#aaa"}}});
+    host.facts(facts.clone());
+    assert_ne!(host.find_text("Calculator"),0);assert_ne!(host.find_text("Version 0.9.0"),0);
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["title"]=="About Calculator"));
+    facts["args"]=json!({"key":"missing"});host.facts(facts);
+    assert_eq!(host.find_text("Calculator"),0);assert_eq!(host.find_text("Version 0.9.0"),0);
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["title"]=="About missing"));
+    drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
+}

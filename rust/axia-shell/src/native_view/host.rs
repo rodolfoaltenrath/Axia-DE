@@ -280,6 +280,20 @@ impl Host {
         self.queue(&reply);
         self.sync();
     }
+    /// Read-only caption lookup for accessibility and compositor integration probes.
+    pub fn find_text(&self, label: &str) -> i32 {
+        fn walk(list: &[Mounted], label: &str) -> Option<i32> {
+            for m in list {
+                if matches!(m.kind,Kind::Text|Kind::Button) && m.label == label {
+                    return Some(m.node);
+                }
+                if m.kind == Kind::Input && (m.label == label || (m.label.is_empty() && m.aux.as_deref() == Some(label))) { return Some(m.node); }
+                if let Some(node)=walk(&m.children,label) { return Some(node); }
+            }
+            None
+        }
+        if label.is_empty() { 0 } else { walk(&self.root,label).unwrap_or(0) }
+    }
     pub fn text(&self) -> String {
         scene::gather_text(self.mount)
     }
@@ -309,6 +323,7 @@ impl Host {
                 "settings": self.facts["settings"],
                 "services": self.facts["services"],
                 "catalog": self.facts["catalog"],
+                "windows": self.facts["windows"],
                 "registry": self.facts["registry"],
                 // For strings the app picks itself (localized package manifests).
                 "lang": self.facts["lang"],

@@ -14,7 +14,7 @@
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
 import { windows, wm, getApp, appMenus, onActiveDesktop, activeDesktop } from './windows.js';
 import { launcherIdOf, quitApp } from './dock.js';
-import { linuxAppFor, shortAppName, windowAppName } from './apps.js';
+import { linuxAppFor, shortAppName, windowAppName, windowIconFacts } from './apps.js';
 import { openFileWithApps } from './sysopen.js';
 import * as fs from './fs.js';
 import { nativeAppRequest, nativeAppEffects } from './nativeappmodel.js';
@@ -93,7 +93,7 @@ export function appMenuItems(winId) {
 export function appControlFacts() {
   return windows.get().map(w => ({ id: String(w.id), app: w.app, builtin: !!getApp(w.id)?.builtin,
     key: launcherIdOf(w), name: groupName(launcherIdOf(w), w), surface: w.args?.surface,
-    x11: !!w.args?.x11, isolated: !!w.args?.pkg }));
+    x11: !!w.args?.x11, isolated: !!w.args?.pkg, iconData: windowIconFacts(w) }));
 }
 export function runningApps() {
   const snapshot = windows.get(), byId = new Map(snapshot.map(w => [String(w.id), w]));

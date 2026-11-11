@@ -1,7 +1,13 @@
-//! Article/tour artwork for apps which still expose JSX icons. Native apps use
-//! their own icon factory; these remaining drawings keep Help independent of React.
-use super::ui::{text, view};
+//! Shared app artwork for Rust views, including icons of apps still being migrated.
+//! Compiled apps draw their own icons; package and desktop files use descriptors.
 use serde_json::{json, Value};
+fn view(style: Value, children: Vec<Value>) -> Value {
+    json!({"kind":"view","style":style,"children":children})
+}
+fn text(label: Value, style: Value) -> Value {
+    json!({"kind":"text","label":label,"style":style})
+}
+
 fn base(s: f64, bg: &str, children: Vec<Value>) -> Value {
     let mut style = json!({"width":s,"height":s,"borderRadius":s*0.225,"boxShadow":format!("0 {}px {}px rgba(0,0,0,0.35)",s*0.04,s*0.12),"overflow":"hidden"});
     style[if bg.starts_with("linear-") {
@@ -357,6 +363,256 @@ pub fn app_icon(id: &str, size: f64) -> Option<Value> {
             node["style"]["direction"] = json!("ltr");
             node
         }
+        "calendar" => {
+            let now = unsafe { libc::time(std::ptr::null_mut()) };
+            let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+            let day = if unsafe { libc::localtime_r(&now, &mut tm) }.is_null() {
+                1
+            } else {
+                tm.tm_mday
+            };
+            let dots=(0..3).map(|_|view(json!({"width":s*0.07,"height":s*0.07,"borderRadius":s*0.035,"backgroundColor":"rgba(255,255,255,0.85)"}),vec![])).collect();
+            let mut node = base(
+                s,
+                "#ffffff",
+                vec![
+                    view(
+                        json!({"height":s*0.27,"backgroundColor":"#f2463d","alignItems":"center","justifyContent":"center"}),
+                        vec![view(json!({"flexDirection":"row","gap":s*0.05}), dots)],
+                    ),
+                    view(
+                        json!({"flex":1,"alignItems":"center","justifyContent":"center"}),
+                        vec![text(
+                            json!(day.to_string()),
+                            json!({"fontSize":s*0.46,"fontWeight":300,"color":"#1c1c1e"}),
+                        )],
+                    ),
+                ],
+            );
+            node["style"]["border"] = json!("1px solid rgba(0,0,0,0.08)");
+            node
+        }
+        "contacts" => {
+            let card = view(
+                json!({"position":"absolute","left":s*0.24,"top":s*0.14,"width":s*0.62,"height":s*0.72,"borderRadius":s*0.06,"backgroundColor":"#f4f1ec","overflow":"hidden","alignItems":"center"}),
+                vec![
+                    view(
+                        json!({"marginTop":s*0.12,"width":s*0.22,"height":s*0.22,"borderRadius":s*0.11,"backgroundColor":"#9b9b9f"}),
+                        vec![],
+                    ),
+                    view(
+                        json!({"marginTop":s*0.04,"width":s*0.42,"height":s*0.42,"borderRadius":s*0.21,"backgroundColor":"#9b9b9f"}),
+                        vec![],
+                    ),
+                ],
+            );
+            let mut children = vec![
+                view(
+                    json!({"position":"absolute","left":0,"top":0,"bottom":0,"width":s*0.16,"backgroundColor":"#6f5843"}),
+                    vec![],
+                ),
+                card,
+            ];
+            children.extend(
+                [0.3, 0.5, 0.7]
+                    .into_iter()
+                    .map(|y| rect(0.86, y, 0.06, 0.1, 0.02, "#e0a33a")),
+            );
+            base(s, "linear-gradient(180deg, #b49a7e, #8c7259)", children)
+        }
+        "mail" => {
+            let mut children = vec![shadow(
+                rect(0.16, 0.27, 0.68, 0.46, 0.06, "#ffffff"),
+                s,
+                0.02,
+                0.05,
+                0.25,
+            )];
+            for i in 0..5 {
+                let mut band = rect(
+                    0.2 + i as f64 * 0.06,
+                    0.31 + i as f64 * 0.045,
+                    0.6 - i as f64 * 0.12,
+                    0.04,
+                    0.02,
+                    if i == 4 { "#0a5fd0" } else { "#cfe6ff" },
+                );
+                band["style"]["height"] = json!((s * 0.04).max(1.));
+                children.push(band);
+            }
+            base(s, "linear-gradient(165deg, #3fa9ff, #0a5fd0)", children)
+        }
+        "passwords" => {
+            let shackle = view(
+                json!({"position":"absolute","left":s*0.3,"top":s*0.14,"width":s*0.4,"height":s*0.4,"borderRadius":s*0.2,"border":format!("{}px solid #ffffff",(s*0.075).max(2.))}),
+                vec![],
+            );
+            let dots=(0..3).map(|_|view(json!({"width":s*0.09,"height":s*0.09,"borderRadius":s*0.045,"backgroundColor":"#1f6fd1"}),vec![])).collect();
+            let body = shadow(
+                view(
+                    json!({"position":"absolute","left":s*0.19,"top":s*0.38,"width":s*0.62,"height":s*0.44,"borderRadius":s*0.1,"backgroundColor":"#ffffff","flexDirection":"row","alignItems":"center","justifyContent":"center","gap":s*0.05}),
+                    dots,
+                ),
+                s,
+                0.02,
+                0.05,
+                0.25,
+            );
+            base(
+                s,
+                "linear-gradient(160deg, #3fd2c7, #1f6fd1)",
+                vec![shackle, body],
+            )
+        }
+        "sysinfo" | "sysprobe" => {
+            let chip = view(
+                json!({"width":s*0.5,"height":s*0.5,"borderRadius":s*0.08,"border":format!("{}px solid rgba(255,255,255,0.95)",(s*0.04).max(1.)),"alignItems":"center","justifyContent":"center"}),
+                vec![view(
+                    json!({"width":s*0.22,"height":s*0.22,"borderRadius":s*0.03,"backgroundColor":"#FFD60A"}),
+                    vec![],
+                )],
+            );
+            let mut children = vec![chip];
+            for p in [0.32, 0.5, 0.68] {
+                for edge in ["top", "bottom"] {
+                    children.push(view(json!({"position":"absolute","left":s*p-s*0.02,edge:s*0.16,"width":s*0.04,"height":s*0.08,"backgroundColor":"rgba(255,255,255,0.8)"}),vec![]));
+                }
+            }
+            view(
+                json!({"width":s,"height":s,"borderRadius":s*0.22,"alignItems":"center","justifyContent":"center","background":"linear-gradient(135deg, #B46CFF, #4F46E5)"}),
+                children,
+            )
+        }
+        "reminders" => {
+            let children=["#007aff","#ff3b30","#ff9500"].into_iter().enumerate().map(|(i,c)|view(json!({"flexDirection":"row","alignItems":"center","gap":s*0.08}),vec![view(json!({"width":s*0.13,"height":s*0.13,"borderRadius":s*0.065,"backgroundColor":c}),vec![]),view(json!({"width":s*if i==2{0.3}else{0.42},"height":(s*0.035).max(1.),"borderRadius":s*0.02,"backgroundColor":"#c7c7cc"}),vec![])])).collect();
+            let mut node = base(s, "#ffffff", children);
+            node["style"]["border"] = json!("1px solid rgba(0,0,0,0.08)");
+            node["style"]["paddingHorizontal"] = json!(s * 0.17);
+            node["style"]["justifyContent"] = json!("center");
+            node["style"]["gap"] = json!(s * 0.09);
+            node
+        }
         _ => return None,
     })
+}
+
+/// The fallback icon colours for an app without a PNG, as `LetterIcon` (sdk/apps.js):
+/// a hue from the name, light to dark.
+pub fn letter_colors(name: &str) -> (String, String) {
+    let hue = name
+        .chars()
+        .fold(0u32, |h, c| h.wrapping_mul(31).wrapping_add(c as u32))
+        % 360;
+    let hsl = |l: f64| {
+        let a = 0.55 * l.min(1. - l);
+        let f = |n: f64| {
+            let k = (n + hue as f64 / 30.) % 12.;
+            l - a * (k - 3.).min(9. - k).min(1.).max(-1.)
+        };
+        format!(
+            "#{:02x}{:02x}{:02x}",
+            (f(0.) * 255.).round() as u8,
+            (f(8.) * 255.).round() as u8,
+            (f(4.) * 255.).round() as u8
+        )
+    };
+    (hsl(0.52), hsl(0.36))
+}
+
+/// Serializable icon facts carry file/letter resources; compiled artwork stays in Rust.
+pub fn from_descriptor(facts: &Value, size: f64, fallback: &str) -> Value {
+    let size = if size.is_finite() {
+        size.clamp(1., 512.)
+    } else {
+        32.
+    };
+    let name = facts["name"].as_str().unwrap_or(fallback);
+    match facts["kind"].as_str().unwrap_or("") {
+        "image" => {
+            if let Some(path) = facts["path"]
+                .as_str()
+                .filter(|p| !p.is_empty() && p.len() <= 4096 && !p.contains('\0'))
+            {
+                return json!({"kind":"image","src":path,"style":{"width":size,"height":size,"objectFit":"contain"}});
+            }
+        }
+        "app" => {
+            if let Some(icon) = facts["id"].as_str().and_then(|id| app_icon(id, size)) {
+                return icon;
+            }
+        }
+        _ => {}
+    }
+    let (light, dark) = letter_colors(name);
+    let letter = name
+        .rsplit('.')
+        .next()
+        .unwrap_or(name)
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().collect::<String>())
+        .unwrap_or_else(|| "?".into());
+    view(
+        json!({"width":size,"height":size,"borderRadius":size*0.225,"alignItems":"center","justifyContent":"center","background":format!("linear-gradient(180deg, {light}, {dark})")}),
+        vec![text(
+            json!(letter),
+            json!({"fontSize":size*0.5,"fontWeight":700,"color":"#fff"}),
+        )],
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_shipped_application_has_rust_artwork() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps");
+        let mut ids: Vec<String> = crate::native_apps::manifests()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["id"].as_str().unwrap().into())
+            .collect();
+        for entry in std::fs::read_dir(root).unwrap().flatten() {
+            if let Ok(raw) = std::fs::read_to_string(entry.path().join("manifest.json")) {
+                let manifest: Value = serde_json::from_str(&raw).unwrap();
+                ids.push(manifest["id"].as_str().unwrap().into());
+            }
+        }
+        for id in ids {
+            for size in [20., 64.] {
+                let icon =
+                    app_icon(&id, size).unwrap_or_else(|| panic!("missing native artwork: {id}"));
+                assert_eq!(icon["kind"], "view");
+                assert_eq!(icon["style"]["width"], size);
+            }
+        }
+    }
+    #[test]
+    fn image_resources_and_fallback_letters_keep_the_sdk_contract() {
+        let image = from_descriptor(&json!({"kind":"image","path":"/tmp/icon.png"}), 64., "App");
+        assert_eq!(image["kind"], "image");
+        assert_eq!(image["style"]["objectFit"], "contain");
+        let fallback = from_descriptor(
+            &json!({"kind":"letter","name":"org.example.Terminal"}),
+            20.,
+            "ignored",
+        );
+        assert_eq!(fallback["children"][0]["label"], "T");
+        let (light, dark) = letter_colors("org.example.Terminal");
+        assert_eq!(
+            fallback["style"]["background"],
+            format!("linear-gradient(180deg, {light}, {dark})")
+        );
+        let unknown = from_descriptor(
+            &json!({"kind":"app","id":"unregistered","name":"ß"}),
+            64.,
+            "ignored",
+        );
+        assert_eq!(unknown["children"][0]["label"], "SS");
+        assert_eq!(
+            from_descriptor(&json!({"kind":"image","path":"\0bad"}), 20., "?")["kind"],
+            "view"
+        );
+    }
 }

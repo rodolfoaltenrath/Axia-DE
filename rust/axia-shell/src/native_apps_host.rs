@@ -1,40 +1,21 @@
-//! Shared ownership/FFI for compiled applications drawn by the React widget host.
-//! Application behavior stays in apps/<id>. Monitor and Calculator are native views instead
-//! (native_view/): Rust mounts them into the scene and this host never creates them.
+//! Session app-control service. Native windows render through native_view;
+//! this JSON bridge supplies grouping/force-quit policy to shell menus as well.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
-pub enum NativeApp {
-    ForceQuit(crate::forcequit::App),
-    AppAbout(crate::appabout::App),
+pub struct NativeApp {
+    control: crate::forcequit::App,
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
-        if id == crate::native_apps::forcequit::ID.as_bytes() {
-            Some(Self::ForceQuit(Default::default()))
-        } else if id == crate::native_apps::appabout::ID.as_bytes() {
-            Some(Self::AppAbout(Default::default()))
-        } else {
-            None
-        }
+        (id == crate::native_apps::forcequit::ID.as_bytes()).then(|| Self {
+            control: Default::default(),
+        })
     }
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "catalog" {
-            return crate::native_apps::manifests();
-        }
-        if input["cmd"] == "icon" {
-            if let Some(id) = input["app"].as_str() {
-                return Self::new(id.as_bytes()).map_or_else(
-                    || json!({"error":"app.invalidRequest"}),
-                    |mut app| app.dispatch(input),
-                );
-            }
-        }
-        self.dispatch(input)
-    }
-    fn dispatch(&mut self, input: &Value) -> Value {
-        match self {
-            Self::ForceQuit(app) => app.request(input),
-            Self::AppAbout(app) => app.request(input),
+            crate::native_apps::manifests()
+        } else {
+            self.control.request(input)
         }
     }
 }
