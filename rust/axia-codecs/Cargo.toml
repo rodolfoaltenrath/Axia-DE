@@ -1,0 +1,18 @@
+[package]
+name = "axia-codecs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Bounded Rust codecs for Axia and its sandboxed helpers"
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[features]
+# Only the vault executable may link this variant. All codec allocations,
+# including decoder scratch buffers, then use its protected secrets arena.
+secure-memory = []
+
+[dependencies]
+libc = "0.2"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
