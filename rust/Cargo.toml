@@ -1,5 +1,5 @@
 [workspace]
-members = ["axia-shell", "axia-codecs", "xtask"]
+members = ["axia-shell", "axia-codecs", "axia-crypto", "xtask"]
 # The compositor build compiles only the library; xtask is asked for by name.
 default-members = ["axia-shell"]
 resolver = "2"
