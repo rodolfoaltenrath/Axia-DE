@@ -2,6 +2,8 @@
 //! on-screen-only peripheral names and serial-number queries.
 #[path = "checks.rs"]
 mod checks;
+#[path = "perf.rs"]
+mod perf;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
@@ -455,6 +457,9 @@ fn memory(lines: &Value) -> Value {
     json!(out)
 }
 pub fn request(input: &Value) -> Value {
+    if let Some(reply) = perf::request(input) {
+        return reply;
+    }
     let a = &input["args"];
     match input["cmd"].as_str().unwrap_or("") {
         "compositionReason" => reason(&a[0]),

@@ -654,7 +654,9 @@ export default function Settings() {
   const [section, setSectionState] = useState(() => request({ cmd: 'current' }));
   const [query, setQuery] = useState('');
   const setSection = s => setSectionState(request({ cmd: 'select', section: s, standalone: standaloneDesktop }));
-  useEffect(() => { if (args?.section) setSection(args.section); }, [args?.nonce]);
+  useEffect(() => {
+    if (args?.section === 'themes' || sectionById.has(args?.section)) setSection(args.section);
+  }, [args?.nonce]);
   const [, Body] = SECTIONS.find(([id]) => id === section) || SECTIONS[0];
   const hasPad = useTrackpads().some((d) => d.kind === 'touchpad');
   const [pi5] = useState(isPi5);

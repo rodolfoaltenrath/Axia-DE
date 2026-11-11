@@ -184,6 +184,8 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("app-models")["checks"], 6);
     assert_eq!(get("app-models")["shortcut"], "pasteEscaped");
     assert_eq!(get("app-models")["hardware"], 10);
+    assert_eq!(get("app-models")["benchmarkCategories"], 6);
+    assert_eq!(get("app-models")["stability"], "pass");
     assert!(get("help-service")["count"].as_u64().unwrap() > 20);
     assert_eq!(get("help-service")["title"], "Clock");
     assert_eq!(get("help-service")["portuguese"], "Relógio");
@@ -381,7 +383,9 @@ async function run(){
     categories:passwordsModel.request(JSON.stringify({cmd:'catalog'})).builtin.length,
     checks:sysinfoModel.request(JSON.stringify({cmd:'evaluate',value:{}})).length,
     shortcut:terminalModel.request(JSON.stringify({cmd:'action',event:{code:47,key:'v',meta:true,shift:true}})),
-    hardware:sysinfoModel.request(JSON.stringify({cmd:'compatibility',args:[{}]})).length});
+    hardware:sysinfoModel.request(JSON.stringify({cmd:'compatibility',args:[{}]})).length,
+    benchmarkCategories:sysinfoModel.request(JSON.stringify({cmd:'perfCatalog'})).categories.length,
+    stability:sysinfoModel.request(JSON.stringify({cmd:'stability',args:[{}]})).state});
   record('empty',{groups:runningApps().length,text:nativeTexts(),react:texts().length});
   const english=help.read('clock'),count=help.list().length,score=help.search('clock')[0]?.score;
   const originalLocale=locale.get();

@@ -179,8 +179,8 @@ EOF
         else skip "app-model-bridge-test" "node_modules/esbuild"; fi
     else skip "sysinfo-model-test" "node and cargo"; fi
     # (0.8.6) LordBench's model (apps/sysinfo/perf.js): references, verdicts, comparisons
-    if have node; then run "sysinfo-perf-test (apps/sysinfo/perf.js)" node tests/sysinfo_perf_test.mjs
-    else skip "sysinfo-perf-test" "node"; fi
+    if have node && have cargo; then run "sysinfo-perf-test (Rust benchmark model)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_perf_test.mjs
+    else skip "sysinfo-perf-test" "node and cargo"; fi
     # (0.8.7) community hardware reports: the schema, Share on GitHub (apps/sysinfo/share.js), the workflow's
     # checks (tools/hwreport/lib.mjs), the catalogue and its snapshot, the Compatibility panel's community data
     if have node && have cargo; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node --import ./tests/native_app_model_node.mjs tests/hwreport_test.mjs

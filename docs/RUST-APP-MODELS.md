@@ -5,6 +5,16 @@ suas regras para Rust. Um modelo migrado **não significa** que o aplicativo
 inteiro já deixou React. A troca da renderização é uma etapa separada, que
 precisa manter o desenho, a interação e os serviços de cada tela.
 
+| Aplicativo | Lógica já transferida | Etapas principais pendentes |
+| --- | --- | --- |
+| Configurações | Catálogo, navegação, busca, visibilidade e seleção lembrada | Páginas, controles e renderização nativa |
+| Terminal | Perfis, cores, configuração nativa, atalhos e bytes de teclado | Estado de sessões/painéis, importação e renderização nativa |
+| Senhas | Categorias, campos, herança, filtros e contagens | Ciclo do cofre, edição, diálogos e renderização nativa |
+| Informações do Sistema | Hardware, compatibilidade, verificações e interpretação de benchmarks | Controle de testes, compartilhamento e renderização nativa |
+
+Nenhum dos quatro aplicativos desta tabela está inteiramente migrado. As
+etapas acima mantêm os componentes visuais existentes para preservar a UI/UX.
+
 ## Configurações
 
 `apps/settings/model.rs` controla o catálogo ordenado das 23 páginas, os quatro
@@ -59,15 +69,26 @@ números de série. Os periféricos são reconstruídos por campos permitidos, s
 endereços ou caminhos D-Bus, e mantêm a ordenação estável por tipo.
 Preserva níveis e estados, chaves
 de tradução, notas e parâmetros. O limite de Landlock continua sendo ABI 6 e a
-presença de um mecanismo não equivale a um teste efetivo. Datas locais e
-serialização JSON continuam pelo host. O coletor, desempenho, compartilhamento
-e interface ainda precisam migrar.
+presença de um mecanismo não equivale a um teste efetivo. `perf.rs` interpreta
+benchmarks por categoria, referências da mesma versão, estabilidade, condições
+diferentes, impacto no desktop, orçamento de atualização e resultados do
+sandbox do helper. Mantém os limites de 5%/25% de quadros atrasados e três
+períodos de atualização para o alerta de latência. Os eventos de firmware
+observados durante o teste têm precedência sobre bits de throttling antigos.
+
+`perf_data.rs` contém os dados compilados das referências. `references.js`
+continua como entrada dos utilitários de build em `tools/hwreport`, sem entrar
+no bundle do aplicativo; o teste da ponte compara os dois catálogos completos.
+Datas locais, colisão de nomes de arquivos e serialização JSON continuam pelo
+host. O coletor, compartilhamento, controle dos testes e interface ainda
+precisam migrar.
 
 ## Comparação com a implementação anterior
 
 `rust/axia-shell/tests/fixtures/app_models.json` contém casos de entrada e saída
 capturados antes da troca das implementações JavaScript. `terminal_keys.json`
-e `sysinfo_hardware.json` completam os casos dos atalhos e hardware. Os testes Rust e
+e `sysinfo_hardware.json` completam os casos dos atalhos e hardware;
+`sysinfo_performance.json` cobre medições e vereditos. Os testes Rust e
 `server/tests/app_model_bridge_test.mjs` usam os mesmos casos, verificando também
 os adaptadores JS reais, persistência e listagem sem valores secretos.
 
