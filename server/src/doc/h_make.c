@@ -20,8 +20,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "stb_image.h"
-#include "stb_image_write.h"
+#include "codecs_ffi.h"
 
 #define IMG_FILE_MAX (128 << 20)
 
@@ -253,13 +252,12 @@ static cairo_surface_t *decode(int fd) {
     size_t len;
     unsigned char *data = read_all(fd, &len);
     if (!data) return NULL;
-    int w, h, ch;
-    if (!stbi_info_from_memory(data, (int)len, &w, &h, &ch) || w <= 0 || h <= 0 || (double)w * h > 120e6) { free(data); return NULL; }
-    unsigned char *rgba = stbi_load_from_memory(data, (int)len, &w, &h, &ch, 4);
+    int w, h;
+    unsigned char *rgba = axia_image_decode(data, len, &w, &h, 4, 32768, 120000000);
     free(data);
     if (!rgba) return NULL;
     cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-    if (cairo_surface_status(s)) { stbi_image_free(rgba); cairo_surface_destroy(s); return NULL; }
+    if (cairo_surface_status(s)) { free(rgba); cairo_surface_destroy(s); return NULL; }
     uint32_t *px = (uint32_t *)cairo_image_surface_get_data(s);
     int stride = cairo_image_surface_get_stride(s) / 4;
     for (int y = 0; y < h; y++)
@@ -268,7 +266,7 @@ static cairo_surface_t *decode(int fd) {
             uint32_t a = q[3];
             px[(size_t)y * stride + x] = a << 24 | ((q[0] * a + 127) / 255) << 16 | ((q[1] * a + 127) / 255) << 8 | ((q[2] * a + 127) / 255);
         }
-    stbi_image_free(rgba);
+    free(rgba);
     cairo_surface_mark_dirty(s);
     return s;
 }
@@ -320,15 +318,16 @@ static void op_decode(const DocMsg *m, const JVal *a) {
     cairo_surface_destroy(img);
 }
 
-static void stb_out(void *ctx, void *data, int size) {
+static int codec_out(void *ctx, const uint8_t *data, size_t size) {
     int fd = *(int *)ctx;
-    const char *p = data;
+    const uint8_t *p = data;
     while (size > 0) {
         ssize_t w = write(fd, p, (size_t)size);
-        if (w <= 0) { if (w < 0 && errno == EINTR) continue; return; }
+        if (w <= 0) { if (w < 0 && errno == EINTR) continue; return 0; }
         p += w;
-        size -= (int)w;
+        size -= (size_t)w;
     }
+    return 1;
 }
 
 static void op_convert(const DocMsg *m, const JVal *a) {
@@ -361,17 +360,17 @@ static void op_convert(const DocMsg *m, const JVal *a) {
     size_t len;
     unsigned char *data = read_all(m->fds[0], &len);
     if (!data) { reply_err(m->h.id, "invalid", ""); return; }
-    int w, h, ch;
-    unsigned char *rgb = stbi_load_from_memory(data, (int)len, &w, &h, &ch, 3);
+    int w, h;
+    unsigned char *rgb = axia_image_decode(data, len, &w, &h, 3, 32768, 120000000);
     free(data);
     if (!rgb) { reply_err(m->h.id, "invalid", ""); return; }
     int ok;
-    if (fmt && !strcmp(fmt, "png")) ok = stbi_write_png_to_func(stb_out, &out, w, h, 3, rgb, w * 3);
+    if (fmt && !strcmp(fmt, "png")) ok = axia_image_encode(codec_out, &out, rgb, w, h, 3, 0);
     else {
         int q = (int)json_num(a, "quality", 90);
-        ok = stbi_write_jpg_to_func(stb_out, &out, w, h, 3, rgb, q < 10 || q > 100 ? 90 : q);
+        ok = axia_image_encode(codec_out, &out, rgb, w, h, 3, q < 10 || q > 100 ? 90 : q);
     }
-    stbi_image_free(rgb);
+    free(rgb);
     if (!ok) { reply_err(m->h.id, "write", ""); return; }
     reply_done_empty(m->h.id);
 }

@@ -7,7 +7,7 @@
  *   5. "fuzz": random images and damaged QR codes can't break anything.
  * Run from server/ (make test). */
 #include "vault/qr.h"
-#include "vault/vstb.h"
+#include "codecs_ffi.h"
 #include "vault/smem.h"
 #include "qr/qr_ref.h"
 
@@ -215,7 +215,7 @@ int main(void) {
             size_t n;
             uint8_t *f = readfile(real[k].file, &n);
             int w = 0, h = 0;
-            uint32_t *px = f ? vstb_decode_argb(f, n, &w, &h) : NULL;
+            uint32_t *px = f ? axia_vault_decode_argb(f, n, &w, &h) : NULL;
             char what[96];
             snprintf(what, sizeof what, "real image %s", real[k].file);
             double t0 = now();

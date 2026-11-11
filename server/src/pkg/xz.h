@@ -1,4 +1,4 @@
-/* xz.h — in-memory decompression of .xz (LZMA2, our own) and .gz (stb_image's inflate). */
+/* xz.h — in-memory decompression of .xz (LZMA2, our own) and .gz (bounded Rust codecs). */
 #ifndef LORD_PKG_XZ_H
 #define LORD_PKG_XZ_H
 

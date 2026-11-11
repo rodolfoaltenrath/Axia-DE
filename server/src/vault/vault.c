@@ -17,7 +17,7 @@
 #include "vgen.h"
 #include "totp.h"
 #include "vimport.h"
-#include "vstb.h"
+#include "codecs_ffi.h"
 #include "qr.h"
 #include "ctap2.h"
 #include "../sec/sandbox.h"
@@ -862,7 +862,7 @@ static void op_qr_scan(Chan *c, uint32_t id, const VMsg *m) {
     uint8_t *d = read_stream(m->fds[0], 32u << 20, &len);
     if (!d) { reply_err(c, id, "read"); return; }
     int w, h;
-    uint32_t *px = vstb_decode_argb(d, len, &w, &h);
+    uint32_t *px = axia_vault_decode_argb(d, len, &w, &h);
     sm_free(d);
     if (!px) { reply_err(c, id, "not-an-image"); return; }
     uint8_t *out = sm_alloc(4097);
@@ -1047,7 +1047,7 @@ static void op_att(Chan *c, uint32_t id, Vault *v, const char *op, const Vj *j, 
     }
     /* att-preview: image shrunk to max px, RGBA in base64 */
     int w, h;
-    uint32_t *px = vstb_decode_argb(pt, len, &w, &h);
+    uint32_t *px = axia_vault_decode_argb(pt, len, &w, &h);
     sm_free(pt);
     if (!px) { reply_err(c, id, "not-an-image"); return; }
     int max = (int)vj_getn(j, 0, "max", 320);

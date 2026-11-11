@@ -1,5 +1,8 @@
 //! Codecs shared by the compositor and sandboxed helpers. C owns returned
 //! buffers and frees them with free(), or sm_free() in the vault build.
+#[cfg(all(feature = "secure-memory", feature = "fonts"))]
+compile_error!("vault codecs require --no-default-features; never unify the protected allocator with compositor fonts");
+
 mod compression;
 #[cfg(feature = "secure-memory")]
 mod secure;
@@ -154,7 +157,7 @@ pub unsafe extern "C" fn axia_image_encode(
     channels: i32,
     quality: i32,
 ) -> i32 {
-    if w <= 0 || h <= 0 || !matches!(channels, 3 | 4) {
+    if w <= 0 || h <= 0 || !matches!(channels, 3 | 4) || (w as u64) * (h as u64) > 120_000_000 {
         return 0;
     }
     let Some(callback) = callback else {
@@ -187,7 +190,7 @@ pub unsafe extern "C" fn axia_image_write_png(
     data: *const u8,
 ) -> i32 {
     use std::os::unix::ffi::OsStrExt;
-    if path.is_null() || w <= 0 || h <= 0 {
+    if path.is_null() || w <= 0 || h <= 0 || (w as u64) * (h as u64) > 120_000_000 {
         return 0;
     }
     let Some(len) = (w as usize)
@@ -250,3 +253,41 @@ pub unsafe extern "C" fn axia_vault_decode_argb(
 mod fonts;
 #[cfg(not(feature = "secure-memory"))]
 mod mail;
+
+#[cfg(test)]
+mod ffi_tests {
+    use super::*;
+    #[test]
+    fn decoder_clears_output_sizes_on_failure() {
+        unsafe {
+            let (mut w, mut h) = (123, 456);
+            assert!(
+                axia_image_decode(ptr::null(), 10, &mut w, &mut h, 4, 8192, 40_000_000).is_null()
+            );
+            assert_eq!((w, h), (0, 0));
+            let mut len = 123;
+            assert!(axia_codec_gunzip(b"invalid".as_ptr(), 7, 100, &mut len).is_null());
+            assert_eq!(len, 0);
+        }
+    }
+    #[test]
+    fn encoder_propagates_sink_failure() {
+        unsafe {
+            unsafe extern "C" fn fail(_: *mut libc::c_void, _: *const u8, _: usize) -> i32 {
+                0
+            }
+            assert_eq!(
+                axia_image_encode(
+                    Some(fail),
+                    ptr::null_mut(),
+                    [1, 2, 3, 255].as_ptr(),
+                    1,
+                    1,
+                    4,
+                    0
+                ),
+                0
+            );
+        }
+    }
+}

@@ -21,8 +21,7 @@
 #include "../pkg/crypto.h"
 #include "../glass_ffi.h"
 #include "../platform/power.h"
-#include "stb_image.h"
-#include "stb_image_write.h"
+#include "codecs_ffi.h"
 #include <signal.h>
 #include <sys/prctl.h>
 #include "js_err.h"
@@ -386,7 +385,7 @@ static void settings_path(char *out, size_t size, const char *suffix) {
 /* Rust owns the imported file and its bounds checks. Decode validation uses the same
  * image library as rendering, before the immutable copy is offered to JavaScript. */
 static int wallpaper_png(const char *path, int w, int h, const unsigned char *rgba) {
-    return stbi_write_png(path, w, h, 4, rgba, w * 4);
+    return axia_image_write_png(path, w, h, rgba);
 }
 static JSValue f_wallpaper_import(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
     (void)self;
@@ -396,12 +395,12 @@ static JSValue f_wallpaper_import(JSContext *c, JSValueConst self, int argc, JSV
     char full[PATH_MAX], imported[PATH_MAX], thumbnail[PATH_MAX];
     int ok = n < PATH_MAX && strlen(source) == n && resolve_readable(source, full) == 0 &&
         axia_wallpaper_import(full, home, getenv("XDG_DATA_HOME"), imported, sizeof imported);
-    int w, h, ch;
+    int w, h;
     /* Parse+decode the managed copy: a malformed or truncated source is never selected. */
-    unsigned char *pixels = ok ? stbi_load(imported, &w, &h, &ch, 4) : NULL;
+    unsigned char *pixels = ok ? axia_image_load(imported, &w, &h) : NULL;
     if (ok && !pixels) { unlink(imported); ok = 0; }
     if (ok && !axia_wallpaper_preview(imported, pixels, w, h, wallpaper_png, thumbnail, sizeof thumbnail)) ok = 0;
-    stbi_image_free(pixels);
+    free(pixels);
     JSValue value = JS_NULL;
     if (ok) {
         value = JS_NewObject(c);

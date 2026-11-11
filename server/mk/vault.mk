@@ -12,11 +12,8 @@ build/monocypher-test: $(MC_DIR)/tests/test.c $(MC_DIR)/tests/utils.c $(MC_DIR)/
 	./$@ > build/monocypher-test.log || { cat build/monocypher-test.log; rm -f $@; exit 1; }
 	@tail -n 3 build/monocypher-test.log
 test: build/monocypher-test
-# Common vault primitives (AES, SHA-1, HMAC, HKDF, secrets arena, stb on the arena)
+# Common vault primitives (AES, SHA-1, HMAC, HKDF, secrets arena, Rust codecs on the arena)
 VAULT_BASE := src/vault/smem.c src/vault/vcrypto.c src/pkg/crypto.c
-build/obj/vault/vstb.o: src/vault/vstb.c src/vault/vstb.h src/vault/smem.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -c -o $@ $<
 build/vcrypto-test: tests/vcrypto_test.c $(VAULT_BASE) src/vault/vcrypto.h src/vault/smem.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vcrypto_test.c $(VAULT_BASE) -lpthread
@@ -41,9 +38,9 @@ test: build/vault-test
 LV_SRC := $(VAULT_CORE) src/vault/vault.c src/vault/keyring.c src/vault/vimport.c src/vault/csvp.c src/vault/kdbx.c src/vault/xmlmini.c \
           src/vault/qr.c src/vault/ctap2.c src/vault/p256.c src/vault/cbor.c src/vault/secretsvc.c src/vault/dbus.c \
           src/sec/sandbox.c src/sec/cgroup.c
-build/axia-vault: $(LV_SRC) build/obj/vault/monocypher.o build/obj/vault/vstb.o build/obj/vault/lists.o $(VAULT_HDR)
+build/axia-vault: $(LV_SRC) build/obj/vault/monocypher.o $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(VAULT_HDR)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(VAULT_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LV_SRC) build/obj/vault/monocypher.o build/obj/vault/vstb.o build/obj/vault/lists.o -lpthread -lm
+	$(CC) $(CPPFLAGS) $(VAULT_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LV_SRC) build/obj/vault/monocypher.o $(VAULT_CODEC_LIB) build/obj/vault/lists.o -lpthread -lm $(CODEC_NATIVE_LIBS)
 # (only when all its parts are there, so the tree always builds)
 LV_READY := $(and $(wildcard src/vault/secretsvc.c),$(wildcard src/vault/dbus.c),$(wildcard src/vault/vimport.c),$(wildcard src/vault/kdbx.c),$(wildcard src/vault/csvp.c),$(wildcard src/vault/xmlmini.c))
 ifneq ($(LV_READY),)

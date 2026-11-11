@@ -1,4 +1,4 @@
-/* otf.h — the OpenType parts stb_truetype lacks, without HarfBuzz:
+/* otf.h — OpenType shaping and color font tables, without HarfBuzz:
  *   - GSUB substitutions: ligatures of programming fonts (JetBrains Mono, Fira Code),
  *     emoji sequences and, per script, Arabic contextual forms;
  *   - GPOS positioning: pair kerning, cursive (Nastaliq, Kannada) and marks (Arabic
@@ -95,7 +95,7 @@ typedef struct { int32_t adv, dx, dy; int att, cur; } OtfPos;    /* cur: cursive
 int  otf_init(Otf *o, const uint8_t *data, size_t size, int font_offset);
 void otf_free(Otf *o);
 int  otf_has_gsub(const Otf *o, int group);
-/* Character → glyph (for fonts stb_truetype doesn't open, like bitmap-only ones). */
+/* Character → glyph (for fonts without outline glyphs, like bitmap-only ones). */
 uint16_t otf_cmap(const Otf *o, uint32_t cp);
 /* Terminal: applies the group's features on the run (in place). */
 void otf_shape(const Otf *o, int group, GlyphRun *run);

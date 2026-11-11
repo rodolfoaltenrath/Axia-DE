@@ -1,14 +1,19 @@
-# axia-server — libc + kernel headers + libxkbcommon + libwayland-server + vendored QuickJS and stb.
+# axia-server — libc + kernel headers + libxkbcommon + libwayland-server + vendored QuickJS and Rust codecs.
 # No libdrm, libinput, X11 or WebKit; the Wayland compositor (src/wl) and the terminal (src/term) are our own.
 CC      ?= cc
 CARGO   ?= cargo
 RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
+CODEC_LIB := build/codecs/release/libaxia_codecs.a
+VAULT_CODEC_LIB := build/vault-codecs/release/libaxia_codecs.a
+CODEC_INPUTS := ../rust/axia-codecs/Cargo.toml $(wildcard ../rust/axia-codecs/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock
+CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
 RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../apps/*/*.rs ../rust/native_apps.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
+RUST_INPUTS += $(CODEC_INPUTS)
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/runtime/*.rs ../rust/axia-shell/src/clipboard/*.rs ../rust/axia-shell/src/snap/*.rs ../rust/axia-shell/src/winmodel/*.rs)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
@@ -17,7 +22,7 @@ CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)
 LDLIBS += $(shell pkg-config --libs libseat)
 CFLAGS  ?= -O2 -g
 WARN    := -Wall -Wextra
-CPPFLAGS += -D_GNU_SOURCE -Isrc -Ibuild/gen -isystem ../third_party/quickjs -isystem ../third_party/stb
+CPPFLAGS += -D_GNU_SOURCE -Isrc -Ibuild/gen -isystem ../third_party/quickjs
 LDLIBS  += -lm -lpthread -lxkbcommon -lwayland-server -lwayland-client -lcrypt
 
 # Architecture: x86_64 (PC) or aarch64 (Raspberry Pi 5/4 and other ARM64, see docs/RASPBERRY.md). Never
@@ -302,12 +307,12 @@ build/wasm-test: tests/wasm_test.c $(WASM_SRC) src/wasm/wasm.h src/wasm/wasm_int
 build/thbrk-test: tests/thbrk_test.c src/ui/thbrk.c src/ui/thbrk.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/thbrk_test.c src/ui/thbrk.c
 # package signing: SHA-256 (NIST), Ed25519 (RFC 8032), JSON, contenido.json and catalog
-build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/lpk.c src/pkg/crypto.c build/obj/ui/stb.o $(wildcard src/sec/*.h)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/lpk.c src/pkg/crypto.c build/obj/ui/stb.o -lm
+build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 build/sandbox-test: tests/sandbox_test.c src/sec/sandbox.c src/sec/cgroup.c src/sec/sandbox.h src/sec/cgroup.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -D_GNU_SOURCE -o $@ tests/sandbox_test.c src/sec/sandbox.c src/sec/cgroup.c -lpthread
-build/sign-test: tests/sign_test.c src/sec/json.c src/sec/sign.c src/lpk.c src/pkg/crypto.c build/obj/ui/stb.o $(wildcard src/sec/*.h) src/lpk.h src/pkg/crypto.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_SIGN_TEST -o $@ tests/sign_test.c src/sec/json.c src/sec/sign.c src/lpk.c src/pkg/crypto.c build/obj/ui/stb.o -lm
+build/sign-test: tests/sign_test.c src/sec/json.c src/sec/sign.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h) src/lpk.h src/pkg/crypto.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_SIGN_TEST -o $@ tests/sign_test.c src/sec/json.c src/sec/sign.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 # Verified system code: manifest parser, signature, per-file check, reading under the root (docs/SIGNING.md)
 test: build/codesig-test
 build/codesig-test: tests/codesig_test.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c src/sec/codesig.h src/sec/json.h src/pkg/crypto.h build/gen/codesig_build.h
@@ -343,9 +348,9 @@ build/tzif-test: tests/tzif_test.c src/ui/tzif.c src/ui/tzif.h
 # journal reader (Logs): normal and compact synthetic files, LZ4 and XZ, broken and
 # truncated files; `build/journal-test dump <file>` dumps JSON to compare with journalctl
 test: build/journal-test
-build/journal-test: tests/journal_test.c src/logs/journal.c src/logs/journal.h src/pkg/xz.c build/obj/ui/stb.o
+build/journal-test: tests/journal_test.c src/logs/journal.c src/logs/journal.h src/pkg/xz.c $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c src/logs/journal.c src/pkg/xz.c build/obj/ui/stb.o -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c src/logs/journal.c src/pkg/xz.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # per-app firewall: rules (precedence, networks, JSON) and DNS names (broken packets, LRU)
 test: build/fw-rules-test build/dnsmap-test build/broker-restrict-test
@@ -453,15 +458,15 @@ ENGINE_SRC := src/gpu/gscissor.c src/gpu/gcontend.c src/ui/text.c src/ui/textlay
               src/ui/paint.c src/ui/otf.c src/ui/fonts.c src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c \
               src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/canvas.c
 test: build/engine-test
-build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # wlroots proof of concept (poc/axia-wlr.c, docs/WLROOTS.md): the UI engine on wlroots 0.20, with
 # wlroots doing the backend, protocols and input. Built on request only, never installed.
 WLR_PKGS := wlroots-0.20 wayland-server xkbcommon pixman-1 libdrm
-build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) $(RUST_LIB)
+build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) -DWLR_USE_UNSTABLE $(shell pkg-config --cflags $(WLR_PKGS)) $(CFLAGS) $(WARN) -std=c11 -o $@ \
-	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 # the frame pipeline's decisions (src/fpipe.c, docs/GPU.md "The frame pipeline"): LORD_PIPELINE, the auto
 # mode, what a display does next, when input waits, and a display on a vblank grid with and without it
 test: build/fpipe-test
@@ -469,11 +474,11 @@ build/fpipe-test: tests/fpipe_test.c src/fpipe.c src/fpipe.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fpipe_test.c src/fpipe.c
 	./$@ || { rm -f $@; exit 1; }
-# test_drag_exact's golden hashes for this architecture: only on the reference code (001633b plus
-# step 9, the corners' restore on the drag layer and main's blur-margin repaint), never to make a changed frame pass
-# (tests/engine_test.c, "The dragged window, pixel for pixel")
-drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c build/obj/ui/stb.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+# Re-record only after an intentional rasterizer change has been reviewed and
+# independent damage/composition checks pass. Never use this to mask a regression.
+# The Rust font migration baseline is documented in docs/RUST-CODECS.md.
+drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./build/engine-golden drag-golden
 build/canvas-test: tests/canvas_test.c src/canvas.c src/canvas.h $(RUST_LIB)
 	@mkdir -p build
@@ -562,8 +567,8 @@ MEDIA_TEST_SRC := tests/media_test.c src/media/proto.c src/media/maudio.c src/me
 build/media-test: $(MEDIA_TEST_SRC) src/media/proto.h src/media/aring.h src/media/media_int.h src/media/mpulse.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(MEDIA_TEST_SRC) -lm
 
-build/vt-dump: tests/vt_dump.c build/obj/term/vt.o build/obj/ui/stb.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $^ $(LDLIBS)
+build/vt-dump: tests/vt_dump.c build/obj/term/vt.o $(CODEC_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $^ $(LDLIBS) $(CODEC_NATIVE_LIBS)
 
 build/gen/%-protocol.h: $(WLPROTO)/stable/xdg-shell/%.xml
 	@mkdir -p build/gen
@@ -590,7 +595,7 @@ $(foreach p,$(WL_MORE),$(eval $(call wl_proto,$(p))))
 build/gen/%.o: build/gen/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
 
-build/axia-server: $(OBJ) build/obj/ui/stb.o $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB)
+build/axia-server: $(OBJ) $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(filter-out $(RUST_LIB),$^) $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS)
 
 # Version, channel and build of LordOS, shown in About and Settings → General (lord.version and
@@ -641,9 +646,6 @@ $(OBJ): build/gen/profile.h
 build/obj/canvas.o: CFLAGS += -O3
 
 # Third-party code: compiled as is, without our warnings.
-build/obj/ui/stb.o: src/ui/stb.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
 
 build/qjs/%.o: $(QJS_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -656,11 +658,8 @@ clean:
 LD_SRC := src/doc/helper.c src/doc/h_pdf.c src/doc/h_arc.c src/doc/h_font.c src/doc/h_make.c src/doc/wire.c src/doc/arcpath.c \
           src/sec/json.c src/sec/sandbox.c src/sec/cgroup.c
 LD_PKGS := poppler-glib libarchive cairo-pdf cairo-ft freetype2 fontconfig
-build/obj/doc/h_stb.o: src/doc/h_stb.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
-build/axia-doc: $(LD_SRC) build/obj/doc/h_stb.o $(wildcard src/doc/*.h) src/sec/sandbox.h src/sec/cgroup.h src/sec/json.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 $(shell pkg-config --cflags $(LD_PKGS)) -o $@ $(LD_SRC) build/obj/doc/h_stb.o $(shell pkg-config --libs $(LD_PKGS)) -lm
+build/axia-doc: $(LD_SRC) $(CODEC_LIB) $(wildcard src/doc/*.h) src/sec/sandbox.h src/sec/cgroup.h src/sec/json.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 $(shell pkg-config --cflags $(LD_PKGS)) -o $@ $(LD_SRC) $(CODEC_LIB) $(shell pkg-config --libs $(LD_PKGS)) -lm $(CODEC_NATIVE_LIBS)
 # rules for extracting without leaving the folder (tests/arcpath_test.c)
 build/arcpath-test: tests/arcpath_test.c src/doc/arcpath.c src/doc/arcpath.h
 	@mkdir -p build
@@ -727,3 +726,21 @@ build/hwdec-test: tests/hwdec_test.c src/media/hwdec.c src/media/hwdec.h src/med
 
 # Shared filesystem algorithms are Rust, including helper/test consumers.
 build/fsops-test build/launch-cli build/apps-actions-test build/defaults-test build/backup-test: $(RUST_LIB)
+
+# Separate target directories prevent secure-memory feature unification with
+# the compositor's ordinary allocator, including during parallel builds.
+$(CODEC_LIB): $(CODEC_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --target-dir $(abspath build/codecs) --release --locked --offline
+$(VAULT_CODEC_LIB): $(CODEC_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --no-default-features --features secure-memory --target-dir $(abspath build/vault-codecs) --release --locked --offline
+.PHONY: test-codecs
+test-codecs:
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-codecs --target-dir $(abspath build/codecs) --locked --offline
+
+build/obj/codecs-test-smem.o: src/vault/smem.c src/vault/smem.h
+	@mkdir -p $(dir $@)
+	$(CC) -D_GNU_SOURCE $(CFLAGS) -fPIC -c -o $@ $<
+.PHONY: test-codecs-secure
+test-codecs-secure: build/obj/codecs-test-smem.o
+	RUSTFLAGS="$(RUSTFLAGS) -C link-arg=$(abspath $<) -C link-arg=-lpthread" $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-codecs --no-default-features --features secure-memory --target-dir $(abspath build/vault-codecs-tests) --locked --offline
+test: test-codecs test-codecs-secure

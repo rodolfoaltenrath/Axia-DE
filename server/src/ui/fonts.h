@@ -2,7 +2,7 @@
  *
  * Searches LordOS's assets/fonts, /usr/share/fonts, /usr/local/share/fonts,
  * ~/.local/share/fonts and ~/.fonts. It only reads the name/OS-2/post/hmtx tables with our own
- * parser that validates bounds; stb_truetype loads only the font that is chosen. */
+ * parser that validates bounds; the Rust rasterizer loads only the font that is chosen. */
 #ifndef LORD_FONTS_H
 #define LORD_FONTS_H
 

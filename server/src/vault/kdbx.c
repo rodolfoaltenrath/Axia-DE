@@ -6,7 +6,7 @@
 #include "smem.h"
 #include "vcrypto.h"
 #include "vjson.h"
-#include "vstb.h"
+#include "codecs_ffi.h"
 #include "xmlmini.h"
 #include "../pkg/crypto.h"
 
@@ -660,7 +660,7 @@ static int parse_xml(const uint8_t *xml, size_t xlen, Stream *s, Bin *bins, int 
                     if (!raw) continue;
                     if (is_true(xml_attr(b, "Compressed"))) {
                         size_t z = 0;
-                        uint8_t *u = vstb_gunzip(raw, m, MAX_PAYLOAD, &z);
+                        uint8_t *u = axia_codec_gunzip(raw, m, MAX_PAYLOAD, &z);
                         sm_free(raw);
                         if (!u) continue;
                         raw = u; m = z;
@@ -736,7 +736,7 @@ static int read_v4(const uint8_t *d, size_t len, const Hdr *h, const uint8_t com
     const uint8_t *body = pt;
     size_t bn = ptn;
     if (h->comp == 1) {
-        plain = vstb_gunzip(pt, ptn, MAX_PAYLOAD, &bn);
+        plain = axia_codec_gunzip(pt, ptn, MAX_PAYLOAD, &bn);
         if (!plain) { fail(l, "corrupt"); goto out; }
         body = plain;
     }
@@ -819,7 +819,7 @@ static int read_v3(const uint8_t *d, size_t len, const Hdr *h, const uint8_t com
     const uint8_t *body = blocks;
     if (h->comp == 1) {
         size_t z = 0;
-        plain = vstb_gunzip(blocks, bn, MAX_PAYLOAD, &z);
+        plain = axia_codec_gunzip(blocks, bn, MAX_PAYLOAD, &z);
         if (!plain) { fail(l, "corrupt"); goto out; }
         body = plain;
         bn = z;

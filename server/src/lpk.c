@@ -9,10 +9,10 @@
  * It is installed without root, in ~/.local/share/axia/apps/<id>/ (user-only). The rules:
  * only regular files and folders (no links or devices), relative paths with letters,
  * digits, '.', '-' and '_' (no "..", no components starting with '.'), at most
- * LPK_MAX_FILES files and LPK_MAX_TOTAL bytes. It is decompressed in memory with stb_image's
- * inflate, written to a new folder and swapped with the previous one via rename. */
+ * LPK_MAX_FILES files and LPK_MAX_TOTAL bytes. It is decompressed in memory with bounded Rust
+ * codecs, written to a new folder and swapped with the previous one via rename. */
 #include "lpk.h"
-#include "stb_image.h"
+#include "codecs_ffi.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -62,22 +62,7 @@ static unsigned long octal(const char *s, size_t n) {
 
 /* gzip (RFC 1952) → raw bytes; NULL if not valid gzip. */
 static unsigned char *gunzip(const unsigned char *in, size_t len, size_t *outlen) {
-    if (len < 18 || in[0] != 0x1f || in[1] != 0x8b || in[2] != 8) return NULL;
-    int flg = in[3];
-    size_t p = 10;
-    if (flg & 4) { if (p + 2 > len) return NULL; p += 2 + (size_t)(in[p] | in[p + 1] << 8); }
-    if (flg & 8) { while (p < len && in[p]) p++; p++; }
-    if (flg & 16) { while (p < len && in[p]) p++; p++; }
-    if (flg & 2) p += 2;
-    if (p >= len - 8) return NULL;
-    uint32_t isize = (uint32_t)in[len - 4] | (uint32_t)in[len - 3] << 8 | (uint32_t)in[len - 2] << 16 | (uint32_t)in[len - 1] << 24;
-    if (isize > LPK_MAX_TOTAL + (uint32_t)LPK_MAX_FILES * 1024u) return NULL;
-    int out = 0;
-    char *r = stbi_zlib_decode_malloc_guesssize_headerflag((const char *)in + p, (int)(len - 8 - p), (int)isize + 1, &out, 0);
-    if (!r) return NULL;
-    if ((uint32_t)out != isize) { free(r); return NULL; }
-    *outlen = (size_t)out;
-    return (unsigned char *)r;
+    return axia_codec_gunzip(in, len, LPK_MAX_TOTAL + (size_t)LPK_MAX_FILES * 1024u, outlen);
 }
 
 int lpk_open(const char *path, Lpk *out, char *err, size_t errlen) {
