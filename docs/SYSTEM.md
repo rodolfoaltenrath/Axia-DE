@@ -448,8 +448,8 @@ In the **Backups** tab: snapshots by day, the tree of each one (with real sizes)
 
 ### Encryption (optional)
 
-With Monocypher 4.0.2 (vendored in `third_party/monocypher`, the same copy Passwords uses; see
-`server/src/backup/crypt.c`):
+With RustCrypto primitives in `rust/axia-crypto`, shared with Passwords through
+`server/src/backup/crypt.c` (compatibility details in `RUST-CRYPTO.md`):
 
 - **Per file:** `LBK1` + a 24-byte nonce + 64 KiB chunks of XChaCha20-Poly1305. Each chunk's nonce
   carries its number and the associated data says whether it is the last one: chunks cannot be

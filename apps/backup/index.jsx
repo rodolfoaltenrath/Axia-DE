@@ -247,7 +247,7 @@ function Settings({ st }) {
   );
 }
 
-// ---- Encryption (Monocypher: chunked XChaCha20-Poly1305, key from Argon2id) ----
+// ---- Encryption (RustCrypto: chunked XChaCha20-Poly1305, key from Argon2id) ----
 function Encryption({ st, cfg, save }) {
   const th = useTheme();
   const [p1, setP1] = useState('');
