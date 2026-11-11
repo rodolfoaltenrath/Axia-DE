@@ -11,6 +11,7 @@ struct Window {
     surface: Option<i32>,
     x11: bool,
     isolated: bool,
+    icon: Value,
 }
 #[derive(Clone)]
 struct Group {
@@ -64,6 +65,7 @@ fn groups(windows: &Value) -> Vec<Group> {
             },
             x11: linux && w["x11"] == true,
             isolated: linux && w["isolated"] == true,
+            icon: w["iconData"].clone(),
         });
     }
     let mut groups: Vec<_> = groups.into_values().collect();
@@ -159,5 +161,33 @@ impl App {
             "icon" => ui::icon(input["size"].as_f64().unwrap_or(32.)),
             _ => json!({"error":"app.invalidRequest"}),
         }
+    }
+}
+
+/// The window uses the session controller with fresh shell facts. It never
+/// executes the surface handles from its last rendered snapshot.
+impl crate::native_view::NativeApp for App {
+    fn request(&mut self, input: &Value) -> Value {
+        match s(input, "cmd") {
+            "quit" => {
+                let key = self.selected.take();
+                self.error.clear();
+                key.map_or(
+                    Value::Null,
+                    |key| json!({"effect":{"kind":"forceQuit","key":key}}),
+                )
+            }
+            "next" => {
+                self.error = input["result"]
+                    .as_str()
+                    .unwrap_or("app.forceQuitFailed")
+                    .into();
+                Value::Null
+            }
+            _ => App::request(self, input),
+        }
+    }
+    fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+        None
     }
 }

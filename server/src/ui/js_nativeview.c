@@ -103,6 +103,33 @@ static JSValue f_text(JSContext *c, JSValueConst t, int argc, JSValueConst *argv
     return argc ? owned_string(c, axia_view_text(arg_handle(c, argv[0]))) : JS_NULL;
 }
 
+/* Caption lookup returns a node owned by this view; it does not dispatch input. */
+static JSValue f_find_text(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    if (argc < 2) return JS_NewInt32(c, 0);
+    const char *label = JS_ToCString(c, argv[1]);
+    int node = label ? axia_view_find_text(arg_handle(c, argv[0]), label) : 0;
+    if (label) JS_FreeCString(c, label);
+    return JS_NewInt32(c, node);
+}
+
+/* Synthetic input uses the same native pre-dispatch as js_pointer, returning
+ * the shell mount target. The caller then dispatches its shell event normally. */
+static JSValue f_pointer(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    if (argc < 5) return JS_NewInt32(c, 0);
+    int32_t target = 0, button = 0;
+    double x = 0, y = 0;
+    if (JS_ToInt32(c, &target, argv[1]) || JS_ToFloat64(c, &x, argv[2]) ||
+        JS_ToFloat64(c, &y, argv[3]) || JS_ToInt32(c, &button, argv[4])) return JS_EXCEPTION;
+    if (!(x > -1e9 && x < 1e9 && y > -1e9 && y < 1e9)) return JS_NewInt32(c, target);
+    const char *kind = JS_ToCString(c, argv[0]);
+    if (!kind) return JS_EXCEPTION;
+    int mount = axia_view_pointer(kind, target, (float)x, (float)y, button);
+    JS_FreeCString(c, kind);
+    return JS_NewInt32(c, mount);
+}
+
 static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("mount", 3, f_mount),
     JS_CFUNC_DEF("unmount", 1, f_unmount),
@@ -113,6 +140,8 @@ static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("paste", 2, f_paste),
     JS_CFUNC_DEF("key", 3, f_key),
     JS_CFUNC_DEF("text", 1, f_text),
+    JS_CFUNC_DEF("findText", 2, f_find_text),
+    JS_CFUNC_DEF("pointer", 5, f_pointer),
 };
 
 /* Session clock model: all scheduling and state transitions are Rust-owned. */

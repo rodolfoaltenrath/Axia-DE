@@ -28,7 +28,12 @@ fn groups_sort_by_name_ignoring_accents_and_case() {
         {"id":"a#4","key":"eclair","name":"éclair"}
     ]);
     let result = request(&mut app, "groups", json!({"windows":windows}));
-    let keys: Vec<_> = result["groups"].as_array().unwrap().iter().map(|g| g["key"].as_str().unwrap()).collect();
+    let keys: Vec<_> = result["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g["key"].as_str().unwrap())
+        .collect();
     assert_eq!(keys, ["area", "browser", "eclair", "zed"]);
 }
 #[test]
@@ -186,4 +191,25 @@ fn native_handle_rejects_unknown_ids_and_invalid_json() {
         axia_native_app_free(app);
         axia_native_app_free(std::ptr::null_mut());
     }
+}
+
+#[test]
+fn native_window_sends_a_group_key_and_displays_the_session_controllers_result() {
+    use crate::native_view::NativeApp;
+    let mut app = App::default();
+    NativeApp::request(&mut app, &json!({"cmd":"sync","windows":snapshot()}));
+    NativeApp::request(&mut app, &json!({"cmd":"select","key":"editor"}));
+    let reply = NativeApp::request(&mut app, &json!({"cmd":"quit"}));
+    assert_eq!(reply["effect"], json!({"kind":"forceQuit","key":"editor"}));
+    assert!(app.selected.is_none());
+    assert!(app.queue.is_empty());
+    assert!(app.pending.is_none());
+    NativeApp::request(
+        &mut app,
+        &json!({"cmd":"next","result":"app.forceQuitRefused"}),
+    );
+    assert_eq!(app.error, "app.forceQuitRefused");
+    NativeApp::request(&mut app, &json!({"cmd":"next","result":""}));
+    assert!(app.error.is_empty());
+    assert!(NativeApp::request(&mut app, &json!({"cmd":"quit"})).is_null());
 }

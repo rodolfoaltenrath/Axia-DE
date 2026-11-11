@@ -44,7 +44,7 @@ mod tests {
             assert!(ids.insert(app["id"].as_str().unwrap()));
             assert!(matches!(
                 app["nativeView"].as_str(),
-                Some("widgets" | "files" | "rust")
+                Some("files" | "rust")
             ));
             assert!(app["size"][0].as_u64().unwrap() >= app["minSize"][0].as_u64().unwrap());
             assert!(app["size"][1].as_u64().unwrap() >= app["minSize"][1].as_u64().unwrap());

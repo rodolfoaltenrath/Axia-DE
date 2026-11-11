@@ -1,6 +1,6 @@
 //! Help window, article navigation and welcome tour, mounted directly by Rust.
 pub mod content;
-mod icons;
+use crate::native_view::icons;
 mod markdown;
 #[cfg(test)]
 mod tests;
