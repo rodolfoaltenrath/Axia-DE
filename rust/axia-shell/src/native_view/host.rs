@@ -26,6 +26,7 @@ enum Kind {
     Text,
     Image,
     Raster,
+    Icon,
     Button,
     Scroll,
     Input,
@@ -38,6 +39,7 @@ fn kind_of(v: &Value) -> Kind {
         Some("text") => Kind::Text,
         Some("image") => Kind::Image,
         Some("raster") => Kind::Raster,
+        Some("appIcon" | "windowIcon") => Kind::Icon,
         Some("button") => Kind::Button,
         Some("scroll") => Kind::Scroll,
         Some("input") => Kind::Input,
@@ -290,6 +292,7 @@ impl Host {
                 "services": self.facts["services"],
                 "catalog": self.facts["catalog"],
                 "registry": self.facts["registry"],
+                "windows": self.facts["windows"],
                 "context": context,
             });
             self.app.request(&input)
@@ -423,6 +426,12 @@ impl Host {
                     }
                     m.image = (id, generation);
                 }
+            }
+            Kind::Icon => {
+                let tree = super::icons::tree(spec, &self.facts);
+                m.style(0, json!({"width":tree["style"]["width"],"height":tree["style"]["height"],"flexShrink":0}));
+                let old = std::mem::take(&mut m.children);
+                m.children = self.reconcile(m.node, old, std::slice::from_ref(&tree));
             }
             Kind::Button => {
                 m.spec = spec.clone();

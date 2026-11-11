@@ -7,6 +7,7 @@
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
 pub mod i18n;
+mod icons;
 pub mod style;
 #[cfg(test)]
 mod tests;
@@ -21,11 +22,33 @@ use std::{
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
     fn request(&mut self, input: &Value) -> Value;
-    fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])>;
+    fn pixels(&self, _id: &str) -> Option<(usize, usize, &[u8])> {
+        None
+    }
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
-    (id == crate::native_apps::monitor::ID)
-        .then(|| Box::new(crate::monitor::App::default()) as Box<dyn NativeApp>)
+    match id {
+        crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
+        crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
+        crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
+        crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App::default())),
+        _ => None,
+    }
+}
+impl NativeApp for crate::calculator::App {
+    fn request(&mut self, input: &Value) -> Value {
+        Self::request(self, input)
+    }
+}
+impl NativeApp for crate::forcequit::App {
+    fn request(&mut self, input: &Value) -> Value {
+        Self::request(self, input)
+    }
+}
+impl NativeApp for crate::appabout::App {
+    fn request(&mut self, input: &Value) -> Value {
+        Self::request(self, input)
+    }
 }
 #[derive(Default)]
 struct Registry {
