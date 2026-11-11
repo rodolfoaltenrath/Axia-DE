@@ -598,6 +598,25 @@ fn a_window_that_came_loose_lands_where_it_was_dropped() {
 }
 
 #[test]
+fn a_dropped_title_bar_never_lands_under_the_menu_bar() {
+    // a start frame that doesn't match the node (the drag then measured from elsewhere) put windows
+    // above the menu bar, out of reach: wherever it is computed, the top stays in the work area
+    let mut s = session(json!([{ "id": "f", "app": "files", "x": 300, "y": 40, "w": 500, "h": 400 }]), json!([1]), 1);
+    state(&mut s);
+    let f = json!({ "x": 300, "y": 40, "w": 500, "h": 400 });
+    op(&mut s, "grabEnd", json!([{ "id": "f", "f": f, "edges": 0, "dx": 20, "dy": -120, "pointer": { "x": 500, "y": 30 } }]));
+    let w = window(&mut s, "f");
+    assert_eq!((w["x"].clone(), w["y"].clone()), (json!(320), json!(28)));
+    // came loose from maximized and dropped high
+    op(&mut s, "snap", json!(["f", "max"]));
+    let area = json!({ "x": 0, "y": 28, "w": 1280, "h": 772 });
+    op(&mut s, "grabEnd", json!([{ "id": "f", "f": area, "edges": 0, "dx": 300, "dy": -50, "dw": 500 - 1280, "dh": 400 - 772,
+        "detached": true, "pointer": { "x": 600, "y": 10 } }]));
+    let w = window(&mut s, "f");
+    assert_eq!((w["y"].clone(), w["maximized"].clone()), (json!(28), json!(false)));
+}
+
+#[test]
 fn a_linked_resize_keeps_both_snapped() {
     let l = json!({ "id": "l", "app": "files", "x": 0, "y": 28, "w": 640, "h": 772, "snapped": "left", "restore": { "x": 1, "y": 1, "w": 1, "h": 1 } });
     let r = json!({ "id": "r", "app": "files", "x": 640, "y": 28, "w": 640, "h": 772, "snapped": "right", "restore": { "x": 1, "y": 1, "w": 1, "h": 1 } });

@@ -3,11 +3,10 @@
 import Reconciler from 'react-reconciler';
 import { ConcurrentRoot, DefaultEventPriority, NoEventPriority } from 'react-reconciler/constants';
 import { createContext, useEffect, useState } from 'react';
-import { flatten, normalize, applyStyle } from './style.js';
-import { register, unregister, currentPriority, addListener, setKeyFilter } from './events.js';
+import { register, unregister, currentPriority, addListener, setKeyFilter, modifiers } from './events.js';
 
 export { addListener, setKeyFilter };
-export { setLayout, getLayout, layouts, modifiers } from './keymap.js';
+export { modifiers };
 export const View = 'view';
 export const Text = 'text';
 export const Image = 'image';
@@ -66,24 +65,30 @@ globalThis.__lordScreen = () => {
   for (const fn of screenListeners) { try { fn(screen, old); } catch (e) { console.error('pantalla:', e?.message || e); } }
 };
 
+// Styles: a node's style (an object, or nested arrays of them) is flattened here and converted to the
+// engine's native properties by Rust (lord.css, rust/axia-shell/src/css_style.rs: colours, shorthands,
+// transforms…), keeping the keys' order because a later key wins; only what changed is sent to the server.
+const flatten = (style) => (!style ? {} : Array.isArray(style) ? Object.assign({}, ...style.map(flatten)) : style);
+const normalize = (flat) => lord.css(JSON.stringify(flat));   // keys keep their order
+const sameValue = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]));
+function applyStyle(id, prev, next) {
+  for (const k in prev) if (!(k in next)) lord.setStyle(id, k, undefined);
+  for (const k in next) if (!sameValue(prev[k], next[k])) lord.setStyle(id, k, next[k]);
+}
+
 // For each instance, a copy of the flattened style that produced inst.style, as [key, value, key,
 // value, …] in its own order (a WeakMap, so the instance a ref sees is unchanged). It is kept only
-// when every value is a primitive and nothing in inst.style is NaN (null otherwise). A render whose
-// flattened style has the same keys, in the same order, with the same values (Object.is) then skips
-// normalize and sends nothing: normalize is pure, so it would give a style equal to inst.style and
-// applyStyle would send no call. It is a copy, not the props' object, so a style object changed in
-// place is still seen; the NaN rule keeps the calls applyStyle repeats because NaN !== NaN (a bad
-// '#zz' color).
-function flatCopy(flat, style) {
+// when every value is a primitive (null otherwise). A render whose flattened style has the same keys,
+// in the same order, with the same values (Object.is) then skips the conversion and sends nothing: it
+// is pure, so it would give a style equal to inst.style. It is a copy, not the props' object, so a
+// style object changed in place is still seen. (lord.css never returns NaN: an unreadable value is
+// null, so every repeated call is skipped too.)
+function flatCopy(flat) {
   const out = [];
   for (const k in flat) {
     const v = flat[k];
     if (v !== null && (typeof v === 'object' || typeof v === 'function')) return null;
     out.push(k, v);
-  }
-  for (const k in style) {
-    const v = style[k];
-    if (v !== v || (Array.isArray(v) && v.some((x) => x !== x))) return null;
   }
   return out;
 }
@@ -104,7 +109,7 @@ function applyProps(inst, prev, next) {
     const style = normalize(flat);
     applyStyle(inst.id, inst.style, style);
     inst.style = style;
-    flats.set(inst, flatCopy(flat, style));
+    flats.set(inst, flatCopy(flat));
   }
   if (prev.src !== next.src) lord.setProp(inst.id, 'src', next.src ?? null);
   if (prev.session !== next.session) lord.setProp(inst.id, 'session', next.session ?? 0);

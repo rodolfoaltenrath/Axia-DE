@@ -7,6 +7,7 @@
 mod assist;
 mod drag;
 mod ffi;
+mod grab;
 mod resize;
 #[cfg(test)]
 mod tests;
