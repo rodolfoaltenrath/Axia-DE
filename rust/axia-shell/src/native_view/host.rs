@@ -269,6 +269,9 @@ impl Host {
     pub fn find_text(&self, label: &str) -> i32 {
         fn walk(list: &[Mounted], label: &str) -> i32 {
             for m in list {
+                if m.kind == Kind::Input && m.label.is_empty() && m.aux.as_deref() == Some(label) {
+                    return m.parts[2];
+                }
                 if m.label == label {
                     match m.kind {
                         Kind::Text => return m.node,
@@ -919,6 +922,9 @@ impl Host {
     fn field_value(&mut self) -> Option<String> {
         let m = find(&mut self.root, self.field)?;
         Some(m.label.clone())
+    }
+    pub fn owns_text_input(&self) -> bool {
+        self.field != 0 && self.window_focused && self.icon_mode().is_none()
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
