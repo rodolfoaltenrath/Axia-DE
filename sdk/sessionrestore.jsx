@@ -19,7 +19,7 @@ import { t } from './i18n.js';
 import { useTheme } from './theme.js';
 import { spacing, typeScale, controlSize } from './controls.jsx';
 import { settings, saveSettingsNow } from './settings.js';
-import { windows, wm, getApp, isLiveSystem, workAreaOf, setLinuxPlacement, SNAP_ZONES, activeDesktop, setActiveDesktop } from './windows.js';
+import { windows, wm, getApp, isLiveSystem, workAreaOf, setLinuxPlacement, SNAP_ZONES, activeDesktop, setActiveDesktop, remembersWindow } from './windows.js';
 import { desktopAt, indexOfDesktop, activeIndex } from './desktops.js';
 import { cleanIndex } from './winmodel.js';
 import { dockIdOfWindow, launchDockItem } from './dock.js';
@@ -53,6 +53,7 @@ function entryOf(open) {
   // moved or shrunk for the on-screen keyboard: what is saved is the window as the person left it
   const w = open.oskFrame ? { ...open, ...open.oskFrame } : open;
   const isLinux = String(w.id).startsWith('linux#');
+  if (!remembersWindow(w)) return null;              // a dialog is not a window of its app to bring back
   const app = isLinux ? (w.args?.pkg ? getApp(w.args.appId) : null) : getApp(w.id);
   if (!isLinux && (!app || app.builtin)) return null;
   if (app && (app.hidden || app.live)) return null;
