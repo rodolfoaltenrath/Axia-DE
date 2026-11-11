@@ -7,7 +7,7 @@ pub const VIEW: i32 = 0;
 pub const TEXT: i32 = 1;
 pub const IMAGE: i32 = 2;
 const RAW: i32 = 3;
-/// A converted style value, as `runtime/style.js` sends it to `lord.setStyle`.
+/// A converted style value (crate::css_style), as the renderer sends it to `lord.setStyle`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Prop {
     Num(f64),

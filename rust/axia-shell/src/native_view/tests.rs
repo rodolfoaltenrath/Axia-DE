@@ -1,9 +1,10 @@
 use super::{
     host::Host,
     i18n::I18n,
-    style::{color, diff, normalize},
+    style::{diff, normalize},
     NativeApp,
 };
+use crate::css_style::color;
 use crate::runtime::native::{self as scene, Prop};
 use serde_json::{json, Map, Value};
 use std::{cell::RefCell, rc::Rc};

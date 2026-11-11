@@ -7,7 +7,8 @@ import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { Dock } from '../../themes/default/components/Dock.jsx';
 import { dockPrefs, dockPoof } from '../../sdk/dock.js';
 import { settings } from '../../sdk/settings.js';
-import { color } from '../../runtime/style.js';
+// a CSS colour as the engine stores it (Rust, rust/axia-shell/src/css_style.rs)
+const color = (c) => lord.css(JSON.stringify({ color: c })).color;
 const check = (value, message) => { if (!value) throw new Error('dock preview smoke: ' + message); };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const theme = { ...DEFAULT_TOKENS, dockBg: 'rgba(32,34,48,0.55)', dockBorder: 'rgba(255,255,255,0.2)', blur: 24 };
