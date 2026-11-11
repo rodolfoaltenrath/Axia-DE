@@ -7,6 +7,7 @@
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { View } from '@lordos/runtime';
 import { useAppWindow } from './components.jsx';
+import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
 import { useWindows, wm, appCatalogSource } from './windows.js';
@@ -86,14 +87,14 @@ export function NativeView({ manifest, args, icon, style }) {
   }, [manifest, icon]);
   const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius } = theme;
   const facts = icon ? { icon } : {
-    args: { ...(args || {}) }, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
+    args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
     services: polled,
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
     context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius },
-      decimal: formatNumber(1.5, 1)[1] },
+      scale: typeScale, decimal: formatNumber(1.5, 1)[1] },
   };
   const json = JSON.stringify(facts);
   useLayoutEffect(() => {

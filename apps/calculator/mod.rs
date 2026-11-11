@@ -91,8 +91,9 @@ impl App {
                     "," => ".",
                     _ => key,
                 };
+                let handled = KEYS.iter().flatten().any(|k| *k == key);
                 self.press(key);
-                json!({})
+                json!({"handled":handled})
             }
             "hover" | "down" | "up" | "leave" if KEYS.iter().flatten().any(|k| *k == key) => {
                 match input["cmd"].as_str().unwrap() {

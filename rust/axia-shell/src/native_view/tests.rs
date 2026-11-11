@@ -395,3 +395,35 @@ fn native_app_keyboard_requires_focus_opt_in_and_explicit_consumption() {
     drop(host);
     scene::destroy(mount);
 }
+
+#[test]
+fn calculator_draws_and_handles_keyboard_and_pointer_without_react() {
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, super::app("calculator").unwrap(), "", None);
+    host.facts(
+        json!({"focused":true,"keyboard":true,"context":{"decimal":",",
+        "theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#0a84ff"}}}),
+    );
+    assert!(host.key("1", "1", 0));
+    assert!(host.key("+", "+", 0));
+    let two = node_with_text(mount, "2");
+    assert_ne!(two, 0);
+    host.pointer("move", two, 10., 20., 0);
+    host.pointer("down", two, 10., 20., 0);
+    host.pointer("up", two, 10., 20., 0);
+    assert!(host.key("Enter", "", 0));
+    assert_ne!(node_with_text(mount, "3"), 0);
+    assert!(!host.key("F12", "", 0));
+    assert!(!host.key("c", "c", 2));
+    host.window_focus(false);
+    assert!(!host.key("Escape", "", 0));
+    host.window_focus(true);
+    assert!(host.key("Escape", "", 0));
+    assert!(host.key("1", "1", 0));
+    assert!(host.key(",", ",", 0));
+    assert!(host.key("5", "5", 0));
+    assert!(host.text().contains("1,5"));
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
