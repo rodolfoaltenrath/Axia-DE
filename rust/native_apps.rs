@@ -7,6 +7,8 @@ pub mod appabout;
 pub mod calculator;
 #[path = "../apps/characters/manifest.rs"]
 pub mod characters;
+#[path = "../apps/clock/manifest.rs"]
+pub mod clock;
 #[path = "../apps/files/manifest.rs"]
 pub mod files;
 #[path = "../apps/forcequit/manifest.rs"]
@@ -21,6 +23,7 @@ pub fn manifests() -> serde_json::Value {
         appabout::manifest(),
         calculator::manifest(),
         characters::manifest(),
+        clock::manifest(),
         files::manifest(),
         forcequit::manifest(),
         monitor::manifest(),

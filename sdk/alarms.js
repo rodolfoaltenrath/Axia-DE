@@ -14,6 +14,7 @@ const conf = () => settings.get().clock || {};
 export const clockTimer = createStore({ state: 'idle', duration: 0, endsAt: 0, left: 0 });
 export const stopwatch = createStore({ running: false, start: 0, acc: 0, laps: [] });
 export const nextAlarm = createStore(null);
+export const clockState = createStore({ timer: clockTimer.get(), stopwatch: stopwatch.get() });
 let handle = null, started = false;
 function publish(store, value) {
   if (JSON.stringify(store.get()) !== JSON.stringify(value)) store.set(() => value);
@@ -23,6 +24,7 @@ export function clockRequest(cmd, extra = {}) {
   if (!reply) return null;
   if ('timer' in reply) {
     publish(clockTimer, reply.timer); publish(stopwatch, reply.stopwatch); publish(nextAlarm, reply.nextAlarm);
+    publish(clockState, { timer: reply.timer, stopwatch: reply.stopwatch });
     for (const effect of reply.effects || []) {
       if (effect.kind === 'settings') settings.set(effect.patch);
       else if (effect.kind === 'alarm') fireAlarm(effect.alarm, effect.due);

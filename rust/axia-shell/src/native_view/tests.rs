@@ -657,3 +657,82 @@ fn characters_selects_previews_and_copies_through_native_pointer_input() {
     assert!(children(mount).is_empty());
     scene::destroy(mount);
 }
+
+#[test]
+fn clock_native_input_starts_pauses_and_saves_alarm_with_enter() {
+    crate::clock::with(|s| *s = Default::default());
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(
+        mount,
+        super::app("clock").unwrap(),
+        &assets.to_string_lossy(),
+        None,
+    );
+    let mut facts = json!({"lang":"en","args":{"tab":"timer"},"settings":{"clock":{"hour24":"24"}},"context":{"theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#0a84ff","control":"#333","controlRadius":7,"controlRadiusSmall":6}}});
+    host.facts(facts.clone());
+    let preset = node_with_text(mount, "3 min");
+    assert_ne!(preset, 0);
+    host.pointer("down", preset, 0., 0., 0);
+    host.pointer("up", preset, 0., 0., 0);
+    assert_eq!(crate::clock::with(|s| s.timer["duration"].clone()), 180000);
+    assert!(host.text().contains("Pause"));
+    assert!(host.deadline().is_some());
+    let pause = node_with_text(mount, "Pause");
+    host.pointer("down", pause, 0., 0., 0);
+    host.pointer("up", pause, 0., 0., 0);
+    assert_eq!(crate::clock::with(|s| s.timer["state"].clone()), "paused");
+    assert!(host.deadline().is_none());
+    facts["args"] = json!({"tab":"alarms"});
+    host.facts(facts);
+    let add = node_with_text(mount, "+");
+    assert_ne!(add, 0);
+    host.pointer("down", add, 0., 0., 0);
+    host.pointer("up", add, 0., 0., 0);
+    let label = node_with_text(mount, "Label (optional)");
+    assert_ne!(label, 0);
+    host.pointer("down", label, 0., 0., 0);
+    host.pointer("up", label, 0., 0., 0);
+    assert!(host.key("N", "Native alarm", 0));
+    assert!(host.key("Enter", "", 0));
+    assert_eq!(
+        crate::clock::with(|s| s.config["alarms"][0]["label"].clone()),
+        "Native alarm"
+    );
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
+
+#[test]
+fn hover_only_parent_keeps_hover_above_a_clickable_child() {
+    struct Hover {
+        log: Rc<RefCell<Vec<String>>>,
+    }
+    impl NativeApp for Hover {
+        fn request(&mut self, input: &Value) -> Value {
+            let cmd = input["cmd"].as_str().unwrap_or("");
+            if cmd == "sync" {
+                return json!({"tree":{"kind":"view","events":{"onMouseEnter":["enter",""],"onMouseLeave":["leave",""]},"children":[{"kind":"text","label":"Row"},{"kind":"view","events":{"onClick":["remove",""]},"children":[{"kind":"text","label":"Remove"}]}]}});
+            }
+            self.log.borrow_mut().push(cmd.into());
+            Value::Null
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(vec![]));
+    let mut host = Host::new(mount, Box::new(Hover { log: log.clone() }), "", None);
+    host.facts(json!({"context":{}}));
+    host.pointer("move", node_with_text(mount, "Row"), 0., 0., 0);
+    host.pointer("move", node_with_text(mount, "Remove"), 0., 0., 0);
+    assert_eq!(*log.borrow(), vec!["enter"]);
+    let remove = node_with_text(mount, "Remove");
+    host.pointer("down", remove, 0., 0., 0);
+    host.pointer("up", remove, 0., 0., 0);
+    assert!(log.borrow().contains(&"remove".into()));
+    drop(host);
+    scene::destroy(mount);
+}

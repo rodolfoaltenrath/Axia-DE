@@ -202,8 +202,16 @@ impl Host {
         if self.icon_mode().is_some() {
             return None;
         }
-        let ms = self.facts["refreshMs"].as_f64().filter(|ms| *ms > 0.)?;
-        let ms = ms.max(250.);
+        let ms = self
+            .app
+            .refresh_ms()
+            .or_else(|| self.facts["refreshMs"].as_f64())
+            .filter(|ms| *ms > 0.)?;
+        let ms = ms.max(if self.app.refresh_ms().is_some() {
+            16.
+        } else {
+            250.
+        });
         Some(if self.window_focused {
             ms
         } else {
@@ -581,12 +589,12 @@ impl Host {
                     Kind::View => {
                         if let Some(action) = &m.click {
                             t.insert(m.node, Target::Click(action.clone(), Value::Null));
-                            if ["onMouseEnter", "onMouseLeave", "onMouseDown", "onMouseUp"]
-                                .iter()
-                                .any(|event| m.spec["events"][*event].is_array())
-                            {
-                                b.insert(m.node, m.node);
-                            }
+                        }
+                        if ["onMouseEnter", "onMouseLeave", "onMouseDown", "onMouseUp"]
+                            .iter()
+                            .any(|event| m.spec["events"][*event].is_array())
+                        {
+                            b.insert(m.node, m.node);
                         }
                     }
                     Kind::Button if m.spec["disabled"] != true => {
@@ -761,10 +769,15 @@ impl Host {
                     self.scroll_to_thumb(node, y as f64);
                 }
                 let hover = if inside {
-                    self.target(target, |t| matches!(t, Target::Click(..)))
-                        .map(|(n, _)| n)
-                        .filter(|n| self.buttons.contains_key(n))
-                        .unwrap_or(0)
+                    let mut node = target;
+                    while node != 0 && node != self.mount && !self.buttons.contains_key(&node) {
+                        node = scene::parent(node);
+                    }
+                    if self.buttons.contains_key(&node) {
+                        node
+                    } else {
+                        0
+                    }
                 } else {
                     0
                 };
@@ -923,7 +936,16 @@ impl Host {
                     self.dispatch(&action, Map::new());
                 }
             }
-            "Enter" | "Delete" | "ArrowLeft" | "ArrowRight" | "Home" | "End" => {}
+            "Enter" => {
+                let submit = find(&mut self.root, self.field)
+                    .map(|m| m.spec["submit"].clone())
+                    .filter(Value::is_array);
+                if let Some(action) = submit {
+                    self.blur();
+                    self.dispatch(&action, Map::new());
+                }
+            }
+            "Delete" | "ArrowLeft" | "ArrowRight" | "Home" | "End" => {}
             _ if !chr.is_empty() && !ctrl && !meta && (!alt || flags & 8 != 0) => {
                 let mut v = value;
                 v.push_str(&chr.replace('\n', " "));
