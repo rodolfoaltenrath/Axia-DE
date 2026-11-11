@@ -260,20 +260,11 @@ fn parse_color(v: &[u8]) -> Option<u32> {
         if k < 3 {
             return None;
         }
+        // clamp keeps NaN as NaN, like the C comparisons
         for x in c.iter_mut().take(3) {
-            if *x < 0.0 {
-                *x = 0.0
-            } else if *x > 255.0 {
-                *x = 255.0
-            }
+            *x = x.clamp(0.0, 255.0);
         }
-        let a = if c[3] < 0.0 {
-            0.0
-        } else if c[3] > 1.0 {
-            1.0
-        } else {
-            c[3]
-        };
+        let a = c[3].clamp(0.0, 1.0);
         return Some(
             ((c[0] as u32) << 24)
                 | ((c[1] as u32) << 16)
@@ -428,16 +419,13 @@ fn apply_css(css: &[u8], is: &mut IStyle, bs: &mut BStyle) {
         }
         let base = if is.fs > 0.0 { is.fs } else { 14.0 };
         let len = |v: &[u8]| parse_len(v, base);
-        if prop == b"display" && eq_ic(val, b"none") {
-            bs.hidden = true;
-        } else if prop == b"visibility" && eq_ic(val, b"hidden") {
-            bs.hidden = true;
-        } else if prop == b"mso-hide" && eq_ic(val, b"all") {
-            bs.hidden = true;
-        } else if prop == b"opacity"
-            && strtod(val).0 <= 0.01
-            && val.first().is_some_and(|&c| is_digit(c))
-        {
+        let hides = (prop == b"display" && eq_ic(val, b"none"))
+            || (prop == b"visibility" && eq_ic(val, b"hidden"))
+            || (prop == b"mso-hide" && eq_ic(val, b"all"))
+            || (prop == b"opacity"
+                && strtod(val).0 <= 0.01
+                && val.first().is_some_and(|&c| is_digit(c)));
+        if hides {
             bs.hidden = true;
         } else if prop == b"overflow" && eq_ic(val, b"hidden") {
             overflow_hidden = true;
@@ -504,13 +492,12 @@ fn apply_css(css: &[u8], is: &mut IStyle, bs: &mut BStyle) {
             }
             let mut p = 0;
             while p < val.len() {
-                if is_digit(val[p]) {
-                    if let Some((px, false)) = len(&val[p..]) {
-                        if px >= 6.0 {
-                            is.fs = px.min(48.0);
-                            break;
-                        }
-                    }
+                if is_digit(val[p])
+                    && let Some((px, false)) = len(&val[p..])
+                    && px >= 6.0
+                {
+                    is.fs = px.min(48.0);
+                    break;
                 }
                 while p < val.len() && val[p] != b' ' {
                     p += 1;
@@ -585,15 +572,15 @@ fn apply_css(css: &[u8], is: &mut IStyle, bs: &mut BStyle) {
                 if eq_ic(right, b"auto") && eq_ic(left, b"auto") {
                     bs.self_center = true;
                 }
-                if let Some((px, false)) = len(top) {
-                    if px > 0.0 {
-                        bs.mt = px;
-                    }
+                if let Some((px, false)) = len(top)
+                    && px > 0.0
+                {
+                    bs.mt = px;
                 }
-                if let Some((px, false)) = len(bot) {
-                    if px > 0.0 {
-                        bs.mb = px;
-                    }
+                if let Some((px, false)) = len(bot)
+                    && px > 0.0
+                {
+                    bs.mb = px;
                 }
             } else if let Some((px, false)) = (prop == b"margin-top")
                 .then(|| len(val))
@@ -638,10 +625,10 @@ fn apply_css(css: &[u8], is: &mut IStyle, bs: &mut BStyle) {
                     if let Some((x, _)) = len(&val[p..]) {
                         w = x;
                     }
-                } else if c == b'#' || starts_ic(&val[p..], b"rgb") || is_alpha(c) {
-                    if let Some(x) = parse_color(&val[p..]) {
-                        col = x;
-                    }
+                } else if (c == b'#' || starts_ic(&val[p..], b"rgb") || is_alpha(c))
+                    && let Some(x) = parse_color(&val[p..])
+                {
+                    col = x;
                 }
                 while p < val.len() && val[p] != b' ' {
                     if val[p] == b'(' {
@@ -1028,13 +1015,12 @@ impl H {
             }
             self.space = false;
             self.line_start = false;
-            let mut t = Vec::with_capacity(4);
-            put_cp(&mut t, cp);
-            self.run.extend_from_slice(&t);
+            let start = self.run.len();
+            put_cp(&mut self.run, cp);
             if self.cur_link >= 0 {
                 let l = &mut self.links[self.cur_link as usize];
                 if l.text.len() < 600 {
-                    l.text.extend_from_slice(&t);
+                    l.text.extend_from_slice(&self.run[start..]);
                 }
             }
         }
@@ -1177,10 +1163,10 @@ impl H {
             if self.open[i].tag == tag {
                 return Some(i);
             }
-            if let Some(stop) = stop {
-                if tag_is(&self.open[i].tag, stop) {
-                    return None;
-                }
+            if let Some(stop) = stop
+                && tag_is(&self.open[i].tag, stop)
+            {
+                return None;
             }
         }
         None
@@ -1294,11 +1280,11 @@ impl H {
             self.out
                 .fmt(format_args!(",\"h\":{}", hh.min(4000.0) as i32));
         }
-        if let Some(alt) = attr(a, b"alt") {
-            if !alt.is_empty() {
-                self.out.raw(b",\"alt\":");
-                self.out.str(&alt[..alt.len().min(199)]);
-            }
+        if let Some(alt) = attr(a, b"alt")
+            && !alt.is_empty()
+        {
+            self.out.raw(b",\"alt\":");
+            self.out.str(&alt[..alt.len().min(199)]);
         }
         if self.cur.link >= 0 {
             self.out.fmt(format_args!(",\"l\":{}", self.cur.link));
@@ -1318,43 +1304,42 @@ impl H {
         }
         let is_void = tag_is(tag, T_VOID);
         // implicit closes
-        if kind == Kind::Block {
-            if let Some(p) = self.find_open(b"p", Some(STOP_CELL)) {
-                if tag != b"td" && tag != b"th" && tag != b"tr" {
-                    self.pop_to(p);
-                }
-            }
+        if kind == Kind::Block
+            && let Some(p) = self.find_open(b"p", Some(STOP_CELL))
+            && tag != b"td"
+            && tag != b"th"
+            && tag != b"tr"
+        {
+            self.pop_to(p);
         }
-        if tag == b"li" {
-            if let Some(k) = self.find_open(b"li", Some(STOP_LIST)) {
-                self.pop_to(k);
-            }
+        if tag == b"li"
+            && let Some(k) = self.find_open(b"li", Some(STOP_LIST))
+        {
+            self.pop_to(k);
         }
-        if tag == b"dt" || tag == b"dd" {
-            if let Some(k) = self
+        if (tag == b"dt" || tag == b"dd")
+            && let Some(k) = self
                 .find_open(b"dt", Some(STOP_LIST))
                 .or_else(|| self.find_open(b"dd", Some(STOP_LIST)))
-            {
-                self.pop_to(k);
-            }
+        {
+            self.pop_to(k);
         }
-        if tag == b"td" || tag == b"th" {
-            if let Some(k) = self
+        if (tag == b"td" || tag == b"th")
+            && let Some(k) = self
                 .find_open(b"td", Some(STOP_TABLE))
                 .or_else(|| self.find_open(b"th", Some(STOP_TABLE)))
-            {
-                self.pop_to(k);
-            }
+        {
+            self.pop_to(k);
         }
-        if tag == b"tr" {
-            if let Some(k) = self.find_open(b"tr", Some(STOP_TABLE)) {
-                self.pop_to(k);
-            }
+        if tag == b"tr"
+            && let Some(k) = self.find_open(b"tr", Some(STOP_TABLE))
+        {
+            self.pop_to(k);
         }
-        if tag == b"a" {
-            if let Some(k) = self.find_open(b"a", Some(STOP_CELL)) {
-                self.pop_to(k);
-            }
+        if tag == b"a"
+            && let Some(k) = self.find_open(b"a", Some(STOP_CELL))
+        {
+            self.pop_to(k);
         }
         // stray td inside a table without tr: open a tr
         if (tag == b"td" || tag == b"th")
@@ -1442,11 +1427,9 @@ impl H {
                 }
             }
             b"center" => bs.align = b'c',
-            b"ul" | b"ol" | b"menu" | b"dd" => {
-                if !bs.has_pad {
-                    bs.pad[3] = 22.0;
-                    bs.has_pad = true;
-                }
+            b"ul" | b"ol" | b"menu" | b"dd" if !bs.has_pad => {
+                bs.pad[3] = 22.0;
+                bs.has_pad = true;
             }
             _ => {}
         }
@@ -1485,23 +1468,24 @@ impl H {
 
         if tag == b"a" {
             self.cur.link = -1;
-            if let Some(href) = attr(a, b"href") {
-                if href_ok(href) && self.links.len() < HTML_MAX_LINKS {
-                    // canonical form: no blanks or control characters anywhere (as browsers do)
-                    let href: Vec<u8> = href
-                        .iter()
-                        .copied()
-                        .filter(|&c| c > 0x20 && c != 0x7f)
-                        .collect();
-                    let k = self.links.len() as i32;
-                    self.links.push(Link {
-                        href,
-                        text: Vec::new(),
-                        warn: false,
-                    });
-                    self.cur.link = k;
-                    self.cur_link = k;
-                }
+            if let Some(href) = attr(a, b"href")
+                && href_ok(href)
+                && self.links.len() < HTML_MAX_LINKS
+            {
+                // canonical form: no blanks or control characters anywhere (as browsers do)
+                let href: Vec<u8> = href
+                    .iter()
+                    .copied()
+                    .filter(|&c| c > 0x20 && c != 0x7f)
+                    .collect();
+                let k = self.links.len() as i32;
+                self.links.push(Link {
+                    href,
+                    text: Vec::new(),
+                    warn: false,
+                });
+                self.cur.link = k;
+                self.cur_link = k;
             }
         }
 
@@ -1629,24 +1613,22 @@ fn legacy_attrs(a: &[Attr], is: &mut IStyle, bs: &mut BStyle, tag: &[u8]) {
             b't'
         };
     }
-    if tag != b"img" {
-        if let Some((px, pct)) = attr(a, b"width")
+    if tag != b"img"
+        && let Some((px, pct)) = attr(a, b"width")
             .and_then(|v| parse_len(v, 14.0))
             .filter(|&(px, _)| px > 0.0)
-        {
-            bs.w = px;
-            bs.wpct = pct;
-            bs.has_w = true;
-        }
+    {
+        bs.w = px;
+        bs.wpct = pct;
+        bs.has_w = true;
     }
-    if tag == b"table" {
-        if let Some(v) = attr(a, b"border") {
-            if hnum(v, 0, 4, 0) > 0 {
-                bs.bw = hnum(v, 0, 4, 0) as f64;
-                bs.bc = 0x999999ff;
-                bs.has_border = true;
-            }
-        }
+    if tag == b"table"
+        && let Some(v) = attr(a, b"border")
+        && hnum(v, 0, 4, 0) > 0
+    {
+        bs.bw = hnum(v, 0, 4, 0) as f64;
+        bs.bc = 0x999999ff;
+        bs.has_border = true;
     }
     if tag == b"font" {
         if let Some(c) = attr(a, b"color").and_then(parse_color) {
@@ -1667,11 +1649,11 @@ fn legacy_attrs(a: &[Attr], is: &mut IStyle, bs: &mut BStyle, tag: &[u8]) {
             is.mono = has_ic(v, b"mono") || has_ic(v, b"courier");
         }
     }
-    if tag == b"body" {
-        if let Some(c) = attr(a, b"text").and_then(parse_color) {
-            is.color = c;
-            is.has_color = true;
-        }
+    if tag == b"body"
+        && let Some(c) = attr(a, b"text").and_then(parse_color)
+    {
+        is.color = c;
+        is.has_color = true;
     }
     if attr(a, b"hidden").is_some() {
         bs.hidden = true;
@@ -1710,10 +1692,10 @@ fn url_host(url: &[u8], cap: usize) -> Vec<u8> {
         p = &p[at + 1..];
         end -= at + 1;
     }
-    if p.first() != Some(&b'[') {
-        if let Some(c) = rchr(&p[..end], b':') {
-            end = c;
-        }
+    if p.first() != Some(&b'[')
+        && let Some(c) = rchr(&p[..end], b':')
+    {
+        end = c;
     }
     let n = end.min(cap - 1);
     let mut out: Vec<u8> = p[..n].iter().map(|&c| lower(c)).collect();
