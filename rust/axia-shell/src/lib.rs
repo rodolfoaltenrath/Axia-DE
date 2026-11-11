@@ -32,6 +32,7 @@ mod network;
 mod network_bus;
 mod tray;
 mod dock_preview;
+mod dock_layout;
 mod appearance;
 mod external_style;
 mod native_style;

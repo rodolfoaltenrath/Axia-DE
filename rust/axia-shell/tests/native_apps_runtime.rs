@@ -237,6 +237,24 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
+    for position in ["bottom", "left", "right"] {
+        let dock = get(&format!("dock-{position}"));
+        assert!(dock["nativeNodes"].as_i64().unwrap() >= 20, "{dock}");
+        assert!(dock["views"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "shell:dock-trash"));
+        assert!(
+            dock["calls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == &json!(["dockOpen", "app:calculator"])),
+            "{dock}"
+        );
+    }
+    assert_eq!(get("dock-unmounted")["views"], 0);
     println!("native Rust apps: Force Quit actions, Calculator native clicks/keyboard/arithmetic/errors/remount, About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
 }
 
@@ -248,12 +266,16 @@ import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/wi
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { AppWindowContext } from '@ROOT@/sdk/components.jsx';
+import { Dock, LaunchpadIcon } from '@ROOT@/themes/default/components/Dock.jsx';
 const catalog=lord.nativeApps.request(JSON.stringify({cmd:'catalog'}));
 const compiled=catalog.map(nativeApp), force=compiled.find(app=>app.id==='forcequit');
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 configureWindows({apps:[...compiled,{id:'demo',name:'Demo',Component:()=>null,Icon},{id:'isolated',name:'Isolated',isolated:true,Component:()=>null,Icon}]});
 registerBuiltinApp({id:'linux',name:'Linux',builtin:true,Component:()=>null,Icon});
-const nodes=new Map();let root,control,guards=0,calls=[],pixelBytes=0;
+const nodes=new Map(),mountedViews=new Map();let root,control,guards=0,calls=[],pixelBytes=0;
+const originalMount=lord.nativeViews.mount,originalUnmount=lord.nativeViews.unmount;
+lord.nativeViews.mount=(node,app,facts)=>{const handle=originalMount(node,app,facts);if(handle)mountedViews.set(handle,{node,app});return handle;};
+lord.nativeViews.unmount=handle=>{mountedViews.delete(handle);return originalUnmount(handle);};
 const originalSetProp=lord.setProp;
 lord.setProp=(id,key,value)=>{if(key==='pixels'&&value?.data)pixelBytes=Math.max(pixelBytes,value.data.length);return originalSetProp(id,key,value);};
 for(const method of ['createNode','appendChild','insertBefore','removeChild','destroy','setRoot','setText']) {
@@ -290,7 +312,12 @@ const click=label=>{
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
 const tokens={mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3584e4',separator:'#555',control:'#333',controlRadius:6};
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},app?h(app.Component,{key:mode+':'+instance}):null)));}
+function DockHarness({args}){return h(Dock,{t:{...tokens,panelBg:'#222',windowBorder:'#555',dockBorder:'#555'},
+  items:[{id:'app:calculator',name:'Calculator',Icon:compiled.find(a=>a.id==='calculator').Icon,pinned:true},
+    {id:'shell:launcher',name:'Apps',Icon:LaunchpadIcon,pinned:true,launcher:true}],
+  running:['app:calculator'],onOpen:id=>calls.push(['dockOpen',id]),position:args.position||'bottom',
+  magnify:!!args.magnify,trashFull:!!args.full,size:54,maxSize:86,area:{x:0,y:0,w:1000,h:700}});}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},mode==='dock'?h(DockHarness,{args}):app?h(app.Component,{key:mode+':'+instance}):null)));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
@@ -336,6 +363,17 @@ async function run(){
   }
   control.setMode('none');await pause();
   record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
+  for(const position of ['bottom','left','right']){
+    control.setArgs({position,magnify:true,full:position!=='bottom'});control.setMode('dock');await pause();await pause();
+    const icon=[...mountedViews.values()].find(v=>v.app==='calculator');
+    if(!icon)throw new Error('missing native Dock icon');
+    const [x,y,w,hh]=lord.getLayout(icon.node);
+    for(const kind of ['move','down','up']){__lordEvent(kind,icon.node,x+w/2,y+hh/2,0);await pause();}
+    record('dock-'+position,{nativeNodes:lord.stats().nodes-[...nodes.values()].filter(alive).length,
+      views:[...mountedViews.values()].map(v=>v.app),calls:[...calls]});
+    control.setMode('none');await pause();
+  }
+  record('dock-unmounted',{views:mountedViews.size});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

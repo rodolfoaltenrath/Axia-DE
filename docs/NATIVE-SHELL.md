@@ -14,7 +14,9 @@ Rust já existente, até não restarem consumidores do motor.
 - Host compartilhado: reconciliação por chave, botões, campos, rolagem,
   eventos de ponteiro em views e teclado de aplicações. Teclas só são consumidas
   mediante resposta explícita do app; atalhos do shell mantêm a precedência.
-- Dock: ícones do lançador e da lixeira nativos, com os dois temas e estados
+- Dock: ordenação visual, separadores, espaço de arraste, ampliação, RTL,
+  posicionamento por monitor e coordenadas estáveis de drop em Rust, com
+  96 referências de geometria e integração nas três posições. Ícones do lançador e da lixeira nativos, com os dois temas e estados
   vazio/cheio. A geometria foi comparada com 15 árvores capturadas do JSX anterior.
 - Ícones: geometria dos apps compilados e de Arquivos, imagens do catálogo e
   fallback de inicial sobre gradiente podem ser montados pelo host Rust.
