@@ -1,4 +1,4 @@
-/* crypt.h — optional encryption of backups, with Monocypher (vendored in third_party/monocypher;
+/* crypt.h — optional encryption of backups, with RustCrypto (rust/axia-crypto;
  * see docs/SYSTEM.md, "Encryption").
  *
  * Each file in the backup is:

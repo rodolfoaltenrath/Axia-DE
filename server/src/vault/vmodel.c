@@ -2,7 +2,7 @@
 #include "vmodel.h"
 #include "smem.h"
 #include "vcrypto.h"
-#include "monocypher.h"
+#include "crypto_ffi.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,7 +115,7 @@ void vm_refresh(VEntry *e) {
     vb_free(&b);
     const char *pw = vm_field(e, "password");
     memset(e->pwhash, 0, sizeof e->pwhash);
-    if (pw && pw[0]) crypto_blake2b_keyed(e->pwhash, 16, (const uint8_t *)"lordos-vault:reuse", 18, (const uint8_t *)pw, strlen(pw));
+    if (pw && pw[0]) axia_crypto_blake2b(e->pwhash, 16, (const uint8_t *)"lordos-vault:reuse", 18, (const uint8_t *)pw, strlen(pw), NULL, 0);
 }
 
 /* ---- load ---- */

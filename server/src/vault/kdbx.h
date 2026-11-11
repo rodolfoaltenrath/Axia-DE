@@ -3,7 +3,7 @@
  *
  * Versions: KDBX 4.0/4.1 (header with SHA-256 and HMAC, HMAC-SHA256 blocks, inner header
  * with the attachments) and KDBX 3.1 (SHA-256 blocks, attachments in Meta/Binaries). KDF: Argon2d,
- * Argon2id (version 0x13, Monocypher) and AES-KDF; ciphers: AES-256-CBC and ChaCha20 (not Twofish:
+ * Argon2id (version 0x13, RustCrypto) and AES-KDF; ciphers: AES-256-CBC and ChaCha20 (not Twofish:
  * "unsupported-cipher"); inner stream for protected values: ChaCha20 (4.x) and Salsa20 (3.1).
  * Composite key: password and/or key file (XML 1.0/2.0, 32 bytes, 64 hex or SHA-256 of the
  * file). Errors go in ImpList.err, as in imp_parse. */

@@ -2,7 +2,7 @@
 #include "vfile.h"
 #include "smem.h"
 #include "vcrypto.h"
-#include "monocypher.h"
+#include "crypto_ffi.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -42,31 +42,27 @@ static uint64_t get64(const uint8_t *p) { uint64_t v = 0; for (int i = 7; i >= 0
 /* ---- derivations ---- */
 
 static void blake_kdf(const uint8_t *key, size_t klen, const char *ctx, const uint8_t *salt, size_t slen, uint8_t out[32]) {
-    crypto_blake2b_ctx c;
-    crypto_blake2b_keyed_init(&c, 32, key, klen);
-    crypto_blake2b_update(&c, (const uint8_t *)ctx, strlen(ctx));
-    if (salt && slen) crypto_blake2b_update(&c, salt, slen);
-    crypto_blake2b_final(&c, out);
+    axia_crypto_blake2b(out, 32, key, klen, (const uint8_t *)ctx, strlen(ctx), salt, slen);
 }
 
 int vf_argon2id(const uint8_t *pass, size_t plen, const uint8_t salt[16], const VKdf *p, uint8_t out[32]) {
     uint32_t blocks = p->m_kib;
     uint32_t lanes = p->lanes ? p->lanes : 1;
     if (blocks < 8 * lanes || blocks > (4u << 20) || p->t_cost < 1 || p->t_cost > 64 || lanes > 8) return -1;
-    void *work = sm_alloc((size_t)blocks * 1024);
+    size_t worklen = axia_crypto_argon_work_size(blocks);
+    void *work = worklen ? sm_alloc(worklen) : NULL;
     if (!work) return -1;
-    crypto_argon2_config cfg = { .algorithm = CRYPTO_ARGON2_ID, .nb_blocks = blocks, .nb_passes = p->t_cost, .nb_lanes = lanes };
-    crypto_argon2_inputs in = { .pass = pass, .salt = salt, .pass_size = (uint32_t)plen, .salt_size = 16 };
-    crypto_argon2(out, 32, work, cfg, in, crypto_argon2_no_extras);
-    sm_free(work);                         /* wiped (the blocks derive from the password) */
-    return 0;
+    if (plen > UINT32_MAX) { sm_free(work); return -1; }
+    AxiaArgonConfig cfg = { AXIA_ARGON2_ID, blocks, p->t_cost, lanes };
+    AxiaArgonInputs in = { pass, salt, (uint32_t)plen, 16 };
+    int rc = axia_crypto_argon2(out, 32, work, worklen, cfg, in, (AxiaArgonExtras){0});
+    sm_free(work);
+    return rc;
 }
 
 void vf_keyfile_hash(const uint8_t *data, size_t len, uint8_t out[32]) {
-    crypto_blake2b_ctx c;
-    crypto_blake2b_keyed_init(&c, 32, (const uint8_t *)"lordos-vault:keyfile-hash", 25);
-    crypto_blake2b_update(&c, data, len);
-    crypto_blake2b_final(&c, out);
+    static const uint8_t domain[] = "lordos-vault:keyfile-hash";
+    axia_crypto_blake2b(out, 32, domain, sizeof domain - 1, data, len, NULL, 0);
 }
 
 static const char CROCK[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -313,7 +309,7 @@ int vf_open_slot(const VHeader *h, int type, const VFactors *f, uint8_t vk[32], 
         if (r < 0) return VF_ENOMEM;
         tried++;
         size_t adl = wrap_ad(h, s, ad);
-        int ok = crypto_aead_unlock(vk, s->mac, kek, s->nonce, ad, adl, s->wrapped, 32) == 0;
+        int ok = axia_crypto_open(vk, s->mac, kek, s->nonce, ad, adl, s->wrapped, 32) == 0;
         sm_wipe(kek, sizeof kek);
         if (ok) { if (slot) *slot = i; return VF_OK; }
     }
@@ -345,9 +341,9 @@ int vf_make_slot(const VHeader *h, VSlot *s, int type, const VFactors *f, const 
     if (r) return r > 0 ? VF_ENOSLOT : VF_ENOMEM;
     vc_random(s->nonce, 24);
     size_t adl = wrap_ad(h, s, ad);
-    crypto_aead_lock(s->wrapped, s->mac, kek, s->nonce, ad, adl, vk, 32);
+    int sealed = axia_crypto_seal(s->wrapped, s->mac, kek, s->nonce, ad, adl, vk, 32);
     sm_wipe(kek, sizeof kek);
-    return VF_OK;
+    return sealed ? VF_ECORRUPT : VF_OK;
 }
 
 static void subkey(const uint8_t vk[32], const char *ctx, uint8_t out[32]) { blake_kdf(vk, 32, ctx, NULL, 0, out); }
@@ -359,7 +355,7 @@ int vf_read_body(const uint8_t *d, size_t len, const VHeader *h, const uint8_t v
     if (!pt) return VF_ENOMEM;
     uint8_t bk[32];
     subkey(vk, "lordos-vault:body", bk);
-    int r = crypto_aead_unlock(pt, mac, bk, nonce, d, h->hlen, ct, h->body_len);
+    int r = axia_crypto_open(pt, mac, bk, nonce, d, h->hlen, ct, h->body_len);
     sm_wipe(bk, sizeof bk);
     if (r) { sm_free(pt); return VF_ECORRUPT; }
     pt[h->body_len] = 0;
@@ -380,9 +376,9 @@ int vf_att_seal(const uint8_t vk[32], const uint8_t vault_id[16], const uint8_t 
     subkey(vk, "lordos-vault:attachment", ak);
     att_ad(vault_id, id, ad);
     vc_random(nonce, 24);
-    crypto_aead_lock(cipher, mac, ak, nonce, ad, 40, plain, len);
+    int sealed = axia_crypto_seal(cipher, mac, ak, nonce, ad, 40, plain, len);
     sm_wipe(ak, sizeof ak);
-    return VF_OK;
+    return sealed ? VF_ECORRUPT : VF_OK;
 }
 
 int vf_att_open(const uint8_t vk[32], const uint8_t vault_id[16], const uint8_t id[16], const uint8_t *cipher, size_t len,
@@ -390,7 +386,7 @@ int vf_att_open(const uint8_t vk[32], const uint8_t vault_id[16], const uint8_t 
     uint8_t ak[32], ad[40];
     subkey(vk, "lordos-vault:attachment", ak);
     att_ad(vault_id, id, ad);
-    int r = crypto_aead_unlock(plain, mac, ak, nonce, ad, 40, cipher, len);
+    int r = axia_crypto_open(plain, mac, ak, nonce, ad, 40, cipher, len);
     sm_wipe(ak, sizeof ak);
     return r ? VF_ECORRUPT : VF_OK;
 }
@@ -430,8 +426,9 @@ int vf_write_fd(int fd, VHeader *h, const uint8_t vk[32], const uint8_t *plain, 
     uint8_t nonce[24], mac[16], bk[32], lenb[8];
     vc_random(nonce, 24);
     subkey(vk, "lordos-vault:body", bk);
-    crypto_aead_lock(ct, mac, bk, nonce, hdr, hl, plain, plen);
+    int sealed = axia_crypto_seal(ct, mac, bk, nonce, hdr, hl, plain, plen);
     sm_wipe(bk, sizeof bk);
+    if (sealed) { free(ct); return VF_ECORRUPT; }
     put64(lenb, plen);
     uint64_t total = hl + 32 + plen + 16;
     int err = write_all(fd, hdr, hl) || write_all(fd, nonce, 24) || write_all(fd, lenb, 8) || write_all(fd, ct, plen) || write_all(fd, mac, 16);

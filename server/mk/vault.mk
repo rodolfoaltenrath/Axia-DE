@@ -1,17 +1,5 @@
-# Passwords and the system keyring (src/vault, docs/PASSWORDS.md). Monocypher 4.0.2 vendored
-# (CC0) in ../third_party/monocypher. Each part adds its tests in mk/vault-*.mk.
-MC_DIR := ../third_party/monocypher
-VAULT_CPP := -isystem $(MC_DIR)
-build/obj/vault/monocypher.o: $(MC_DIR)/monocypher.c $(MC_DIR)/monocypher.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -w -c -o $@ $<
-# Monocypher's official vectors (tests/test.c + tests/vectors.h from the release tarball)
-build/monocypher-test: $(MC_DIR)/tests/test.c $(MC_DIR)/tests/utils.c $(MC_DIR)/tests/utils.h $(MC_DIR)/tests/vectors.h $(MC_DIR)/monocypher.c $(MC_DIR)/monocypher-ed25519.c
-	@mkdir -p build
-	$(CC) $(CFLAGS) -w -std=c11 -I$(MC_DIR) -I$(MC_DIR)/tests -o $@ $(MC_DIR)/tests/test.c $(MC_DIR)/tests/utils.c $(MC_DIR)/monocypher.c $(MC_DIR)/monocypher-ed25519.c
-	./$@ > build/monocypher-test.log || { cat build/monocypher-test.log; rm -f $@; exit 1; }
-	@tail -n 3 build/monocypher-test.log
-test: build/monocypher-test
+# Passwords and the system keyring. Rust cryptography is included in the secure
+# codecs archive, so each executable links only one Rust runtime/allocator.
 # Common vault primitives (AES, SHA-1, HMAC, HKDF, secrets arena, Rust codecs on the arena)
 VAULT_BASE := src/vault/smem.c src/vault/vcrypto.c src/pkg/crypto.c
 build/vcrypto-test: tests/vcrypto_test.c $(VAULT_BASE) src/vault/vcrypto.h src/vault/smem.h
@@ -29,18 +17,18 @@ VAULT_CORE := src/vault/smem.c src/vault/vcrypto.c src/vault/vjson.c src/vault/v
               src/vault/totp.c src/vault/vwire.c src/pkg/crypto.c
 VAULT_HDR := $(wildcard src/vault/*.h) src/sec/sandbox.h
 # format, model, TOTP, generator, JSON and protocol (tests/vault_test.c)
-build/vault-test: tests/vault_test.c $(VAULT_CORE) build/obj/vault/monocypher.o build/obj/vault/lists.o $(VAULT_HDR)
+build/vault-test: tests/vault_test.c $(VAULT_CORE) $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(VAULT_HDR)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(VAULT_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vault_test.c $(VAULT_CORE) build/obj/vault/monocypher.o build/obj/vault/lists.o -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vault_test.c $(VAULT_CORE) $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 test: build/vault-test
 # axia-vault: the confined Passwords and keyring helper (src/vault/vault.c)
 LV_SRC := $(VAULT_CORE) src/vault/vault.c src/vault/keyring.c src/vault/vimport.c src/vault/csvp.c src/vault/kdbx.c src/vault/xmlmini.c \
           src/vault/qr.c src/vault/ctap2.c src/vault/p256.c src/vault/cbor.c src/vault/secretsvc.c src/vault/dbus.c \
           src/sec/sandbox.c src/sec/cgroup.c
-build/axia-vault: $(LV_SRC) build/obj/vault/monocypher.o $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(VAULT_HDR)
+build/axia-vault: $(LV_SRC) $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(VAULT_HDR)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(VAULT_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LV_SRC) build/obj/vault/monocypher.o $(VAULT_CODEC_LIB) build/obj/vault/lists.o -lpthread -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LV_SRC) $(VAULT_CODEC_LIB) build/obj/vault/lists.o -lpthread -lm $(CODEC_NATIVE_LIBS)
 # (only when all its parts are there, so the tree always builds)
 LV_READY := $(and $(wildcard src/vault/secretsvc.c),$(wildcard src/vault/dbus.c),$(wildcard src/vault/vimport.c),$(wildcard src/vault/kdbx.c),$(wildcard src/vault/csvp.c),$(wildcard src/vault/xmlmini.c))
 ifneq ($(LV_READY),)

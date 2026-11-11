@@ -6,7 +6,8 @@ RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
 CODEC_LIB := build/codecs/release/libaxia_codecs.a
 VAULT_CODEC_LIB := build/vault-codecs/release/libaxia_codecs.a
-CODEC_INPUTS := ../rust/axia-codecs/Cargo.toml $(wildcard ../rust/axia-codecs/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock
+CRYPTO_INPUTS := ../rust/axia-crypto/Cargo.toml $(wildcard ../rust/axia-crypto/src/*.rs) ../rust/vendor/argon2-0.6.0/src/lib.rs
+CODEC_INPUTS := $(CRYPTO_INPUTS) ../rust/axia-codecs/Cargo.toml $(wildcard ../rust/axia-codecs/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock
 CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
@@ -116,8 +117,7 @@ HDR += $(wildcard src/logs/*.h)
 BACKUP_SRC := src/backup/engine.c src/backup/crypt.c src/backup/backup.c src/ui/js_backup.c
 SRC += $(BACKUP_SRC)
 HDR += $(wildcard src/backup/*.h)
-# optional encryption uses Monocypher (vendored in third_party/monocypher; the object comes from mk/vault.mk)
-build/obj/backup/%.o: CPPFLAGS += -isystem ../third_party/monocypher
+# Backup encryption uses allocation-free Rust primitives through axia-shell.
 # Disks (docs/SYSTEM.md): disks, partitions and mounts without root, our own SMART and the disk-* actions
 DISK_SRC := src/disk/disk.c src/disk/smart.c src/disk/smartctl.c src/ui/js_disk.c
 SRC += $(DISK_SRC)
@@ -440,11 +440,10 @@ build/dnsmap-test: tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules.c src/fw/fwm
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
 	./$@ || { rm -f $@; exit 1; }
 # backup engine: snapshots, hard links, restore, retention, interruptions, exclusions, encryption
-build/axia-server: build/obj/vault/monocypher.o
 test: build/backup-test
-build/backup-test: tests/backup_test.c src/backup/engine.c src/backup/crypt.c src/backup/engine.h src/backup/crypt.h src/fsops.h build/obj/vault/monocypher.o
+build/backup-test: tests/backup_test.c src/backup/engine.c src/backup/crypt.c src/backup/engine.h src/backup/crypt.h src/fsops.h
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -isystem ../third_party/monocypher $(CFLAGS) $(WARN) -std=c11 -o $@ tests/backup_test.c src/backup/engine.c src/backup/crypt.c build/obj/vault/monocypher.o -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/backup_test.c src/backup/engine.c src/backup/crypt.c -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # Monitor collection, rendering and regression tests are in apps/monitor/*.rs.
 # Keep the migrated regression suite in the standard test entry point.
@@ -744,3 +743,20 @@ build/obj/codecs-test-smem.o: src/vault/smem.c src/vault/smem.h
 test-codecs-secure: build/obj/codecs-test-smem.o
 	RUSTFLAGS="$(RUSTFLAGS) -C link-arg=$(abspath $<) -C link-arg=-lpthread" $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-codecs --no-default-features --features secure-memory --target-dir $(abspath build/vault-codecs-tests) --locked --offline
 test: test-codecs test-codecs-secure
+
+.PHONY: test-crypto
+test-crypto:
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-crypto --target-dir $(abspath build/crypto-tests) --locked --offline
+test: test-crypto
+
+# Rust compatibility tests call the actual C format consumers against immutable
+# files produced by the previous crypto backend. Crypto itself is Rust only.
+CRYPTO_FORMAT_SRC := src/vault/vfile.c src/vault/vcrypto.c src/pkg/crypto.c src/vault/smem.c src/backup/crypt.c
+build/crypto-format-test.so: $(CRYPTO_FORMAT_SRC) src/crypto_ffi.h $(wildcard src/vault/*.h) src/backup/crypt.h $(CODEC_LIB)
+	@mkdir -p build
+	printf '%s\n' '{ global: vf_*; bkc_*; sm_free; local: *; };' > build/crypto-format-test.map
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -shared -fPIC -o $@ $(CRYPTO_FORMAT_SRC) $(CODEC_LIB) -Wl,--version-script=build/crypto-format-test.map $(CODEC_NATIVE_LIBS)
+.PHONY: test-crypto-native
+test-crypto-native: build/crypto-format-test.so
+	AXIA_CRYPTO_FORMAT_LIBRARY=$(abspath $<) $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-crypto --target-dir $(abspath build/crypto-tests) --locked --offline --test formats existing_vault_backup_slots_and_attachment -- --ignored
+test: test-crypto-native

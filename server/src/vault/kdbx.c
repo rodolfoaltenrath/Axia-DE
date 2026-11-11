@@ -10,7 +10,7 @@
 #include "xmlmini.h"
 #include "../pkg/crypto.h"
 
-#include <monocypher.h>
+#include "crypto_ffi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -143,17 +143,18 @@ static int stream_init(Stream *s, uint32_t id, const uint8_t *key, size_t klen) 
     return -1;
 }
 
-static void stream_xor(Stream *s, uint8_t *p, size_t n) {
-    if (!s->kind) return;
+static int stream_xor(Stream *s, uint8_t *p, size_t n) {
+    if (!s->kind) return 0;
     for (size_t i = 0; i < n; i++) {
         if (s->pos == 64) {
             if (s->kind == 2) salsa20_block(s->key, s->nonce, s->ctr, s->buf);
-            else crypto_chacha20_ietf(s->buf, NULL, 64, s->key, s->nonce, (uint32_t)s->ctr);
+            else if (s->ctr > UINT32_MAX || axia_crypto_chacha20(s->buf, NULL, 64, s->key, s->nonce, (uint32_t)s->ctr)) return -1;
             s->ctr++;
             s->pos = 0;
         }
         p[i] ^= s->buf[s->pos++];
     }
+    return 0;
 }
 
 /* ---- header ---- */
@@ -366,22 +367,23 @@ static int transform(const Hdr *h, const uint8_t comp[32], uint8_t out[32], ImpL
         if (k.rounds > kdbx_max_aes_rounds) return fail(l, "too-big");
         return aes_kdf(comp, k.salt, k.rounds, out);
     }
-    int alg = !memcmp(k.uuid, U_ARGON2D, 16) ? CRYPTO_ARGON2_D : !memcmp(k.uuid, U_ARGON2ID, 16) ? CRYPTO_ARGON2_ID : -1;
+    int alg = !memcmp(k.uuid, U_ARGON2D, 16) ? AXIA_ARGON2_D : !memcmp(k.uuid, U_ARGON2ID, 16) ? AXIA_ARGON2_ID : -1;
     if (alg < 0) return fail(l, "unsupported-kdf");
-    if (k.ver != 0x13) return fail(l, "unsupported-kdf");      /* Monocypher: only Argon2 1.3 */
+    if (k.ver != 0x13) return fail(l, "unsupported-kdf");      /* KDBX compatibility: Argon2 1.3. */
     if (!k.salt || k.saltlen < 8 || k.saltlen > 0xffffffffu || k.par < 1 || k.par > 0xffffff || k.iter < 1 || k.iter > 0xffffffffu)
         return fail(l, "corrupt");
     uint64_t kib = k.mem / 1024;
     if (kib > kdbx_max_argon_kib || k.iter * kib > kdbx_max_argon_kib * 64) return fail(l, "too-big");
     if (kib < 8ull * k.par) return fail(l, "corrupt");
-    void *work = sm_alloc((size_t)kib * 1024);
+    size_t worklen = axia_crypto_argon_work_size((uint32_t)kib);
+    void *work = worklen ? sm_alloc(worklen) : NULL;
     if (!work) return fail(l, "memory");
-    crypto_argon2_config cfg = { (uint32_t)alg, (uint32_t)kib, (uint32_t)k.iter, k.par };
-    crypto_argon2_inputs in = { comp, k.salt, 32, (uint32_t)k.saltlen };
-    crypto_argon2_extras ex = { k.key, k.ad, (uint32_t)k.keylen, (uint32_t)k.adlen };
-    crypto_argon2(out, 32, work, cfg, in, ex);
+    AxiaArgonConfig cfg = { (uint32_t)alg, (uint32_t)kib, (uint32_t)k.iter, k.par };
+    AxiaArgonInputs in = { comp, k.salt, 32, (uint32_t)k.saltlen };
+    AxiaArgonExtras ex = { k.key, k.ad, (uint32_t)k.keylen, (uint32_t)k.adlen };
+    int rc = axia_crypto_argon2(out, 32, work, worklen, cfg, in, ex);
     sm_free(work);
-    return 0;
+    return rc ? fail(l, "corrupt") : 0;
 }
 
 static int composite(const char *password, const uint8_t *kf, size_t kflen, uint8_t out[32], ImpList *l) {
@@ -408,7 +410,7 @@ static uint8_t *decrypt(const Hdr *h, const uint8_t key[32], const uint8_t *ct, 
     uint8_t *out = sm_alloc(n ? n : 1);
     if (!out) return NULL;
     if (!memcmp(h->cipher, U_CHACHA, 16)) {
-        crypto_chacha20_ietf(out, ct, n, key, h->iv, 0);
+        if (axia_crypto_chacha20(out, ct, n, key, h->iv, 0)) { sm_free(out); return NULL; }
         *outlen = n;
         return out;
     }
@@ -605,7 +607,7 @@ static int unprotect(XNode *n, Stream *s) {
         size_t m = 0;
         uint8_t *b = b64_decode(n->text ? n->text : "", n->tlen, &m);
         if (!b) return -1;
-        stream_xor(s, b, m);
+        if (stream_xor(s, b, m)) { sm_free(b); return -1; }
         char *t = sm_alloc(m + 1);
         if (!t) { sm_free(b); return -1; }
         memcpy(t, b, m);
