@@ -167,6 +167,7 @@ fn real_compiled_app_widgets_and_effects() {
             "about",
             "appabout",
             "calculator",
+            "characters",
             "files",
             "forcequit",
             "monitor",
@@ -202,6 +203,10 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("about", "System Report…"));
     assert!(has_text("about", "QuickJS + React 19.3.1"));
     assert_eq!(get("about")["react"], 0, "About content bypasses React");
+    assert!(has_text("characters", "Emoji"));
+    assert!(has_text("characters", "Symbols"));
+    assert!(has_text("characters", "Choose a character"));
+    assert_eq!(get("characters")["react"], 0, "Characters content bypasses React");
     assert!(has_text("calculator-precedence", "14"));
     assert_eq!(
         get("calculator-precedence")["react"],
@@ -346,6 +351,8 @@ async function run(){
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   wm.open('about');control.setArgs({});control.setMode('about');await pause();
   record('about',{text:nativeTexts(),react:texts().length});
+  wm.open('characters');control.setArgs({});control.setMode('characters');await pause();
+  record('characters',{text:nativeTexts(),react:texts().length});wm.close('characters',true);
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');

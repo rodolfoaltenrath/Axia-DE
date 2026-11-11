@@ -15,6 +15,7 @@ RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../apps/*/*.rs ../rust/native_apps.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 RUST_INPUTS += $(CODEC_INPUTS)
+RUST_INPUTS += ../assets/emoji.json
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/runtime/*.rs ../rust/axia-shell/src/clipboard/*.rs ../rust/axia-shell/src/snap/*.rs ../rust/axia-shell/src/winmodel/*.rs)
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/native_view/*.rs)

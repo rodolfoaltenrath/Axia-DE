@@ -675,6 +675,21 @@ o contexto fornece resolução, versão do motor e separadores regionais. O rela
 é um efeito `openApp` do host. A moldura da janela e o shell continuam em React;
 a migração deste app não significa que o compositor inteiro esteja em Rust.
 
+## Emoji e Símbolos
+
+`apps/characters/` contém apenas fontes Rust. O app monta abas, categorias,
+seletor de tons, busca, grade Unicode, prévia e ação de cópia no host nativo.
+A busca mantém a ordem Unicode, a preferência por início de palavra e a consulta
+simultânea aos termos em inglês, espanhol e português, ignorando acentos.
+Os nomes respeitam o idioma da interface e os pacotes de idioma do usuário.
+
+`assets/emoji.json` é a única lista de categorias e bases que aceitam tons de
+pele; o Rust a compila e `sdk/emojidata.js` a exporta para o seletor rápido do
+shell. `tools/gen-emoji.mjs` atualiza esse arquivo compartilhado. O seletor
+rápido continua no shell; o conteúdo do app não passa pelo React.
+Recentes e tom continuam nas preferências `emojiRecent` e `emojiTone` existentes.
+A cópia é um efeito do host para a área de transferência do sistema.
+
 ## Monitor application
 
 `apps/monitor/*.rs` owns all eight Monitor tabs, privacy panels, collection,

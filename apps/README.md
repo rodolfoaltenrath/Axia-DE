@@ -1,6 +1,6 @@
 # Axia apps
 
-`apps/about/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
+`apps/about/`, `apps/characters/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
 `apps/monitor/`, `apps/store/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, Calculator, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, Calculator, Emoji & Symbols, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -17,7 +17,9 @@ has no polling timer. The shell still supplies the window frame and theme.
 About preserves the branding, status badges, hardware/server rows, regional
 formatting and System Report action. Its shared shell bridge supplies service
 facts, with the original 5 s system and 2 s server sampling periods; the app
-contains no React code. Files shares its Rust
+contains no React code. Emoji & Symbols owns its tabs, multilingual search,
+Unicode blocks, skin tones, recents and clipboard actions in Rust. The shared
+Unicode data in `assets/emoji.json` also supplies the shell picker. Files shares its Rust
 service with the file dialogs; `sdk/rustfiles.js` transports those shared widgets
 and desktop effects. Process termination still passes through the compositor's
 Wayland credential checks.

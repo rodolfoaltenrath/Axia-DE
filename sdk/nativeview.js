@@ -94,7 +94,7 @@ export function NativeView({ manifest, args, icon, style }) {
     const id = setInterval(() => setPolled(previous => services(manifest, previous, sampled)), 1000);
     return () => clearInterval(id);
   }, [manifest, icon]);
-  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder } = theme;
+  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection } = theme;
   const facts = icon ? { icon } : {
     args: { ...(args || {}) }, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
@@ -102,7 +102,7 @@ export function NativeView({ manifest, args, icon, style }) {
     services: polled,
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
-    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder },
+    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },
       decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3),
       ...(manifest.facts === 'system' ? { screen: { width: screen.width, height: screen.height }, reactVersion, version: lord.version } : {}) },
   };
