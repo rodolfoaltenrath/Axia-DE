@@ -159,14 +159,35 @@ fn cs_norm(cs: &[u8]) -> Vec<u8> {
     }
 }
 
+/// A table's normalized name and alias.
+type CsName = (Vec<u8>, Option<Vec<u8>>);
+
+/// The tables' names and aliases, normalized once (in table order).
+fn cs_names() -> &'static [CsName] {
+    static NAMES: std::sync::OnceLock<Vec<CsName>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        CS_TABLES
+            .iter()
+            .map(|t| {
+                (
+                    cs_norm(t.name),
+                    (!t.alias.is_empty()).then(|| cs_norm(t.alias)),
+                )
+            })
+            .collect()
+    })
+}
+
 fn cs_table(norm: &[u8]) -> Option<&'static CsTable> {
-    CS_TABLES
+    cs_names()
         .iter()
-        .find(|t| cs_norm(t.name) == norm || (!t.alias.is_empty() && cs_norm(t.alias) == norm))
+        .position(|(n, a)| n == norm || a.as_deref() == Some(norm))
+        .map(|k| &CS_TABLES[k])
 }
 
 fn windows1252() -> Option<&'static [u16; 128]> {
-    cs_table(b"windows1252").map(|t| &t.hi)
+    static W: std::sync::OnceLock<Option<&'static [u16; 128]>> = std::sync::OnceLock::new();
+    *W.get_or_init(|| cs_table(b"windows1252").map(|t| &t.hi))
 }
 
 fn is_utf8_name(n: &[u8]) -> bool {
@@ -441,12 +462,12 @@ pub(crate) fn qp_dec(s: &[u8], header: bool, out: &mut Vec<u8>) {
             i += 1;
             continue;
         }
-        if i + 2 < len {
-            if let (Some(h), Some(l)) = (hexv(s[i + 1]), hexv(s[i + 2])) {
-                out.push(h * 16 + l);
-                i += 3;
-                continue;
-            }
+        if i + 2 < len
+            && let (Some(h), Some(l)) = (hexv(s[i + 1]), hexv(s[i + 2]))
+        {
+            out.push(h * 16 + l);
+            i += 3;
+            continue;
         }
         out.push(b'=');
         i += 1;
@@ -772,12 +793,13 @@ pub unsafe extern "C" fn mime_decode_words(input: *const c_char, out: *mut c_cha
 fn pct_decode(b: &mut Vec<u8>, s: &[u8]) {
     let mut i = 0;
     while i < s.len() {
-        if s[i] == b'%' && i + 2 < s.len() {
-            if let (Some(h), Some(l)) = (hexv(s[i + 1]), hexv(s[i + 2])) {
-                b.push(h * 16 + l);
-                i += 3;
-                continue;
-            }
+        if s[i] == b'%'
+            && i + 2 < s.len()
+            && let (Some(h), Some(l)) = (hexv(s[i + 1]), hexv(s[i + 2]))
+        {
+            b.push(h * 16 + l);
+            i += 3;
+            continue;
         }
         b.push(s[i]);
         i += 1;
@@ -889,15 +911,14 @@ fn param_into(value: &[u8], name: &[u8], out: &mut [u8]) -> bool {
             };
             let mut v: &[u8] = &seg.2;
             if seg.1 {
-                if want == 0 {
-                    if let Some(q1) = chr(v, b'\'') {
-                        if let Some(q2) = chr(&v[q1 + 1..], b'\'') {
-                            if q1 != 0 && q1 < 64 {
-                                cs = v[..q1].to_vec();
-                            }
-                            v = &v[q1 + 1 + q2 + 1..];
-                        }
+                if want == 0
+                    && let Some(q1) = chr(v, b'\'')
+                    && let Some(q2) = chr(&v[q1 + 1..], b'\'')
+                {
+                    if q1 != 0 && q1 < 64 {
+                        cs = v[..q1].to_vec();
                     }
+                    v = &v[q1 + 1 + q2 + 1..];
                 }
                 pct_decode(&mut raw, v);
             } else {
@@ -948,20 +969,22 @@ pub unsafe extern "C" fn mime_param(
 fn parse_ctype(h: &[u8], p: &mut MimePart, parent: Option<(&[u8], &[u8])>) {
     putc(&mut p.type_, b"text");
     putc(&mut p.subtype, b"plain");
-    if let Some((t, s)) = parent {
-        if t == b"multipart" && s == b"digest" {
-            putc(&mut p.type_, b"message");
-            putc(&mut p.subtype, b"rfc822");
-        }
+    if let Some((t, s)) = parent
+        && t == b"multipart"
+        && s == b"digest"
+    {
+        putc(&mut p.type_, b"message");
+        putc(&mut p.subtype, b"rfc822");
     }
     if let Some(ct) = header(h, b"Content-Type", 1024) {
         let k = cspn(&ct, b";");
         let main = lower_all(&trimmed(&ct[..k], 160));
-        if let Some(sl) = chr(&main, b'/') {
-            if sl != 0 && sl + 1 < main.len() {
-                copy_trim(zc_mut(&mut p.type_), &main[..sl]);
-                copy_trim(zc_mut(&mut p.subtype), &main[sl + 1..]);
-            }
+        if let Some(sl) = chr(&main, b'/')
+            && sl != 0
+            && sl + 1 < main.len()
+        {
+            copy_trim(zc_mut(&mut p.type_), &main[..sl]);
+            copy_trim(zc_mut(&mut p.subtype), &main[sl + 1..]);
         }
         if let Some(v) = param(&ct, b"charset", 256) {
             putc(&mut p.charset, &v);
@@ -986,10 +1009,10 @@ fn parse_ctype(h: &[u8], p: &mut MimePart, parent: Option<(&[u8], &[u8])>) {
         let k = cspn(&cd, b";");
         copy_trim(zc_mut(&mut p.disposition), &cd[..k]);
         lower_c(&mut p.disposition);
-        if let Some(v) = param(&cd, b"filename", 256) {
-            if !v.is_empty() {
-                putc(&mut p.filename, &v);
-            }
+        if let Some(v) = param(&cd, b"filename", 256)
+            && !v.is_empty()
+        {
+            putc(&mut p.filename, &v);
         }
     }
     if let Some(v) = header(h, b"Content-ID", 256) {
@@ -1247,18 +1270,18 @@ fn addrs_raw(value: &[u8], out: &mut [MimeAddr]) -> usize {
             copy_trim(zc_mut(&mut a.email), &bare);
             // unquoted "a@b" with spaces: keep the word containing @
             let e = zc(&a.email).to_vec();
-            if chr(&e, b' ').is_some() {
-                if let Some(atp) = chr(&e, b'@') {
-                    let mut st = atp;
-                    while st > 0 && e[st - 1] != b' ' {
-                        st -= 1;
-                    }
-                    let mut en = atp;
-                    while en < e.len() && e[en] != b' ' {
-                        en += 1;
-                    }
-                    putc(&mut a.email, &e[st..en]);
+            if chr(&e, b' ').is_some()
+                && let Some(atp) = chr(&e, b'@')
+            {
+                let mut st = atp;
+                while st > 0 && e[st - 1] != b' ' {
+                    st -= 1;
                 }
+                let mut en = atp;
+                while en < e.len() && e[en] != b' ' {
+                    en += 1;
+                }
+                putc(&mut a.email, &e[st..en]);
             }
             decode_words_into(&trimmed(&comment, 512), zc_mut(&mut a.name));
         }
@@ -1377,16 +1400,16 @@ fn date(v: &[u8]) -> i64 {
             if let Some((h, k)) = scan_d(tok) {
                 hh = h;
                 got = 1;
-                if tok.get(k) == Some(&b':') {
-                    if let Some((m2, k2)) = scan_d(&tok[k + 1..]) {
-                        mm = m2;
-                        got = 2;
-                        let r = &tok[k + 1 + k2..];
-                        if r.first() == Some(&b':') {
-                            if let Some((s2, _)) = scan_d(&r[1..]) {
-                                ss = s2;
-                            }
-                        }
+                if tok.get(k) == Some(&b':')
+                    && let Some((m2, k2)) = scan_d(&tok[k + 1..])
+                {
+                    mm = m2;
+                    got = 2;
+                    let r = &tok[k + 1 + k2..];
+                    if r.first() == Some(&b':')
+                        && let Some((s2, _)) = scan_d(&r[1..])
+                    {
+                        ss = s2;
                     }
                 }
             }

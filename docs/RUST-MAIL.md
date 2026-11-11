@@ -68,6 +68,18 @@ Two bugs were fixed on the way:
 
 `tests/mail_test.c` covers both.
 
+Two differences from the C runtime behaviour, both deliberate:
+
+- The zone cache (`ic_zone_offset`, `ic_wall_to_utc`) is behind a mutex. In C it
+  was a global array that axia-maild's mail and DAV worker threads filled and
+  evicted (with `free`) concurrently.
+- Out of memory aborts axia-maild instead of returning `NULL`, as Rust's
+  allocation does; the 16 MiB `JBuf` limit still returns `NULL` as before.
+
+On the test fixtures the Rust parsers are as fast as the C ones or faster: the
+HTML sanitizer takes about a third of the time, RFC 2047 words and iCalendar
+expansion well under, MIME and XML slightly under, vCard about 10% over.
+
 ## Validation (x86_64, 2026-11-11)
 
 - `build/mail-test`: 30,976/30,976 checks against the Rust parsers (the 30,953

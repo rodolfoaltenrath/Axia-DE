@@ -245,11 +245,7 @@ fn add_prop(c: &mut IcComp, line: &[u8], total: &mut i64) -> Result<(), ()> {
     }
     let nm: Vec<u8> = nm.iter().map(|&x| upper(x)).collect();
     putc(&mut p.name, &nm);
-    let pl = if colon > params_start {
-        colon - params_start
-    } else {
-        0
-    };
+    let pl = colon.saturating_sub(params_start);
     p.params = malloc_str(&line[params_start..params_start + pl]);
     p.value = malloc_str(&line[colon + 1..]);
     if p.params.is_null() || p.value.is_null() {
@@ -380,7 +376,7 @@ pub unsafe extern "C" fn ic_parse(
     }
 }
 
-fn props<'a>(c: &'a IcComp) -> &'a [IcProp] {
+fn props(c: &IcComp) -> &[IcProp] {
     if c.props.is_null() || c.nprops <= 0 {
         &[]
     } else {
@@ -796,12 +792,12 @@ fn zone_load(st: &mut ZoneState, zone: &[u8]) -> Option<usize> {
         zn = iana.to_vec();
     }
     // "/mozilla.org/20050126_1/Europe/Madrid", "/freeassociation.sourceforge.net/Tzfile/Europe/Madrid"
-    if zn.first() == Some(&b'/') {
-        if let Some(last) = rchr(&zn, b'/') {
-            match rchr(&zn[..last], b'/') {
-                Some(prev) => zn = zn[prev + 1..].to_vec(),
-                None => zn = zn[last + 1..].to_vec(),
-            }
+    if zn.first() == Some(&b'/')
+        && let Some(last) = rchr(&zn, b'/')
+    {
+        match rchr(&zn[..last], b'/') {
+            Some(prev) => zn = zn[prev + 1..].to_vec(),
+            None => zn = zn[last + 1..].to_vec(),
         }
     }
     if eq_ic(&zn, b"Z") || eq_ic(&zn, b"GMT") || eq_ic(&zn, b"Etc/UTC") {
@@ -951,10 +947,10 @@ fn parse_dt(v: &[u8], t: &mut i64, allday: &mut i32, utc: &mut bool) -> bool {
 /// ic_time: Some(t) on success; allday and tzid are written like the C version.
 pub(crate) fn time(p: Option<&IcProp>, allday: &mut i32, tzid: Option<&mut [u8]>) -> Option<i64> {
     let mut tzid = tzid;
-    if let Some(tz) = tzid.as_deref_mut() {
-        if !tz.is_empty() {
-            tz[0] = 0;
-        }
+    if let Some(tz) = tzid.as_deref_mut()
+        && !tz.is_empty()
+    {
+        tz[0] = 0;
     }
     let p = p?;
     if p.value.is_null() {
@@ -1177,10 +1173,10 @@ fn fill_event(c: &IcComp, e: &mut IcEvent) {
     if e.end < e.start {
         e.end = e.start;
     }
-    if let Some(rid) = prop(c, b"RECURRENCE-ID") {
-        if let Some(t) = time(Some(rid), &mut ad, Some(&mut tz)) {
-            e.recurrence_id = t;
-        }
+    if let Some(rid) = prop(c, b"RECURRENCE-ID")
+        && let Some(t) = time(Some(rid), &mut ad, Some(&mut tz))
+    {
+        e.recurrence_id = t;
     }
     for x in props_named(c, b"EXDATE") {
         // comma separated, with the same parameters
@@ -1256,10 +1252,10 @@ fn fill_event(c: &IcComp, e: &mut IcEvent) {
     if let Some(pr) = prop(c, b"PRIORITY") {
         e.priority = bnum(value(pr), 0, 9, 0).0;
     }
-    if let Some(co) = prop(c, b"COMPLETED") {
-        if let Some(t) = time(Some(co), &mut ad, Some(&mut tz)) {
-            e.completed = t;
-        }
+    if let Some(co) = prop(c, b"COMPLETED")
+        && let Some(t) = time(Some(co), &mut ad, Some(&mut tz))
+    {
+        e.completed = t;
     }
     if e.completed == 0 && zc(&e.status) == b"COMPLETED" {
         e.completed = if e.modified != 0 { e.modified } else { 1 };
@@ -1329,15 +1325,16 @@ pub unsafe extern "C" fn ical_events(
         if zc(&calc.name) != b"VCALENDAR" {
             continue;
         }
-        if let Some(m) = prop(calc, b"METHOD") {
-            if !mo.is_empty() && mo[0] == 0 {
-                put(mo, value(m));
-                for c in mo.iter_mut() {
-                    if *c == 0 {
-                        break;
-                    }
-                    *c = upper(*c);
+        if let Some(m) = prop(calc, b"METHOD")
+            && !mo.is_empty()
+            && mo[0] == 0
+        {
+            put(mo, value(m));
+            for c in mo.iter_mut() {
+                if *c == 0 {
+                    break;
                 }
+                *c = upper(*c);
             }
         }
         let mut c = calc.kid;
@@ -2018,7 +2015,9 @@ fn vtimezone(b: &mut JBuf, zone: &[u8]) -> bool {
     }
     let stdoff = (-(sign as i64) * (hh as i32 as i64 * 3600 + mm as i32 as i64 * 60)) as i32; // POSIX sign is inverted
     let mut dstoff = stdoff.wrapping_add(3600);
-    let mut dst: Option<((i32, i32, i32), (i32, i32, i32))> = None;
+    // (month, week, weekday) of the DST start and end
+    type Transition = (i32, i32, i32);
+    let mut dst: Option<(Transition, Transition)> = None;
     let mut dstn = Vec::new();
     if at(p) != 0 {
         dstn = posix_name(r, &mut p);
