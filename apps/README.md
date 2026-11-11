@@ -26,6 +26,12 @@ service with the file dialogs; `sdk/rustfiles.js` transports those shared widget
 and desktop effects. Process termination still passes through the compositor's
 Wayland credential checks.
 
+Help is being migrated in stages. `apps/help/content.rs` now owns article
+reading, metadata, translated catalogs with English fallback, search ranking,
+snippets and internal-link validation. `sdk/help.js` only adapts the public API
+and executes window effects. The Help window, Markdown renderer and welcome
+tour still use React; they are the next part of this app's migration.
+
 ## Remaining apps awaiting migration
 
 Each remaining app is a folder `apps/<id>/` with two files. Apps don't depend on the theme: any theme shows

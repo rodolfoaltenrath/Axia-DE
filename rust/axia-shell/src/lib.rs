@@ -2,6 +2,8 @@
 //! Window-system objects and the React UI retain their existing interfaces.
 mod anim;
 mod clock;
+#[path = "../../../apps/help/content.rs"]
+mod help;
 #[path = "../../../apps/clock/mod.rs"]
 mod clock_app;
 #[path = "../../../apps/characters/mod.rs"]

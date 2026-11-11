@@ -21,116 +21,41 @@
 //   ---
 // Special links in the text: [Open Settings → Network](settings:network), [Files](app:files)
 // and [another article](help:spotlight). Global search reads articles on its Rust worker.
-// They are read by lord.help (server/src/ui/js_help.c), only from LordOS's assets/help folder.
+// Rust reads them through lord.help (server/src/ui/js_help.c), only from Axia's assets/help folder.
 import { locale } from './i18n.js';
 import { settings } from './settings.js';
 import { wm, getApp, isLiveSystem } from './windows.js';
 
 const DEFAULT_LANG = 'en';
-const has = () => typeof lord.help !== 'undefined';
+const has = () => typeof lord.help?.request === 'function';
 const langOf = () => String(locale.get().lang || DEFAULT_LANG).split('-')[0];
-const lists = new Map();                    // 'es' → raw list of that language
-const bodies = new Map();                   // 'es/clock' → parsed article (with the fallback applied)
-
-function parse(txt) {
-  const out = { body: txt, meta: {} };
-  const m = /^---\n([\s\S]*?)\n---\n?/.exec(txt);
-  if (!m) return out;
-  for (const line of m[1].split('\n')) {
-    const i = line.indexOf(':');
-    if (i > 0) out.meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-  }
-  out.body = txt.slice(m[0].length);
-  return out;
+// The shell keeps its public API; catalog policy, parsing, fallback, ranking and
+// snippets run in Rust. Only window management belongs on this side of the bridge.
+function request(cmd, args = {}) {
+  if (!has()) return null;
+  return lord.help.request({ cmd, lang: langOf(), ...args });
 }
-
-function rawList(lang) {
-  if (lists.has(lang)) return lists.get(lang);
-  let list = [];
-  try { list = has() ? lord.help.list(lang) : []; } catch (e) { list = []; }
-  lists.set(lang, list);
-  return list;
-}
-
-const byOrder = (a, b) => (a.order || 0) - (b.order || 0) || a.title.localeCompare(b.title);
-
-// English articles, replaced by the translated ones where they exist, plus the articles only the
-// interface language has.
-function mergedList(lang) {
-  const base = rawList(DEFAULT_LANG);
-  if (lang === DEFAULT_LANG) return base.slice().sort(byOrder);
-  const own = new Map(rawList(lang).map((a) => [a.id, a]));
-  const out = base.map((a) => own.get(a.id) || a);
-  for (const a of own.values()) if (!base.some((b) => b.id === a.id)) out.push(a);
-  return out.sort(byOrder);
-}
-
-function readRaw(lang, id) {
-  try { return has() ? lord.help.read(lang, id) : null; } catch (e) { return null; }
-}
-
-const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
-let listCache = null;                       // { lang, list }
 
 export const help = {
   available: has,
-  list() {
-    const lang = langOf();
-    if (!listCache || listCache.lang !== lang) listCache = { lang, list: mergedList(lang) };
-    return listCache.list;
-  },
-  read(id) {
-    const lang = langOf();
-    const key = `${lang}/${id}`;
-    if (bodies.has(key)) return bodies.get(key);
-    let txt = readRaw(lang, id);
-    if (txt == null && lang !== DEFAULT_LANG) txt = readRaw(DEFAULT_LANG, id);   // not translated yet
-    if (txt == null) return null;
-    const p = parse(txt);
-    const a = { id, title: p.meta.title || id, app: p.meta.app || '', section: p.meta.section || '', keywords: p.meta.keywords || '', body: p.body };
-    bodies.set(key, a);
-    return a;
-  },
+  list() { return request('list') || []; },
+  read(id) { return request('read', { id: String(id || '') }); },
   open(id) { wm.open('help', { args: { article: id } }); },
   startTour() { wm.open('help', { args: { tour: true } }); },
-  search(query) {
-    const q = fold(query).trim();
-    if (q.length < 2) return [];
-    const out = [];
-    for (const it of help.list()) {
-      const a = help.read(it.id);
-      if (!a) continue;
-      const title = fold(a.title), kw = fold(a.keywords), body = fold(a.body);
-      let score = title.startsWith(q) ? 90 : title.includes(q) ? 70 : kw.includes(q) ? 55 : 0;
-      const at = body.indexOf(q);
-      if (!score && at >= 0) score = 30;
-      if (!score) continue;
-      let snippet = '';
-      if (at >= 0) {
-        const raw = a.body.replace(/[#*`>[\]()_]/g, '').replace(/\s+/g, ' ');
-        const k = fold(raw).indexOf(q);
-        let from = Math.max(0, k - 60);
-        while (from > 0 && from < k && raw[from - 1] !== ' ') from++;     // start at a whole word
-        snippet = `${from > 0 ? '…' : ''}${raw.slice(from, k + 140).trim()}`;
-      }
-      out.push({ id: a.id, title: a.title, score, snippet: snippet || a.body.replace(/^#.*$/m, '').replace(/\s+/g, ' ').trim().slice(0, 180) });
-    }
-    return out.sort((x, y) => y.score - x.score);
-  },
-  // What to do with a link in the text. Returns true if it handled it.
+  search(query) { return request('search', { query: String(query || '') }) || []; },
+  // Rust validates internal links; this adapter runs their desktop effects.
   link(url) {
-    const u = String(url || '');
-    let m;
-    if ((m = /^settings:([a-z]+)$/.exec(u))) { wm.open('settings', { args: { section: m[1] } }); return true; }
-    if ((m = /^app:([a-z0-9-]+)$/.exec(u))) { if (getApp(m[1])) wm.open(m[1]); return true; }
-    if ((m = /^help:([a-z0-9-]+)$/.exec(u))) { help.open(m[1]); return true; }
-    return false;
+    const target = request('link', { url: String(url || '') });
+    if (!target) return false;
+    if (target.app === 'settings' || target.app === 'help' || getApp(target.app)) {
+      wm.open(target.app, target.args ? { args: target.args } : undefined);
+    }
+    return true;
   },
 };
 
-// Global search reads and ranks articles on its Rust worker. The Help app keeps
-// its own list/read/search interface above.
+// Global search keeps its asynchronous Rust worker; the Help API above uses
+// the Rust content service on the UI thread, with bounded article caches.
 
 // First login: "Welcome to LordOS", only once (settings.welcomeShown). On the live system the
 // installer opens instead.
@@ -141,4 +66,4 @@ export function maybeStartTour() {
 }
 
 // when the language changes, everything is read again
-locale.subscribe(() => { lists.clear(); bodies.clear(); listCache = null; });
+locale.subscribe(() => { request('clear'); });
