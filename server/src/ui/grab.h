@@ -65,6 +65,10 @@ void grab_note_shift(int held);
 int  grab_zone_take(int *zone, AxiaSnapRect *rect);
 /* Finished (the button was released): 1 and the result. */
 int  grab_finish(GrabEnd *out);
+/* After grab_finish, once the release has been routed and right before js_wm_end: the nodes the drag
+ * moved go back to what the theme had set, for the window list to place them (the renderer only sends
+ * what changed since its last render). grab_cancel() does it at once. */
+void grab_restore(void);
 void grab_cancel(void);
 /* LordBench's desktop scene (bench/lbframes.h, docs/BENCHMARK.md): the window's node moves along a
  * figure of eight (rx, ry px; one turn every period_ms) through the same path as a drag, one step per

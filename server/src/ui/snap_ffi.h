@@ -39,4 +39,27 @@ AxiaSnapResize *axia_snap_resize_new(int edges, const AxiaSnapMember *members, s
 void            axia_snap_resize_free(AxiaSnapResize *);
 int             axia_snap_resize_moves(const AxiaSnapResize *, size_t i);
 size_t          axia_snap_resize_apply(const AxiaSnapResize *, double dx, double dy, AxiaSnapRect *out, size_t max);
+
+/* Moving or resizing a window's node with the pointer (rust snap/grab.rs; grab.c owns the node). In the
+ * node's parent coordinates; the node is the frame enlarged by `inset` per side. */
+typedef struct { double x, w, top; } AxiaGrabArea;     /* a display's span [x, x + w) and its work area's top */
+typedef struct {
+    AxiaSnapRect node;                  /* the node at the start: left, top, width, height */
+    double origin_x, origin_y;          /* the parent's origin on screen */
+    double pointer_x, pointer_y;        /* where the button was pressed */
+    int edges;                          /* 0 moves; xdg edges (1 top, 2 bottom, 4 left, 8 right) */
+    double inset, min_w, min_h, max_w, max_h;   /* of the frame; max 0 = none */
+    double min_top;                     /* on screen, unless the area under the frame's centre says otherwise */
+    int nareas;
+    AxiaGrabArea areas[4];
+    double detach_w, detach_h;          /* a maximized or snapped window's node once it comes loose; 0 = none */
+} AxiaGrabStart;
+enum { AXIA_GRAB_MOVED = 1, AXIA_GRAB_SIZED = 2, AXIA_GRAB_DETACHED = 4 };
+typedef struct AxiaGrab AxiaGrab;
+AxiaGrab *axia_grab_new(const AxiaGrabStart *start);
+void      axia_grab_free(AxiaGrab *);
+/* The pointer moved: AXIA_GRAB_* flags (0: the node stays) and the node now in `out`. */
+int       axia_grab_motion(AxiaGrab *, double px, double py, double screen_w, double screen_h, AxiaSnapRect *out);
+int       axia_grab_waiting(const AxiaGrab *);         /* 1 until a maximized or snapped window comes loose */
+int       axia_grab_end(const AxiaGrab *, AxiaSnapRect *delta);   /* the node's change; 1 if it came loose */
 #endif
