@@ -503,3 +503,33 @@ fn a_native_text_field_has_priority_over_an_app_keyboard_and_blocks_fallthrough(
     scene::destroy(field_mount);
     scene::destroy(app_mount);
 }
+
+#[test]
+fn native_button_feedback_is_immediate_and_release_outside_cancels_the_click() {
+    let mount = scene::create(scene::VIEW);
+    let outside = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, Box::new(Demo::default()), "", None);
+    host.facts(json!({"context":{"theme":{"mode":"dark"}}}));
+    host.take();
+    let label = host.find_text("More");
+    let button = scene::parent(label);
+    let opacity = || unsafe { (*crate::runtime::node_get(button)).s.opacity };
+    host.pointer("move", label, 0., 0., 0);
+    assert!((opacity() - 0.85).abs() < 1e-6);
+    host.pointer("down", label, 0., 0., 0);
+    assert!((opacity() - 0.7).abs() < 1e-6);
+    host.pointer("move", outside, 0., 0., 0);
+    assert_eq!(opacity(), 1.);
+    host.pointer("up", outside, 0., 0., 0);
+    assert!(!host.pending());
+    assert!(host.text().contains("count 0"));
+    host.pointer("move", label, 0., 0., 0);
+    assert!((opacity() - 0.85).abs() < 1e-6);
+    host.pointer("down", label, 0., 0., 0);
+    host.pointer("up", label, 0., 0., 0);
+    assert!((opacity() - 0.85).abs() < 1e-6);
+    assert!(host.text().contains("count 1"));
+    drop(host);
+    scene::destroy(mount);
+    scene::destroy(outside);
+}

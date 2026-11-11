@@ -500,11 +500,12 @@ impl Host {
         let spec = &m.spec;
         let disabled = spec["disabled"] == true;
         let hover = self.hover == m.node && !disabled;
+        let pressed = self.pressed == m.node && hover;
         let base = json!({
             "height":28,"paddingHorizontal":14,"borderRadius":self.theme("controlRadius","6"),
             "flexDirection":"row","gap":6,"justifyContent":"center","alignItems":"center",
             "backgroundColor":self.theme("control","#3a3a3f"),
-            "opacity": if disabled {0.4} else if hover {0.85} else {1.},
+            "opacity": if disabled {0.4} else if pressed {0.7} else if hover {0.85} else {1.},
         });
         let color = if spec["destructive"] == true {
             json!("#ff453a")
@@ -835,7 +836,10 @@ impl Host {
                 self.set_hover(hover);
             }
             "down" => {
-                self.pressed = 0;
+                let previous = std::mem::take(&mut self.pressed);
+                if previous != 0 {
+                    self.restyle(previous);
+                }
                 if !inside {
                     self.blur();
                     return None;
@@ -852,6 +856,9 @@ impl Host {
                     self.pressed = self
                         .target(target, |t| matches!(t, Target::Click(..)))
                         .map_or(0, |(n, _)| n);
+                    if self.pressed != 0 {
+                        self.restyle(self.pressed);
+                    }
                 }
                 let field = self
                     .target(target, |t| matches!(t, Target::Field))
@@ -864,6 +871,9 @@ impl Host {
                     self.restyle(node);
                 }
                 let pressed = std::mem::take(&mut self.pressed);
+                if pressed != 0 {
+                    self.restyle(pressed);
+                }
                 if inside && button == 0 && pressed != 0 {
                     if let Some((node, Target::Click(action, value))) =
                         self.target(target, |t| matches!(t, Target::Click(..)))
