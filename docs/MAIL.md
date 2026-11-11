@@ -172,7 +172,7 @@ sorted by date. It is rebuilt from the cache in milliseconds at start and never 
 ### HTML without executing anything
 
 LordOS has no web engine (WebKit/Chromium are not allowed), and Mail does not need one. The
-HTML part goes through **our sanitizer** (`server/src/mail/html.c`): a tolerant tokenizer that
+HTML part goes through **our sanitizer** (`rust/axia-mail/src/html.rs`, see [RUST-MAIL.md](RUST-MAIL.md)): a tolerant tokenizer that
 builds a small tree in JSON — blocks, layout tables (rows, cells, widths, colors, padding,
 alignment), text runs (bold, monospace, color, size, background, underline/strike), images and
 links — and `apps/mail/HtmlView.jsx` draws it with View/Text/Image. Common newsletter markup
@@ -270,7 +270,7 @@ reminders list, an address book); CalDAV/CardDAV accounts add the server's colle
   dropped in favor of the server's copy, with a `dav-rejected` event), then the ETag list and a
   `calendar-multiget` / `addressbook-multiget` of what changed; deletions on the server delete
   locally.
-- **iCalendar** (`ical.c`): VEVENT/VTODO/VALARM, DATE and DATE-TIME (UTC, `TZID` through the system
+- **iCalendar** (`rust/axia-mail/src/ical.rs`): VEVENT/VTODO/VALARM, DATE and DATE-TIME (UTC, `TZID` through the system
   tz database with our TZif reader, non-IANA zone names mapped, floating = local), `RRULE` with
   DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY (with ordinals ±1..53), BYMONTHDAY,
   BYMONTH; `EXDATE`; `RECURRENCE-ID` overrides. Events we write carry a `VTIMEZONE` built from
@@ -282,7 +282,7 @@ reminders list, an address book); CalDAV/CardDAV accounts add the server's colle
 - **Reminders**: VTODO with due date (all-day or with time), priority (high 1, medium 5, low 9),
   flag (`X-LORDOS-FLAGGED`), completion, subtasks (`RELATED-TO`); smart lists Today (due today or
   overdue), Scheduled, All, Flagged, Completed.
-- **Contacts** (`vcard.c`): vCard 2.1/3.0/4.0 in (with quoted-printable and other charsets), 3.0
+- **Contacts** (`rust/axia-mail/src/vcard.rs`): vCard 2.1/3.0/4.0 in (with quoted-printable and other charsets), 3.0
   out: name parts, nickname, organization and department, title, e-mails, phones, addresses, URLs,
   IM, birthday, notes, categories, photo (resized to 320 px JPEG in the sandbox) and groups
   (`X-ADDRESSBOOKSERVER-KIND:group` and vCard 4 `KIND`/`MEMBER`).
@@ -325,7 +325,7 @@ Operations of `axia-maild` (`server/src/mail/maild.c`): `status`, `auth`, `folde
 
 `make -C server test` runs, among the rest:
 
-- `build/mail-test` (30,953 checks): the IMAP response parser (literals, bracketed sections,
+- `build/mail-test` (30,976 checks, linked to the Rust parsers of [RUST-MAIL.md](RUST-MAIL.md)): the IMAP response parser (literals, bracketed sections,
   modified UTF-7, UID sets), MIME (nested multipart, base64 / quoted-printable, RFC 2047 words,
   RFC 2231 continuations, address lists with groups and comments, dates, 25 charsets including
   KOI8-R, ISO-8859-15 and UTF-16), the HTML sanitizer against hostile input (script, event
@@ -334,7 +334,9 @@ Operations of `axia-maild` (`server/src/mail/maild.c`): `status`, `auth`, `folde
   COUNT/EXDATE/BYDAY ordinals, non-IANA zone names, REPLY, a round trip; hostile RRULEs with
   `2147483647MO` and friends), vCard (2.1 QP, groups, photo round trip), the XML reader
   (namespaces, CDATA, DOCTYPE refused, depth limit), hostile attachment names — and for each
-  parser a deterministic mutation fuzzer (thousands of mutated inputs).
+  parser a deterministic mutation fuzzer (thousands of mutated inputs); the struct layouts the Rust
+  side exports are checked against the headers.
+- `make -C server test-mail-rust`: the Rust parsers' own tests (`cargo test -p axia-mail`).
 - `build/mailnet-test` (138 checks, needs the OpenSSL headers): HTTP chunk sizes and
   Content-Length (overflow, garbage, negative), header limits, IMAP literals near `SIZE_MAX`,
   every literal size around the buffer-growth boundaries, endless lines — over a socketpair.

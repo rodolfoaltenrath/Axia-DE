@@ -919,3 +919,11 @@ make -C server build/windows-bridge-host && (cd server && node tests/windows_bri
 
 Ainda precisa de validação na sessão física: temas, Dock, Overview, alternador,
 gestos e apps Linux sobre a lista nova.
+
+## Parsers do e-mail
+
+Os parsers do `axia-maild` que leem dados de fora (MIME e charsets, XML do
+WebDAV, o sanitizador de HTML, iCalendar e vCard) estão em `rust/axia-mail`,
+com a mesma ABI C de `server/src/mail/*.h`. Só o `axia-maild` liga essa
+variante do `axia-codecs` (feature `mail`). Detalhes, limites e validação em
+[RUST-MAIL.md](RUST-MAIL.md).
