@@ -10,14 +10,16 @@ import { useAppWindow } from './components.jsx';
 import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
 import { useWindows, wm, appCatalogSource } from './windows.js';
-import { useLauncherApps } from './apps.js';
+import { useLauncherApps, launchApp } from './apps.js';
+import { refreshPackages } from './packages.js';
 import { useSettings, settings } from './settings.js';
 import { appName } from './i18n.js';
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
   comment: app.comment, description: app.description, genericName: app.genericName,
-  package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon });
+  package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
+  category: typeof app.category === 'string' ? app.category : undefined });
 
 const runners = new Map();          // handle → runs one effect
 globalThis.__lordNativeView = () => {
@@ -34,6 +36,8 @@ function runner(handle, manifest, winId) {
         if (effect.kind === 'title' && winId) wm.setTitle(winId, effect.title);
         else if (effect.kind === 'paste') lord.nativeViews.paste(handle, String(lord.clipboard.get() ?? ''));
         else if (effect.kind === 'copy') lord.clipboard.set(String(effect.text ?? ''));
+        else if (effect.kind === 'launchApp') launchApp(String(effect.app));
+        else if (effect.kind === 'refreshPackages') refreshPackages();
       } catch (e) { console.error('native view:', e); }
       return;
     }

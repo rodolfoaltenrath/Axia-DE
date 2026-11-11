@@ -700,9 +700,11 @@ gerenciador de janelas, envia os fatos (configurações, tema, serviços do
 firewall, catálogo, foco da janela) e executa os efeitos do shell: abrir apps,
 gravar configurações, chamadas ao firewall, área de transferência e título da
 janela. O mesmo host monta o ícone da Dock e os painéis de privacidade dentro
-das Configurações. Calculadora, Force Quit e Sobre continuam no host React
-(`sdk/rustwidgets.js`): o Force Quit mostra ícones de apps, que são componentes
-do shell.
+das Configurações. A Axia Store também é uma visão nativa
+([STORE.md](STORE.md)); `native_view/paint.rs` tem as formas com antialiasing
+que ela usa para ícones e artes. Calculadora, Force Quit e Sobre continuam no
+host React (`sdk/rustwidgets.js`): o Force Quit mostra ícones de apps, que são
+componentes do shell.
 
 ```sh
 cargo test --manifest-path rust/Cargo.toml --locked --offline --lib native_view

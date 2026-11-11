@@ -299,6 +299,12 @@ fn expand(k: &str, v: &Value, out: &mut Props) {
             let c = c.map_or(0x8000_0000, |c| color(&Value::from(c.as_str())));
             put(out, "shadowColor", Prop::Num(f64::from(c)));
         }
+        "backdropFilter" => {
+            // "blur(24px)" → the radius; anything else turns the blur off.
+            let s = v.as_str().unwrap_or("");
+            let radius = s.find("blur(").map_or(0., |i| leading_float(&s[i + 5..]));
+            put(out, "backdropBlur", Prop::Num(radius));
+        }
         "background" | "backgroundImage" => match v.as_str().and_then(gradient) {
             Some(g) => put(out, "gradient", g),
             None => put(out, "backgroundColor", Prop::Num(f64::from(color(v)))),

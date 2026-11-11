@@ -159,6 +159,10 @@ The UI receives them with `admin.onEvent()`.
 
 ## The Store
 
+> **History.** This section describes the React Store of the Debian era. It was
+> replaced by the Axia Store, a native view written in Rust; see
+> [STORE.md](STORE.md).
+
 `apps/store`. In "Discover" it shows the AppStream desktop apps by category, with their translated
 names and descriptions and their icon. Search returns apps first and then the other packages. A
 package's page, before installing or removing, shows the plan: what gets installed, upgraded or
