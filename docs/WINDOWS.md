@@ -92,13 +92,20 @@ wm.beginResize(id, edges)     // edges as in xdg_toplevel.resize: 1 top, 2 botto
 ```
 
 - Per frame, C shifts the window's node (`left`/`top`, and `width`/`height` when resizing) and redoes
-  the layout. **JS is not called and React doesn't re-render.**
+  the layout. **JS is not called and React doesn't re-render.** Where the node goes (the limits below,
+  a maximized or snapped window coming loose) is decided in Rust (`rust/axia-shell/src/snap/grab.rs`);
+  `grab.c` only writes it to the node.
 - While it lasts, Linux apps don't receive the pointer (`wl_pointer_grab`: `leave`), as in Weston.
-- On release, JS receives `__lordWm('end', { node, dx, dy, dw, dh })` and the SDK stores the geometry
-  in the window manager. React sets the same value the node already had, and `lord.setStyle` no
-  longer invalidates anything if the style didn't change (`js.c`).
+- On release, JS receives `__lordWm('end', { node, dx, dy, dw, dh })` and the window list (Rust,
+  `grabEnd`) stores the geometry. Right before that, `grab.c` puts every node it moved back to what
+  the theme had set (`grab_restore`): the renderer sends a node only the styles that changed since its
+  own last render, so a node left where the drag put it kept that place whenever the window list gave
+  the same style as before (a window snapped back to the side it came from stayed at its loose size,
+  one maximized again stayed small where it was dropped). JS's jobs run before the next frame, so the
+  window is only drawn where the window list puts it.
 - Limits: the minimum size is the manifest's `minSize` (Linux apps, 160×100). The frame doesn't go
-  above the work area (the menu bar) and 48 px always remain visible.
+  above the work area (the menu bar) and 48 px always remain visible; the window list keeps a dropped
+  frame's top in the work area too.
 - `xdg_toplevel.move` and `xdg_toplevel.resize` from apps that draw their own frame (GTK, Chromium
   with CSD) use the same thing (`sdk/wayland.js`). Since 0.8.3 X11 apps under Xwayland that draw
   their own frame ask with `_NET_WM_MOVERESIZE`, which the window manager for X (`wl/xwm.c`) turns

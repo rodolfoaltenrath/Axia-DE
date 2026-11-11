@@ -50,6 +50,26 @@ int main(void) {
     axia_snap_resize_free(l);
     axia_snap_resize_free(NULL);
     assert(!axia_snap_resize_new(4, m, 2, area));
+
+    /* a maximized window (no borders) grabbed in the middle of its bar: the fields after areas[]
+     * reach Rust only with the same layout (detach_*), and so does the second display's top */
+    AxiaGrabStart gs = {
+        .node = { 0, 28, 1280, 772 }, .pointer_x = 640, .pointer_y = 40, .edges = 0,
+        .min_w = 160, .min_h = 100, .min_top = 28, .nareas = 2,
+        .areas = { { 0, 1280, 28 }, { 1280, 1920, 0 } },
+        .detach_w = 600, .detach_h = 400,
+    };
+    AxiaGrab *g = axia_grab_new(&gs);
+    assert(g && axia_grab_waiting(g) == 1);
+    assert(axia_grab_motion(g, 642, 42, 3200, 1080, &r) == 0);
+    assert(axia_grab_motion(g, 644, 44, 3200, 1080, &r) == (AXIA_GRAB_DETACHED | AXIA_GRAB_MOVED | AXIA_GRAB_SIZED));
+    assert(r.x == 344 && r.y == 32 && r.w == 600 && r.h == 400 && !axia_grab_waiting(g));
+    assert(axia_grab_motion(g, 644 + 1600, -400, 3200, 1080, &r) == AXIA_GRAB_MOVED && r.y == 0);
+    AxiaSnapRect delta;
+    assert(axia_grab_end(g, &delta) == 1 && delta.x == 1944 && delta.y == -28 && delta.w == -680 && delta.h == -372);
+    axia_grab_free(g);
+    axia_grab_free(NULL);
+    assert(!axia_grab_new(NULL));
     puts("snap C/Rust ABI: ok");
     return 0;
 }
