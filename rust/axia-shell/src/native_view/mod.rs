@@ -21,6 +21,8 @@ use std::{
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
+    /// Resource roots supplied by the host, including user language packs.
+    fn resources(&mut self, _assets: &str, _home: Option<&str>) {}
     fn request(&mut self, input: &Value) -> Value;
     fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])>;
     /// Optional window-level keyboard input (e.g. Calculator). Fields keep
@@ -31,6 +33,7 @@ pub trait NativeApp {
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
+        crate::native_apps::characters::ID => Some(Box::new(crate::characters::App::default())),
         crate::native_apps::about::ID => Some(Box::new(crate::about::App::default())),
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),

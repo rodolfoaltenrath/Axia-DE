@@ -159,7 +159,8 @@ impl Drop for Host {
     }
 }
 impl Host {
-    pub fn new(mount: i32, app: Box<dyn NativeApp>, assets: &str, home: Option<&str>) -> Self {
+    pub fn new(mount: i32, mut app: Box<dyn NativeApp>, assets: &str, home: Option<&str>) -> Self {
+        app.resources(assets, home);
         Self {
             mount,
             app,
@@ -913,7 +914,15 @@ impl Host {
                 v.pop();
                 self.edit(v);
             }
-            "Escape" => self.blur(),
+            "Escape" => {
+                let cancel = find(&mut self.root, self.field)
+                    .map(|m| m.spec["cancel"].clone())
+                    .filter(Value::is_array);
+                self.blur();
+                if let Some(action) = cancel {
+                    self.dispatch(&action, Map::new());
+                }
+            }
             "Enter" | "Delete" | "ArrowLeft" | "ArrowRight" | "Home" | "End" => {}
             _ if !chr.is_empty() && !ctrl && !meta && (!alt || flags & 8 != 0) => {
                 let mut v = value;

@@ -610,3 +610,50 @@ fn about_report_button_uses_native_input_and_small_control_metrics() {
     assert!(children(mount).is_empty());
     scene::destroy(mount);
 }
+
+#[test]
+fn characters_selects_previews_and_copies_through_native_pointer_input() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(
+        mount,
+        super::app("characters").unwrap(),
+        &assets.to_string_lossy(),
+        None,
+    );
+    host.facts(json!({"lang":"en","settings":{"emojiRecent":["😺"],"emojiTone":0},"context":{"theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#0a84ff","controlRadius":7,"controlRadiusSmall":6}}}));
+    let cat = node_with_text(mount, "😺");
+    assert_ne!(cat, 0);
+    host.pointer("down", cat, 0., 0., 0);
+    host.pointer("up", cat, 0., 0., 0);
+    assert!(host.text().contains("U+1F63A"));
+    assert!(host
+        .take()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["kind"] == "settings"));
+    let copy = node_with_text(mount, "Copy");
+    assert_ne!(copy, 0);
+    host.pointer("down", copy, 0., 0., 0);
+    host.pointer("up", copy, 0., 0., 0);
+    assert!(host
+        .take()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e == &json!({"host":true,"kind":"copy","text":"😺"})));
+    let search = node_with_text(mount, "Search emoji");
+    assert_ne!(search, 0);
+    host.pointer("down", search, 0., 0., 0);
+    host.pointer("up", search, 0., 0., 0);
+    assert!(host.key("x", "x", 0));
+    assert_ne!(node_with_text(mount, "x"), 0);
+    assert!(host.key("Escape", "", 0));
+    assert_eq!(node_with_text(mount, "x"), 0);
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
