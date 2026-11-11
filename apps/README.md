@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, Calculator, Emoji & Symbols, Clock, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, Calculator, Emoji & Symbols, Clock, Help, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -26,11 +26,13 @@ service with the file dialogs; `sdk/rustfiles.js` transports those shared widget
 and desktop effects. Process termination still passes through the compositor's
 Wayland credential checks.
 
-Help is being migrated in stages. `apps/help/content.rs` now owns article
-reading, metadata, translated catalogs with English fallback, search ranking,
-snippets and internal-link validation. `sdk/help.js` only adapts the public API
-and executes window effects. The Help window, Markdown renderer and welcome
-tour still use React; they are the next part of this app's migration.
+Help mounts its sidebar, search field, reading column, Markdown and six-step
+welcome tour directly in Rust. `apps/help/content.rs` owns the translated
+catalogs, English fallback, ranking, snippets and internal links; `markdown.rs`
+keeps the article formatting and clickable navigation. Its remaining app-icon
+artwork is Rust too. `sdk/help.js` remains the shell's shared content API and
+window-effects adapter; the Help window does not use it or the React Markdown
+renderer. There are no Help JSX or JSON manifest sources.
 
 ## Remaining apps awaiting migration
 

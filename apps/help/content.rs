@@ -1,6 +1,7 @@
 //! Shared Help content engine. The desktop bridge and the native app use the
 //! same catalog, English fallback, accent-insensitive ranking and snippets.
 #[cfg(test)]
+#[path = "content_tests.rs"]
 mod content_tests;
 
 use crate::search::matching::fold;

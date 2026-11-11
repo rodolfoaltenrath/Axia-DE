@@ -171,6 +171,7 @@ fn real_compiled_app_widgets_and_effects() {
             "clock",
             "files",
             "forcequit",
+            "help",
             "monitor",
             "store"
         ])
@@ -228,6 +229,11 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("clock-native-timer")["react"], 0);
     assert!(has_text("clock-native-alarms", "No alarms yet."));
     assert!(has_text("clock-native-stopwatch", "00:00.00"));
+    assert!(has_text("help-native-article", "Open Clock"));
+    assert_eq!(get("help-native-article")["react"],0,"{}",get("help-native-article"));
+    assert!(has_text("help-native-tour", "Next"));
+    assert!(has_text("help-native-tour", "Skip"));
+    assert!(has_text("help-native-missing", "That article was not found."));
     assert!(has_text("characters", "Emoji"));
     assert!(has_text("characters", "Symbols"));
     assert!(has_text("characters", "Choose a character"));
@@ -292,7 +298,7 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    println!("native Rust apps: Force Quit actions, Calculator native keyboard/errors/remount (zero React texts), About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
+    println!("native Rust apps: catalog, Force Quit, Calculator, About, Characters, Clock, Help article/tour/fallback and content bridge, Monitor and Store passed");
 }
 
 const DRIVER: &str = r#"
@@ -322,7 +328,13 @@ for(const method of ['createNode','appendChild','insertBefore','removeChild','de
     if(method==='setRoot')root=args[0];
     if(method==='appendChild'||method==='insertBefore')nodes.get(args[1]).parent=args[0];
     if(method==='removeChild')nodes.get(args[1]).parent=null;
-    if(method==='destroy')nodes.delete(args[0]);
+    if(method==='destroy') {
+      // C destroys the whole subtree. Purge its tracked descendants too, before
+      // Rust reuses those node IDs for another app's native widgets.
+      const gone=new Set([args[0]]);
+      for(const id of gone)for(const n of nodes.values())if(n.parent===id)gone.add(n.id);
+      for(const id of gone)nodes.delete(id);
+    }
     if(method==='setText')nodes.get(args[0]).text=args[1];
     return result;
   };
@@ -339,7 +351,7 @@ const click=label=>{
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
 const tokens={mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3584e4',separator:'#555',control:'#333',controlRadius:6};
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:mode==='help'?860:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
@@ -404,6 +416,11 @@ async function run(){
   control.setArgs({tab:'alarms'});await pause();record('clock-native-alarms',{text:nativeTexts()});
   control.setArgs({tab:'stopwatch'});await pause();record('clock-native-stopwatch',{text:nativeTexts()});
   wm.close('clock',true);
+  wm.open('help');control.setArgs({article:'clock',nonce:1});control.setMode('help');await pause();
+  record('help-native-article',{text:nativeTexts(),react:texts().length,reactLabels:texts().map(n=>({id:n.id,text:n.text,parent:n.parent}))});
+  control.setArgs({tour:true,nonce:2});await pause();record('help-native-tour',{text:nativeTexts()});
+  control.setArgs({article:'missing',nonce:3});await pause();record('help-native-missing',{text:nativeTexts()});
+  wm.close('help',true);
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');

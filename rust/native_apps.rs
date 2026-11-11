@@ -13,6 +13,8 @@ pub mod clock;
 pub mod files;
 #[path = "../apps/forcequit/manifest.rs"]
 pub mod forcequit;
+#[path = "../apps/help/manifest.rs"]
+pub mod help;
 #[path = "../apps/monitor/manifest.rs"]
 pub mod monitor;
 #[path = "../apps/store/manifest.rs"]
@@ -26,6 +28,7 @@ pub fn manifests() -> serde_json::Value {
         clock::manifest(),
         files::manifest(),
         forcequit::manifest(),
+        help::manifest(),
         monitor::manifest(),
         store::manifest()
     ])
