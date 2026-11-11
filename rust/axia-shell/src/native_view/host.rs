@@ -198,6 +198,9 @@ impl Host {
         self.facts["icon"].as_f64()
     }
     fn refresh_ms(&self) -> Option<f64> {
+        if self.icon_mode().is_some() {
+            return None;
+        }
         let ms = self.facts["refreshMs"].as_f64().filter(|ms| *ms > 0.)?;
         let ms = ms.max(250.);
         Some(if self.window_focused {
@@ -217,23 +220,32 @@ impl Host {
             .unwrap_or(".")
             .to_owned();
         if let Some(focused) = self.facts["focused"].as_bool() {
-            self.window_focus(focused);
+            self.change_window_focus(focused);
         }
         self.sync();
     }
     pub fn window_focus(&mut self, focused: bool) {
+        if self.change_window_focus(focused) {
+            self.sync();
+        }
+    }
+    /// Apply focus cleanup without an intermediate tree. facts() will sync
+    /// once after both the cleanup and the new context have reached the app.
+    fn change_window_focus(&mut self, focused: bool) -> bool {
         if self.window_focused == focused {
-            return;
+            return false;
         }
         self.window_focused = focused;
+        let mut changed = false;
         if !focused {
             self.blur();
             let pressed = std::mem::take(&mut self.pressed);
-            self.pointer_action(pressed, "onMouseUp");
-            self.set_hover(0);
+            changed |= self.pointer_action(pressed, "onMouseUp");
+            changed |= self.update_hover(0);
         }
         // The refresh period depends on focus.
         self.next_sync = self.refresh_ms().map(|ms| now_ms() + ms);
+        changed
     }
     pub fn pending(&self) -> bool {
         !self.effects.is_empty()
@@ -587,10 +599,11 @@ impl Host {
                 walk(&m.children, t, b);
             }
         }
-        let (mut t, mut b) = (HashMap::new(), HashMap::new());
-        walk(&self.root, &mut t, &mut b);
-        self.targets = t;
-        self.buttons = b;
+        // Keep the buckets across reconciliations: Calculator has the same
+        // keys on every hover/press, and Monitor repeatedly rebuilds its tabs.
+        self.targets.clear();
+        self.buttons.clear();
+        walk(&self.root, &mut self.targets, &mut self.buttons);
     }
 }
 /// Interaction: pointer, wheel, keys, the refresh timer and caret/scroll-bar timers.
@@ -630,27 +643,37 @@ impl Host {
         });
     }
     fn set_hover(&mut self, node: i32) {
+        if self.update_hover(node) {
+            self.sync();
+        }
+    }
+    fn update_hover(&mut self, node: i32) -> bool {
         if node == self.hover {
-            return;
+            return false;
         }
         let old = std::mem::replace(&mut self.hover, node);
-        self.pointer_action(old, "onMouseLeave");
-        self.pointer_action(node, "onMouseEnter");
+        let mut changed = self.pointer_action(old, "onMouseLeave");
+        changed |= self.pointer_action(node, "onMouseEnter");
         for n in [old, node] {
             if n != 0 {
                 self.restyle(n);
             }
         }
+        changed
     }
-    fn pointer_action(&mut self, node: i32, event: &str) {
+    /// Send the action, but reconcile only after all actions of this event.
+    fn pointer_action(&mut self, node: i32, event: &str) -> bool {
         if node == 0 {
-            return;
+            return false;
         }
         let action = find(&mut self.root, node)
             .map(|m| m.spec["events"][event].clone())
             .filter(Value::is_array);
         if let Some(action) = action {
-            self.dispatch(&action, Map::new());
+            self.send(&action, Map::new());
+            true
+        } else {
+            false
         }
     }
     fn focus(&mut self, node: i32) {
@@ -671,13 +694,16 @@ impl Host {
     }
     /// Runs a widget action like the React host's `send([cmd, key], extra)`.
     fn dispatch(&mut self, action: &Value, extra: Map<String, Value>) {
+        self.send(action, extra);
+        self.sync();
+    }
+    fn send(&mut self, action: &Value, extra: Map<String, Value>) {
         let mut input = Map::new();
         input.insert("cmd".into(), action[0].clone());
         input.insert("key".into(), action[1].clone());
         input.extend(extra);
         let reply = self.app.request(&Value::Object(input));
         self.queue(&reply);
-        self.sync();
     }
     fn scroll_by(&mut self, node: i32, delta: f64) {
         let Some(m) = find(&mut self.root, node) else {
@@ -738,39 +764,59 @@ impl Host {
                 self.set_hover(hover);
             }
             "down" => {
+                if button != 0 {
+                    let field = if inside {
+                        self.target(target, |t| matches!(t, Target::Field))
+                            .map_or(0, |(n, _)| n)
+                    } else {
+                        0
+                    };
+                    self.focus(field);
+                    return inside.then_some(self.mount);
+                }
                 let old = std::mem::take(&mut self.pressed);
-                self.pointer_action(old, "onMouseUp");
+                let mut changed = self.pointer_action(old, "onMouseUp");
                 if !inside {
                     self.blur();
+                    if changed {
+                        self.sync();
+                    }
                     return None;
                 }
-                if button == 0 {
-                    if let Some((thumb, Target::Thumb(scroll))) =
-                        self.target(target, |t| matches!(t, Target::Thumb(_)))
-                    {
-                        let top = scene::frame(thumb).map_or(0., |f| f.1 as f64);
-                        self.drag = Some((scroll, y as f64 - top));
-                        self.bars.insert(scroll, f64::INFINITY);
-                        return Some(self.mount);
+                if let Some((thumb, Target::Thumb(scroll))) =
+                    self.target(target, |t| matches!(t, Target::Thumb(_)))
+                {
+                    let top = scene::frame(thumb).map_or(0., |f| f.1 as f64);
+                    self.drag = Some((scroll, y as f64 - top));
+                    self.bars.insert(scroll, f64::INFINITY);
+                    if changed {
+                        self.sync();
                     }
-                    self.pressed = self
-                        .target(target, |t| matches!(t, Target::Click(..)))
-                        .map_or(0, |(n, _)| n);
-                    self.pointer_action(self.pressed, "onMouseDown");
+                    return Some(self.mount);
                 }
+                self.pressed = self
+                    .target(target, |t| matches!(t, Target::Click(..)))
+                    .map_or(0, |(n, _)| n);
+                changed |= self.pointer_action(self.pressed, "onMouseDown");
                 let field = self
                     .target(target, |t| matches!(t, Target::Field))
                     .map_or(0, |(n, _)| n);
                 self.focus(field);
+                if changed {
+                    self.sync();
+                }
             }
             "up" => {
+                if button != 0 {
+                    return inside.then_some(self.mount);
+                }
                 if let Some((node, _)) = self.drag.take() {
                     self.bars.insert(node, now_ms() + BAR_SHOWN);
                     self.restyle(node);
                 }
                 let pressed = std::mem::take(&mut self.pressed);
-                self.pointer_action(pressed, "onMouseUp");
-                if inside && button == 0 && pressed != 0 {
+                let mut changed = self.pointer_action(pressed, "onMouseUp");
+                if inside && pressed != 0 {
                     if let Some((node, Target::Click(action, value))) =
                         self.target(target, |t| matches!(t, Target::Click(..)))
                     {
@@ -779,9 +825,13 @@ impl Host {
                             if !value.is_null() {
                                 extra.insert("value".into(), value);
                             }
-                            self.dispatch(&action, extra);
+                            self.send(&action, extra);
+                            changed = true;
                         }
                     }
+                }
+                if changed {
+                    self.sync();
                 }
             }
             "wheel" if inside => {
@@ -877,6 +927,12 @@ impl Host {
         }
     }
     pub fn tick(&mut self, now: f64) {
+        // Icons depend on the explicit size in facts(), not the mount's
+        // layout. Their sync path never measures context/width; checking it
+        // here would rebuild every icon on every compositor frame.
+        if self.icon_mode().is_some() {
+            return;
+        }
         // The window was resized: the app lays its tree out for the new width.
         let width = scene::frame(self.mount).map_or(0., |f| f.2);
         let resized = width > 1. && (width - self.width).abs() >= 1.;
