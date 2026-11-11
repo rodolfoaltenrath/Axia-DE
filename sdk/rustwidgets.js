@@ -1,6 +1,6 @@
-// Host vocabulary for Rust-owned panel trees drawn through React (Calculator, Force Quit,
+// Host vocabulary for Rust-owned panel trees drawn through React (Force Quit,
 // About). Layout and interaction policies stay in Rust; this adapter binds the existing renderer,
-// input and locale APIs. Monitor is a native view mounted by Rust (sdk/nativeview.js).
+// input and locale APIs. Monitor and Calculator are native views mounted by Rust (sdk/nativeview.js).
 import { createElement as h } from 'react';
 import { View, Text, Image } from '@lordos/runtime';
 import { TextInput, Button, ScrollView } from './components.jsx';

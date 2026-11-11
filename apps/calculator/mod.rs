@@ -28,6 +28,29 @@ impl Default for App {
         }
     }
 }
+impl crate::native_view::NativeApp for App {
+    fn request(&mut self, input: &Value) -> Value {
+        App::request(self, input)
+    }
+    fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+        None
+    }
+    fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
+        // Desktop shortcuts stay with the shell. Shift and AltGr can produce
+        // arithmetic symbols on international keyboard layouts.
+        if flags & (2 | 16) != 0 || (flags & 4 != 0 && flags & 8 == 0) {
+            return None;
+        }
+        let accepted = |s: &str| {
+            KEYS.iter().flatten().any(|k| *k == s)
+                || ["Enter", "Backspace", "Escape", "*", "/", ","].contains(&s)
+        };
+        if !accepted(key) && !accepted(chr) {
+            return None;
+        }
+        Some(self.request(&json!({"cmd":"key","event":key,"char":chr})))
+    }
+}
 impl App {
     fn press(&mut self, key: &str) {
         if !KEYS.iter().flatten().any(|k| *k == key) {
@@ -64,6 +87,7 @@ impl App {
                 json!({"tree":ui::tree(self,&input["context"]),"expression":self.expression,"result":self.result,"failed":self.error})
             }
             "icon" => ui::icon(input["size"].as_f64().unwrap_or(32.)),
+            "close" => json!({}),
             "press" => {
                 self.press(key);
                 json!({})

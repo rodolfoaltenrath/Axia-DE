@@ -1,13 +1,18 @@
 # Axia apps
 
-`apps/forcequit/`, `apps/files/`, `apps/calculator/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/forcequit/`, `apps/files/`, `apps/calculator/`, `apps/monitor/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata. There are no app JSX or
 JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. Files shares its Rust
+binds compiled apps to the desktop's current renderer. Calculator and Monitor
+mount their widgets and icons directly into the Rust scene through
+`native_view/`; their content and input do not pass through React. Calculator
+keeps its existing widget tree, colors, arithmetic and localized display, and
+has no polling timer. The shell still supplies the window frame and theme.
+Files shares its Rust
 service with the file dialogs; `sdk/rustfiles.js` transports those shared widgets
 and desktop effects. Process termination still passes through the compositor's
 Wayland credential checks.
