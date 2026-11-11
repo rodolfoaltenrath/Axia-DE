@@ -95,6 +95,7 @@ globalThis.__lordWayland = (sid, type, d = {}) => {
       if (d.appId && (getApp(d.appId)?.package || getApp(d.appId)?.isolated)) setTimeout(() => applyAppMenus(d.appId), 0);   // menús de la app aislada (ya mapeada)
       break;
     }
+    case 'activate': if (win) wm.focus(id); break;
     case 'unmap': if (win) wm.close(id, true); break;
     case 'title': {                      // an isolated app keeps its name when the title is just its id
       if (!win) break;

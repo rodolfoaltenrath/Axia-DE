@@ -572,3 +572,41 @@ fn calculator_icon_is_not_rebuilt_on_each_frame_after_layout() {
     assert!(children(mount).is_empty());
     scene::destroy(mount);
 }
+
+#[test]
+fn about_report_button_uses_native_input_and_small_control_metrics() {
+    let dir = locales();
+    std::fs::write(
+        dir.0.join("locales/en/about.json"),
+        r#"{"systemReport":"System Report…"}"#,
+    )
+    .unwrap();
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(
+        mount,
+        super::app("about").unwrap(),
+        dir.0.to_str().unwrap(),
+        None,
+    );
+    host.facts(json!({"context":{"theme":{"text":"#fff","control":"#333","controlRadiusSmall":4,"buttonBorder":true,"separator":"#555"}}}));
+    let label = node_with_text(mount, "System Report…");
+    assert_ne!(label, 0);
+    let button = scene::parent(label);
+    assert_eq!(
+        unsafe { (*crate::runtime::node_get(button)).s.height.v },
+        22.
+    );
+    host.take();
+    host.pointer("down", button, 0., 0., 0);
+    host.pointer("up", button, 0., 0., 0);
+    assert!(host
+        .take()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|effect| effect == &json!({"kind":"openApp","app":"sysinfo"})));
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}

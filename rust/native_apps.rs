@@ -1,4 +1,6 @@
 //! Single metadata source for apps compiled into the compositor; no app JSON/JSX sources.
+#[path = "../apps/about/manifest.rs"]
+pub mod about;
 #[path = "../apps/appabout/manifest.rs"]
 pub mod appabout;
 #[path = "../apps/calculator/manifest.rs"]
@@ -13,6 +15,7 @@ pub mod monitor;
 pub mod store;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
+        about::manifest(),
         appabout::manifest(),
         calculator::manifest(),
         files::manifest(),

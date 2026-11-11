@@ -31,6 +31,7 @@ pub trait NativeApp {
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
+        crate::native_apps::about::ID => Some(Box::new(crate::about::App::default())),
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
         crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),

@@ -486,8 +486,12 @@ impl Host {
         let spec = &m.spec;
         let disabled = spec["disabled"] == true;
         let hover = self.hover == m.node && !disabled;
+        let small = spec["small"] == true;
         let base = json!({
-            "height":28,"paddingHorizontal":14,"borderRadius":self.theme("controlRadius","6"),
+            "height":if small {22} else {28},"paddingHorizontal":if small {10} else {14},
+            "borderRadius":self.theme(if small {"controlRadiusSmall"} else {"controlRadius"},"6"),
+            "borderWidth":if self.facts["context"]["theme"]["buttonBorder"] == true {1} else {0},
+            "borderColor":self.theme("separator","#555555"),
             "flexDirection":"row","gap":6,"justifyContent":"center","alignItems":"center",
             "backgroundColor":self.theme("control","#3a3a3f"),
             "opacity": if disabled {0.4} else if hover {0.85} else {1.},
@@ -500,7 +504,7 @@ impl Host {
         m.style(0, json!([base, spec["style"]]));
         m.style(
             1,
-            json!({"fontSize":13,"fontWeight":500,"color":color,"whiteSpace":"nowrap"}),
+            json!({"fontSize":if small {12} else {13},"fontWeight":500,"color":color,"whiteSpace":"nowrap"}),
         );
     }
     fn field_style(&mut self, m: &mut Mounted) {

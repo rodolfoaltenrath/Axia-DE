@@ -4,8 +4,8 @@
 // module only gives the view a mount node inside the window manager's frame, sends it the facts it
 // reads (settings, theme, services, catalog, focus) and runs the effects that belong to the shell:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
-import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { View } from '@lordos/runtime';
+import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { View, screen } from '@lordos/runtime';
 import { useAppWindow } from './components.jsx';
 import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
@@ -64,12 +64,17 @@ function runner(handle, manifest, winId) {
   };
 }
 
-function services(manifest) {
+function services(manifest, previous = {}, sampled = {}) {
+  const now = Date.now();
   const value = {};
   for (const [service, methods] of Object.entries(manifest.services || {})) {
+    const interval = manifest.serviceIntervals?.[service] ?? 1000;
+    if (sampled[service] && (interval < 0 || now - sampled[service] < interval)) { value[service] = previous[service]; continue; }
+    sampled[service] = now;
     value[service] = {};
+    const source = service === '$root' ? lord : lord[service];
     for (const method of methods) {
-      try { value[service][method] = lord[service]?.[method]?.() ?? null; } catch (_) { value[service][method] = null; }
+      try { value[service][method] = source?.[method]?.() ?? null; } catch (_) { value[service][method] = null; }
     }
   }
   return value;
@@ -82,13 +87,14 @@ export function NativeView({ manifest, args, icon, style }) {
   useWindows();
   const [preferences] = useSettings();
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
-  const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest) : {}));
+  const [sampled] = useState(() => ({}));
+  const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest, {}, sampled) : {}));
   useEffect(() => {
     if (!manifest.services || icon) return undefined;
-    const id = setInterval(() => setPolled(services(manifest)), 1000);
+    const id = setInterval(() => setPolled(previous => services(manifest, previous, sampled)), 1000);
     return () => clearInterval(id);
   }, [manifest, icon]);
-  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius } = theme;
+  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder } = theme;
   const facts = icon ? { icon } : {
     args: { ...(args || {}) }, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
@@ -96,8 +102,9 @@ export function NativeView({ manifest, args, icon, style }) {
     services: polled,
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
-    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius },
-      decimal: formatNumber(1.5, 1)[1] },
+    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder },
+      decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3),
+      ...(manifest.facts === 'system' ? { screen: { width: screen.width, height: screen.height }, reactVersion, version: lord.version } : {}) },
   };
   const json = JSON.stringify(facts);
   useLayoutEffect(() => {

@@ -660,6 +660,21 @@ Rust do host também verificam cliques, hover, pressão, cancelamento, foco,
 instâncias e ícones. A integração confere os títulos e versões do Sobre. Os apps compilados
 são abertos nos temas padrão e clássico pelo teste headless.
 
+## Sobre o Axia
+
+`apps/about/` agora contém apenas Rust: `manifest.rs`, `mod.rs`, `ui.rs` e
+`tests.rs`. O host nativo monta o conteúdo e o ícone diretamente na cena.
+A árvore conserva o logotipo, a tipografia, os espaçamentos, os indicadores de
+assinatura, as linhas opcionais de gabinete/tempo de boot e o botão de relatório.
+O botão usa as dimensões pequenas do controle original, incluindo a borda do tema.
+
+O shell comum (`sdk/nativeview.js`) fornece fatos dos serviços existentes,
+sem definir o layout ou tratar o estado do app. `serviceIntervals` conserva os
+períodos de 5 segundos para sistema e 2 segundos para estatísticas do servidor;
+o contexto fornece resolução, versão do motor e separadores regionais. O relatório
+é um efeito `openApp` do host. A moldura da janela e o shell continuam em React;
+a migração deste app não significa que o compositor inteiro esteja em Rust.
+
 ## Monitor application
 
 `apps/monitor/*.rs` owns all eight Monitor tabs, privacy panels, collection,
@@ -704,7 +719,7 @@ gerenciador de janelas, envia os fatos (configurações, tema, serviços do
 firewall, catálogo, foco da janela) e executa os efeitos do shell: abrir apps,
 gravar configurações, chamadas ao firewall, área de transferência e título da
 janela. O mesmo host monta o ícone da Dock e os painéis de privacidade dentro
-das Configurações. Calculadora e Monitor são montados diretamente em Rust.
+das Configurações. Sobre o Axia, Calculadora e Monitor são montados diretamente em Rust.
 A Calculadora conserva a mesma árvore de widgets e o ícone; hover, pressão,
 cancelamento do clique, traduções e teclado são tratados pelo host nativo.
 Teclas só chegam à janela focada, nunca aos ícones; atalhos Ctrl/Alt/Super
