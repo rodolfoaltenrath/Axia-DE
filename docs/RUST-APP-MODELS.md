@@ -28,7 +28,13 @@ valores iniciais dos perfis, da composição das preferências, da seleção por
 perfil padrão e da conversão para `lord.term.configure`. O catálogo usa uma
 lista de pares para preservar a ordem dos esquemas na tela de preferências.
 `profiles.js` transporta dados e mantém os efeitos de salvar e traduzir nomes.
-Sessões, atalhos, preferências visuais e emulador ainda têm etapas pendentes.
+`keys.rs` controla também códigos físicos, modificadores, bindings, precedência
+das atribuições por perfil, bytes enviados ao PTY e símbolos dos menus. A ordem
+de inserção dos atalhos é preservada, inclusive quando duas ações disputam a
+mesma combinação. Texto é devolvido como unidades UTF-16 para manter escapes,
+caracteres suplementares e substitutos isolados. A ponte restaura ArrayBuffer
+para atribuições hexadecimais, como antes. Sessões, preferências visuais e
+emulador ainda têm etapas pendentes.
 
 ## Senhas
 
@@ -46,15 +52,22 @@ têm travessia limitada. A interface ainda usa os componentes JSX existentes.
 ## Informações do Sistema
 
 `apps/sysinfo/checks.rs` controla as verificações de configuração, o resultado
-do Sandbox Probe e o resultado do Test Bench. Preserva níveis e estados, chaves
+do Sandbox Probe e o resultado do Test Bench. `model.rs` controla camadas de GPU,
+motivos da composição por CPU, compatibilidade, seções de hardware, revisão e
+throttling do Raspberry Pi, nomes da máquina e parsers das linhas de memória e
+números de série. Os periféricos são reconstruídos por campos permitidos, sem
+endereços ou caminhos D-Bus, e mantêm a ordenação estável por tipo.
+Preserva níveis e estados, chaves
 de tradução, notas e parâmetros. O limite de Landlock continua sendo ABI 6 e a
-presença de um mecanismo não equivale a um teste efetivo. O coletor, o restante
-do modelo e a interface ainda precisam migrar.
+presença de um mecanismo não equivale a um teste efetivo. Datas locais e
+serialização JSON continuam pelo host. O coletor, desempenho, compartilhamento
+e interface ainda precisam migrar.
 
 ## Comparação com a implementação anterior
 
 `rust/axia-shell/tests/fixtures/app_models.json` contém casos de entrada e saída
-capturados antes da troca das implementações JavaScript. Os testes Rust e
+capturados antes da troca das implementações JavaScript. `terminal_keys.json`
+e `sysinfo_hardware.json` completam os casos dos atalhos e hardware. Os testes Rust e
 `server/tests/app_model_bridge_test.mjs` usam os mesmos casos, verificando também
 os adaptadores JS reais, persistência e listagem sem valores secretos.
 

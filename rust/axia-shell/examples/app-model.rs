@@ -4,8 +4,8 @@
 mod passwords_model;
 #[path = "../../../apps/settings/model.rs"]
 mod settings_model;
-#[path = "../../../apps/sysinfo/checks.rs"]
-mod sysinfo_checks;
+#[path = "../../../apps/sysinfo/model.rs"]
+mod sysinfo_model;
 #[path = "../../../apps/terminal/model.rs"]
 mod terminal_model;
 use serde_json::{json, Value};
@@ -19,7 +19,7 @@ fn main() {
             "settings" => settings.request(&input["input"]),
             "terminal" => terminal_model::request(&input["input"]),
             "passwords" => passwords_model::request(&input["input"]),
-            "sysinfo" => sysinfo_checks::request(&input["input"]),
+            "sysinfo" => sysinfo_model::request(&input["input"]),
             _ => json!({"error":"app.invalidRequest"}),
         };
         println!("{reply}");

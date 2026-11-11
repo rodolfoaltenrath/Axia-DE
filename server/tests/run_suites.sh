@@ -183,8 +183,8 @@ EOF
     else skip "sysinfo-perf-test" "node"; fi
     # (0.8.7) community hardware reports: the schema, Share on GitHub (apps/sysinfo/share.js), the workflow's
     # checks (tools/hwreport/lib.mjs), the catalogue and its snapshot, the Compatibility panel's community data
-    if have node; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node tests/hwreport_test.mjs
-    else skip "hwreport-test" "node"; fi
+    if have node && have cargo; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node --import ./tests/native_app_model_node.mjs tests/hwreport_test.mjs
+    else skip "hwreport-test" "node and cargo"; fi
     # (0.8.6) runtime/index.js's skip of unchanged styles sends the same lord.* calls as without it
     if have node && [ -d ../node_modules/esbuild ] && [ -d ../node_modules/react-reconciler ]; then
         run "runtime-props-test (runtime/index.js)" node tests/runtime_props_test.mjs
