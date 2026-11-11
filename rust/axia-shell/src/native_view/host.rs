@@ -286,6 +286,8 @@ impl Host {
                 "services": self.facts["services"],
                 "catalog": self.facts["catalog"],
                 "registry": self.facts["registry"],
+                // For strings the app picks itself (localized package manifests).
+                "lang": self.facts["lang"],
                 "context": context,
             });
             self.app.request(&input)

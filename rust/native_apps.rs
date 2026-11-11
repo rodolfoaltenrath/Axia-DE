@@ -9,13 +9,16 @@ pub mod files;
 pub mod forcequit;
 #[path = "../apps/monitor/manifest.rs"]
 pub mod monitor;
+#[path = "../apps/store/manifest.rs"]
+pub mod store;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         appabout::manifest(),
         calculator::manifest(),
         files::manifest(),
         forcequit::manifest(),
-        monitor::manifest()
+        monitor::manifest(),
+        store::manifest()
     ])
 }
 #[cfg(test)]

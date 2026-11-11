@@ -163,7 +163,14 @@ fn real_compiled_app_widgets_and_effects() {
     };
     assert_eq!(
         get("catalog")["ids"],
-        json!(["appabout", "calculator", "files", "forcequit", "monitor"])
+        json!([
+            "appabout",
+            "calculator",
+            "files",
+            "forcequit",
+            "monitor",
+            "store"
+        ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
     assert_eq!(get("empty")["groups"], 0);
@@ -214,6 +221,18 @@ fn real_compiled_app_widgets_and_effects() {
         0,
         "closing the window unmounts the view"
     );
+    for text in [
+        "Discover",
+        "Create",
+        "Updates",
+        "Meet Axia Store",
+        "Axia Essentials",
+        "OPEN",
+    ] {
+        assert!(has_text("store", text), "{text}");
+    }
+    assert_eq!(get("store")["title"], "Axia Store");
+    assert!(has_text("store-categories", "Utilities"));
     for tab in [
         "overview",
         "cpu",
@@ -321,6 +340,12 @@ async function run(){
   }
   control.setMode('calculator');await pause();
   record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
+  // Axia Store: a native view too, with the sidebar, the editorial cards and the apps.
+  wm.open('store');control.setArgs({});control.setMode('store');
+  for(let i=0;i<30&&!nativeTexts().includes('Discover');i++)await pause();
+  record('store',{text:nativeTexts(),title:wm.get('store')?.title});
+  control.setArgs({page:'categories'});await pause();await pause();
+  record('store-categories',{text:nativeTexts()});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

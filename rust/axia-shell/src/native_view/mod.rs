@@ -7,6 +7,7 @@
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
 pub mod i18n;
+pub mod paint;
 pub mod style;
 #[cfg(test)]
 mod tests;
@@ -24,8 +25,19 @@ pub trait NativeApp {
     fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])>;
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
-    (id == crate::native_apps::monitor::ID)
-        .then(|| Box::new(crate::monitor::App::default()) as Box<dyn NativeApp>)
+    if id == crate::native_apps::monitor::ID {
+        Some(Box::new(crate::monitor::App::default()))
+    } else if id == crate::native_apps::store::ID {
+        Some(Box::new(crate::store::App::default()))
+    } else {
+        None
+    }
+}
+/// The icon tree a native-view app draws for itself (another app can show it).
+pub fn icon_tree(id: &str, size: f64) -> Option<Value> {
+    let mut app = app(id)?;
+    let tree = app.request(&serde_json::json!({"cmd":"icon","size":size}));
+    (!tree.is_null()).then_some(tree)
 }
 #[derive(Default)]
 struct Registry {
