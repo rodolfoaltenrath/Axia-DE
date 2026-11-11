@@ -736,3 +736,36 @@ fn hover_only_parent_keeps_hover_above_a_clickable_child() {
     drop(host);
     scene::destroy(mount);
 }
+
+#[test]
+fn help_native_search_enter_escape_tour_and_open_app_use_scene_input() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, super::app("help").unwrap(), assets.to_str().unwrap(), None);
+    let mut facts = json!({"lang":"en","focused":true,"args":{"article":"welcome"},"width":860,
+        "registry":[{"id":"help","name":"Help","icon":true},{"id":"clock","name":"Clock","icon":true}],
+        "context":{"theme":{"text":"#fff","textDim":"#aaa","accent":"#3584e4","control":"#333","sidebarBg":"#222","separator":"#444","controlRadius":6,"controlRadiusSmall":4}}});
+    host.facts(facts.clone());
+    let click = |host: &mut Host, label: &str| {
+        let node = node_with_text(mount, label);
+        assert_ne!(node, 0, "missing {label}");
+        host.pointer("down", node, 0., 0., 0);
+        host.pointer("up", node, 0., 0., 0);
+    };
+    let field = scene::parent(node_with_text(mount,"Search help"));
+    click(&mut host,"Search help");
+    assert!(host.key("c","clock",0));
+    assert!(host.key("Enter","",0));
+    assert!(host.text().contains("Open Clock"));
+    host.take();click(&mut host,"Open Clock");
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e| e["kind"]=="openApp"&&e["app"]=="clock"));
+    host.pointer("down",field,0.,0.,0);host.pointer("up",field,0.,0.,0);assert!(host.key("Escape","",0));
+    assert!(host.text().contains("Getting started"));
+    facts["args"]=json!({"tour":true,"nonce":1});host.facts(facts);
+    for _ in 0..5 { click(&mut host,"Next"); }
+    assert!(host.text().contains("Always at hand"));
+    host.take();click(&mut host,"Get started");
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["kind"]=="settings"&&e["patch"]["welcomeShown"]==true));
+    assert!(!host.text().contains("Get started"));
+    drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
+}
