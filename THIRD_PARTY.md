@@ -8,9 +8,21 @@ the components below, each under its own license.
 | Component | Used for | License |
 |---|---|---|
 | QuickJS | JavaScript engine for the UI | MIT (`third_party/quickjs/LICENSE`) |
-| stb_image, stb_image_write, stb_truetype | image decoding/encoding, font rasterization | MIT or public domain (dual) |
 | Monocypher 4 | vault and keyring cryptography | CC0-1.0 or BSD-2-Clause (`third_party/monocypher/LICENCE.md`) |
 | EFF large wordlist, SecLists common passwords | passphrase generator, weak-password check | CC BY 3.0 (EFF), MIT (SecLists, `third_party/wordlists/LICENSE-SecLists`) |
+
+## Rust codecs (`rust/vendor/`)
+
+The stb headers were replaced by `rust/axia-codecs`. Its dependencies are
+vendored for offline, locked builds; their upstream license files are retained.
+
+| Component | Used for | License |
+|---|---|---|
+| image and its PNG/JPEG/GIF/BMP dependencies | bounded image decoding and PNG/JPEG encoding | MIT or Apache-2.0; see each vendored crate |
+| fontdue 0.9.5 | glyph metrics and rasterization | MIT or Apache-2.0 or Zlib |
+| ttf-parser 0.25.1 | checked font tables, face metrics and GPOS kerning | MIT or Apache-2.0 |
+| flate2 / miniz_oxide | bounded gzip and raw DEFLATE | MIT or Apache-2.0 / MIT or Zlib or Apache-2.0 |
+| core_maths / libm | portable font arithmetic | MIT |
 
 ## Data files
 

@@ -146,7 +146,7 @@ formats).
 
 | File | What it shows | Who makes it |
 |---|---|---|
-| PNG/JPEG image | the image | stb_image in axia-server, as before |
+| PNG/JPEG image | the image | bounded Rust image codecs in axia-server |
 | PDF | the first page and the page count | axia-doc's utility session, already warm |
 | text and code | the first lines | — |
 | font (`.ttf/.otf/.ttc`) | a sample in several sizes | FreeType in axia-doc |

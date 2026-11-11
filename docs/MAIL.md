@@ -76,7 +76,7 @@ run in one sandboxed helper process, **`axia-maild`**.
   `axia-server` never links it.
 - **The compositor never waits**: requests are asynchronous (`lord.mail.poll()`), and inside
   `axia-maild` network work runs on account threads, never on the thread that reads the channel.
-- **Images are decoded in the sandbox** (stb_image in `axia-maild`, PNG/JPEG/GIF/BMP) and come
+- **Images are decoded in the sandbox** (Rust `axia-codecs` in `axia-maild`, PNG/JPEG/GIF/BMP) and come
   back as sealed memfds of ARGB pixels, like `axia-doc`'s; `axia-server` only copies pixels.
 
 ### Passwords and the keyring

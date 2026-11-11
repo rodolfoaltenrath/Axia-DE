@@ -271,7 +271,7 @@ Events: `__lordMedia(id, type, data)`. Types: `info`, `pos`, `state`, `sub`, `st
   - they go in `~/.cache/axia/thumbs/<sha256 of path, date, size and side>.png`;
   - the background worker makes them;
   - the ones that fail aren't requested again during the session;
-  - Files uses them for videos, audio covers and the images stb doesn't read (WebP, HEIC, AVIF).
+  - Files uses them for videos, audio covers and the images the desktop codecs do not read (WebP, HEIC, AVIF).
 - **"Open with":** Photos for images and Player for audio and video, both as the default option.
 - **Quick Preview:** the one in Files (from the documents agent) uses `media.poster`.
 - **Where things are saved:**

@@ -190,12 +190,12 @@ changed (click on the shortcut and press the new combination). Changes are saved
 - Preferences → Text lists the installed **monospace** fonts (`assets/fonts`,
   `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts`, `~/.fonts`). The
   catalog is built by `server/src/ui/fonts.c`, reading only the `name`, `OS/2`, `post` and
-  `hmtx` tables with our own bounds-checking parser; stb_truetype opens only the chosen one.
+  `hmtx` tables with our own bounds-checking parser; the Rust font rasterizer opens only the chosen one.
 - Ligatures apply the `calt`/`liga`/`clig` features with `server/src/ui/otf.c`
   (lookups 1, 2, 4, 5, 6 and 7). `make -C server test` builds `build/shape-test` to compare
   against HarfBuzz; with JetBrains Mono and Fira Code the results match.
 - Emoji: the first installed CBDT font (on Debian, `fonts-noto-color-emoji`). The PNGs are
-  decoded with stb_image and scaled to two cells. Sequences (👍🏽, 🇦🇷, 👨‍👩‍👧) are composed with
+  decoded with the bounded Rust image codecs and scaled to two cells. Sequences (👍🏽, 🇦🇷, 👨‍👩‍👧) are composed with
   its `ccmp`.
 - Fallback for missing characters: profile font → "non-ASCII" font → JetBrains Mono → DejaVu
   Sans Mono → Noto Sans Mono → DejaVu Sans → Noto Sans Symbols → Inter → emoji → empty box.

@@ -128,7 +128,7 @@ Each root process has a narrow, documented interface. §6.3 describes them.
 | Sandbox, broker, permissions, signing, firewall service, vault | Mesa (optional), PipeWire, `libwayland`, `libxkbcommon` |
 | Session manager, network service, fan service | systemd, systemd-resolved, BlueZ, CUPS, wpa_supplicant, OpenVPN, strongSwan's daemon |
 | Debian package engine (OpenPGP, xz, HTTP and HTTPS, resolver) | FFmpeg, Poppler, libarchive, OpenSSL, Monocypher (in helpers only) |
-| Touchpad driver, terminal emulator, WebAssembly interpreter | stb (fonts and images), fonts under the OFL |
+| Touchpad driver, terminal emulator, WebAssembly interpreter | Rust codecs (fonts and images), fonts under the OFL |
 | Remote desktop over WebRTC: ICE-lite, DTLS-SRTP set-up, RTP packetization, bandwidth control (encoding in `axia-media`) | libsrtp2 and usrsctp (in `lord-sessiond`'s bridge), libx264, libvpx, Opus and VA-API (in `axia-media`) |
 | System Information's collector, `axia-sysreport`, `axia-fetch`, the Test Bench | Xwayland (Debian's package, on demand), smartmontools, `pci.ids` and `usb.ids` |
 | Remote Desk's VNC client (RFB 3.8), the SMB2 and NTLM code in `axia-lan` | libfreerdp and libwinpr (in `axia-rdesk`), rclone, fuse3 and openssh-client (remote folders), Raspberry Pi's FFmpeg (on the Pi, pinned) |
@@ -254,7 +254,7 @@ LordOS's interface is written in JavaScript with React, but there is no web engi
 - **React:** React 19.3.1 with `react-reconciler` 0.34, bundled with esbuild into each theme. The default theme with every app weighs about 1.9 MB (560 KB compressed) in 0.8.6.
 - **Layout:** LordOS's own flexbox implementation (`layout.c`), with wrapping, logical start/end edges and right-to-left mirroring.
 - **Painting:** LordOS's own 2D rasterizer with antialiased rounded rectangles, cached shadows, reduced-resolution blur and damage tracking: only the changed region is repainted. On ARM, optional NEON loops speed up blits and masks, verified bit-identical to the C code.
-- **Text:** glyphs are rasterized with `stb_truetype`. Shaping is LordOS's own OpenType code (GSUB substitutions and GPOS positioning, colour emoji), with full Unicode bidi, Arabic joining, Indic shaping and the Universal Shaping Engine (409 of 409 test sentences identical to HarfBuzz in `tests/hb_compare.py`), CJK line breaking, Thai word breaking, and per-script font fallback. HarfBuzz, FreeType, fontconfig, fribidi and ICU are not linked by `axia-server`.
+- **Text:** glyphs are rasterized with the Rust `fontdue` backend. Shaping is LordOS's own OpenType code (GSUB substitutions and GPOS positioning, colour emoji), with full Unicode bidi, Arabic joining, Indic shaping and the Universal Shaping Engine (409 of 409 test sentences identical to HarfBuzz in `tests/hb_compare.py`), CJK line breaking, Thai word breaking, and per-script font fallback. HarfBuzz, FreeType, fontconfig, fribidi and ICU are not linked by `axia-server`.
 - **Input methods:** Korean (hangul), Japanese (kana and SKK) and Chinese (pinyin), in `server/src/ime.c`, with no ibus or fcitx.
 
 **Figure: From a mouse move to a new frame.**
@@ -854,7 +854,7 @@ Each release publishes its measurements as files in `results/<version>/<machine>
 
 ## 12. License and credits
 
-LordOS's code is released under the **MIT license**. Third-party components keep their own licenses, listed in `THIRD_PARTY.md`: QuickJS and stb (vendored), Monocypher (CC0/BSD-2), the EFF word list (CC BY 3.0 US), the common-password list (MIT), DB-IP Lite country data (CC BY 4.0), Natural Earth (public domain), and the Inter, JetBrains Mono, Plus Jakarta Sans and Noto fonts (OFL; Noto as subsets built into `axia-bench`). Each release carries an SPDX SBOM of what the package bundles and depends on (`docs/COMPLIANCE.md`).
+LordOS's code is released under the **MIT license**. Third-party components keep their own licenses, listed in `THIRD_PARTY.md`: QuickJS and Rust codec dependencies (vendored), Monocypher (CC0/BSD-2), the EFF word list (CC BY 3.0 US), the common-password list (MIT), DB-IP Lite country data (CC BY 4.0), Natural Earth (public domain), and the Inter, JetBrains Mono, Plus Jakarta Sans and Noto fonts (OFL; Noto as subsets built into `axia-bench`). Each release carries an SPDX SBOM of what the package bundles and depends on (`docs/COMPLIANCE.md`).
 
 LordOS is created by the **iPERFEX** group: **Pablo Miranda** and **Federico Pereira**.
 

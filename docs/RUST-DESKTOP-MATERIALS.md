@@ -15,7 +15,7 @@ Imports use a temporary private file and atomic rename. Their size is limited to
 32 MiB, dimensions to 8192 per side, and area to 16,777,216 pixels, before decoding.
 The original can subsequently be moved or deleted. User files are never modified.
 
-The existing stb decoder validates the actual managed copy, and its PNG encoder
+The bounded Rust decoder validates the actual managed copy, and its PNG encoder
 writes a thumbnail resampled by Rust, at most 320×180. Galleries decode thumbnails,
 not full originals. The image bridge releases managed originals and scale caches
 when their last display/node releases them; shared displays retain their references.

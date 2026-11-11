@@ -906,7 +906,7 @@ EGL/GLES/GBM ones. What follows is the result.
 |---|---|
 | `server/Makefile` | `ARCH` (from `$(CC) -dumpmachine`). On aarch64, `NEON=1` by default (`-DLORD_NEON`; `NEON=0` turns it off). QuickJS with `-ffp-contract=off`: GCC in GNU mode fuses `a*b+c` into FMA on ARM and would change JS numeric results; our code uses `-std=c11`, which already turns it off. `$(LD)` instead of `ld` for `pages.o` (cross-compiling). New test `build/canvas-test` |
 | `server/src/canvas.c` | The rows of `canvas_blit` (without corners) and of `canvas_alpha_mask` (text, shadows) are separate functions, with a NEON version (4 pixels per iteration) under `LORD_NEON && __ARM_NEON`. Bit-for-bit identical to C with valid premultiplied sources: checked with `tests/canvas_test.c` under emulation (SIMDe) on the development machine, 4000 random rows. Still to do on the board |
-| `server/src/ui/stb.c` | `STBI_NEON` on aarch64: stb's JPEG uses NEON (on x86 it already used SSE2) |
+| `rust/axia-codecs` | pure Rust image codecs; the JPEG backend selects supported CPU optimizations |
 | `server/src/term/vt.c:890` | `src[i] >= 0 && …` with `char`: on ARM `char` is unsigned and `-Wextra` warns (`-Wtype-limits`). Now `(unsigned char)src[i] < 0x20`, the same on both architectures |
 | `server/src/kms.c` `kms_dispatch` | the DRM event buffer aligned to 8 (it's read with a cast to `drm_event_vblank`, which has 64-bit fields) |
 | `server/src/drmcard.h` (new), `main.c`, `remote/monitor.c` | pick the card with connectors instead of `card0` (see above) |
@@ -921,7 +921,7 @@ EGL/GLES/GBM ones. What follows is the result.
   - The Monitor uses `sysconf(_SC_PAGESIZE)` (`monitor/mon.c`).
   - The dmabuf feedback does `memfd` + `mmap` of an arbitrary size, which is valid.
 - **Unaligned reads and endianness:**
-  - the OpenType, MaxMind DB, xz, PNG/JPEG (stb), thbrk and IME readers read byte by byte in
+  - the OpenType, MaxMind DB, xz, PNG/JPEG (Rust codecs), thbrk and IME readers read byte by byte in
     big-endian or with `memcpy`;
   - netlink attributes (`net/state.c`, `nl.c`, `wg.c`) are 4-aligned by the format.
   - Everything is little-endian, like x86.

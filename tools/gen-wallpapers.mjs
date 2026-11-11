@@ -14,7 +14,7 @@
 // drop lordos-<name>@3840x2160.png next to the original and run this again.
 //
 // JPEG at quality 90 with 4:4:4 chroma (the art has fine violet and gold detail that 4:2:0 blurs),
-// baseline + optimized Huffman tables. stb_image (axia-server) decodes it; WebP isn't supported.
+// baseline + optimized Huffman tables. The Rust image codecs (axia-server) decode it; WebP isn't supported.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

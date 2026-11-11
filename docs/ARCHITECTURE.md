@@ -15,7 +15,7 @@ like React Native but on top of our display server.
         ▼
  lord-ui (C, ours) ───── QuickJS (JS engine, vendored)
         │                + a host config for the stock react-reconciler + our own flexbox layout
-        │                + our own 2D rasterizer + text (stb_truetype)
+        │                + our own 2D rasterizer + text (Rust font codecs)
         ▼
  axia-server (C, ours)   display server: DRM/KMS + evdev, windows, focus,
         │                composition, theme decorations
@@ -75,11 +75,11 @@ like React Native but on top of our display server.
 
 1. An event arrives (evdev) → `hit_test` finds the node under the cursor → `__lordEvent` in JS.
 2. React updates state → the reconciler calls `lord.setStyle/appendChild/...` → nodes are marked.
-   Only the style properties that changed are sent (`applyStyle` in `runtime/style.js`). Since 0.8.6
-   `applyProps` in `runtime/index.js` also skips converting a node's style when its
-   flattened style has the same keys, in the same order, with the same primitive values as last time
-   (kept as a copy, so a style object changed in place is still seen; not when a converted value is
-   NaN, which `applyStyle` re-sends every time). The calls are exactly the ones it sent before:
+   A node's style is converted to native properties by Rust (`lord.css`,
+   `rust/axia-shell/src/css_style.rs`) and only the properties that changed are sent (`applyStyle`
+   in `runtime/index.js`). `applyProps` also skips converting a node's style when its flattened
+   style has the same keys, in the same order, with the same primitive values as last time (kept
+   as a copy, so a style object changed in place is still seen). The calls are exactly the ones it sent before:
    `server/tests/runtime_props_test.mjs` checks it against the runtime with the skip turned off.
 3. `axia-server` recomputes the layout, computes the damaged region and repaints only that region.
 4. It copies the scene to the back buffer, draws the cursor, and page-flips on the next vblank.
@@ -96,8 +96,8 @@ Besides the kernel and libc, only these are allowed:
 | `libxkbcommon`       | XKB keyboard layouts (M5) and what Wayland apps require (M6) | system    |
 | Mesa: `libgbm`, `libEGL`, `libGLESv2` | GPU composition and dmabuf buffers from apps (games); optional: without a 3D GPU or without the `-dev` packages it builds and runs without Mesa (approved by the user on 2026-10-16, see `GPU.md`) | system |
 | QuickJS              | ES2023 JavaScript engine, ~1 MB, written in C                  | vendored|
-| `stb_truetype`, `stb_image` | fonts and images (`axia-server`, `axia-doc`, and `axia-maild`); public domain, a single header | vendored|
-| `stb_image_write`    | PNG images written by the `axia-doc` and `axia-maild` helpers; public domain | vendored|
+| `axia-codecs` (Rust) | bounded image codecs, font rasterization and gzip; dependencies and licenses in `THIRD_PARTY.md` | vendored Rust crates |
+
 | OpenSSL (`libssl`, `libcrypto`) | TLS. Linked directly only by `axia-maild` (IMAP/SMTP/CalDAV/CardDAV, certificates checked against the system CA store, `MAIL.md`) and, since 0.8.5, `axia-dl` (the blocklist downloads, sandboxed, no sockets of its own, `FIREWALL.md` "Blocklists") and `lord-tls` (the package engine's HTTPS, sandboxed, `PACKAGES.md` "HTTPS"). Never `axia-server` | system |
 | `libcrypt`           | verifying passwords against `/etc/shadow` (`lord-sessiond`, `admin.c`) | system |
 | FFmpeg (`libavcodec`, `libavformat`, `libavutil`, `libswscale`, `libswresample`) and `libva` (+ `libva-drm`) | Decoding and encoding video, audio and images; VA-API for hardware decoding (M9, approved by the user). **Only `axia-media` links them**, the sandboxed helper; the player, synchronization and interface are our own. Never `axia-server` (`MEDIA.md`) | system |
@@ -249,8 +249,8 @@ The code is the same. The differences:
 
 - **Build:** the Makefile detects `ARCH` with `$(CC) -dumpmachine` and never uses
   `-march=native`.
-  - On aarch64 the NEON loops in `canvas.c` (`NEON=0` turns them off) and `STBI_NEON` are enabled.
-  - On x86-64 everything is portable C (stb uses SSE2 by itself).
+  - On aarch64 the NEON loops in `canvas.c` (`NEON=0` turns them off) are enabled; the Rust JPEG decoder selects its supported architecture optimizations.
+  - On x86-64 the Rust codecs use portable builds with supported architecture optimizations.
 - **Display and GPU:**
   - The card is chosen because it has connectors (`server/src/drmcard.h`), not because it is `card0`.
   - On ARM boards the display (vc4) and the GPU (v3d) are different devices. Mesa joins them
