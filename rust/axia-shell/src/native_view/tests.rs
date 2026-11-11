@@ -439,3 +439,136 @@ fn calculator_icons_and_unfocused_windows_never_take_arithmetic_keys() {
         scene::destroy(mount);
     }
 }
+
+struct CountedApp {
+    app: Box<dyn NativeApp>,
+    syncs: Rc<std::cell::Cell<usize>>,
+}
+impl NativeApp for CountedApp {
+    fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "sync" || input["cmd"] == "icon" {
+            self.syncs.set(self.syncs.get() + 1);
+        }
+        self.app.request(input)
+    }
+    fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])> {
+        self.app.pixels(id)
+    }
+    fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
+        self.app.key(key, chr, flags)
+    }
+}
+fn counted_calculator() -> (Host, i32, Rc<std::cell::Cell<usize>>) {
+    let mount = scene::create(scene::VIEW);
+    let syncs = Rc::new(std::cell::Cell::new(0));
+    let app = CountedApp {
+        app: super::app("calculator").unwrap(),
+        syncs: syncs.clone(),
+    };
+    let mut host = Host::new(mount, Box::new(app), "", None);
+    host.facts(json!({"focused":true,"context":{"theme":{"mode":"dark"}}}));
+    (host, mount, syncs)
+}
+
+#[test]
+fn calculator_keeps_the_primary_press_when_another_mouse_button_is_used() {
+    let (mut host, mount, syncs) = counted_calculator();
+    let seven = node_with_text(mount, "7");
+    let button = scene::parent(seven);
+    let opacity = || unsafe { (*crate::runtime::node_get(button)).s.opacity };
+    host.pointer("move", seven, 0., 0., 0);
+    host.pointer("down", seven, 0., 0., 0);
+    assert_eq!(opacity(), 0.7);
+    let before = syncs.get();
+    // A second button's release (or press) cannot end the held left click.
+    host.pointer("up", seven, 0., 0., 2);
+    host.pointer("down", seven, 0., 0., 2);
+    host.pointer("up", seven, 0., 0., 2);
+    assert_eq!(opacity(), 0.7);
+    assert_eq!(syncs.get(), before);
+    host.pointer("up", seven, 0., 0., 0);
+    host.key("Enter", "", 0);
+    assert_eq!(
+        texts(&host).lines().filter(|text| *text == "7").count(),
+        3,
+        "expression, result and key label all show 7"
+    );
+    assert!(!texts(&host).lines().any(|text| text == "77"));
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
+
+#[test]
+fn calculator_reconciles_once_per_pointer_event_and_focus_fact_update() {
+    let (mut host, mount, syncs) = counted_calculator();
+    let seven = node_with_text(mount, "7");
+    let eight = node_with_text(mount, "8");
+    assert_eq!(syncs.get(), 1);
+    for (kind, node) in [
+        ("move", seven),
+        ("move", eight),
+        ("down", eight),
+        ("up", eight),
+    ] {
+        let before = syncs.get();
+        host.pointer(kind, node, 0., 0., 0);
+        assert_eq!(syncs.get(), before + 1, "one tree for {kind}");
+    }
+    host.pointer("move", seven, 0., 0., 0);
+    host.pointer("down", seven, 0., 0., 0);
+    let before = syncs.get();
+    host.facts(json!({"focused":false,"context":{"theme":{"mode":"dark"}}}));
+    assert_eq!(
+        syncs.get(),
+        before + 1,
+        "focus cleanup and new facts share a tree"
+    );
+    let button = scene::parent(seven);
+    assert_eq!(unsafe { (*crate::runtime::node_get(button)).s.opacity }, 1.);
+    host.pointer("up", seven, 0., 0., 0);
+    assert_eq!(syncs.get(), before + 1, "cancelled click does not rebuild");
+    host.window_focus(true);
+    host.key("Enter", "", 0);
+    assert_eq!(
+        texts(&host).lines().filter(|text| *text == "8").count(),
+        3,
+        "expression, result and key label all show 8"
+    );
+    assert!(!texts(&host).lines().any(|text| text == "87"));
+    drop(host);
+    scene::destroy(mount);
+}
+
+#[test]
+fn calculator_icon_is_not_rebuilt_on_each_frame_after_layout() {
+    let mount = scene::create(scene::VIEW);
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let app = CountedApp {
+        app: super::app("calculator").unwrap(),
+        syncs: calls.clone(),
+    };
+    let mut host = Host::new(mount, Box::new(app), "", None);
+    host.facts(json!({"icon":32,"refreshMs":250}));
+    assert_eq!(calls.get(), 1);
+    unsafe {
+        // The compositor lays out the shell's mount after the initial tree.
+        let node = crate::runtime::node_get(mount);
+        (*node).w = 32.;
+        (*node).h = 32.;
+    }
+    for now in [0., 16., 32., 1000.] {
+        host.tick(now);
+    }
+    assert_eq!(
+        calls.get(),
+        1,
+        "an unchanged icon does not rebuild per frame"
+    );
+    assert!(host.deadline().is_none());
+    host.facts(json!({"icon":48}));
+    assert_eq!(calls.get(), 2, "a new explicit icon size is rendered");
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
