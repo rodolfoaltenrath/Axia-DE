@@ -208,7 +208,7 @@ char *msg_body_text(const char *raw, size_t len);            /* plain text of a 
 void msg_preview(const char *hdr, size_t hlen, const char *part, size_t plen, char *out, size_t cap, int *att);
 int  https_get(const char *url, char **body, size_t *blen, size_t max, char *err, size_t ecap);
 
-/* ---- images (mimg.c, stb_image) ---- */
+/* ---- images (rust/axia-codecs/src/mail.rs) ---- */
 uint32_t *img_decode(const unsigned char *data, size_t len, int maxw, int maxh, int *w, int *h);
 unsigned char *img_thumb_jpeg(const unsigned char *data, size_t len, int max, size_t *olen);
 

@@ -36,9 +36,9 @@ pub unsafe extern "C" fn axia_font_open(
     let Ok(face) = Face::parse(data, index) else {
         return ptr::null_mut();
     };
-    *ascent = i32::from(face.ascender());
-    *descent = i32::from(face.descender());
-    *gap = i32::from(face.line_gap());
+    *ascent = i32::from(face.tables().hhea.ascender);
+    *descent = i32::from(face.tables().hhea.descender);
+    *gap = i32::from(face.tables().hhea.line_gap);
     *upem = i32::from(face.units_per_em());
     // otf.c still reads the original mapped font for shaping/color tables.
     *offset = if data.starts_with(b"ttcf") {
@@ -192,9 +192,14 @@ pub unsafe extern "C" fn axia_font_kern(font: *const Font, left: u32, right: u32
     let Ok(mut cache) = font.kern_cache.lock() else {
         return 0;
     };
-    *cache
-        .entry(key)
-        .or_insert_with(|| kerning(font, left as u16, right as u16))
+    if let Some(value) = cache.get(&key) {
+        return *value;
+    }
+    let value = kerning(font, left as u16, right as u16);
+    if cache.len() < 8192 {
+        cache.insert(key, value);
+    }
+    value
 }
 
 #[cfg(test)]
@@ -263,6 +268,91 @@ mod tests {
                 )
                 .is_null());
             }
+        }
+    }
+    #[test]
+    fn bundled_outline_formats_render() {
+        for data in [
+            include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf").as_slice(),
+            include_bytes!("../../../assets/fonts/PlusJakartaSans-Medium.ttf").as_slice(),
+            include_bytes!("../../../server/src/bench/fonts/NotoSansCJKsc-LB.otf").as_slice(),
+        ] {
+            let raster = fontdue::Font::from_bytes(data, fontdue::FontSettings::default()).unwrap();
+            let cp = if raster.lookup_glyph_index('A') != 0 {
+                'A'
+            } else {
+                '中'
+            };
+            let (metrics, mask) = raster.rasterize(cp, 24.0);
+            assert!(metrics.advance_width > 0.0 && mask.iter().any(|p| *p > 0));
+        }
+    }
+
+    #[test]
+    fn render_latin_sample() {
+        unsafe {
+            let (mut a, mut d, mut gap, mut upem, mut off) = (0, 0, 0, 0, 0);
+            let font = axia_font_open(
+                INTER.as_ptr(),
+                INTER.len(),
+                0,
+                &mut a,
+                &mut d,
+                &mut gap,
+                &mut upem,
+                &mut off,
+            );
+            assert!(!font.is_null());
+            let mut canvas =
+                image::RgbaImage::from_pixel(1600, 240, image::Rgba([250, 250, 250, 255]));
+            for (row, size) in [14.0, 20.0, 32.0, 48.0].into_iter().enumerate() {
+                let mut pen = 20.0f32;
+                let mut previous = 0;
+                let baseline = 32 + row as i32 * 58;
+                for cp in "Axia DE · Aplicativos, ações e configurações · AV gy".chars() {
+                    let gid = axia_font_glyph(font, cp as u32);
+                    assert_ne!(gid, 0);
+                    pen += axia_font_kern(font, previous, gid) as f32 * size / upem as f32;
+                    let (mut w, mut h, mut x, mut y, mut advance) = (0, 0, 0, 0, 0.0);
+                    let mask = axia_font_raster(
+                        font,
+                        gid,
+                        size,
+                        &mut w,
+                        &mut h,
+                        &mut x,
+                        &mut y,
+                        &mut advance,
+                    );
+                    if !mask.is_null() {
+                        let mask_slice = std::slice::from_raw_parts(mask, (w * h) as usize);
+                        for yy in 0..h {
+                            for xx in 0..w {
+                                let (px, py) = (pen.round() as i32 + x + xx, baseline + y + yy);
+                                if px >= 0 && py >= 0 && px < 1600 && py < 240 {
+                                    let coverage = u32::from(mask_slice[(yy * w + xx) as usize]);
+                                    let value =
+                                        ((250 * (255 - coverage) + 25 * coverage) / 255) as u8;
+                                    canvas.put_pixel(
+                                        px as u32,
+                                        py as u32,
+                                        image::Rgba([value, value, value, 255]),
+                                    );
+                                }
+                            }
+                        }
+                        libc::free(mask.cast());
+                    }
+                    assert!(advance > 0.0);
+                    pen += advance;
+                    previous = gid;
+                }
+                assert!(pen > 200.0 && pen < 1600.0);
+            }
+            if let Some(path) = std::env::var_os("AXIA_CODEC_FONT_SAMPLE") {
+                canvas.save(path).unwrap();
+            }
+            axia_font_close(font);
         }
     }
 }

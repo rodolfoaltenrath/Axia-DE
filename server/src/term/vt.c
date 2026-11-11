@@ -16,7 +16,7 @@
 #include <wchar.h>
 #include <wctype.h>
 
-#include "stb_image.h"
+#include "codecs_ffi.h"
 
 enum { S_GROUND, S_ESC, S_ESC_INT, S_CSI, S_OSC, S_OSC_ESC, S_DCS, S_DCS_ESC, S_IGNORE, S_IGNORE_ESC, S_TMUX, S_TMUX_ESC };
 
@@ -946,18 +946,18 @@ static void place_image(Term *t, const char *args, const char *data) {
     uint8_t *raw = malloc(n * 3 / 4 + 4);
     if (!raw) return;
     size_t len = base64_decode(data, n, raw);
-    int w, h, comp;
-    unsigned char *rgba = stbi_load_from_memory(raw, (int)len, &w, &h, &comp, 4);
+    int w, h;
+    unsigned char *rgba = axia_image_decode(raw, len, &w, &h, 4, 8192, 8192ull * 8192);
     free(raw);
     if (!rgba) return;
-    if (w <= 0 || h <= 0 || w > 8192 || h > 8192) { stbi_image_free(rgba); return; }
+    if (w <= 0 || h <= 0 || w > 8192 || h > 8192) { free(rgba); return; }
     uint32_t *px = malloc((size_t)w * h * 4);
-    if (!px) { stbi_image_free(rgba); return; }
+    if (!px) { free(rgba); return; }
     for (long i = 0; i < (long)w * h; i++) {
         uint32_t r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2], a = rgba[i * 4 + 3];
         px[i] = a << 24 | (r * a / 255) << 16 | (g * a / 255) << 8 | (b * a / 255);
     }
-    stbi_image_free(rgba);
+    free(rgba);
 
     float cw = t->cell_w > 0 ? t->cell_w : 8, ch = t->cell_h > 0 ? t->cell_h : 16;
     int pxw, pxh;

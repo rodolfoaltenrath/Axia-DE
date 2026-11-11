@@ -100,4 +100,28 @@ mod tests {
             assert!(decode(&vec![255; len], 8192, 40_000_000).is_none());
         }
     }
+    #[test]
+    fn bmp_and_gif_first_frame() {
+        let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([10, 200, 30, 255]));
+        let mut bmp = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(pixels.clone())
+            .write_to(&mut bmp, ImageFormat::Bmp)
+            .unwrap();
+        assert_eq!(decode(bmp.get_ref(), 2, 4).unwrap(), pixels);
+        let mut gif = Vec::new();
+        {
+            let mut encoder = image::codecs::gif::GifEncoder::new(&mut gif);
+            encoder
+                .encode_frame(image::Frame::new(pixels.clone()))
+                .unwrap();
+            encoder
+                .encode_frame(image::Frame::new(image::RgbaImage::from_pixel(
+                    2,
+                    2,
+                    image::Rgba([255, 0, 0, 255]),
+                )))
+                .unwrap();
+        }
+        assert_eq!(decode(&gif, 2, 4).unwrap(), pixels);
+    }
 }

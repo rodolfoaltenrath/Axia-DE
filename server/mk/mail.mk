@@ -49,12 +49,9 @@ LMD_SRC := src/mail/maild.c src/mail/store.c src/mail/search.c src/mail/imap.c s
 ifeq ($(MAILNET),1)
 all: build/axia-maild
 endif
-build/obj/mail/mimg.o: src/mail/mimg.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
-build/axia-maild: $(LMD_SRC) build/obj/mail/mimg.o $(MAIL_HDR) src/sec/sandbox.h src/sec/cgroup.h
+build/axia-maild: $(LMD_SRC) $(CODEC_LIB) $(MAIL_HDR) src/sec/sandbox.h src/sec/cgroup.h
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LMD_SRC) build/obj/mail/mimg.o $(shell pkg-config --libs openssl) -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LMD_SRC) $(CODEC_LIB) $(shell pkg-config --libs openssl) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # manual driver for axia-maild (not in `make test`): build/maild-cli '{"op":"status"}' --wait 5
 build/maild-cli: tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c src/mail/mailc.h $(NETCONN_SRC)
 	@mkdir -p build

@@ -1,4 +1,4 @@
-/* xz.c — decompressors for Debian's indexes: our own xz (LZMA2) and gzip (stb_image's
+/* xz.c — decompressors for Debian's indexes: our own xz (LZMA2) and gzip (bounded Rust
  * inflate, which is already in axia-server for PNGs). All in memory: repository files are
  * a few tens of MB.
  *
@@ -7,7 +7,7 @@
  * though the compressed file already comes verified by the signed InRelease's SHA-256.
  * The LZMA decoder follows the LZMA specification (Igor Pavlov) and the structure of xz-embedded (public domain). */
 #include "xz.h"
-#include "stb_image.h"
+#include "codecs_ffi.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -337,22 +337,7 @@ fail:
 }
 
 int gz_decode(const uint8_t *in, size_t len, uint8_t **out, size_t *outlen, size_t max) {
-    if (len < 18 || in[0] != 0x1f || in[1] != 0x8b || in[2] != 8 || len > 0x7fffffff) return -1;
-    uint8_t flg = in[3];
-    size_t p = 10;
-    if (flg & 4) { if (p + 2 > len) return -1; p += 2 + (size_t)(in[p] | in[p + 1] << 8); }
-    if (flg & 8) { while (p < len && in[p]) p++; p++; }
-    if (flg & 16) { while (p < len && in[p]) p++; p++; }
-    if (flg & 2) p += 2;
-    if (p + 8 > len) return -1;
-    /* the original size (mod 2^32) is at the end: it serves as a first estimate */
-    uint32_t isize = (uint32_t)in[len - 4] | (uint32_t)in[len - 3] << 8 | (uint32_t)in[len - 2] << 16 | (uint32_t)in[len - 1] << 24;
-    if (isize > max) return -1;
-    int n = 0;
-    char *r = stbi_zlib_decode_noheader_malloc((const char *)in + p, (int)(len - p - 8), &n);
-    if (!r) return -1;
-    if ((size_t)n > max) { free(r); return -1; }
-    *out = (uint8_t *)r;
-    *outlen = (size_t)n;
-    return 0;
+    if (!out || !outlen) return -1;
+    *out = axia_codec_gunzip(in, len, max, outlen);
+    return *out ? 0 : -1;
 }

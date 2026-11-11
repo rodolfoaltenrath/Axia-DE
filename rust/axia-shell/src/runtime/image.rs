@@ -281,32 +281,6 @@ fn decode(path: &CStr) -> Option<Pixels> {
         path::Path,
     };
     const MAX_FILE: usize = 64 * 1024 * 1024;
-    unsafe extern "C" {
-        fn stbi_info_from_memory(
-            data: *const u8,
-            len: i32,
-            w: *mut i32,
-            h: *mut i32,
-            channels: *mut i32,
-        ) -> i32;
-        fn stbi_load_from_memory(
-            data: *const u8,
-            len: i32,
-            w: *mut i32,
-            h: *mut i32,
-            channels: *mut i32,
-            desired: i32,
-        ) -> *mut u8;
-        fn stbi_image_free(data: *mut std::ffi::c_void);
-    }
-    struct Decoded(*mut u8);
-    impl Drop for Decoded {
-        fn drop(&mut self) {
-            unsafe {
-                stbi_image_free(self.0.cast());
-            }
-        }
-    }
     let path = Path::new(std::ffi::OsStr::from_bytes(path.to_bytes()));
     let mut file = OpenOptions::new()
         .read(true)
@@ -331,35 +305,12 @@ fn decode(path: &CStr) -> Option<Pixels> {
         }
         data.extend_from_slice(&chunk[..n]);
     }
-    let (mut w, mut h, mut channels) = (0, 0, 0);
-    unsafe {
-        if stbi_info_from_memory(
-            data.as_ptr(),
-            data.len() as i32,
-            &mut w,
-            &mut h,
-            &mut channels,
-        ) == 0
-        {
-            return None;
-        }
-        image_sampling::count(w, h)?;
-        let decoded = Decoded(stbi_load_from_memory(
-            data.as_ptr(),
-            data.len() as i32,
-            &mut w,
-            &mut h,
-            &mut channels,
-            4,
-        ));
-        if decoded.0.is_null() {
-            return None;
-        }
-        let n = image_sampling::count(w, h)?;
-        let mut pixels = Pixels::empty(w, h)?;
-        pixels.rgba(std::slice::from_raw_parts(decoded.0, n * 4));
-        Some(pixels)
-    }
+    let decoded = axia_codecs::images::decode(&data, 32768, 64 * 1024 * 1024)?;
+    let (w, h) = (decoded.width() as i32, decoded.height() as i32);
+    image_sampling::count(w, h)?;
+    let mut pixels = Pixels::empty(w, h)?;
+    pixels.rgba(decoded.as_raw());
+    Some(pixels)
 }
 #[cfg(not(test))]
 #[no_mangle]

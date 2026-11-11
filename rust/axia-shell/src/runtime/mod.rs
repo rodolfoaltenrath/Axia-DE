@@ -1,6 +1,6 @@
 //! Native scene ownership and styles. The renderer still borrows the C-layout
-//! views synchronously. Image ownership/cache/sampling are Rust; the vendored
-//! stb decoder, text shaping and the remaining canvas/painting stay in C.
+//! views synchronously. Image ownership/cache/sampling/decoding are Rust.
+//! Text shaping and the remaining canvas/painting stay in C.
 //!
 //! FFI contract: UI thread only, no reentrant calls. Node pointers are null or
 //! live views returned by node_new/node_get. C cannot free or relink views, text,

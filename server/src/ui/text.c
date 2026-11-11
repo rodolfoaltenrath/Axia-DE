@@ -1,5 +1,5 @@
-/* text.c — TrueType/OpenType fonts (stb_truetype + otf.c), glyph cache, measuring and
- * line wrapping. Fonts are mapped with mmap (not copied to RAM).
+/* text.c — TrueType/OpenType fonts (Rust font codecs + otf.c), glyph cache, measuring and
+ * line wrapping. Source fonts are mapped; Rust owns parsed outlines.
  *
  * Text that Inter covers (Latin, Greek, Cyrillic) goes through the fast path here; the rest
  * (Arabic, Hebrew, CJK, emoji, combining marks…) through textlayout.c. */
@@ -14,15 +14,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "stb_truetype.h"
-#include "stb_image.h"
+#include "codecs_ffi.h"
 
 typedef struct {
-    stbtt_fontinfo info;
+    AxiaRustFont *info;
     unsigned char *data;
     size_t size;
     int ascent, descent, gap, upem;
-    int color;                  /* CBDT bitmaps only (stb_truetype doesn't open it) */
+    int color;                  /* CBDT bitmaps only (without outline glyphs) */
     Otf otf;
     char path[512];
     int index;
@@ -56,8 +55,6 @@ static unsigned char *map_file(const char *path, size_t *size) {
     return m;
 }
 
-static unsigned be16(const unsigned char *d, size_t n, size_t off) { return off + 2 <= n ? (unsigned)(d[off] << 8 | d[off + 1]) : 0; }
-
 /* Whether text drawn since the last call may land differently when moved by whole pixels: only
  * draw_fast with a font whose em is a power of two of at most 2048 units keeps every pen position an
  * exact binary fraction at a whole font size; textlayout.c (shaping, other scripts' fonts) is not
@@ -71,19 +68,17 @@ static int load_bytes(Font *f, unsigned char *data, size_t size, int index, int 
     f->data = data;
     f->size = size;
     if (!f->data) return -1;
-    int off = stbtt_GetFontOffsetForIndex(f->data, index);
-    if (off < 0) off = 0;
+    int off = 0;
+    f->info = axia_font_open(f->data, f->size, (uint32_t)index,
+                             &f->ascent, &f->descent, &f->gap, &f->upem, &off);
     otf_init(&f->otf, f->data, f->size, off);
-    if (stbtt_InitFont(&f->info, f->data, off)) {
-        stbtt_GetFontVMetrics(&f->info, &f->ascent, &f->descent, &f->gap);
-        f->upem = be16(f->data, f->size, (size_t)f->info.head + 18);
-    } else if (f->otf.cbdt) {
+    if (!f->info && f->otf.cbdt) {
         /* color-bitmap-only font: cmap and metrics with otf.c */
         f->color = 1;
         f->upem = 2048;
         f->ascent = 1900;
         f->descent = -500;
-    } else {
+    } else if (!f->info) {
         otf_free(&f->otf);
         if (mapped) munmap(f->data, f->size);
         f->data = NULL;
@@ -147,7 +142,7 @@ int text_font_add(const char *path) { return text_font_load(path, 0); }
 uint32_t text_font_glyph(int font, uint32_t cp) {
     if (font < 0 || font >= nfonts || !fonts[font].data) return 0;
     Font *f = &fonts[font];
-    return f->color ? otf_cmap(&f->otf, cp) : (uint32_t)stbtt_FindGlyphIndex(&f->info, (int)cp);
+    return f->color ? otf_cmap(&f->otf, cp) : (uint32_t)axia_font_glyph(f->info, cp);
 }
 
 int text_font_has(int font, uint32_t cp) { return text_font_glyph(font, cp) != 0; }
@@ -161,19 +156,19 @@ Otf *text_font_otf(int font) { return font >= 0 && font < nfonts && fonts[font].
 
 float text_font_scale(int font, float size) {
     Font *f = &fonts[font];
-    return f->color ? size / f->upem : stbtt_ScaleForMappingEmToPixels(&f->info, size);
+    return size / f->upem;
 }
 
 int text_font_kern_glyphs(int font, uint32_t a, uint32_t b) {
     Font *f = &fonts[font];
-    return f->color ? 0 : stbtt_GetGlyphKernAdvance(&f->info, (int)a, (int)b);
+    return f->color ? 0 : axia_font_kern(f->info, a, b);
 }
 
 int text_ui_font_bold(int font) { return font >= 2 && font < NFONTS; }
 
 void text_font_vmetrics(int font, float size, float *asc, float *desc) {
     Font *f = &fonts[font];
-    float scale = f->color ? size / f->upem : stbtt_ScaleForMappingEmToPixels(&f->info, size);
+    float scale = size / f->upem;
     *asc = f->ascent * scale;
     *desc = f->descent * scale;
 }
@@ -239,11 +234,8 @@ const Glyph *text_glyph(uint32_t cp, int font, float size) {
     g->cp = cp; g->font = (uint16_t)font; g->size_q = (uint16_t)size_q; g->used = 1;
     cache_used++;
     if (f->color) return g;
-    float scale = stbtt_ScaleForMappingEmToPixels(&f->info, size_q / 2.0f);
-    int adv, lsb;
-    stbtt_GetCodepointHMetrics(&f->info, (int)cp, &adv, &lsb);
-    g->adv = adv * scale;
-    g->bmp = stbtt_GetCodepointBitmap(&f->info, scale, scale, (int)cp, &g->w, &g->h, &g->xoff, &g->yoff);
+    g->bmp = axia_font_raster(f->info, axia_font_glyph(f->info, cp), size_q / 2.0f,
+                              &g->w, &g->h, &g->xoff, &g->yoff, &g->adv);
     return g;
 }
 
@@ -257,11 +249,8 @@ const Glyph *text_glyph_id(int font, uint32_t gid, float size) {
     g->cp = key; g->font = (uint16_t)font; g->size_q = (uint16_t)size_q; g->used = 1;
     cache_used++;
     if (f->color) return g;
-    float scale = stbtt_ScaleForMappingEmToPixels(&f->info, size_q / 2.0f);
-    int adv, lsb;
-    stbtt_GetGlyphHMetrics(&f->info, (int)gid, &adv, &lsb);
-    g->adv = adv * scale;
-    g->bmp = stbtt_GetGlyphBitmap(&f->info, scale, scale, (int)gid, &g->w, &g->h, &g->xoff, &g->yoff);
+    g->bmp = axia_font_raster(f->info, gid, size_q / 2.0f,
+                              &g->w, &g->h, &g->xoff, &g->yoff, &g->adv);
     return g;
 }
 
@@ -301,8 +290,8 @@ const Glyph *text_glyph_color(int font, uint32_t gid, int max_w, int max_h) {
     size_t len;
     int ppem;
     const uint8_t *png = otf_color_png(&fonts[font].otf, (uint16_t)gid, max_h, &len, &ppem);
-    int w, h, n;
-    unsigned char *rgba = png ? stbi_load_from_memory(png, (int)len, &w, &h, &n, 4) : NULL;
+    int w, h;
+    unsigned char *rgba = png ? axia_image_decode(png, len, &w, &h, 4, 8192, 16000000) : NULL;
     if (!rgba) return g;
     uint32_t *argb = malloc((size_t)w * h * 4);
     if (argb) {
@@ -318,7 +307,7 @@ const Glyph *text_glyph_color(int font, uint32_t gid, int max_w, int max_h) {
         free(argb);
         if (g->argb) { g->w = dw; g->h = dh; g->adv = (float)dw; }
     }
-    stbi_image_free(rgba);
+    free(rgba);
     return g;
 }
 
@@ -342,7 +331,7 @@ static uint32_t utf8_next(const char **p) {
 static float kern(int font, float size, uint32_t a, uint32_t b) {
     if (!a) return 0;
     Font *f = &fonts[font];
-    return stbtt_GetCodepointKernAdvance(&f->info, (int)a, (int)b) * stbtt_ScaleForMappingEmToPixels(&f->info, size);
+    return axia_font_kern(f->info, axia_font_glyph(f->info, a), axia_font_glyph(f->info, b)) * (size / f->upem);
 }
 
 float text_line_height(float size, float lh) {
@@ -454,7 +443,7 @@ static void draw_fast(Canvas *c, const char *s, int font, float size, float line
     float lh = text_line_height(size, line_h);
     Font *f = &fonts[font];
     if (!f->upem || (f->upem & (f->upem - 1)) || f->upem > 2048) drew_inexact = 1;
-    float scale = stbtt_ScaleForMappingEmToPixels(&f->info, size);
+    float scale = (size / f->upem);
     float asc = f->ascent * scale, desc = f->descent * scale;
     for (int i = 0; i < n; i++) {
         float pen = x;
