@@ -21,7 +21,7 @@
 #include "qr.h"
 #include "ctap2.h"
 #include "../sec/sandbox.h"
-#include "monocypher.h"
+#include "crypto_ffi.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1116,7 +1116,7 @@ static const char *group_cat(Vault *v, GroupMap **gm, int *ngm, const char *path
     GroupMap *g = &ng[(*ngm)++];
     snprintf(g->path, sizeof g->path, "%s", path);
     uint8_t h[8];
-    crypto_blake2b(h, 8, (const uint8_t *)path, strlen(path));
+    axia_crypto_blake2b(h, 8, NULL, 0, (const uint8_t *)path, strlen(path), NULL, 0);
     snprintf(g->id, sizeof g->id, "g%02x%02x%02x%02x%02x%02x", h[0], h[1], h[2], h[3], h[4], h[5]);
     /* already in cats? */
     if (v->m.cats && strstr(v->m.cats, g->id)) return g->id;

@@ -16,7 +16,7 @@
 #include "vault/p256.h"
 #include "vault/vcrypto.h"
 #include "pkg/crypto.h"
-#include "monocypher.h"
+#include "crypto_ffi.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -204,11 +204,11 @@ static void do_client_pin(uint32_t cid, const Cb *c) {
 /* credencial = nonce(24) || XChaCha20-Poly1305(master, CredRandom(32), ad = rpIdHash) || mac(16) */
 static void make_cred_id(const uint8_t rph[32], const uint8_t credrandom[32], uint8_t id[72]) {
     vc_random(id, 24);
-    crypto_aead_lock(id + 24, id + 56, master, id, rph, 32, credrandom, 32);
+    axia_crypto_seal(id + 24, id + 56, master, id, rph, 32, credrandom, 32);
 }
 static int open_cred_id(const uint8_t rph[32], const uint8_t *id, size_t n, uint8_t credrandom[32]) {
     if (n != 72) return -1;
-    return crypto_aead_unlock(credrandom, id + 56, master, id, rph, 32, id + 24, 32);
+    return axia_crypto_open(credrandom, id + 56, master, id, rph, 32, id + 24, 32);
 }
 
 /* lo que se hace después del toque */

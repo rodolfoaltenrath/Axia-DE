@@ -1,6 +1,6 @@
-/* crypt.c — backup encryption with Monocypher (see crypt.h). */
+/* crypt.c — backup encryption with RustCrypto (see crypt.h). */
 #include "crypt.h"
-#include "monocypher.h"
+#include "crypto_ffi.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,7 +15,7 @@
 
 static const uint8_t magic[4] = { 'L', 'B', 'K', '1' };
 
-void bkc_wipe(void *p, size_t n) { crypto_wipe(p, n); }
+void bkc_wipe(void *p, size_t n) { axia_crypto_wipe(p, n); }
 
 uint64_t bkc_enc_size(uint64_t plain) {
     uint64_t chunks = plain ? (plain + BKC_CHUNK - 1) / BKC_CHUNK : 1;
@@ -97,7 +97,7 @@ int bkc_encrypt_fd(int in, int out, const uint8_t key[BKC_KEY], int (*tick)(void
         uint8_t nonce[24], ad[9];
         chunk_nonce(hdr + 4, i, nonce);
         chunk_ad(i, last, ad);
-        crypto_aead_lock(c, c + n, key, nonce, ad, sizeof ad, a, (size_t)n);
+        if (axia_crypto_seal(c, c + n, key, nonce, ad, sizeof ad, a, (size_t)n)) { r = -1; break; }
         if ((r = write_full(out, c, (size_t)n + BKC_MAC))) break;
         if (tick && tick(ud, (size_t)n)) { r = 1; break; }
         if (last) break;
@@ -106,8 +106,8 @@ int bkc_encrypt_fd(int in, int out, const uint8_t key[BKC_KEY], int (*tick)(void
         i++;
     }
     if (n < 0) r = -1;
-    crypto_wipe(a, BKC_CHUNK);
-    crypto_wipe(b, BKC_CHUNK);
+    axia_crypto_wipe(a, BKC_CHUNK);
+    axia_crypto_wipe(b, BKC_CHUNK);
     free(a); free(b); free(c);
     return r;
 }
@@ -129,7 +129,7 @@ int bkc_decrypt_fd(int in, int out, const uint8_t key[BKC_KEY], int (*tick)(void
         chunk_nonce(hdr + 4, i, nonce);
         chunk_ad(i, last, ad);
         size_t len = (size_t)n - BKC_MAC;
-        if (crypto_aead_unlock(p, a + len, key, nonce, ad, sizeof ad, a, len)) { r = -3; break; }
+        if (axia_crypto_open(p, a + len, key, nonce, ad, sizeof ad, a, len)) { r = -3; break; }
         if ((r = write_full(out, p, len))) break;
         if (tick && tick(ud, len)) { r = 1; break; }
         if (last) break;
@@ -137,25 +137,28 @@ int bkc_decrypt_fd(int in, int out, const uint8_t key[BKC_KEY], int (*tick)(void
         n = next;
         i++;
     }
-    crypto_wipe(p, BKC_CHUNK);
+    axia_crypto_wipe(p, BKC_CHUNK);
     free(a); free(b); free(p);
     return r;
 }
 
 int bkc_derive(const char *pass, const uint8_t salt[BKC_SALT], uint8_t key[BKC_KEY]) {
-    void *work = malloc((size_t)KDF_BLOCKS * 1024);
+    size_t plen = strlen(pass);
+    if (plen > UINT32_MAX) return -1;
+    size_t worklen = axia_crypto_argon_work_size(KDF_BLOCKS);
+    void *work = worklen ? malloc(worklen) : NULL;
     if (!work) return -1;
-    crypto_argon2_config cfg = { .algorithm = CRYPTO_ARGON2_ID, .nb_blocks = KDF_BLOCKS, .nb_passes = KDF_PASSES, .nb_lanes = 1 };
-    crypto_argon2_inputs inp = { .pass = (const uint8_t *)pass, .salt = salt, .pass_size = (uint32_t)strlen(pass), .salt_size = BKC_SALT };
-    crypto_argon2(key, BKC_KEY, work, cfg, inp, crypto_argon2_no_extras);
-    crypto_wipe(work, (size_t)KDF_BLOCKS * 1024);
+    AxiaArgonConfig cfg = { AXIA_ARGON2_ID, KDF_BLOCKS, KDF_PASSES, 1 };
+    AxiaArgonInputs inp = { (const uint8_t *)pass, salt, (uint32_t)plen, BKC_SALT };
+    int rc = axia_crypto_argon2(key, BKC_KEY, work, worklen, cfg, inp, (AxiaArgonExtras){0});
+    axia_crypto_wipe(work, worklen);
     free(work);
-    return 0;
+    return rc;
 }
 
 void bkc_check(const uint8_t key[BKC_KEY], uint8_t out[16]) {
     static const char label[] = "LordOS-Backups key check v1";
-    crypto_blake2b_keyed(out, 16, key, BKC_KEY, (const uint8_t *)label, sizeof label - 1);
+    axia_crypto_blake2b(out, 16, key, BKC_KEY, (const uint8_t *)label, sizeof label - 1, NULL, 0);
 }
 
 static void hex(const uint8_t *b, size_t n, char *out) {
@@ -207,7 +210,7 @@ int bkc_unlock(const char *machine, const char *pass, uint8_t key[BKC_KEY]) {
     if (bkc_info_read(machine, salt, check)) return -2;
     if (bkc_derive(pass, salt, key)) return -1;
     bkc_check(key, got);
-    if (crypto_verify16(got, check)) { crypto_wipe(key, BKC_KEY); return -1; }
+    if (axia_crypto_verify16(got, check)) { axia_crypto_wipe(key, BKC_KEY); return -1; }
     return 0;
 }
 
@@ -215,6 +218,6 @@ int bkc_setup(const char *machine, const char *pass, uint8_t key[BKC_KEY]) {
     uint8_t salt[BKC_SALT], check[16];
     if (bkc_random(salt, sizeof salt) || bkc_derive(pass, salt, key)) return -1;
     bkc_check(key, check);
-    if (bkc_info_write(machine, salt, check)) { crypto_wipe(key, BKC_KEY); return -1; }
+    if (bkc_info_write(machine, salt, check)) { axia_crypto_wipe(key, BKC_KEY); return -1; }
     return 0;
 }
