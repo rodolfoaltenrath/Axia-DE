@@ -631,9 +631,10 @@ além dos testes existentes de navegação, seletores e operações de arquivos.
 ## Calculadora e Sobre o aplicativo
 
 `apps/calculator/` e `apps/appabout/` também são fontes Rust completas, com
-metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. A propriedade do
-estado e a FFI comum ficam em `rust/axia-shell/src/native_apps_host.rs`: cada
-objeto possui uma variante Rust tipada, liberada pelo finalizador QuickJS.
+metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. A Calculadora
+pertence ao host de visões nativas em Rust, incluindo seus nós e entrada.
+O Sobre ainda usa a FFI de `rust/axia-shell/src/native_apps_host.rs`, com uma
+variante Rust tipada liberada pelo finalizador QuickJS.
 
 A Calculadora mantém expressão, resultado, erro, hover e pressionamento em
 Rust. O parser limita o tamanho e a profundidade e exige consumir toda a entrada.
@@ -647,13 +648,16 @@ O Sobre recebe fatos serializáveis do catálogo e do registro. Rust escolhe nom
 versão, descrição, origem, indicação de isolamento, ícone e título da janela.
 Dados de um alvo anterior não são conservados ao mudar para um app inexistente.
 O host comum resolve traduções, ícones e teclado/foco e aplica o título, sem
-wrappers específicos por app. As capacidades `facts` e `keyboard` vêm dos
-metadados Rust; a Calculadora não transporta o catálogo a cada tecla.
+wrappers específicos por app. Os fatos necessários vêm dos metadados Rust;
+a Calculadora trata teclas diretamente no host nativo, sem adaptador JS
+específico nem transporte do catálogo a cada tecla.
 
 Os testes unitários cobrem expressões malformadas, limites, valores grandes,
 precedência, teclado, estados independentes e as origens dos aplicativos. A
-integração real usa botões e teclado da Calculadora, provoca divisão por zero,
-reabre a janela e confere os títulos e versões do Sobre. Os quatro apps compilados
+integração real usa o teclado da Calculadora, provoca divisão por zero,
+reabre a janela e confirma que seus textos não passam pelo React. Os testes
+Rust do host também verificam cliques, hover, pressão, cancelamento, foco,
+instâncias e ícones. A integração confere os títulos e versões do Sobre. Os apps compilados
 são abertos nos temas padrão e clássico pelo teste headless.
 
 ## Monitor application
@@ -700,7 +704,12 @@ gerenciador de janelas, envia os fatos (configurações, tema, serviços do
 firewall, catálogo, foco da janela) e executa os efeitos do shell: abrir apps,
 gravar configurações, chamadas ao firewall, área de transferência e título da
 janela. O mesmo host monta o ícone da Dock e os painéis de privacidade dentro
-das Configurações. Calculadora, Force Quit e Sobre continuam no host React
+das Configurações. Calculadora e Monitor são montados diretamente em Rust.
+A Calculadora conserva a mesma árvore de widgets e o ícone; hover, pressão,
+cancelamento do clique, traduções e teclado são tratados pelo host nativo.
+Teclas só chegam à janela focada, nunca aos ícones; atalhos Ctrl/Alt/Super
+seguem para o shell, e a Calculadora não mantém timer quando ociosa.
+Force Quit e Sobre continuam no host React
 (`sdk/rustwidgets.js`): o Force Quit mostra ícones de apps, que são componentes
 do shell.
 

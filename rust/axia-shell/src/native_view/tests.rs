@@ -186,10 +186,21 @@ fn node_with_text(root: i32, label: &str) -> i32 {
     0
 }
 fn children(node: i32) -> Vec<i32> {
-    // The scene has no child list API here: walk ids that name `node` as parent.
-    (1..4096)
-        .filter(|id| scene::exists(*id) && scene::parent(*id) == node)
-        .collect()
+    // Read the same borrowed sibling links as the renderer. Avoid scanning
+    // thousands of unused IDs for every text lookup (especially under Miri).
+    let mut out = Vec::new();
+    unsafe {
+        let parent = crate::runtime::node_get(node);
+        if parent.is_null() {
+            return out;
+        }
+        let mut child = (*parent).first;
+        while !child.is_null() {
+            out.push((*child).id);
+            child = (*child).next;
+        }
+    }
+    out
 }
 
 #[test]
@@ -312,4 +323,119 @@ fn icons_render_once_without_timers_or_input() {
     drop(host);
     scene::destroy(mount);
     let _ = Map::<String, Value>::new();
+}
+
+#[test]
+fn calculator_mounts_keys_and_pointer_feedback_directly_and_releases_its_nodes() {
+    let dir = locales();
+    std::fs::write(
+        dir.0.join("locales/en/calculator.json"),
+        r#"{"error":"Error"}"#,
+    )
+    .unwrap();
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(
+        mount,
+        super::app("calculator").unwrap(),
+        dir.0.to_str().unwrap(),
+        None,
+    );
+    host.facts(json!({"lang":"en","context":{"decimal":".","theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#3584e4"}}}));
+    let key = node_with_text(mount, "7");
+    assert_ne!(key, 0);
+    let button = scene::parent(key);
+    let opacity = || unsafe { (*crate::runtime::node_get(button)).s.opacity };
+    assert_eq!(opacity(), 1.);
+    host.pointer("move", key, 0., 0., 0);
+    assert_eq!(opacity(), 0.88);
+    host.pointer("down", key, 0., 0., 0);
+    assert_eq!(opacity(), 0.7);
+    host.pointer("up", key, 0., 0., 0);
+    assert_eq!(opacity(), 0.88);
+    assert!(texts(&host).lines().any(|t| t == "7"));
+    // The key's nodes survive updates, hover and result changes.
+    assert!(scene::exists(key));
+    assert_eq!(scene::parent(key), button);
+    for (name, chr) in [("+", "+"), ("3", "3"), ("Enter", "")] {
+        assert!(host.key(name, chr, 0));
+    }
+    assert!(texts(&host).lines().any(|t| t == "10"));
+    assert!(!host.key("1", "1", 2), "Ctrl shortcuts pass through");
+    assert!(!host.key("1", "1", 16), "Super shortcuts pass through");
+    assert!(!host.key("x", "x", 0));
+    host.pointer("down", key, 0., 0., 0);
+    host.window_focus(false);
+    assert_eq!(opacity(), 1., "losing focus clears hover and pressure");
+    assert!(!host.key("Escape", "", 0));
+    host.pointer("up", key, 0., 0., 0);
+    assert!(
+        texts(&host).lines().any(|t| t == "10"),
+        "focus loss cancels the pending click"
+    );
+    host.window_focus(true);
+    host.key("Escape", "", 0);
+    let outside = scene::create(scene::VIEW);
+    host.pointer("down", key, 0., 0., 0);
+    host.pointer("move", outside, 0., 0., 0);
+    host.pointer("up", outside, 0., 0., 0);
+    assert_eq!(opacity(), 1.);
+    host.key("Enter", "", 0);
+    assert!(
+        texts(&host).contains("Error"),
+        "cancelled click left the expression empty"
+    );
+    host.key("Escape", "", 0);
+    for (name, chr) in [
+        ("1", "1"),
+        (",", ","),
+        ("5", "5"),
+        ("*", "*"),
+        ("2", "2"),
+        ("Enter", ""),
+    ] {
+        assert!(host.key(name, chr, 0));
+    }
+    assert!(texts(&host).lines().any(|t| t == "3"));
+    assert!(
+        host.deadline().is_none(),
+        "calculator does not poll or blink at idle"
+    );
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(outside);
+    scene::destroy(mount);
+}
+
+#[test]
+fn calculator_icons_and_unfocused_windows_never_take_arithmetic_keys() {
+    let a = scene::create(scene::VIEW);
+    let b = scene::create(scene::VIEW);
+    let icon = scene::create(scene::VIEW);
+    let mut first = Host::new(a, super::app("calculator").unwrap(), "", None);
+    let mut second = Host::new(b, super::app("calculator").unwrap(), "", None);
+    let mut picture = Host::new(icon, super::app("calculator").unwrap(), "", None);
+    first.facts(json!({"focused":true,"context":{"decimal":","}}));
+    second.facts(json!({"focused":false,"context":{"decimal":"."}}));
+    picture.facts(json!({"icon":32}));
+    assert!(!picture.key("1", "1", 0));
+    assert!(!second.key("1", "1", 0));
+    for key in ["1", ".", "5", "Enter"] {
+        assert!(first.key(key, key, 0));
+    }
+    assert!(texts(&first).contains("1,5"));
+    assert!(!texts(&second).contains("1.5"));
+    first.facts(json!({"focused":false,"context":{"decimal":","}}));
+    second.window_focus(true);
+    assert!(!first.key("Escape", "", 0));
+    assert!(second.key("9", "9", 0));
+    assert!(second.key("Enter", "", 0));
+    assert!(texts(&second).lines().any(|t| t == "9"));
+    assert!(texts(&first).contains("1,5"));
+    assert!(!children(icon).is_empty());
+    assert!(picture.deadline().is_none());
+    drop((first, second, picture));
+    for mount in [a, b, icon] {
+        assert!(children(mount).is_empty());
+        scene::destroy(mount);
+    }
 }
