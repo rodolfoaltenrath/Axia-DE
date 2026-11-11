@@ -172,8 +172,12 @@ EOF
     if have node; then run "netmodel-test (sdk/netmodel.js)" node tests/netmodel_test.mjs
     else skip "netmodel-test" "node"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.js): GPU layers, CPU reasons, Compatibility
-    if have node; then run "sysinfo-model-test (apps/sysinfo/model.js)" node tests/sysinfo_model_test.mjs
-    else skip "sysinfo-model-test" "node"; fi
+    if have node && have cargo; then
+        run "app-model-test-adapter" cargo build --manifest-path ../rust/Cargo.toml --locked --offline --example app-model
+        run "sysinfo-model-test (Rust checks and apps/sysinfo/model.js)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_model_test.mjs
+        if [ -d ../node_modules/esbuild ]; then run "app-model-bridge-test" node tests/app_model_bridge_test.mjs
+        else skip "app-model-bridge-test" "node_modules/esbuild"; fi
+    else skip "sysinfo-model-test" "node and cargo"; fi
     # (0.8.6) LordBench's model (apps/sysinfo/perf.js): references, verdicts, comparisons
     if have node; then run "sysinfo-perf-test (apps/sysinfo/perf.js)" node tests/sysinfo_perf_test.mjs
     else skip "sysinfo-perf-test" "node"; fi

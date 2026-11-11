@@ -2,13 +2,14 @@
 // the reasons for CPU composition, the Compatibility panel and the Hardware sections. Run by
 // tests/run_suites.sh (needs node).
 import { evaluate, evaluateProbe, evaluateBench, LIMITS } from '../../apps/sysinfo/checks.js';
+import { isDeepStrictEqual } from 'node:util';
 import { compositionReason, cardLayers, sessionLayers, compatibility, hardwareSections, piBoard, throttleFlags, piStatus, machineName, reportFileName, reportJson, parseMemoryLines, parseSerialLines, peripherals, firmwareDate } from '../../apps/sysinfo/model.js';
 
 let n = 0, bad = 0;
 const eq = (what, got, want) => {
   n++;
   const g = JSON.stringify(got), w = JSON.stringify(want);
-  if (g !== w) { bad++; console.log(`✗ ${what}\n    got  ${g}\n    want ${w}`); }
+  if (!isDeepStrictEqual(got, want)) { bad++; console.log(`✗ ${what}\n    got  ${g}\n    want ${w}`); }
 };
 const states = (rows) => Object.fromEntries(rows.map((r) => [r.id, r.state]));
 const notes = (rows) => Object.fromEntries(rows.map((r) => [r.id, r.note]));

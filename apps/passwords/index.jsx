@@ -11,7 +11,7 @@ import {
 } from '@lordos/sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { app, req, refreshStatus, wireEvents, reloadLogin } from './api.js';
-import { allCategories, builtinById, catName } from './templates.js';
+import { summarizeEntries, filterEntries, allCategories, builtinById, catName } from './templates.js';
 import { CatIcon, EntryIcon, Overlays } from './ui.jsx';
 import { Glyph } from './glyphs.jsx';
 import { UnlockView, CreateView } from './Lock.jsx';
@@ -61,27 +61,17 @@ function SideRow({ icon, label, count, selected, onClick, depth = 0, color, onDo
   );
 }
 
-function inCat(entryCat, catId, cats) {
-  if (entryCat === catId) return true;
-  let c = cats.find((x) => x.id === entryCat);
-  for (let guard = 0; c && c.parent && guard < 16; guard++) {
-    if (c.parent === catId) return true;
-    c = cats.find((x) => x.id === c.parent);
-  }
-  return false;
-}
-
 function Sidebar({ sel, onSel, issues, onNewCat, onEditCat, onEditTag }) {
   const th = useTheme();
   const st = useStore(app);
   const cats = allCategories(st.cats);
   const live = st.entries.filter((e) => !e.trash);
   const [open, setOpen] = useState({});
-  const count = (fn) => live.filter(fn).length;
+  const counts = summarizeEntries(st.entries, cats);
   const tags = [...new Set(live.flatMap((e) => e.tags || []))].sort((a, b) => a.localeCompare(b));
   const childrenOf = (pid) => cats.filter((c) => (c.parent || '') === pid);
   const tree = (pid, depth) => childrenOf(pid).map((c) => {
-    const n = count((e) => inCat(e.cat, c.id, cats));
+    const n = counts.categories[c.id] || 0;
     const kids = childrenOf(c.id);
     if (c.builtin && !n && !kids.length && sel !== `cat:${c.id}`) return null;     // empty built-in ones take no room
     const isOpen = open[c.id] !== false;
@@ -95,14 +85,14 @@ function Sidebar({ sel, onSel, issues, onNewCat, onEditCat, onEditTag }) {
   return (
     <ScrollView style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 10, paddingBottom: 12, gap: 2 }}>
-        <SideRow icon="lock" label={t('passwords.side.all')} count={count((e) => !e.arch)} selected={sel === 'all'} onClick={() => onSel('all')} />
-        <SideRow icon="star" label={t('passwords.side.fav')} count={count((e) => e.fav)} selected={sel === 'fav'} onClick={() => onSel('fav')} />
-        <SideRow icon="clock" label={t('passwords.side.codes')} count={count((e) => e.totp)} selected={sel === 'codes'} onClick={() => onSel('codes')} />
+        <SideRow icon="lock" label={t('passwords.side.all')} count={counts.all} selected={sel === 'all'} onClick={() => onSel('all')} />
+        <SideRow icon="star" label={t('passwords.side.fav')} count={counts.fav} selected={sel === 'fav'} onClick={() => onSel('fav')} />
+        <SideRow icon="clock" label={t('passwords.side.codes')} count={counts.codes} selected={sel === 'codes'} onClick={() => onSel('codes')} />
         <SideRow icon="shield" label={t('passwords.side.security')} count={issues} selected={sel === 'security'} onClick={() => onSel('security')} />
-        <SideRow icon="wifi" label={t('passwords.side.wifi')} count={count((e) => inCat(e.cat, 'wifi', cats))} selected={sel === 'cat:wifi'} onClick={() => onSel('cat:wifi')} />
-        <SideRow icon="note" label={t('passwords.side.notes')} count={count((e) => inCat(e.cat, 'notes', cats))} selected={sel === 'cat:notes'} onClick={() => onSel('cat:notes')} />
-        <SideRow icon="card" label={t('passwords.side.cards')} count={count((e) => inCat(e.cat, 'cards', cats))} selected={sel === 'cat:cards'} onClick={() => onSel('cat:cards')} />
-        <SideRow icon="archive" label={t('passwords.side.archived')} count={count((e) => e.arch)} selected={sel === 'archived'} onClick={() => onSel('archived')} />
+        <SideRow icon="wifi" label={t('passwords.side.wifi')} count={counts.categories.wifi || 0} selected={sel === 'cat:wifi'} onClick={() => onSel('cat:wifi')} />
+        <SideRow icon="note" label={t('passwords.side.notes')} count={counts.categories.notes || 0} selected={sel === 'cat:notes'} onClick={() => onSel('cat:notes')} />
+        <SideRow icon="card" label={t('passwords.side.cards')} count={counts.categories.cards || 0} selected={sel === 'cat:cards'} onClick={() => onSel('cat:cards')} />
+        <SideRow icon="archive" label={t('passwords.side.archived')} count={counts.archived} selected={sel === 'archived'} onClick={() => onSel('archived')} />
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
           <View style={{ flex: 1 }}><SectionTitle>{t('passwords.side.categories')}</SectionTitle></View>
           <ToolbarButton small icon="+" iconSize={15} color={th.textDim} title={t('passwords.menu.newCat')} onClick={onNewCat} style={{ marginTop: 6 }} />
@@ -110,12 +100,12 @@ function Sidebar({ sel, onSel, issues, onNewCat, onEditCat, onEditTag }) {
         {tree('', 0)}
         {tags.length > 0 && <View style={{ marginTop: 8 }}><SectionTitle>{t('passwords.side.tags')}</SectionTitle></View>}
         {tags.map((tg) => (
-          <SideRow key={tg} color={tagColor(tg)} label={tg} count={count((e) => (e.tags || []).includes(tg))} selected={sel === `tag:${tg}`}
+          <SideRow key={tg} color={tagColor(tg)} label={tg} count={counts.tags[tg] || 0} selected={sel === `tag:${tg}`}
             onClick={() => onSel(`tag:${tg}`)} onDoubleClick={() => onEditTag(tg)} />
         ))}
         <View style={{ marginTop: 8 }}><SectionTitle>{t('passwords.side.system')}</SectionTitle></View>
         <SideRow icon="person" label={t('passwords.side.login')} count={st.login.entries.length} selected={sel === 'login'} onClick={() => { reloadLogin(); onSel('login'); }} />
-        <SideRow icon="trash" label={t('passwords.side.trash')} count={st.entries.filter((e) => e.trash).length} selected={sel === 'trash'} onClick={() => onSel('trash')} />
+        <SideRow icon="trash" label={t('passwords.side.trash')} count={counts.trash} selected={sel === 'trash'} onClick={() => onSel('trash')} />
       </View>
     </ScrollView>
   );
@@ -246,17 +236,7 @@ export default function Passwords() {
 
   const v = sel === 'login' ? 'login' : 'main';
   const base = sel === 'login' ? st.login.entries : st.entries;
-  let list = base.filter((e) => {
-    if (sel === 'login') return true;
-    if (sel === 'trash') return !!e.trash;
-    if (e.trash) return false;
-    if (sel === 'all') return !e.arch;
-    if (sel === 'fav') return e.fav;
-    if (sel === 'archived') return e.arch;
-    if (sel.startsWith('cat:')) return inCat(e.cat, sel.slice(4), cats);
-    if (sel.startsWith('tag:')) return (e.tags || []).includes(sel.slice(4));
-    return true;
-  });
+  let list = filterEntries(base, sel, cats);
   if (q.trim()) {
     if (sel === 'login') { const qq = q.toLowerCase(); list = list.filter((e) => `${e.title} ${e.sub} ${e.url || ''}`.toLowerCase().includes(qq)); }
     else if (hits) list = list.filter((e) => hits.has(e.id));
