@@ -13,7 +13,7 @@ pub fn tree(spec: &Value, facts: &Value) -> Value {
         .as_str()
         .and_then(|id| facts["windows"].as_array()?.iter().find(|w| w["id"] == id));
     let id = window
-        .and_then(|w| w["key"].as_str())
+        .and_then(|w| w["iconApp"].as_str().or_else(|| w["key"].as_str()))
         .or_else(|| spec["app"].as_str())
         .unwrap_or("");
     let id = id.strip_prefix("app:").unwrap_or(id);

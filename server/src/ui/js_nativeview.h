@@ -15,6 +15,7 @@ void     axia_view_free(char *p);
 void     axia_view_result(unsigned handle, const char *result);
 void     axia_view_paste(unsigned handle, const char *text);
 char    *axia_view_text(unsigned handle);
+int      axia_view_find_text(unsigned handle, const char *label);
 /* A pointer event or a touchpad gesture: the view under it handles it; JS's target is returned
  * (the view's mount node, so the window and the shell still see the event). */
 int      axia_view_pointer(const char *type, int target, float x, float y, int button);

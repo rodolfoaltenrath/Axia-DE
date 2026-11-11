@@ -198,6 +198,7 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("calculator-keyboard", "3"));
     assert!(has_text("calculator-remount", "0"));
     assert_eq!(get("appabout")["title"], "About Calculator");
+    assert_eq!(get("appabout")["react"], 0);
     assert!(has_text("appabout", "Version 0.9.0"));
     assert_eq!(get("appabout-missing")["title"], "About missing");
     assert!(!has_text("appabout-missing", "Version 0.9.0"));
@@ -236,7 +237,7 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    println!("native Rust apps: Force Quit actions, Calculator native keyboard/arithmetic/errors/remount, About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
+    println!("native Rust apps: Force Quit actions, Calculator native clicks/keyboard/arithmetic/errors/remount, About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
 }
 
 const DRIVER: &str = r#"
@@ -272,7 +273,16 @@ const texts=()=>[...nodes.values()].filter(n=>n.text&&alive(n));
 const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
 const click=label=>{
   const node=texts().find(n=>n.text===label);
-  if(!node)throw new Error('native app driver: missing '+label);
+  if(!node){
+    let target=0;for(let h=1;h<256&&!target;h++)target=lord.nativeViews.findText(h,label);
+    if(!target)throw new Error('native app driver: missing '+label);
+    const [x,y,w,height]=lord.getLayout(target);
+    for(const kind of ['move','down','up']){
+      const mount=lord.nativeViews.pointer(kind,target,x+w/2,y+height/2,0);
+      __lordEvent(kind,mount,x+w/2,y+height/2,0);
+    }
+    globalThis.__lordNativeView?.();return;
+  }
   const [x,y,w,height]=lord.getLayout(node.parent);
   __lordEvent('down',node.parent,x+w/2,y+height/2,0);
   __lordEvent('up',node.parent,x+w/2,y+height/2,0);
@@ -280,12 +290,12 @@ const click=label=>{
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
 const tokens={mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3584e4',separator:'#555',control:'#333',controlRadius:6};
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},app?h(app.Component,{key:mode+':'+instance}):null)));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
-  record('empty',{groups:runningApps().length,text:texts().map(n=>n.text)});
+  record('empty',{groups:runningApps().length,text:nativeTexts()});
   const a=wm.open('demo',{instance:'a'}),b=wm.open('demo',{instance:'b'});
   wm.setCloseGuard(a,()=>{guards++;return false;});wm.setCloseGuard(b,()=>{guards++;return false;});
   await pause();click('Demo');await pause();click('Force Quit');await pause();
@@ -304,7 +314,7 @@ async function run(){
   calls=[];click('Force Quit');await pause();record('remount',{calls});
   control.setMode('calculator');await pause();
   const key=(name,char='')=>{__lordKey(0,1,name,char,name,0);__lordKey(0,0,name,'',name,0);};
-  for(const label of ['2','+','3','×','4','=']){key(label,label);await pause();}
+  for(const label of ['2','+','3','×','4','=']){click(label);await pause();}
   record('calculator-arithmetic',{text:nativeTexts(),react:texts().length});
   key('Escape');key('1','1');key('/','/');key('0','0');key('Enter');await pause();
   record('calculator-keyboard-error',{text:nativeTexts()});
@@ -312,8 +322,8 @@ async function run(){
   record('calculator-keyboard',{text:nativeTexts()});
   control.setInstance(2);await pause();record('calculator-remount',{text:nativeTexts()});
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
-  record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
-  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
+  record('appabout',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
+  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:nativeTexts()});
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
@@ -324,7 +334,7 @@ async function run(){
     control.setArgs({tab});await pause();await pause();
     record('monitor-'+tab,{text:nativeTexts(),texts:nativeTexts().length});
   }
-  control.setMode('forcequit');await pause();
+  control.setMode('none');await pause();
   record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
   lord.quit();
 }

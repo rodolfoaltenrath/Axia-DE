@@ -9,7 +9,7 @@ import { dockGlass, useDockPreviews } from '@lordos/sdk';
 // precise position. The logic is the SDK's (sdk/dock.js: beginDockDrag, registerDockTarget, dock.*);
 // this file only draws it and says where things are. The Trash is always the last item.
 import {
-  View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
+  NativeView, View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
   registerDockTarget, dockDragJustEnded, refreshTrash, Layer, nativeAnim, whenAnimDone,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -23,49 +23,13 @@ const TRASH = '__trash';
 // What the Dock takes up from its screen edge (for the work area).
 export const dockThickness = (size) => size + PAD * 2 + MARGIN + 4;
 
-export function LaunchpadIcon({ size: s }) {
-  const colors = ['#ff5f57', '#febc2e', '#28c840', '#0a84ff', '#bf5af2', '#ff9f0a', '#30d158', '#ff375f', '#64d2ff'];
-  const d = s * 0.14, g = s * 0.08, o = (s - 3 * d - 2 * g) / 2;
-  return (
-    <View style={{ width: s, height: s, borderRadius: s * 0.225, background: 'linear-gradient(180deg, #5b5b66, #2b2b33)',
-      boxShadow: `0 ${s * 0.04}px ${s * 0.12}px rgba(0,0,0,0.35)` }}>
-      {colors.map((c, i) => (
-        <View key={i} style={{ position: 'absolute', left: o + (i % 3) * (d + g), top: o + Math.floor(i / 3) * (d + g),
-          width: d, height: d, borderRadius: d * 0.3, backgroundColor: c }} />
-      ))}
-    </View>
-  );
+const launcherIcon = Object.freeze({ id: 'shell:dock-launcher' });
+const trashIcon = Object.freeze({ id: 'shell:dock-trash' });
+export function LaunchpadIcon({ size }) {
+  return <NativeView manifest={launcherIcon} icon={size || 32} />;
 }
-
-// The Trash: a wire basket, empty or with crumpled papers. Light and dark versions.
-export function TrashIcon({ size: s, full, dark }) {
-  const body = dark ? 'linear-gradient(180deg, rgba(235,238,245,0.30), rgba(200,205,215,0.16))' : 'linear-gradient(180deg, rgba(255,255,255,0.85), rgba(215,220,230,0.65))';
-  const line = dark ? 'rgba(255,255,255,0.55)' : 'rgba(60,66,80,0.45)';
-  const w = s * 0.62, hh = s * 0.64, x = (s - w) / 2, y = s * 0.3;
-  return (
-    <View style={{ width: s, height: s }}>
-      {full && (
-        <>
-          <View style={{ position: 'absolute', left: x + w * 0.02, top: y - s * 0.24, width: w * 0.52, height: s * 0.32, borderRadius: s * 0.13,
-            backgroundColor: '#ffffff', border: '1px solid rgba(60,66,80,0.35)', transform: 'rotate(-14deg)' }} />
-          <View style={{ position: 'absolute', left: x + w * 0.4, top: y - s * 0.28, width: w * 0.56, height: s * 0.34, borderRadius: s * 0.08,
-            backgroundColor: '#e9f1ff', border: '1px solid rgba(60,66,80,0.35)', transform: 'rotate(12deg)' }}>
-            {[0.3, 0.5, 0.7].map((k) => <View key={k} style={{ position: 'absolute', left: w * 0.08, right: w * 0.1, top: s * 0.34 * k, height: 1, backgroundColor: 'rgba(60,90,160,0.45)' }} />)}
-          </View>
-        </>
-      )}
-      <View style={{ position: 'absolute', left: x, top: y, width: w, height: hh, borderBottomLeftRadius: s * 0.1, borderBottomRightRadius: s * 0.1,
-        borderTopLeftRadius: s * 0.04, borderTopRightRadius: s * 0.04, background: body, border: `1px solid ${line}`, overflow: 'hidden',
-        boxShadow: `0 ${s * 0.03}px ${s * 0.1}px rgba(0,0,0,0.25)` }}>
-        {[0.2, 0.4, 0.6, 0.8].map((k) => (
-          <View key={k} style={{ position: 'absolute', top: 0, bottom: 0, left: w * k - 0.5, width: 1, backgroundColor: line }} />
-        ))}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: hh * 0.5, height: 1, backgroundColor: line }} />
-      </View>
-      <View style={{ position: 'absolute', left: x - s * 0.03, top: y - 1, width: w + s * 0.06, height: s * 0.05, borderRadius: s * 0.03,
-        backgroundColor: dark ? 'rgba(235,238,245,0.6)' : 'rgba(120,126,140,0.7)' }} />
-    </View>
-  );
+export function TrashIcon({ size, full, dark }) {
+  return <NativeView manifest={trashIcon} icon={size || 32} args={{ full, dark }} />;
 }
 
 // Auto-hide: shows when the pointer touches the edge (after a short delay) and hides

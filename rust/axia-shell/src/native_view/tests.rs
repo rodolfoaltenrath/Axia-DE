@@ -427,3 +427,33 @@ fn calculator_draws_and_handles_keyboard_and_pointer_without_react() {
     assert!(children(mount).is_empty());
     scene::destroy(mount);
 }
+
+#[test]
+fn native_force_quit_uses_current_windows_and_clears_stale_selection() {
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, super::app("forcequit").unwrap(), "", None);
+    let facts = json!({"windows":[{"id":"demo","key":"app:demo","app":"demo","name":"Demo"}],
+        "context":{"theme":{"mode":"dark","text":"#fff","accent":"#3584e4"}}});
+    host.facts(facts.clone());
+    let row = host.find_text("Demo");
+    assert_ne!(row, 0);
+    assert_eq!(host.find_text("missing"), 0);
+    host.pointer("down", row, 0., 0., 0);
+    host.pointer("up", row, 0., 0., 0);
+    let quit = host.find_text("forcequit.quit");
+    assert_ne!(quit, 0);
+    host.pointer("down", quit, 0., 0., 0);
+    host.pointer("up", quit, 0., 0., 0);
+    assert_eq!(
+        host.take().unwrap()[0],
+        json!({"kind":"closeWindow","id":"demo"})
+    );
+    host.result(json!(""));
+    host.facts(json!({"windows":[],"context":facts["context"]}));
+    let quit = host.find_text("forcequit.quit");
+    host.pointer("down", quit, 0., 0., 0);
+    host.pointer("up", quit, 0., 0., 0);
+    assert!(!host.pending());
+    drop(host);
+    scene::destroy(mount);
+}

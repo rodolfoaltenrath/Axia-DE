@@ -265,6 +265,26 @@ impl Host {
     pub fn text(&self) -> String {
         scene::gather_text(self.mount)
     }
+    /// Locate a native label for accessibility and compositor integration tools.
+    pub fn find_text(&self, label: &str) -> i32 {
+        fn walk(list: &[Mounted], label: &str) -> i32 {
+            for m in list {
+                if m.label == label {
+                    match m.kind {
+                        Kind::Text => return m.node,
+                        Kind::Button | Kind::Input => return m.parts[0],
+                        _ => {}
+                    }
+                }
+                let node = walk(&m.children, label);
+                if node != 0 {
+                    return node;
+                }
+            }
+            0
+        }
+        walk(&self.root, label)
+    }
     fn context(&mut self) -> Value {
         let width = scene::frame(self.mount)
             .map(|f| f.2)
@@ -282,7 +302,7 @@ impl Host {
     fn sync(&mut self) {
         let now = now_ms();
         let reply = if let Some(size) = self.icon_mode() {
-            json!({"tree": self.app.request(&json!({"cmd":"icon","size":size}))})
+            json!({"tree": self.app.request(&json!({"cmd":"icon","size":size,"args":self.facts["args"]}))})
         } else {
             let context = self.context();
             let input = json!({

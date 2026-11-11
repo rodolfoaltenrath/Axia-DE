@@ -91,9 +91,13 @@ export function appMenuItems(winId) {
 
 // Host facts resolve registry/localized names and window handles. Rust owns filtering and grouping.
 export function appControlFacts() {
-  return windows.get().map(w => ({ id: String(w.id), app: w.app, builtin: !!getApp(w.id)?.builtin,
-    key: launcherIdOf(w), name: groupName(launcherIdOf(w), w), surface: w.args?.surface,
-    x11: !!w.args?.x11, isolated: !!w.args?.pkg }));
+  return windows.get().map(w => {
+    const icon = String(w.id).startsWith('linux#') ? linuxAppFor(w.args?.appId) : getApp(w.id);
+    return { id: String(w.id), app: w.app, builtin: !!getApp(w.id)?.builtin,
+      key: launcherIdOf(w), name: groupName(launcherIdOf(w), w), surface: w.args?.surface,
+      iconApp: icon?.id, iconPath: typeof icon?.icon === 'string' ? icon.icon : '',
+      x11: !!w.args?.x11, isolated: !!w.args?.pkg };
+  });
 }
 export function runningApps() {
   const snapshot = windows.get(), byId = new Map(snapshot.map(w => [String(w.id), w]));
