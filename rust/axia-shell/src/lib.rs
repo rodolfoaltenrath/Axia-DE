@@ -18,6 +18,7 @@ mod native_apps;
 mod flip_pacing;
 mod stall;
 mod css_style;
+mod keymap;
 mod window_policy;
 mod clipboard;
 mod runtime;

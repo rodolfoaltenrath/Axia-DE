@@ -760,14 +760,22 @@ static void ime_commit(const char *text) {
 /* Key → __lordKey(code, value, key, text, base, flags). With libxkbcommon (keyboard.c)
  * C does the translation; if no layout is loaded, only code and value. If there is an
  * active input method (ime.c) and a focused text field, the key goes through it first. */
+/* Without an XKB keymap the fallback tables translate (rust/axia-shell/src/keymap.rs). */
+extern int axia_keymap_translate(int code, int value, char *key, char *chr, char *base, size_t n);
+extern void axia_keymap_name(int code, char *out, size_t n);
+
 void js_key(int code, int value) {
     KeyInfo k;
     kb_key(code, value, &k);
     grab_note_shift(k.shift);           /* Shift while moving a window: the thirds (grab.c) */
     js_wm_zone_flush();
-    if (!kb_ready()) {
-        JSValueConst args[2] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value) };
-        JS_FreeValue(ctx, call_global("__lordKey", 2, args));
+    if (!kb_ready()) {                  /* the shell gets the same event as with XKB */
+        char key[64], chr[64], base[64];
+        int flags = axia_keymap_translate(code, value, key, chr, base, sizeof key);
+        JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, key),
+                                 JS_NewString(ctx, chr), JS_NewString(ctx, base), JS_NewInt32(ctx, flags) };
+        JS_FreeValue(ctx, call_global("__lordKey", 6, args));
+        for (int i = 2; i < 5; i++) JS_FreeValue(ctx, args[i]);
         drain_jobs();
         return;
     }
@@ -781,7 +789,9 @@ void js_key(int code, int value) {
         if (used) { drain_jobs(); return; }
     }
     int flags = k.shift | k.ctrl << 1 | k.alt << 2 | k.altgr << 3 | k.meta << 4 | k.caps << 5 | k.dead << 6 | (to_app == 2) << 7;
-    JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, k.key),
+    char named[32];
+    if (!k.key[0]) axia_keymap_name(code, named, sizeof named);     /* XKB gave no name (Rust's table) */
+    JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, k.key[0] ? k.key : named),
                              JS_NewString(ctx, k.chr), JS_NewString(ctx, k.base), JS_NewInt32(ctx, flags) };
     JS_FreeValue(ctx, call_global("__lordKey", 6, args));
     for (int i = 2; i < 5; i++) JS_FreeValue(ctx, args[i]);

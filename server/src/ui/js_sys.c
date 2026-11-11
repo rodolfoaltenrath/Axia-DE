@@ -1490,7 +1490,18 @@ static const JSCFunctionListEntry locale_funcs[] = {
     JS_CFUNC_DEF("languages", 0, f_locale_languages),
     JS_CFUNC_DEF("installPack", 2, f_locale_install),
 };
+/* lord.keyboard.fallbackLayout(name): the table used only without XKB (rust/axia-shell/src/keymap.rs) */
+extern void axia_keymap_set_layout(const char *name);
+static JSValue f_kb_fallback(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    const char *name = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    axia_keymap_set_layout(name);
+    if (name) JS_FreeCString(c, name);
+    return JS_UNDEFINED;
+}
+
 static const JSCFunctionListEntry keyboard_funcs[] = {
+    JS_CFUNC_DEF("fallbackLayout", 1, f_kb_fallback),
     JS_CFUNC_DEF("set", 2, f_kb_set),
     JS_CFUNC_DEF("current", 0, f_kb_current),
     JS_CFUNC_DEF("setGroup", 1, f_kb_group),

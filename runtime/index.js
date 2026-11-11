@@ -3,10 +3,10 @@
 import Reconciler from 'react-reconciler';
 import { ConcurrentRoot, DefaultEventPriority, NoEventPriority } from 'react-reconciler/constants';
 import { createContext, useEffect, useState } from 'react';
-import { register, unregister, currentPriority, addListener, setKeyFilter } from './events.js';
+import { register, unregister, currentPriority, addListener, setKeyFilter, modifiers } from './events.js';
 
 export { addListener, setKeyFilter };
-export { setLayout, getLayout, layouts, modifiers } from './keymap.js';
+export { modifiers };
 export const View = 'view';
 export const Text = 'text';
 export const Image = 'image';
