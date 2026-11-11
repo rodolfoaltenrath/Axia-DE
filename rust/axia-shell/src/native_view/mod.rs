@@ -22,10 +22,18 @@ use std::{
 pub trait NativeApp {
     fn request(&mut self, input: &Value) -> Value;
     fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])>;
+    /// Optional window-level keyboard input (e.g. Calculator). Fields keep
+    /// their existing editing path; None leaves the key with the shell.
+    fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
+        None
+    }
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
-    (id == crate::native_apps::monitor::ID)
-        .then(|| Box::new(crate::monitor::App::default()) as Box<dyn NativeApp>)
+    match id {
+        crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
+        crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
+        _ => None,
+    }
 }
 #[derive(Default)]
 struct Registry {

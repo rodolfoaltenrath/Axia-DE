@@ -217,7 +217,7 @@ impl Host {
             .unwrap_or(".")
             .to_owned();
         if let Some(focused) = self.facts["focused"].as_bool() {
-            self.window_focused = focused;
+            self.window_focus(focused);
         }
         self.sync();
     }
@@ -228,6 +228,9 @@ impl Host {
         self.window_focused = focused;
         if !focused {
             self.blur();
+            let pressed = std::mem::take(&mut self.pressed);
+            self.pointer_action(pressed, "onMouseUp");
+            self.set_hover(0);
         }
         // The refresh period depends on focus.
         self.next_sync = self.refresh_ms().map(|ms| now_ms() + ms);
@@ -379,6 +382,12 @@ impl Host {
         match m.kind {
             Kind::View => {
                 m.style(0, style);
+                // Views only need their event map after reconciliation. Avoid
+                // retaining another copy of the entire descendant tree.
+                m.spec = spec
+                    .get("events")
+                    .map(|events| json!({"events":events}))
+                    .unwrap_or(Value::Null);
                 m.click = spec["events"]["onClick"]
                     .as_array()
                     .filter(|a| !a.is_empty())
@@ -553,6 +562,12 @@ impl Host {
                     Kind::View => {
                         if let Some(action) = &m.click {
                             t.insert(m.node, Target::Click(action.clone(), Value::Null));
+                            if ["onMouseEnter", "onMouseLeave", "onMouseDown", "onMouseUp"]
+                                .iter()
+                                .any(|event| m.spec["events"][*event].is_array())
+                            {
+                                b.insert(m.node, m.node);
+                            }
                         }
                     }
                     Kind::Button if m.spec["disabled"] != true => {
@@ -619,10 +634,23 @@ impl Host {
             return;
         }
         let old = std::mem::replace(&mut self.hover, node);
+        self.pointer_action(old, "onMouseLeave");
+        self.pointer_action(node, "onMouseEnter");
         for n in [old, node] {
             if n != 0 {
                 self.restyle(n);
             }
+        }
+    }
+    fn pointer_action(&mut self, node: i32, event: &str) {
+        if node == 0 {
+            return;
+        }
+        let action = find(&mut self.root, node)
+            .map(|m| m.spec["events"][event].clone())
+            .filter(Value::is_array);
+        if let Some(action) = action {
+            self.dispatch(&action, Map::new());
         }
     }
     fn focus(&mut self, node: i32) {
@@ -710,7 +738,8 @@ impl Host {
                 self.set_hover(hover);
             }
             "down" => {
-                self.pressed = 0;
+                let old = std::mem::take(&mut self.pressed);
+                self.pointer_action(old, "onMouseUp");
                 if !inside {
                     self.blur();
                     return None;
@@ -727,6 +756,7 @@ impl Host {
                     self.pressed = self
                         .target(target, |t| matches!(t, Target::Click(..)))
                         .map_or(0, |(n, _)| n);
+                    self.pointer_action(self.pressed, "onMouseDown");
                 }
                 let field = self
                     .target(target, |t| matches!(t, Target::Field))
@@ -739,6 +769,7 @@ impl Host {
                     self.restyle(node);
                 }
                 let pressed = std::mem::take(&mut self.pressed);
+                self.pointer_action(pressed, "onMouseUp");
                 if inside && button == 0 && pressed != 0 {
                     if let Some((node, Target::Click(action, value))) =
                         self.target(target, |t| matches!(t, Target::Click(..)))
@@ -800,8 +831,16 @@ impl Host {
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
-        if self.field == 0 || !self.window_focused {
+        if !self.window_focused || self.icon_mode().is_some() {
             return false;
+        }
+        if self.field == 0 {
+            let Some(reply) = self.app.key(key, chr, flags) else {
+                return false;
+            };
+            self.queue(&reply);
+            self.sync();
+            return true;
         }
         let (ctrl, alt, meta) = (flags & 2 != 0, flags & 4 != 0, flags & 16 != 0);
         let Some(value) = self.field_value() else {
