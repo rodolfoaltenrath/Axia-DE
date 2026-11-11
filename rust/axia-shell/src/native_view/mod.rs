@@ -8,6 +8,7 @@
 mod host;
 pub mod i18n;
 mod icons;
+mod shell_icons;
 pub mod style;
 #[cfg(test)]
 mod tests;
@@ -26,12 +27,14 @@ pub trait NativeApp {
         None
     }
 }
-fn app(id: &str) -> Option<Box<dyn NativeApp>> {
+pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
         crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
         crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App::default())),
+        "shell:dock-launcher" => Some(Box::new(shell_icons::Icon::Launcher)),
+        "shell:dock-trash" => Some(Box::new(shell_icons::Icon::Trash)),
         _ => None,
     }
 }
@@ -161,6 +164,11 @@ pub unsafe extern "C" fn axia_view_paste(handle: u32, value: *const c_char) {
 #[no_mangle]
 pub extern "C" fn axia_view_text(handle: u32) -> *mut c_char {
     with_host(handle, |h| owned(h.text())).unwrap_or(std::ptr::null_mut())
+}
+/// Label lookup for accessibility/automation; IDs are valid only while mounted.
+#[no_mangle]
+pub unsafe extern "C" fn axia_view_find_text(handle: u32, label: *const c_char) -> i32 {
+    with_host(handle, |h| h.find_text(text(label))).unwrap_or(0)
 }
 fn handles() -> Vec<u32> {
     with(|r| r.hosts.keys().copied().collect())

@@ -9,9 +9,13 @@ Rust já existente, até não restarem consumidores do motor.
 - Monitor: árvore, rasters, entrada e atualização periódica nativos.
 - Calculadora: árvore e ícone nativos, cálculo por teclado e ponteiro, foco,
   separador decimal e feedback de pressão/hover em Rust.
+- Force Quit e Sobre: árvores e ícones nativos; o adaptador React de widgets
+  desses apps foi removido. Efeitos ainda usam os serviços da sessão.
 - Host compartilhado: reconciliação por chave, botões, campos, rolagem,
   eventos de ponteiro em views e teclado de aplicações. Teclas só são consumidas
   mediante resposta explícita do app; atalhos do shell mantêm a precedência.
+- Dock: ícones do lançador e da lixeira nativos, com os dois temas e estados
+  vazio/cheio. A geometria foi comparada com 15 árvores capturadas do JSX anterior.
 - Ícones: geometria dos apps compilados e de Arquivos, imagens do catálogo e
   fallback de inicial sobre gradiente podem ser montados pelo host Rust.
 

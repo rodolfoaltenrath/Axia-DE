@@ -12,12 +12,15 @@ import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
 import { useWindows, wm, appCatalogSource } from './windows.js';
 import { useLauncherApps } from './apps.js';
-import { useSettings, settings } from './settings.js';
+import { useSettings } from './settings.js';
 import { appName } from './i18n.js';
+import { appControlFacts } from './appcontrol.js';
+import { executeNativeEffect } from './nativeappmodel.js';
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
   comment: app.comment, description: app.description, genericName: app.genericName,
+  iconPath: typeof app.icon === 'string' ? app.icon : '',
   package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon });
 
 const runners = new Map();          // handle → runs one effect
@@ -38,25 +41,7 @@ function runner(handle, manifest, winId) {
       } catch (e) { console.error('native view:', e); }
       return;
     }
-    let result = '';
-    try {
-      switch (effect.kind) {
-        case 'settings': settings.set(effect.patch); break;
-        case 'openApp': wm.open(effect.app, { args: effect.args || {} }); break;
-        case 'nativeCall':
-          if (!manifest.calls?.[effect.service]?.includes(effect.method)) throw new Error('app.invalidRequest');
-          result = lord[effect.service][effect.method](...(effect.args || []));
-          break;
-        case 'nativeRead':
-          if (!manifest.reads?.[effect.service]?.includes(effect.method)) throw new Error('app.invalidRequest');
-          result = { method: effect.method, value: lord[effect.service][effect.method](...(effect.args || [])) };
-          break;
-        default: result = 'app.invalidRequest';
-      }
-    } catch (error) {
-      const code = error?.code || error?.message || 'app.invalidRequest';
-      result = effect.kind === 'nativeCall' || effect.kind === 'nativeRead' ? { error: code } : code;
-    }
+    const result = executeNativeEffect(effect, manifest);
     lord.nativeViews.result(handle, result);
   };
 }
@@ -86,11 +71,12 @@ export function NativeView({ manifest, args, icon, style }) {
     return () => clearInterval(id);
   }, [manifest, icon]);
   const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius } = theme;
-  const facts = icon ? { icon } : {
+  const facts = icon ? { icon, args: args || {} } : {
     args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
     services: polled,
+    ...(manifest.facts === 'windows' ? { windows: appControlFacts() } : {}),
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
     context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius },

@@ -103,6 +103,27 @@ static JSValue f_text(JSContext *c, JSValueConst t, int argc, JSValueConst *argv
     return argc ? owned_string(c, axia_view_text(arg_handle(c, argv[0]))) : JS_NULL;
 }
 
+/* Native label lookup and pointer relay for accessibility/automation. The relay
+ * returns the mount node, just like the compositor's physical pointer path. */
+static JSValue f_find_text(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    if (argc < 2) return JS_NewInt32(c, 0);
+    const char *label = JS_ToCString(c, argv[1]);
+    int node = label ? axia_view_find_text(arg_handle(c, argv[0]), label) : 0;
+    if (label) JS_FreeCString(c, label);
+    return JS_NewInt32(c, node);
+}
+static JSValue f_pointer(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    int32_t target = 0, button = 0;
+    double x = 0, y = 0;
+    if (argc < 5 || JS_ToInt32(c, &target, argv[1]) || JS_ToFloat64(c, &x, argv[2]) ||
+        JS_ToFloat64(c, &y, argv[3]) || JS_ToInt32(c, &button, argv[4])) return JS_UNDEFINED;
+    const char *kind = JS_ToCString(c, argv[0]);
+    int node = kind ? axia_view_pointer(kind, target, (float)x, (float)y, button) : target;
+    if (kind) JS_FreeCString(c, kind);
+    return JS_NewInt32(c, node);
+}
 static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("mount", 3, f_mount),
     JS_CFUNC_DEF("unmount", 1, f_unmount),
@@ -113,6 +134,8 @@ static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("paste", 2, f_paste),
     JS_CFUNC_DEF("key", 3, f_key),
     JS_CFUNC_DEF("text", 1, f_text),
+    JS_CFUNC_DEF("findText", 2, f_find_text),
+    JS_CFUNC_DEF("pointer", 5, f_pointer),
 };
 
 void js_nativeview_register(JSContext *ctx, JSValue lord, const char *assets_dir) {

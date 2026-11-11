@@ -1,24 +1,12 @@
-//! Shared ownership/FFI for compiled applications drawn by the React widget host.
-//! Application behavior stays in apps/<id>. Monitor is a native view instead
-//! (native_view/): Rust mounts it into the scene and this host never creates it.
+//! App-control service retained by the JavaScript shell during its migration.
+//! Compiled application views are owned by native_view; this service only keeps
+//! the Force Quit controller used by application menus and catalog queries.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
-pub enum NativeApp {
-    ForceQuit(crate::forcequit::App),
-    Calculator(crate::calculator::App),
-    AppAbout(crate::appabout::App),
-}
+pub struct NativeApp(crate::forcequit::App);
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
-        if id == crate::native_apps::forcequit::ID.as_bytes() {
-            Some(Self::ForceQuit(Default::default()))
-        } else if id == crate::native_apps::calculator::ID.as_bytes() {
-            Some(Self::Calculator(Default::default()))
-        } else if id == crate::native_apps::appabout::ID.as_bytes() {
-            Some(Self::AppAbout(Default::default()))
-        } else {
-            None
-        }
+        (id == crate::native_apps::forcequit::ID.as_bytes()).then(|| Self(Default::default()))
     }
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "catalog" {
@@ -26,20 +14,16 @@ impl NativeApp {
         }
         if input["cmd"] == "icon" {
             if let Some(id) = input["app"].as_str() {
-                return Self::new(id.as_bytes()).map_or_else(
+                return crate::native_view::app(id).map_or_else(
                     || json!({"error":"app.invalidRequest"}),
-                    |mut app| app.dispatch(input),
+                    |mut app| app.request(input),
                 );
             }
         }
         self.dispatch(input)
     }
     fn dispatch(&mut self, input: &Value) -> Value {
-        match self {
-            Self::ForceQuit(app) => app.request(input),
-            Self::Calculator(app) => app.request(input),
-            Self::AppAbout(app) => app.request(input),
-        }
+        self.0.request(input)
     }
 }
 

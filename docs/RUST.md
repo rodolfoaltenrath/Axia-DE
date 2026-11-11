@@ -700,9 +700,11 @@ gerenciador de janelas, envia os fatos (configurações, tema, serviços do
 firewall, catálogo, foco da janela) e executa os efeitos do shell: abrir apps,
 gravar configurações, chamadas ao firewall, área de transferência e título da
 janela. O mesmo host monta o ícone da Dock e os painéis de privacidade dentro
-das Configurações. Calculadora, Force Quit e Sobre continuam no host React
-(`sdk/rustwidgets.js`): o Force Quit mostra ícones de apps, que são componentes
-do shell.
+das Configurações. Calculadora, Force Quit e Sobre também são montados pelo
+Rust, incluindo seus ícones. O host React de widgets desses apps foi removido;
+os efeitos ainda passam pelo adaptador de serviços da sessão. Os ícones do
+lançador e da lixeira da Dock também usam visões Rust. A retirada do restante
+do shell é acompanhada em [NATIVE-SHELL.md](NATIVE-SHELL.md).
 
 ```sh
 cargo test --manifest-path rust/Cargo.toml --locked --offline --lib native_view

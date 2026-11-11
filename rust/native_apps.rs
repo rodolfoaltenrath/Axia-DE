@@ -27,10 +27,7 @@ mod tests {
         let mut ids = std::collections::BTreeSet::new();
         for app in apps {
             assert!(ids.insert(app["id"].as_str().unwrap()));
-            assert!(matches!(
-                app["nativeView"].as_str(),
-                Some("widgets" | "files" | "rust")
-            ));
+            assert!(matches!(app["nativeView"].as_str(), Some("files" | "rust")));
             assert!(app["size"][0].as_u64().unwrap() >= app["minSize"][0].as_u64().unwrap());
             assert!(app["size"][1].as_u64().unwrap() >= app["minSize"][1].as_u64().unwrap());
         }
