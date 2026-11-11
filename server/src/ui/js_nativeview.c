@@ -115,7 +115,25 @@ static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("text", 1, f_text),
 };
 
+/* Session clock model: all scheduling and state transitions are Rust-owned. */
+static JSValue f_clock_request(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    if (!argc) return JS_NULL;
+    JSValue keep;
+    const char *input = arg_json(c, argv[0], &keep);
+    char *out = input ? axia_clock_request(input) : NULL;
+    if (input) JS_FreeCString(c, input);
+    JS_FreeValue(c, keep);
+    if (!out) return JS_NULL;
+    JSValue result = JS_ParseJSON(c, out, strlen(out), "<clock>");
+    axia_view_free(out);
+    return result;
+}
+
 void js_nativeview_register(JSContext *ctx, JSValue lord, const char *assets_dir) {
+    JSValue clock = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, clock, "request", JS_NewCFunction(ctx, f_clock_request, "request", 1));
+    JS_SetPropertyStr(ctx, lord, "clock", clock);
     const char *home = getenv("HOME");
     axia_view_init(assets_dir ? assets_dir : "", home ? home : "");
     JSValue o = JS_NewObject(ctx);

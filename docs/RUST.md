@@ -690,6 +690,18 @@ rápido continua no shell; o conteúdo do app não passa pelo React.
 Recentes e tom continuam nas preferências `emojiRecent` e `emojiTone` existentes.
 A cópia é um efeito do host para a área de transferência do sistema.
 
+## Serviço de alarmes, temporizador e cronômetro
+
+`rust/axia-shell/src/clock/` é o modelo de sessão do Relógio. Ele conserva os
+formatos de `settings.clock`, a soneca de 9 minutos, a janela de atraso de
+10 minutos, a duração para repetir o temporizador e as 200 voltas mais recentes.
+A recorrência usa o calendário local, incluindo mudanças de horário de verão;
+num horário ambíguo, escolhe a primeira ocorrência, como o `Date` anterior.
+
+`sdk/alarms.js` publica snapshots e apresenta sons, notificações e o item da
+barra. O próximo intervalo vem do Rust; o agendamento não depende de uma janela
+aberta. A FFI JSON fica em `js_nativeview.c` (`lord.clock.request`).
+
 ## Monitor application
 
 `apps/monitor/*.rs` owns all eight Monitor tabs, privacy panels, collection,
