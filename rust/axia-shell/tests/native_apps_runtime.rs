@@ -175,6 +175,11 @@ fn real_compiled_app_widgets_and_effects() {
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
+    assert_eq!(get("clock-service")["alarms"][0]["label"], "Native clock test");
+    assert_eq!(get("clock-service")["timer"]["state"], "paused");
+    assert_eq!(get("clock-service")["timer"]["duration"], 30000);
+    assert_eq!(get("clock-service")["stopwatch"]["running"], false);
+    assert_eq!(get("clock-service")["stopwatch"]["laps"].as_array().unwrap().len(), 1);
     assert_eq!(get("external-activation")["focused"], true);
     assert_eq!(get("external-activation")["minimized"], false);
     assert_eq!(get("empty")["groups"], 0);
@@ -275,6 +280,7 @@ import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js
 import { View, render } from '@ROOT@/runtime/index.js';
 import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
 import '@ROOT@/sdk/wayland.js';
+import { clockAlarms, clockTimer, timerStart, timerPause, timerReset, stopwatch, swStart, swStop, swLap, swReset } from '@ROOT@/sdk/alarms.js';
 import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/windows.js';
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
@@ -317,6 +323,10 @@ async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
   record('empty',{groups:runningApps().length,text:texts().map(n=>n.text)});
+  const alarmId=clockAlarms.add({h:23,m:45,label:'Native clock test'});
+  timerStart(30);timerPause();swStart();await pause();swLap();swStop();
+  record('clock-service',{alarms:clockAlarms.list(),timer:clockTimer.get(),stopwatch:stopwatch.get()});
+  clockAlarms.remove(alarmId);timerReset();swReset();
   const browser=wm.open('linux',{instance:804,args:{surface:804}});
   wm.minimize(browser);__lordWayland(804,'activate');
   record('external-activation',{focused:wm.focused()===browser,minimized:wm.get(browser).minimized});wm.close(browser,true);

@@ -1,6 +1,7 @@
 //! Rust services embedded in the existing C compositor.
 //! Window-system objects and the React UI retain their existing interfaces.
 mod anim;
+mod clock;
 #[path = "../../../apps/characters/mod.rs"]
 mod characters;
 #[path = "../../../apps/about/mod.rs"]

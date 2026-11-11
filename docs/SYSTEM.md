@@ -662,9 +662,10 @@ the `Date` of the whole theme (the bar, the other apps). Instead:
   Casablanca, Gaza, Santiago, Kathmandu, St Johns…) every ~3 days from 1970 to 2045:
   **216,168 instants, 0 differences** on VM 119.
 
-### Alarms with the app closed (`sdk/alarms.js`)
+### Alarms with the app closed (`rust/axia-shell/src/clock/`)
 
-Alarms, the timer and the stopwatch live in the SDK, not in the window: `startShell` calls
+Alarms, the timer and the stopwatch live in Rust session state, independently of the window.
+The SDK bridge presents notifications and sounds; `startShell` calls
 `startAlarms()` once per session. So they ring with Clock closed and also with the session in the
 background (fast user switching, or viewed only from the browser): the `axia-server` session keeps
 running, and so does its JS.
