@@ -318,7 +318,24 @@ static JSValue f_stats(JSContext *c, JSValueConst this_val, int argc, JSValueCon
     return o;
 }
 
+/* lord.css(json): a CSS/React style object (key order kept) → its native properties
+ * (rust/axia-shell/src/css_style.rs). runtime/index.js sends only the ones that changed. */
+extern char *axia_css_normalize(const char *input);
+extern void axia_css_free(char *reply);
+static JSValue f_css(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    const char *in = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    if (!in) return JS_ThrowTypeError(c, "lord.css requires JSON");
+    char *reply = axia_css_normalize(in);
+    JS_FreeCString(c, in);
+    if (!reply) return JS_ThrowOutOfMemory(c);
+    JSValue v = JS_ParseJSON(c, reply, strlen(reply), "<css>");
+    axia_css_free(reply);
+    return v;
+}
+
 static const JSCFunctionListEntry lord_funcs[] = {
+    JS_CFUNC_DEF("css", 1, f_css),
     JS_CFUNC_DEF("createNode", 1, f_create_node),
     JS_CFUNC_DEF("setText", 2, f_set_text),
     JS_CFUNC_DEF("setStyle", 3, f_set_style),

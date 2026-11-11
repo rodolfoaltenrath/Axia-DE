@@ -37,6 +37,9 @@ const MOCK = `globalThis.__lordTest = (() => {
     removeChild: (p, c) => log.push('remove ' + p + ' ' + c),
     destroy: (id) => log.push('destroy ' + id),
     setRoot: (id) => log.push('root ' + id),
+    // the conversion is Rust's (lord.css); this keeps its contract: pure, NaN arrives as null and
+    // null/false are skipped, later pairs win
+    css: (json) => { const out = {}; for (const [k, v] of Object.entries(JSON.parse(json))) if (v !== null && v !== false) out[k] = v; return out; },
   };
   globalThis.__skips = 0;
   process.on('exit', () => process.stderr.write('skips ' + globalThis.__skips + '\\n'));
