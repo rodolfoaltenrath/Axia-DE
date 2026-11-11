@@ -2,12 +2,13 @@
 // machines, category means, the stability and compatibility verdicts, comparisons with the previous
 // result and the conditions that differ. Run by tests/run_suites.sh (needs node).
 import { CATEGORIES, DESKTOP_CATEGORIES, SANDBOX_TRIES, ENGINE_IDS, desktopVerdict, REFERENCES, ratio, categoryRatios, comparableReferences, stability, compatibilityVerdict, conditionDiffs, changes, sustainedSeries, refreshBudget, fileName, piFirmware } from '../../apps/sysinfo/perf.js';
+import { isDeepStrictEqual } from 'node:util';
 
 let n = 0, bad = 0;
 const eq = (what, got, want) => {
   n++;
   const g = JSON.stringify(got), w = JSON.stringify(want);
-  if (g !== w) { bad++; console.log(`✗ ${what}\n    got  ${g}\n    want ${w}`); }
+  if (!isDeepStrictEqual(got, want)) { bad++; console.log(`✗ ${what}\n    got  ${g}\n    want ${w}`); }
 };
 const near = (what, got, want) => eq(what, got != null && Math.abs(got - want) < 1e-9, true);
 

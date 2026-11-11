@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { REFERENCES as sourceReferences } from '../../apps/sysinfo/references.js';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const sent = [];
 const create = lord.nativeApps.create;
@@ -16,6 +17,7 @@ const result = await build({ stdin: { contents: `
   export * as passwords from './apps/passwords/templates.js';
   export * as checks from './apps/sysinfo/checks.js';
   export * as hardware from './apps/sysinfo/model.js';
+  export * as perf from './apps/sysinfo/perf.js';
   export * as keys from './apps/terminal/keys.js';
   export { settings } from '@lordos/sdk';
 `, resolveDir: root }, bundle: true, write: false, format: 'esm', platform: 'node', plugins: [{
@@ -30,7 +32,7 @@ const result = await build({ stdin: { contents: `
     ` }));
   },
 }] });
-const { terminal, passwords, checks, hardware, keys, settings } = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64'));
+const { terminal, passwords, checks, hardware, perf, keys, settings } = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64'));
 const cases = JSON.parse(fs.readFileSync(root + 'rust/axia-shell/tests/fixtures/app_models.json', 'utf8'));
 let n = 0;
 for (const { app, input: i, expected } of cases) {
@@ -87,5 +89,16 @@ for (const { input: i, expected } of JSON.parse(fs.readFileSync(root + 'rust/axi
 assert.throws(() => keys.mappingBytes({ action: 'text', param: '\\u{110000}' }), RangeError);
 for (const { input: i, expected } of JSON.parse(fs.readFileSync(root + 'rust/axia-shell/tests/fixtures/sysinfo_hardware.json', 'utf8'))) {
   assert.deepEqual(hardware[i.cmd](...i.args), expected, `hardware ${i.cmd} reference ${n++}`);
+}
+assert.deepEqual(perf.REFERENCES, sourceReferences, 'runtime and build-tool reference measurements stay identical');
+function sameMeasurement(a, b) {
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(a), Math.abs(b));
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return a === b;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(k => Object.prototype.hasOwnProperty.call(b, k) && sameMeasurement(a[k], b[k]));
+}
+for (const { input: i, expected } of JSON.parse(fs.readFileSync(root + 'rust/axia-shell/tests/fixtures/sysinfo_performance.json', 'utf8'))) {
+  assert.ok(sameMeasurement(perf[i.cmd](...i.args), expected), `performance ${i.cmd} reference ${n++}`);
 }
 console.log(`app-model-bridge-test: ${n} reference cases and transport/persistence/list checks passed`);

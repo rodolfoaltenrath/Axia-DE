@@ -18,10 +18,13 @@ export const terminalSettings = () => {
 export function saveTerminalSettings(patch) {
   settings.set({ terminal: { ...terminalSettings(), ...patch } });
 }
-export const getProfile = id => request({ cmd: 'profile', settings: raw(), id });
+export const getProfile = id => {
+  const { profiles, defaultProfile } = raw();
+  return request({ cmd: 'profile', settings: { profiles, defaultProfile }, id });
+};
 export const allSchemes = () => ({ ...PRESETS, ...(terminalSettings().schemes || {}) });
-export const schemeOf = profile => request({ cmd: 'scheme', settings: raw(), profile });
-export const toConfig = (profile, extra = {}) => request({ cmd: 'config', settings: raw(), profile, extra });
+export const schemeOf = profile => request({ cmd: 'scheme', settings: { schemes: raw().schemes }, profile });
+export const toConfig = (profile, extra = {}) => request({ cmd: 'config', settings: { schemes: raw().schemes }, profile, extra });
 
 export function newProfileId() {
   return `p${Date.now().toString(36)}`;
