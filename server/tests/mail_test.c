@@ -11,6 +11,7 @@
 #include "sec/json.h"
 #include "doc/wire.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -781,11 +782,37 @@ static void test_vcard(void) {
     }
 }
 
+/* ---- the Rust implementation's C ABI (rust/axia-mail) ---- */
+
+size_t axia_mail_layout(int which);
+
+static void test_abi(void) {
+    /* every exported struct has the layout the headers declare */
+    size_t want[] = { sizeof(MimePart), sizeof(MimeMsg), sizeof(MimeAddr), sizeof(MxNode), sizeof(HtmlStats), sizeof(HtmlData),
+                      sizeof(IcProp), sizeof(IcComp), sizeof(IcAttendee), sizeof(IcEvent), sizeof(IcBuild), sizeof(JBuf), sizeof(JVal),
+                      offsetof(MimePart, hdr), offsetof(IcEvent, description), offsetof(IcEvent, att), offsetof(IcEvent, parent_uid),
+                      offsetof(IcBuild, exdate), offsetof(MxNode, tlen), offsetof(IcComp, kid) };
+    for (size_t i = 0; i < sizeof want / sizeof want[0]; i++) CHECK(axia_mail_layout((int)i) == want[i]);
+    /* a value ending in a multibyte character keeps it when nothing is truncated */
+    char *u = ic_unescape_dup("Jos\xc3\xa9");
+    CHECKS(u, "Jos\xc3\xa9");
+    free(u);
+    char t[5];
+    ic_unescape("Jos\xc3\xa9", t, sizeof t);                 /* truncated: the partial "é" goes */
+    CHECKS(t, "Jos");
+    /* a hidden element where a closed list used to be still ends at its own close tag */
+    const char *h = "<div><ol><li>a<li>b</ol><span style=\"display:none\">x</span>visible</div>";
+    size_t n;
+    char *j = html_sanitize(h, strlen(h), &n, NULL, NULL, NULL);
+    CHECK(j && strstr(j, "\"visible\"") && !strstr(j, "\"x\":\"x\""));
+    free(j);
+}
+
 int main(void) {
     alarm(300);                 /* never hang a `make test`: SIGALRM kills a runaway parser */
     clock_t t0 = clock();
     static const struct { const char *name; void (*fn)(void); } parts[] = {
-        { "imap", test_imap }, { "mime", test_mime }, { "html", test_html }, { "xml", test_xml }, { "ical", test_ical }, { "vcard", test_vcard },
+        { "imap", test_imap }, { "mime", test_mime }, { "html", test_html }, { "xml", test_xml }, { "ical", test_ical }, { "vcard", test_vcard }, { "abi", test_abi },
     };
     for (size_t i = 0; i < sizeof parts / sizeof parts[0]; i++) {
         int before = fails;

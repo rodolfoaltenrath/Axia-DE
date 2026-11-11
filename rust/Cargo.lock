@@ -50,6 +50,7 @@ name = "axia-codecs"
 version = "0.1.0"
 dependencies = [
  "axia-crypto",
+ "axia-mail",
  "flate2",
  "fontdue",
  "image",
@@ -69,6 +70,13 @@ dependencies = [
  "serde_json",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "axia-mail"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
