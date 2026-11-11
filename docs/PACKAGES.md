@@ -12,7 +12,7 @@ The code is in `server/src/pkg/`:
 |---|---|
 | `crypto.c` | SHA-256, SHA-512, RSA PKCS#1 v1.5 verification (Montgomery) and Ed25519 (TweetNaCl arithmetic) |
 | `pgp.c` | Binary or armored OpenPGP keyrings, subkeys, expirations and revocations; v4 signatures of clear-signed messages (`InRelease`) |
-| `xz.c` | Our own xz/LZMA2 decompressor; gzip with `stb_image`'s inflate (already there for PNGs) |
+| `xz.c` | Our own xz/LZMA2 decompressor; bounded, checksum-verified gzip with `axia-codecs` (Rust) |
 | `deb.c` | dpkg version comparison, deb822 fields, relations (`a (>= 1) \| b`) |
 | `idx.c` | The compact index that `pkg-update` builds and that is read with mmap |
 | `status.c` | Reading `/var/lib/dpkg/status` (what is installed) |

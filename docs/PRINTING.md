@@ -120,7 +120,7 @@ CUPS socket is a Unix socket and isn't affected.
 - **Preview** at the lowest resolution. **The area** is chosen by dragging over the preview.
 - **Save as PDF, PNG or JPEG** in Documents or Pictures, as "Scan <date> <time>" (named in the interface language):
   - if the scanner provides that format, it's copied as is;
-  - otherwise axia-doc converts it (stb_image and cairo), at the real size according to the
+  - otherwise axia-doc converts it (Rust image codecs and cairo), at the real size according to the
     resolution;
   - the image the scanner sends **is decoded in axia-doc**, confined, never in axia-server.
 - **Security:**

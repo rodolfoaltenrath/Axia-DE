@@ -211,8 +211,8 @@ Locking frees the model block by block; every arena block is wiped on free.
 - The process is not dumpable (`PR_SET_DUMPABLE 0`, which also blocks ptrace from the same user)
   and `RLIMIT_CORE` is 0.
 - The request JSON is received straight into the arena (`vw_feed` with the arena allocator) and
-  the in-arena JSON reader (`vjson.c`) tokenises in place; stb_image (for QR images and photo
-  previews) and the KDBX gzip inflate also allocate from the arena (`vstb.c`).
+  the in-arena JSON reader (`vjson.c`) tokenises in place; Rust image codecs (for QR images and photo
+  previews) and the KDBX gzip inflate also allocate from the arena (`rust/axia-codecs`, `secure-memory` feature).
 - Argon2's work area (64–256 MiB) cannot be locked under the default limit; it is `DONTDUMP`
   and wiped after each derivation. The test VM has no swap.
 
@@ -480,7 +480,7 @@ whose only verification is built in (fingerprint) are not implemented/tested.
 | `server/src/vault/vmodel.c` | decrypted content: items, search, list, history |
 | `server/src/vault/smem.c` | the secret arena |
 | `server/src/vault/vjson.c`, `vwire.c` | in-arena JSON, the message protocol |
-| `server/src/vault/vgen.c`, `totp.c`, `qr.c`, `vstb.c` | generator/strength/HIBP, TOTP, QR, stb with the arena |
+| `server/src/vault/vgen.c`, `totp.c`, `qr.c`; `rust/axia-codecs` | generator/strength/HIBP, TOTP, QR, Rust codecs with the arena |
 | `server/src/vault/vcrypto.c` | AES, SHA-1, HMAC, HKDF |
 | `server/src/vault/ctap2.c`, `cbor.c`, `p256.c`, `fidodev.c` | FIDO2 client, CBOR, P-256, device discovery |
 | `server/src/vault/dbus.c`, `secretsvc.c` | own D-Bus and the Secret Service |

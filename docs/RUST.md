@@ -202,9 +202,10 @@ imagem são marcados para outra tentativa, com nova geração de pintura para
 invalidar também os rasters de transformações e as camadas de arraste. Isso
 não depende de outra interação do usuário nem descarta as medições do layout.
 
-O decodificador PNG/JPEG vendorizado `stb` permanece para preservar os pixels;
-é uma dependência de terceiros, também utilizada pelas fontes. O blit ainda
-usa o canvas C. Não há fallback para o antigo `image.c`. Os testes Rust
+O decodificador PNG/JPEG e a rasterização de fontes agora usam `axia-codecs`,
+em Rust, com dependências vendorizadas. A troca de rasterizador pode alterar
+a cobertura nas bordas dos glifos. O blit ainda usa o canvas C.
+Veja `RUST-CODECS.md` para limites, memória do cofre e testes. Não há fallback para o antigo `image.c`. Os testes Rust
 substituem `wallpaper_image_test.c`, removido do build e do repositório.
 
 `image_tests.rs` cobre referências, caches, troca de tamanho, OOM, ordem de
@@ -676,8 +677,9 @@ cena do runtime, sem React. O host fica em `rust/axia-shell/src/native_view/`:
   rolagem (roda, touchpad e arraste da barra) e campo de texto (cursor
   piscando, colar pelo shell) são do host. Uma árvore igual à anterior
   (`{"same": true}`) não toca a cena.
-- `style.rs` converte os objetos de estilo como `runtime/style.js` (cores,
-  `padding`, `flex`, `border`, `boxShadow`, gradientes…) e envia só as diferenças.
+- `style.rs` adapta os objetos de estilo ao conversor único `css_style.rs` (cores,
+  `padding`, `flex`, `border`, `boxShadow`, gradientes…), o mesmo que o renderizador React
+  usa por `lord.css`, e envia só as diferenças.
 - `i18n.rs` traduz as legendas como `t()` e `errorText()`: pacote do usuário,
   depois os assets, inglês como reserva, plurais de `meta.json`.
 - `runtime/native.rs` é a API segura da cena usada pelo host (criar, inserir,

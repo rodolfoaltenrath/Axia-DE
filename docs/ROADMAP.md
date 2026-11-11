@@ -16,7 +16,7 @@ screenshots (QEMU `screendump`) and documented.
 - [x] QuickJS 2025-04-26 vendored in `third_party/quickjs`, embedded in `axia-server`.
 - [x] Native node tree (`View`, `Text`, `Image`) + styles (a CSS subset, see `themes/README.md`).
 - [x] Our own flexbox layout (`server/src/ui/layout.c`).
-- [x] Text with `stb_truetype` and the Inter font (OFL); PNG/JPEG images with `stb_image`.
+- [x] Text with the Rust font rasterizer and Inter (OFL); PNG/JPEG images with Rust codecs.
 - [x] React 18 renderer (`runtime/`, `react-reconciler` 0.29) that creates and updates native nodes.
 - [x] Mouse events with bubbling (enter/leave/click), keyboard, timers, `requestAnimationFrame`.
 - [x] "Lord Flow" theme: menu bar with blur, dock with magnification and tooltip, draggable
@@ -252,7 +252,7 @@ our own installer, and network, VPN, sound and clipboard with our own interface.
   - [x] Portability audit of `server/` for aarch64: unsigned char, 16K pages,
     arm64 seccomp, alignment and `ARCH` in the Makefile (no `-march=native`).
   - [x] Optional per-architecture NEON in `canvas.c` (blit and masks), bit-identical to C
-    (`build/canvas-test`); `STBI_NEON`.
+    (`build/canvas-test`); Rust JPEG architecture optimizations.
   - [x] Separate display and GPU (vc4 + v3d):
     - the card with connectors (`drmcard.h`), in axia-server and lord-sessiond;
     - `IN_FORMATS` of the primary plane and direct scanout only with accepted modifiers;
