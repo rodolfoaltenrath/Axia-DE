@@ -702,6 +702,21 @@ num horário ambíguo, escolhe a primeira ocorrência, como o `Date` anterior.
 barra. O próximo intervalo vem do Rust; o agendamento não depende de uma janela
 aberta. A FFI JSON fica em `js_nativeview.c` (`lord.clock.request`).
 
+## Relógio nativo
+
+`apps/clock/` contém apenas Rust: metadados, controlador, árvore de widgets e
+testes. As quatro abas, seleção e remoção de cidades, editor de alarmes,
+preferências de 12/24 horas, presets do temporizador e voltas do cronômetro são
+montados diretamente no host nativo. A leitura dos fusos conserva o serviço
+TZif existente do compositor, por efeitos `nativeRead` autorizados no manifesto.
+
+O host admite cadência variável por app: relógio mundial a cada segundo,
+alarmes a cada 30 segundos, temporizador em execução a cada 250 ms e cronômetro
+em execução a cada 47 ms. Temporizador pausado e cronômetro parado não mantêm
+um timer de desenho. Fechar a janela libera seus nós e preserva o serviço de
+sessão. O shell recebe apenas snapshots para o indicador e os efeitos de
+notificação/configuração. Enter nos campos e hover das linhas também são do host.
+
 ## Monitor application
 
 `apps/monitor/*.rs` owns all eight Monitor tabs, privacy panels, collection,

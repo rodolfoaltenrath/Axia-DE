@@ -18,7 +18,7 @@ RUST_INPUTS += $(CODEC_INPUTS)
 RUST_INPUTS += ../assets/emoji.json
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/runtime/*.rs ../rust/axia-shell/src/clipboard/*.rs ../rust/axia-shell/src/snap/*.rs ../rust/axia-shell/src/winmodel/*.rs)
-RUST_INPUTS += $(wildcard ../rust/axia-shell/src/native_view/*.rs)
+RUST_INPUTS += $(wildcard ../rust/axia-shell/src/native_view/*.rs ../rust/axia-shell/src/clock/*.rs)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
 CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)

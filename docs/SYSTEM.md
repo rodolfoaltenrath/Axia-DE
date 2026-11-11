@@ -632,7 +632,8 @@ Export of the "lord-netd" view: `~/Documentos/Registros-20261018-035235.txt`, 20
 
 ## Clock (`apps/clock`)
 
-World clock, alarms, timer and stopwatch, like GNOME Clocks.
+World clock, alarms, timer and stopwatch. The application is a compiled Rust native view;
+its widget tree and input bypass React, while the shell supplies the window frame.
 
 | Tab | What it does |
 |---|---|

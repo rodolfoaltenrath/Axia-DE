@@ -14,6 +14,9 @@ import { useLauncherApps, launchApp } from './apps.js';
 import { refreshPackages } from './packages.js';
 import { useSettings, settings } from './settings.js';
 import { appName } from './i18n.js';
+import { arm, clockState } from './alarms.js';
+import { useStore } from './store.js';
+const emptyClock = { get: () => null, subscribe: () => () => {} };
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
@@ -38,6 +41,7 @@ function runner(handle, manifest, winId) {
         else if (effect.kind === 'copy') lord.clipboard.set(String(effect.text ?? ''));
         else if (effect.kind === 'launchApp') launchApp(String(effect.app));
         else if (effect.kind === 'refreshPackages') refreshPackages();
+        else if (effect.kind === 'clock') arm();
       } catch (e) { console.error('native view:', e); }
       return;
     }
@@ -86,6 +90,7 @@ export function NativeView({ manifest, args, icon, style }) {
   const { lang } = useLocale();
   useWindows();
   const [preferences] = useSettings();
+  const clock = useStore(manifest.facts === 'clock' && !icon ? clockState : emptyClock);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
   const [sampled] = useState(() => ({}));
   const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest, {}, sampled) : {}));
@@ -99,7 +104,7 @@ export function NativeView({ manifest, args, icon, style }) {
     args: { ...(args || {}) }, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
-    services: polled,
+    services: { ...polled, ...(clock ? { $clock: clock } : {}) },
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
     context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },

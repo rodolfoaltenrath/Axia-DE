@@ -23,6 +23,8 @@ use std::{
 pub trait NativeApp {
     /// Resource roots supplied by the host, including user language packs.
     fn resources(&mut self, _assets: &str, _home: Option<&str>) {}
+    /// An app may vary its refresh cadence with its current page and state.
+    fn refresh_ms(&self) -> Option<f64> { None }
     fn request(&mut self, input: &Value) -> Value;
     fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])>;
     /// Optional window-level keyboard input (e.g. Calculator). Fields keep
@@ -33,6 +35,7 @@ pub trait NativeApp {
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
+        crate::native_apps::clock::ID => Some(Box::new(crate::clock_app::App::default())),
         crate::native_apps::characters::ID => Some(Box::new(crate::characters::App::default())),
         crate::native_apps::about::ID => Some(Box::new(crate::about::App::default())),
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),

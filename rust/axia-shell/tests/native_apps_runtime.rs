@@ -168,6 +168,7 @@ fn real_compiled_app_widgets_and_effects() {
             "appabout",
             "calculator",
             "characters",
+            "clock",
             "files",
             "forcequit",
             "monitor",
@@ -208,6 +209,14 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("about", "System Report…"));
     assert!(has_text("about", "QuickJS + React 19.3.1"));
     assert_eq!(get("about")["react"], 0, "About content bypasses React");
+    assert!(has_text("clock-native-timer", "Start"));
+    assert!(has_text("clock-native-timer", "3 min"));
+    assert!(has_text("clock-native-running", "Pause"));
+    assert!(has_text("clock-native-paused", "Resume"));
+    assert!(has_text("clock-native-world", "Local time"));
+    assert_eq!(get("clock-native-timer")["react"], 0);
+    assert!(has_text("clock-native-alarms", "No alarms yet."));
+    assert!(has_text("clock-native-stopwatch", "00:00.00"));
     assert!(has_text("characters", "Emoji"));
     assert!(has_text("characters", "Symbols"));
     assert!(has_text("characters", "Choose a character"));
@@ -363,6 +372,14 @@ async function run(){
   record('about',{text:nativeTexts(),react:texts().length});
   wm.open('characters');control.setArgs({});control.setMode('characters');await pause();
   record('characters',{text:nativeTexts(),react:texts().length});wm.close('characters',true);
+  wm.open('clock');control.setArgs({tab:'timer'});control.setMode('clock');await pause();
+  record('clock-native-timer',{text:nativeTexts(),react:texts().length});
+  timerStart(30);await pause();record('clock-native-running',{text:nativeTexts()});
+  timerPause();await pause();record('clock-native-paused',{text:nativeTexts()});timerReset();
+  control.setArgs({tab:'world'});await pause();await pause();record('clock-native-world',{text:nativeTexts()});
+  control.setArgs({tab:'alarms'});await pause();record('clock-native-alarms',{text:nativeTexts()});
+  control.setArgs({tab:'stopwatch'});await pause();record('clock-native-stopwatch',{text:nativeTexts()});
+  wm.close('clock',true);
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
