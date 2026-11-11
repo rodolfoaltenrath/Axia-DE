@@ -15,7 +15,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GAP = 8, PAD = 9, MARGIN = 6;
-const SEP = GAP + 1;          // separator before the recent apps and before the Trash
 const REORDER_MS = 150;       // neighbours sliding aside while dragging
 const NEAR = 60;              // dragged farther than this from the Dock: the remove cue (after a hold)
 const TRASH = '__trash';
@@ -163,65 +162,22 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const drag = useStore(dockDrag);
   const poof = useStore(dockPoof);
   const reduce = !!useStore(settings).reduceMotion;
-  // The magnifier computes positions with the mouse coordinate: in Arabic/Hebrew the bottom row reverses
-  // the list (the visual result users expect); on the side the order is top to bottom in all of them.
-  const flip = !vert && dir === 'rtl';
-  const trashItem = { id: TRASH, trash: true };
   const dragging = !!drag;
-  const own = drag && drag.source === 'dock' ? drag.id : null;          // an icon of this Dock is being dragged
-  // tokens in reading order: items, the gap where a drop would land, separators
-  // Tokens on screen (reading order, mirrored for a bottom Dock in RTL): the icons without the one
-  // being dragged, the gap where a drop would land, the separators and the Trash, always last.
-  const tokensFor = (skip, gapAt) => {
-    const out = [];
-    let pi = 0, sepDone = false, gapDone = gapAt < 0;
-    for (const it of list) {
-      if (it.id === skip) continue;
-      const pinned = it.pinned && !it.recent;
-      if (!gapDone && (!pinned || pi === gapAt)) { out.push({ gap: true }); gapDone = true; }
-      if (pinned) pi++;
-      if (it.recent && !sepDone) { out.push({ sep: true }); sepDone = true; }
-      out.push({ item: it });
-    }
-    if (!gapDone) out.push({ gap: true });
-    out.push({ sep: true }, { item: trashItem });
-    return flip ? out.reverse() : out;
-  };
-  const pinnedCount = list.filter((it) => it.pinned && !it.recent && it.id !== own).length;
-  const gapAt = drag && drag.over && drag.over.index != null ? Math.max(0, Math.min(pinnedCount, drag.over.index)) : -1;
-  const vis = tokensFor(own, gapAt);
-  const items = vis.filter((x) => x.item).map((x) => x.item);
+  const own = drag?.source === 'dock' ? drag.id : null;
+  // Rust owns ordering, magnification and geometry. Callable icon components
+  // remain here until their apps have native views.
+  const model = lord.appearance.request(JSON.stringify({ op: 'dockLayout',
+    items: list.map(({ id, pinned, recent }) => ({ id, pinned: !!pinned, recent: !!recent })),
+    own, dragging, gapAt: drag?.over?.index ?? null, rtl: dir === 'rtl',
+    position, size, maxSize, magnify, area, top, pointer: m }));
+  if (!model?.tokens) throw new Error('Dock geometry unavailable');
+  const trashItem = { id: TRASH, trash: true };
+  const vis = model.tokens.map(token => token.item === undefined ? token
+    : { item: token.item < 0 ? trashItem : list[token.item] });
+  const items = vis.filter(token => token.item).map(token => token.item);
   const n = items.length;
-  const seps = vis.filter((x) => x.sep).length;
-  const gaps = vis.filter((x) => x.gap).length;
-  const origin = vert ? area.y + top : area.x, avail = vert ? area.h - top : area.w;
+  const { baseSize: BASE, maxSize: MAX, centers, sizes, hovered, len, start: startT, bar, flip } = model;
   const AX = area.x, AY = area.y, AR = area.x + area.w, AB = area.y + area.h;
-  // with many apps the icons shrink so the Dock fits on screen
-  // (it accounts for magnifier growth: about 2.6 extra icons in total)
-  const grow = magnify ? 2.6 * Math.max(0, maxSize / size - 1) : 0;
-  const fit = Math.floor((avail - 2 * PAD - 16 - (n + gaps - 1) * GAP - seps * SEP) / (Math.max(1, n + gaps) + grow));
-  const BASE = Math.max(20, Math.min(size, fit));
-  const MAX = magnify && !dragging ? Math.max(BASE, Math.round(maxSize * BASE / size)) : BASE, RANGE = BASE * 3;
-  // base layout (every icon at BASE): for the magnifier, the tooltip and the drop positions
-  const layout = (sizeOf, toks = vis) => {
-    let x = PAD;
-    const c = [];
-    for (const tk of toks) {
-      if (tk.sep) x += SEP;
-      else if (tk.gap) x += BASE + GAP;
-      else { const s = sizeOf(c.length); c.push(x + s / 2); x += s + GAP; }
-    }
-    return { c, len: x - GAP + PAD };
-  };
-  const base = layout(() => BASE);
-  const baseStart = origin + (avail - base.len) / 2;
-  const centers = base.c.map((c) => baseStart + c);
-  const sizes = centers.map((c) => {
-    if (m == null || MAX === BASE) return BASE;
-    const d = Math.abs(m - c) / RANGE;
-    return d < 1 ? Math.round(BASE + (MAX - BASE) * Math.cos((d * Math.PI) / 2)) : BASE;
-  });
-  const hovered = m == null || dragging ? -1 : centers.findIndex((c) => Math.abs(m - c) <= (BASE + GAP) / 2);
   const movePointer = (e) => {
     const coordinate = vert ? e.y : e.x;
     if (!magnify && !dragging && m != null) {
@@ -230,10 +186,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
     }
     setM(coordinate);
   };
-  const real = layout((i) => sizes[i]);
-  const len = real.len;
-  const startT = Math.max(origin, origin + (avail - len) / 2);
-  const bar = BASE + PAD * 2;
+  const real = { c: model.offsets };
 
   // glide: every icon's place on screen, the bar's start and length
   const settle = useRef(0);
@@ -251,9 +204,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
 
   // where the bar is on screen (for auto-hide, drops) and how far it moves when hiding
   const rect = useRef(null);
-  rect.current = position === 'bottom' ? { x0: startT, x1: startT + len, y0: AB - MARGIN - bar, y1: AB }
-    : position === 'left' ? { x0: AX, x1: AX + MARGIN + bar, y0: startT, y1: startT + len }
-      : { x0: AR - MARGIN - bar, x1: AR, y0: startT, y1: startT + len };
+  rect.current = model.rect;
   const areaRef = useRef(area);
   areaRef.current = area;
   const external = !!drag && drag.source !== 'dock';
@@ -270,15 +221,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   // Drop target (sdk/dock.js): the index among the shown pinned items, or the Trash. Computed from
   // the layout without the dragged icon and without the gap, so it doesn't move under the pointer.
   const geo = useRef(null);
-  {
-    const toks = tokensFor(own, -1);
-    const r = layout(() => BASE, toks);
-    const rs = origin + (avail - r.len) / 2;
-    const restItems = toks.filter((x) => x.item).map((x) => x.item);
-    const rest = restItems.map((it, i) => (it.pinned && !it.recent ? rs + r.c[i] : null)).filter((c) => c != null);
-    const ti = items.findIndex((it) => it.trash);
-    geo.current = { rest, flip, vert, rect: rect.current, trashC: ti >= 0 ? startT + real.c[ti] : null, BASE };
-  }
+  geo.current = { ...model.drop, flip, vert, rect: model.rect, BASE };
   useEffect(() => registerDockTarget({
     hit(x, y) {
       const g = geo.current, r = g.rect, slack = 24;

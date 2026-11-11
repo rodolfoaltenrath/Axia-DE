@@ -106,11 +106,15 @@ pub unsafe extern "C" fn axia_native_style_request(
         Value::Null
     } else {
         let bytes = CStr::from_ptr(input).to_bytes();
-        if bytes.len() > 16 * 1024 {
+        if bytes.len() > 128 * 1024 {
             Value::Null
         } else if let Ok(source) = serde_json::from_slice::<Value>(bytes) {
-            let tokens = files_theme(&source);
-            json!({"tokens":tokens,"chrome":frame(&tokens),"dockFeedback":dock_feedback(source["mode"] != "light")})
+            if source["op"] == "dockLayout" {
+                crate::dock_layout::request(&source)
+            } else {
+                let tokens = files_theme(&source);
+                json!({"tokens":tokens,"chrome":frame(&tokens),"dockFeedback":dock_feedback(source["mode"] != "light")})
+            }
         } else {
             Value::Null
         }
@@ -125,7 +129,10 @@ mod tests {
     fn dock_feedback_is_visible_without_magnification_or_expensive_effects() {
         for dark in [false, true] {
             let feedback = dock_feedback(dark);
-            assert_ne!(feedback["hover"]["backgroundColor"], feedback["pressed"]["backgroundColor"]);
+            assert_ne!(
+                feedback["hover"]["backgroundColor"],
+                feedback["pressed"]["backgroundColor"]
+            );
             assert_eq!(feedback["hover"]["opacity"], 1);
             assert_eq!(feedback["pressed"]["opacity"], 0.72);
             for state in ["hover", "pressed"] {
