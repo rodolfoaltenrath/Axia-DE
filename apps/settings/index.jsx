@@ -597,22 +597,23 @@ function ChipGlyph() {
   );
 }
 
-// Sidebar groups (as in TangoOS): [id, component, icon color, symbol (a glyph or a component)].
-const GROUPS = [
-  [['general', General, '#8e8e93', 'i'], ['appearance', Appearance, '#3a3a3c', '◐'], ['wallpaper', Wallpapers, '#30b0c7', '▣'], ['dock', DockSettings, '#3a3a3c', '▁'], ['displays', DisplaysSettings, '#0a84ff', '▭']],
-  [['network', NetworkSettings, '#0a84ff', '⇅'], ['bluetooth', BluetoothSettings, '#0a84ff', 'ᛒ'], ['sound', SoundSettings, '#ff375f', '♪'], ['notifications', NotificationsSettings, '#ff3b30', '◉'], ['printers', PrintersSettings, '#636366', '⎙'], ['clipboard', ClipboardSettings, '#5e5ce6', '⎘']],
-  [['language', LanguageRegion, '#30b0c7', 'A'], ['datetime', DateTimeSettings, '#0a84ff', '◷'], ['keyboard', Keyboard, '#8e8e93', '⌨'], ['trackpad', TrackpadSettings, '#8e8e93', '▭'], ['defaultapps', DefaultAppsSettings, '#8e8e93', '◫']],
-  [['power', PowerSettings, '#30d158', BoltGlyph], ['cooling', CoolingSettings, '#32ade6', FanGlyph], ['firmware', FirmwareSettings, '#5e5ce6', ChipGlyph], ['privacy', PrivacySettings, '#0a84ff', LockGlyph], ['users', UsersSettings, '#0a84ff', '☺'], ['updates', Updates, '#8e8e93', '↻'], ['session', Session, '#ff453a', '↪']],
-];
+// Rust owns section metadata and navigation. These maps only resolve JSX bodies and drawings.
+const model = lord.nativeApps.create('settings');
+const request = value => model.request(JSON.stringify(value));
+const BODIES = { general: General, appearance: Appearance, wallpaper: Wallpapers, dock: DockSettings,
+  displays: DisplaysSettings, network: NetworkSettings, bluetooth: BluetoothSettings, sound: SoundSettings,
+  notifications: NotificationsSettings, printers: PrintersSettings, clipboard: ClipboardSettings,
+  language: LanguageRegion, datetime: DateTimeSettings, keyboard: Keyboard, trackpad: TrackpadSettings,
+  defaultapps: DefaultAppsSettings, power: PowerSettings, cooling: CoolingSettings, firmware: FirmwareSettings,
+  privacy: PrivacySettings, users: UsersSettings, updates: Updates, session: Session };
+const GLYPHS = { bolt: BoltGlyph, fan: FanGlyph, chip: ChipGlyph, lock: LockGlyph };
+const GROUPS = request({ cmd: 'catalog' }).map(g => g.map(({ id, color, glyph }) => [id, BODIES[id], color, GLYPHS[glyph] || glyph]));
 const SECTIONS = GROUPS.flat();
-// Trackpad only if there is a touchpad (lord-sessiond lends them with the monitor); Board firmware
-// only on a BCM2712 board (Raspberry Pi 5, 500, CM5: lord.system.info().board)
+const sectionById = new Map(SECTIONS.map(s => [s[0], s]));
 const isPi5 = () => { try { return lord.system.info().board === 'pi5'; } catch (e) { return false; } };
-const sectionShown = (id, hasPad, pi5 = isPi5()) => (id !== 'trackpad' || hasPad) && (id !== 'firmware' || pi5) && (!standaloneDesktop || !['users', 'cooling', 'firmware'].includes(id));
-
-// The Dock's right-click menu lists every section, in the sidebar's order and with its names; one
-// opens Settings on that page (sdk/dock.js, quick actions). Built from SECTIONS, so it never drifts.
-registerDockActions('settings', () => SECTIONS.filter(([id]) => sectionShown(id, hasTouchpad()))
+const visibleGroups = (hasPad, pi5, query = '', captions = {}) => request({ cmd: 'groups', hasPad, pi5,
+  standalone: standaloneDesktop, query, captions }).map(g => g.map(id => sectionById.get(id)));
+registerDockActions('settings', () => visibleGroups(hasTouchpad(), isPi5()).flat()
   .map(([id]) => ({ id, label: `settings.section.${id}`, args: { section: id } })));
 
 function SectionIcon({ color, glyph: G, size = 20 }) {
@@ -645,29 +646,20 @@ function UserCard({ onClick, selected }) {
   );
 }
 
-// The open section survives the interface being remounted when the language changes.
-let lastSection = 'general';
-
 // Other apps open a section: wm.open('settings', { args: { section: 'network', page: 'vpn' } }).
 export default function Settings() {
   const t = useTheme();
   const { t: tr } = useLocale();
   const { args } = useAppWindow();
-  const [section, setSectionState] = useState(lastSection);
+  const [section, setSectionState] = useState(() => request({ cmd: 'current' }));
   const [query, setQuery] = useState('');
-  const setSection = (s) => {
-    if (standaloneDesktop && ['users', 'cooling', 'firmware'].includes(s)) s = 'general';
-    lastSection = s; setSectionState(s);
-  };
-  // 'themes' (the old Themes page, links from older help) now opens Appearance
-  useEffect(() => { const sec = args?.section === 'themes' ? 'appearance' : args?.section; if (sec && SECTIONS.some(([id]) => id === sec)) setSection(sec); }, [args?.nonce]);
+  const setSection = s => setSectionState(request({ cmd: 'select', section: s, standalone: standaloneDesktop }));
+  useEffect(() => { if (args?.section) setSection(args.section); }, [args?.nonce]);
   const [, Body] = SECTIONS.find(([id]) => id === section) || SECTIONS[0];
-  const q = query.trim().toLowerCase();
-  // Trackpad only if there is a touchpad (lord-sessiond lends them with the monitor)
   const hasPad = useTrackpads().some((d) => d.kind === 'touchpad');
   const [pi5] = useState(isPi5);
-  const visible = (id) => sectionShown(id, hasPad, pi5) && `${tr(`settings.section.${id}`)} ${tr(`settings.keywords.${id}`)}`.toLowerCase().includes(q);
-  const groups = GROUPS.map((g) => g.filter(([id]) => visible(id))).filter((g) => g.length);
+  const captions = Object.fromEntries(SECTIONS.map(([id]) => [id, `${tr(`settings.section.${id}`)} ${tr(`settings.keywords.${id}`)}`]));
+  const groups = visibleGroups(hasPad, pi5, query, captions);
   return (
     <View style={{ flex: 1, flexDirection: 'row' }}>
       <View style={{ width: 220, backgroundColor: t.sidebarBg, paddingTop: spacing.m }}>

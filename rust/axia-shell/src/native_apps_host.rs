@@ -2,20 +2,23 @@
 //! this JSON bridge supplies grouping/force-quit policy to shell menus as well.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
-pub struct NativeApp {
-    control: crate::forcequit::App,
+pub enum NativeApp {
+    Control(crate::forcequit::App),
+    Settings(crate::settings_model::Model),
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
-        (id == crate::native_apps::forcequit::ID.as_bytes()).then(|| Self {
-            control: Default::default(),
-        })
+        match id {
+            b"forcequit" => Some(Self::Control(Default::default())),
+            b"settings" => Some(Self::Settings(Default::default())),
+            _ => None,
+        }
     }
     fn request(&mut self, input: &Value) -> Value {
-        if input["cmd"] == "catalog" {
-            crate::native_apps::manifests()
-        } else {
-            self.control.request(input)
+        match self {
+            Self::Control(control) if input["cmd"] != "catalog" => control.request(input),
+            Self::Control(_) => crate::native_apps::manifests(),
+            Self::Settings(model) => model.request(input),
         }
     }
 }

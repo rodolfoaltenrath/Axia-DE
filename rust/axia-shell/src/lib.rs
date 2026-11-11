@@ -18,6 +18,8 @@ mod forcequit;
 mod calculator;
 #[path = "../../../apps/appabout/mod.rs"]
 mod appabout;
+#[path = "../../../apps/settings/model.rs"]
+mod settings_model;
 mod native_apps_host;
 mod native_view;
 #[path = "../../../apps/monitor/mod.rs"]
