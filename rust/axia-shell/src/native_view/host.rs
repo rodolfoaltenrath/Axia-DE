@@ -130,6 +130,8 @@ pub struct Host {
     root: Vec<Mounted>,
     targets: HashMap<i32, Target>,
     buttons: HashMap<i32, i32>,
+    events: HashMap<i32, Value>,
+    pointer_path: Vec<i32>,
     effects: VecDeque<Value>,
     title: String,
     window_focused: bool,
@@ -169,6 +171,8 @@ impl Host {
             root: Vec::new(),
             targets: HashMap::new(),
             buttons: HashMap::new(),
+            events: HashMap::new(),
+            pointer_path: Vec::new(),
             effects: VecDeque::new(),
             title: String::new(),
             window_focused: true,
@@ -217,7 +221,7 @@ impl Host {
             .unwrap_or(".")
             .to_owned();
         if let Some(focused) = self.facts["focused"].as_bool() {
-            self.window_focused = focused;
+            self.window_focus(focused);
         }
         self.sync();
     }
@@ -379,6 +383,7 @@ impl Host {
         match m.kind {
             Kind::View => {
                 m.style(0, style);
+                m.spec = spec.clone();
                 m.click = spec["events"]["onClick"]
                     .as_array()
                     .filter(|a| !a.is_empty())
@@ -576,6 +581,16 @@ impl Host {
         walk(&self.root, &mut t, &mut b);
         self.targets = t;
         self.buttons = b;
+        fn events(list: &[Mounted], out: &mut HashMap<i32, Value>) {
+            for m in list {
+                if m.spec["events"].is_object() {
+                    out.insert(m.node, m.spec["events"].clone());
+                }
+                events(&m.children, out);
+            }
+        }
+        self.events.clear();
+        events(&self.root, &mut self.events);
     }
 }
 /// Interaction: pointer, wheel, keys, the refresh timer and caret/scroll-bar timers.
@@ -643,7 +658,10 @@ impl Host {
     }
     /// Runs a widget action like the React host's `send([cmd, key], extra)`.
     fn dispatch(&mut self, action: &Value, extra: Map<String, Value>) {
-        let mut input = Map::new();
+        if !action[0].is_string() {
+            return;
+        }
+        let mut input = self.facts.as_object().cloned().unwrap_or_default();
         input.insert("cmd".into(), action[0].clone());
         input.insert("key".into(), action[1].clone());
         input.extend(extra);
@@ -687,12 +705,87 @@ impl Host {
         let current = m.offset;
         self.scroll_by(node, target - current);
     }
+    fn event_path(&self, mut node: i32) -> Vec<i32> {
+        let mut path = Vec::new();
+        for _ in 0..4096 {
+            if node <= 0 || node == self.mount {
+                break;
+            }
+            if self.events.contains_key(&node) {
+                path.push(node);
+            }
+            node = scene::parent(node);
+        }
+        path
+    }
+    fn pointer_action(&mut self, action: Value, x: f32, y: f32, button: i32) {
+        if action.is_array() {
+            self.dispatch(
+                &action,
+                Map::from_iter([
+                    ("x".into(), json!(x)),
+                    ("y".into(), json!(y)),
+                    ("button".into(), json!(button)),
+                ]),
+            );
+        }
+    }
+    /// Enter/leave follow ancestor boundaries: moving between a label and its
+    /// parent must not reset the button's hover or press state.
+    fn pointer_boundaries(&mut self, target: i32, x: f32, y: f32, button: i32) {
+        let path = if scene::within(target, self.mount) {
+            self.event_path(target)
+        } else {
+            Vec::new()
+        };
+        let old = std::mem::replace(&mut self.pointer_path, path.clone());
+        // Copy actions before dispatch: an action may reconcile or remove nodes.
+        let mut actions = Vec::new();
+        for node in old.iter().filter(|n| !path.contains(n)) {
+            actions.push(
+                self.events
+                    .get(node)
+                    .map(|v| v["onMouseLeave"].clone())
+                    .unwrap_or(Value::Null),
+            );
+        }
+        for node in path.iter().rev().filter(|n| !old.contains(n)) {
+            actions.push(
+                self.events
+                    .get(node)
+                    .map(|v| v["onMouseEnter"].clone())
+                    .unwrap_or(Value::Null),
+            );
+        }
+        for action in actions {
+            self.pointer_action(action, x, y, button);
+        }
+    }
     /// Some(mount) when the event is this view's: JS then sees it on the mount node.
     pub fn pointer(&mut self, kind: &str, target: i32, x: f32, y: f32, button: i32) -> Option<i32> {
-        let _ = x;
         let inside = scene::within(target, self.mount);
         if self.icon_mode().is_some() {
             return inside.then_some(self.mount);
+        }
+        if matches!(kind, "move" | "down" | "up") {
+            self.pointer_boundaries(target, x, y, button);
+        }
+        let event = match kind {
+            "down" => "onMouseDown",
+            "up" => "onMouseUp",
+            _ => "",
+        };
+        if inside && button == 0 && !event.is_empty() {
+            let action = self
+                .event_path(target)
+                .iter()
+                .filter_map(|node| self.events.get(node))
+                .map(|v| &v[event])
+                .find(|v| v.is_array())
+                .cloned();
+            if let Some(action) = action {
+                self.pointer_action(action, x, y, button);
+            }
         }
         match kind {
             "move" => {
@@ -800,8 +893,24 @@ impl Host {
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
-        if self.field == 0 || !self.window_focused {
+        if !self.window_focused || self.icon_mode().is_some() {
             return false;
+        }
+        if self.field == 0 {
+            if self.facts["keyboard"] != true || flags & (2 | 4 | 16) != 0 {
+                return false;
+            }
+            let mut input = self.facts.as_object().cloned().unwrap_or_default();
+            input.insert("cmd".into(), json!("key"));
+            input.insert("event".into(), json!(key));
+            input.insert("char".into(), json!(chr));
+            let reply = self.app.request(&Value::Object(input));
+            if reply["handled"] != true {
+                return false;
+            }
+            self.queue(&reply);
+            self.sync();
+            return true;
         }
         let (ctrl, alt, meta) = (flags & 2 != 0, flags & 4 != 0, flags & 16 != 0);
         let Some(value) = self.field_value() else {
