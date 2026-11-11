@@ -212,11 +212,23 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
             libc::RENAME_NOREPLACE,
         )
     };
-    if rc < 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
+    if rc >= 0 {
+        return Ok(());
     }
+    let e = std::io::Error::last_os_error();
+    if e.raw_os_error() != Some(libc::EINVAL) {
+        return Err(e);
+    }
+    // a filesystem without RENAME_NOREPLACE (some FUSE ones, NTFS through ntfs-3g): the target is
+    // checked first, then a plain rename
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    if unsafe { libc::fstatat(b.as_raw_fd(), bn.as_ptr(), &mut st, libc::AT_SYMLINK_NOFOLLOW) } == 0 {
+        return Err(std::io::Error::from_raw_os_error(libc::EEXIST));
+    }
+    if unsafe { libc::renameat(a.as_raw_fd(), an.as_ptr(), b.as_raw_fd(), bn.as_ptr()) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

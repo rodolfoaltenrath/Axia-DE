@@ -1102,11 +1102,17 @@ impl Session {
                 title: t,
                 value,
                 action: a,
-                ..
+                paths,
             } => {
                 title = tr(t);
                 let mut field = input(value, "dialogText", json!(""));
                 field["key"] = json!(format!("dialog-{}", self.dialog_epoch));
+                if a == "rename" {
+                    // only the name selected at first: typing keeps the extension (the field
+                    // reads it once, when the dialog opens)
+                    let folder = paths.first().is_some_and(|p| p.is_dir());
+                    field["select"] = json!([0, crate::text_edit::stem_len(value, folder)]);
+                }
                 content.push(field);
                 if a == "connect" {
                     for uri in shared.preferences["servers"]["history"]

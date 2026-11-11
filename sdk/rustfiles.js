@@ -167,7 +167,7 @@ export const RustWidget = memo(function WidgetNode({ node, send }) {
     case 'text': return h(Text, props, caption(node.text));
     case 'button': return h(Button, { ...props, primary: node.primary, disabled: node.disabled, small: true, label: caption(node.label), onClick: node.disabled ? undefined : (e) => send(node.action, e) });
     case 'input': return h(TextInput, { ...props, value: node.value, placeholder: caption(node.placeholder), autoFocus: node.autoFocus, secure: node.secure,
-      selectAll: node.selectAll, onChange: (value) => send(node.action, null, { value }), onSubmit: node.submit ? () => send(node.submit) : undefined, onCancel: node.cancel ? () => send(node.cancel) : undefined });
+      selectAll: node.selectAll, select: node.select, onChange: (value) => send(node.action, null, { value }), onSubmit: node.submit ? () => send(node.submit) : undefined, onCancel: node.cancel ? () => send(node.cancel) : undefined });
     case 'image': return h(Image, { ...props, src: node.src });
     case 'media': return h(MediaView, { ...props, media: media.view(node.media, { fit: 'contain' }) });
     case 'documentImage': return h(DocImage, { ...props, image: node.image?.id || 0 });

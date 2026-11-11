@@ -283,13 +283,41 @@ pub fn rename(from: &Path, to: &Path) -> Result<()> {
     let p = policy::current();
     let from = p.target(from, true)?;
     let to = p.target(to, true)?;
-    policy::rename_noreplace(&from, &to).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::AlreadyExists {
-            "fs.exists".into()
-        } else {
-            io_error(e)
+    if from == to {
+        return Ok(()); // the name confirmed unchanged
+    }
+    match policy::rename_noreplace(&from, &to) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && case_only(&from, &to) => {
+            // only the letters' case changed, on a disk that ignores it (a FAT or exFAT pen
+            // drive): "to" is the file itself, so it goes through a free name
+            let tmp = (0..100)
+                .map(|i| from.with_file_name(format!(".axia-rename-{}-{i}", std::process::id())))
+                .find(|t| fs::symlink_metadata(t).is_err())
+                .ok_or("fs.exists")?;
+            policy::rename_noreplace(&from, &tmp).map_err(io_error)?;
+            policy::rename_noreplace(&tmp, &to).map_err(|e| {
+                let _ = policy::rename_noreplace(&tmp, &from);
+                io_error(e)
+            })
         }
-    })
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err("fs.exists".into()),
+        Err(e) => Err(io_error(e)),
+    }
+}
+
+/// Two names in one folder that differ only in their letters' case and lead to the same file
+/// (one inode on one device): a disk that ignores case. Hard links have names of their own.
+fn case_only(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let lower = |p: &Path| p.file_name().map(|n| n.to_string_lossy().to_lowercase());
+    if a.parent() != b.parent() || lower(a) != lower(b) {
+        return false;
+    }
+    match (fs::symlink_metadata(a), fs::symlink_metadata(b)) {
+        (Ok(x), Ok(y)) => x.dev() == y.dev() && x.ino() == y.ino(),
+        _ => false,
+    }
 }
 
 struct Prepared {

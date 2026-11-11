@@ -985,6 +985,38 @@ fn create_rename_and_collisions_preserve_existing_files() {
     assert_eq!(fs::read_to_string(h.path("outro.txt")).unwrap(), "outro");
 }
 #[test]
+fn a_rename_keeps_the_extension_selects_the_result_and_accepts_the_same_name() {
+    let h = Home::new();
+    h.file("relatorio.final.pdf", "pdf");
+    let (mut s, mut shared) = h.session(json!({}));
+    ready(&mut s, &shared);
+    select(&mut s, &mut shared, "relatorio.final.pdf");
+    event(&mut s, &mut shared, "rename", Value::Null);
+    // the field starts with the name selected, not its extension
+    let tree = s.render(&shared).to_string();
+    assert!(tree.contains(r#""select":[0,15]"#), "{tree}");
+    // confirmed unchanged: closed, no "already exists"
+    enter_text(&mut s, &mut shared, "relatorio.final.pdf");
+    assert!(s.error.is_none(), "{:?}", s.error);
+    assert!(s.dialog.is_none());
+    // renamed: the new name is the one selected
+    event(&mut s, &mut shared, "rename", Value::Null);
+    enter_text(&mut s, &mut shared, "relatório.pdf");
+    assert!(h.path("relatório.pdf").is_file());
+    let names: Vec<_> = s.selected().into_iter().map(|e| e.name).collect();
+    assert_eq!(names, ["relatório.pdf"]);
+    // only the case of the extension: no warning about changing it
+    event(&mut s, &mut shared, "rename", Value::Null);
+    enter_text(&mut s, &mut shared, "relatório.PDF");
+    assert!(s.dialog.is_none(), "no extension warning for a change of case");
+    assert!(h.path("relatório.PDF").is_file());
+    // a new folder is selected too
+    event(&mut s, &mut shared, "newFolder", Value::Null);
+    enter_text(&mut s, &mut shared, "Nova");
+    let names: Vec<_> = s.selected().into_iter().map(|e| e.name).collect();
+    assert_eq!(names, ["Nova"]);
+}
+#[test]
 fn back_forward_up_and_breadcrumb_navigation_keep_history_consistent() {
     let h = Home::new();
     let one = h.dir("one");
