@@ -2,6 +2,8 @@
 //! secrets are retained by this model; persistence remains a shell effect.
 #[path = "data.rs"]
 mod data;
+#[path = "keys.rs"]
+mod keys;
 use serde_json::{json, Value};
 
 fn merge(base: &Value, patch: &Value) -> Value {
@@ -164,6 +166,9 @@ fn config(raw: &Value, p: &Value, extra: &Value) -> Value {
     out
 }
 pub fn request(input: &Value) -> Value {
+    if let Some(reply) = keys::request(input) {
+        return reply;
+    }
     let raw = &input["settings"];
     match input["cmd"].as_str().unwrap_or("") {
         "catalog" => json!({"presets":data::presets(),"profile":data::profile()}),

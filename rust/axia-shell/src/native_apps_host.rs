@@ -1,5 +1,6 @@
-//! Session app-control service. Native windows render through native_view;
-//! this JSON bridge supplies grouping/force-quit policy to shell menus as well.
+//! App models and session app-control service. Native windows render through
+//! native_view; transitional JSX adapters call the same compiled model code
+//! through this bounded JSON bridge until their scenes migrate too.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 pub enum NativeApp {
@@ -27,7 +28,7 @@ impl NativeApp {
             Self::Settings(model) => model.request(input),
             Self::Terminal => crate::terminal_model::request(input),
             Self::Passwords => crate::passwords_model::request(input),
-            Self::Sysinfo => crate::sysinfo_checks::request(input),
+            Self::Sysinfo => crate::sysinfo_model::request(input),
         }
     }
 }

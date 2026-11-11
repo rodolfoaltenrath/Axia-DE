@@ -99,7 +99,7 @@ eq('peripherals: names, kinds and order', merged.map((p) => [p.name, p.kind, p.c
   ['Logitech USB Receiver', 'receiver', 'usb', true, null], ['', 'audio', 'bluetooth', true, 40], ['', 'other', 'bluetooth', false, null]]);
 eq('peripherals: no address or path survives', /AA[:_-]BB|org\/bluez/.test(JSON.stringify(merged)), false);
 eq('peripherals: nothing known', peripherals(null, null), []);
-eq('peripherals: only the fields it builds', Object.keys(peripherals([{ name: 'x', kind: 'mouse', connection: 'usb', battery: -1, serial: 'S', address: 'A' }], null)[0]), ['name', 'kind', 'connection', 'battery', 'connected']);
+eq('peripherals: only the fields it builds', Object.keys(peripherals([{ name: 'x', kind: 'mouse', connection: 'usb', battery: -1, serial: 'S', address: 'A' }], null)[0]).sort(), ['name', 'kind', 'connection', 'battery', 'connected'].sort());
 
 // ---- firmware dates ----
 eq('DMI date', firmwareDate('11/23/2023').toDateString(), new Date(2023, 10, 23).toDateString());

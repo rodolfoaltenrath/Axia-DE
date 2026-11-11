@@ -7,7 +7,14 @@ const catalog = request({ cmd: 'catalog' });
 export const PRESETS = Object.fromEntries(catalog.presets);
 export const DEFAULT_PROFILE = catalog.profile;
 const raw = () => settings.get().terminal || {};
-export const terminalSettings = () => request({ cmd: 'settings', settings: raw() });
+export const terminalSettings = () => {
+  const source = raw();
+  const value = request({ cmd: 'settings', settings: source });
+  // Keep host dictionary identity/insertion order for imported color schemes
+  // and custom shortcuts; JSON object key order is not carried by the model.
+  for (const key of ['schemes', 'shortcuts']) if (Object.prototype.hasOwnProperty.call(source, key)) value[key] = source[key];
+  return value;
+};
 export function saveTerminalSettings(patch) {
   settings.set({ terminal: { ...terminalSettings(), ...patch } });
 }
