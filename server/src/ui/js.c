@@ -334,8 +334,24 @@ static JSValue f_css(JSContext *c, JSValueConst this_val, int argc, JSValueConst
     return v;
 }
 
+/* lord.textEdit(json): a one-line field's caret, selection and keys (rust/axia-shell/src/text_edit.rs) */
+extern char *axia_text_edit(const char *input);
+extern void axia_text_edit_free(char *reply);
+static JSValue f_text_edit(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    const char *in = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    if (!in) return JS_ThrowTypeError(c, "lord.textEdit requires JSON");
+    char *reply = axia_text_edit(in);
+    JS_FreeCString(c, in);
+    if (!reply) return JS_ThrowOutOfMemory(c);
+    JSValue v = JS_ParseJSON(c, reply, strlen(reply), "<textEdit>");
+    axia_text_edit_free(reply);
+    return v;
+}
+
 static const JSCFunctionListEntry lord_funcs[] = {
     JS_CFUNC_DEF("css", 1, f_css),
+    JS_CFUNC_DEF("textEdit", 1, f_text_edit),
     JS_CFUNC_DEF("createNode", 1, f_create_node),
     JS_CFUNC_DEF("setText", 2, f_set_text),
     JS_CFUNC_DEF("setStyle", 3, f_set_style),

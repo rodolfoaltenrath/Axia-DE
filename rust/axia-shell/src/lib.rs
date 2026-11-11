@@ -20,6 +20,7 @@ mod stall;
 mod css_style;
 mod keymap;
 mod window_policy;
+mod text_edit;
 mod clipboard;
 mod runtime;
 mod applications;
