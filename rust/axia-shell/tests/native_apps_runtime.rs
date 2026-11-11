@@ -177,6 +177,11 @@ fn real_compiled_app_widgets_and_effects() {
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
+    assert_eq!(get("app-models")["settings"], "appearance");
+    assert_eq!(get("app-models")["schemes"], 16);
+    assert_eq!(get("app-models")["profile"], 13);
+    assert_eq!(get("app-models")["categories"], 16);
+    assert_eq!(get("app-models")["checks"], 6);
     assert!(get("help-service")["count"].as_u64().unwrap() > 20);
     assert_eq!(get("help-service")["title"], "Clock");
     assert_eq!(get("help-service")["portuguese"], "Relógio");
@@ -366,6 +371,13 @@ render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
+  const settingsModel=lord.nativeApps.create('settings');settingsModel.request(JSON.stringify({cmd:'select',section:'themes'}));
+  const terminalModel=lord.nativeApps.create('terminal'),passwordsModel=lord.nativeApps.create('passwords'),sysinfoModel=lord.nativeApps.create('sysinfo');
+  record('app-models',{settings:settingsModel.request(JSON.stringify({cmd:'current'})),
+    schemes:terminalModel.request(JSON.stringify({cmd:'catalog'})).presets.length,
+    profile:terminalModel.request(JSON.stringify({cmd:'profile',settings:{},id:'missing'})).fontSize,
+    categories:passwordsModel.request(JSON.stringify({cmd:'catalog'})).builtin.length,
+    checks:sysinfoModel.request(JSON.stringify({cmd:'evaluate',value:{}})).length});
   record('empty',{groups:runningApps().length,text:nativeTexts(),react:texts().length});
   const english=help.read('clock'),count=help.list().length,score=help.search('clock')[0]?.score;
   const originalLocale=locale.get();

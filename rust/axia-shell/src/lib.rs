@@ -20,6 +20,12 @@ mod calculator;
 mod appabout;
 #[path = "../../../apps/settings/model.rs"]
 mod settings_model;
+#[path = "../../../apps/terminal/model.rs"]
+mod terminal_model;
+#[path = "../../../apps/passwords/model.rs"]
+mod passwords_model;
+#[path = "../../../apps/sysinfo/checks.rs"]
+mod sysinfo_checks;
 mod native_apps_host;
 mod native_view;
 #[path = "../../../apps/monitor/mod.rs"]
