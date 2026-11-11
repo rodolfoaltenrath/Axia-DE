@@ -1,0 +1,21 @@
+[package]
+name = "axia-crypto"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Allocation-free Rust cryptographic primitives for Axia vaults and backups"
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+argon2 = { version = "0.6", default-features = false, features = ["zeroize"] }
+blake2 = { version = "0.11", default-features = false, features = ["zeroize"] }
+chacha20 = { version = "0.10", default-features = false, features = ["zeroize", "cipher"] }
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["zeroize"] }
+zeroize = { version = "1", default-features = false }
+subtle = { version = "2", default-features = false }
+
+[dev-dependencies]
+libc = "0.2"
+serde_json = "1"

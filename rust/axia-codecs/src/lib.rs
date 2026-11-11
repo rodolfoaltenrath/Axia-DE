@@ -291,3 +291,6 @@ mod ffi_tests {
         }
     }
 }
+
+// One static archive per executable keeps the vault allocator isolated.
+pub use axia_crypto as crypto;
