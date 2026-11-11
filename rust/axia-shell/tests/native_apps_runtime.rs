@@ -176,6 +176,17 @@ fn real_compiled_app_widgets_and_effects() {
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
+    assert!(get("help-service")["count"].as_u64().unwrap() > 20);
+    assert_eq!(get("help-service")["title"], "Clock");
+    assert_eq!(get("help-service")["portuguese"], "Relógio");
+    assert_eq!(get("help-service")["fallback"], "Clock");
+    assert_eq!(get("help-service")["score"], 90);
+    assert_eq!(get("help-service")["accentScore"], 90);
+    assert_eq!(get("help-service")["short"], 0);
+    assert_eq!(get("help-service")["raw"], true);
+    assert_eq!(get("help-service")["invalid"], true);
+    assert_eq!(get("help-service")["link"], true);
+    assert_eq!(get("help-service")["external"], false);
     assert_eq!(get("clock-service")["alarms"][0]["label"], "Native clock test");
     assert_eq!(get("clock-service")["timer"]["state"], "paused");
     assert_eq!(get("clock-service")["timer"]["duration"], 30000);
@@ -288,6 +299,8 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js';
 import { View, render } from '@ROOT@/runtime/index.js';
 import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
+import { help } from '@ROOT@/sdk/help.js';
+import { locale } from '@ROOT@/sdk/i18n.js';
 import '@ROOT@/sdk/wayland.js';
 import { clockAlarms, clockTimer, timerStart, timerPause, timerReset, stopwatch, swStart, swStop, swLap, swReset } from '@ROOT@/sdk/alarms.js';
 import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/windows.js';
@@ -332,6 +345,17 @@ async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
   record('empty',{groups:runningApps().length,text:texts().map(n=>n.text)});
+  const english=help.read('clock'),count=help.list().length,score=help.search('clock')[0]?.score;
+  const originalLocale=locale.get();
+  locale.set({...originalLocale,lang:'pt-BR'});
+  const portuguese=help.read('clock')?.title,accentScore=help.search('RELOGIO')[0]?.score;
+  locale.set({...originalLocale,lang:'zz'});
+  const fallback=help.read('clock')?.title;
+  locale.set(originalLocale);
+  const link=help.link('app:demo');const linked=windows.get().find(w=>w.app==='demo');if(linked)wm.close(linked.id,true);
+  record('help-service',{count,title:english?.title,portuguese,fallback,score,accentScore,short:help.search('c').length,
+    raw:lord.help.read('en','clock').startsWith('---\n'),invalid:lord.help.read('en','../clock')===null,
+    link,external:help.link('https://example.org')});
   const alarmId=clockAlarms.add({h:23,m:45,label:'Native clock test'});
   timerStart(30);timerPause();swStart();await pause();swLap();swStop();
   record('clock-service',{alarms:clockAlarms.list(),timer:clockTimer.get(),stopwatch:stopwatch.get()});
