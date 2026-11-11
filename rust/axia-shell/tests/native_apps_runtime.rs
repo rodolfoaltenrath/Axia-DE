@@ -164,6 +164,7 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(
         get("catalog")["ids"],
         json!([
+            "about",
             "appabout",
             "calculator",
             "files",
@@ -173,6 +174,8 @@ fn real_compiled_app_widgets_and_effects() {
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
+    assert_eq!(get("external-activation")["focused"], true);
+    assert_eq!(get("external-activation")["minimized"], false);
     assert_eq!(get("empty")["groups"], 0);
     assert!(get("empty")["text"]
         .as_array()
@@ -195,6 +198,10 @@ fn real_compiled_app_widgets_and_effects() {
             .iter()
             .any(|v| v == text)
     };
+    assert!(has_text("about", "Axia"));
+    assert!(has_text("about", "System Report…"));
+    assert!(has_text("about", "QuickJS + React 19.3.1"));
+    assert_eq!(get("about")["react"], 0, "About content bypasses React");
     assert!(has_text("calculator-precedence", "14"));
     assert_eq!(
         get("calculator-precedence")["react"],
@@ -262,6 +269,7 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js';
 import { View, render } from '@ROOT@/runtime/index.js';
 import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
+import '@ROOT@/sdk/wayland.js';
 import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/windows.js';
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
@@ -304,6 +312,9 @@ async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
   record('empty',{groups:runningApps().length,text:texts().map(n=>n.text)});
+  const browser=wm.open('linux',{instance:804,args:{surface:804}});
+  wm.minimize(browser);__lordWayland(804,'activate');
+  record('external-activation',{focused:wm.focused()===browser,minimized:wm.get(browser).minimized});wm.close(browser,true);
   const a=wm.open('demo',{instance:'a'}),b=wm.open('demo',{instance:'b'});
   wm.setCloseGuard(a,()=>{guards++;return false;});wm.setCloseGuard(b,()=>{guards++;return false;});
   await pause();click('Demo');await pause();click('Force Quit');await pause();
@@ -333,6 +344,8 @@ async function run(){
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
+  wm.open('about');control.setArgs({});control.setMode('about');await pause();
+  record('about',{text:nativeTexts(),react:texts().length});
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');

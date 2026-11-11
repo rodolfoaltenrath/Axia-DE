@@ -727,6 +727,9 @@ static void on_client_message(const uint8_t *p) {
     if (type == AT(WL_SURFACE_ID)) {
         w->surface_res = d[0];
         try_attach(w);
+    } else if (type == AT(NET_ACTIVE_WINDOW)) {
+        /* Browser tabs opened by a user action may reuse an existing window. */
+        if (w->managed && w->sid && wl_activation_timestamp_valid(d[1])) wlx_request(w->sid, XREQ_ACTIVATE, 0);
     } else if (type == AT(NET_WM_STATE)) {
         int action = (int)d[0];                             /* 0 remove, 1 add, 2 toggle */
         for (int i = 1; i <= 2; i++) {
@@ -747,7 +750,7 @@ static void on_client_message(const uint8_t *p) {
     } else if (type == AT(WM_CHANGE_STATE)) {
         if (d[0] == 3 && w->sid) wlx_request(w->sid, XREQ_MINIMIZE, 0);   /* IconicState */
     }
-    /* _NET_ACTIVE_WINDOW from an app is ignored: only the user moves the focus (no focus stealing) */
+    /* Activation without a recent input timestamp leaves focus with the user. */
 }
 
 static void on_focus_in(const uint8_t *p) {

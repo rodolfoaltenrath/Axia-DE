@@ -1,6 +1,8 @@
 //! Rust services embedded in the existing C compositor.
 //! Window-system objects and the React UI retain their existing interfaces.
 mod anim;
+#[path = "../../../apps/about/mod.rs"]
+mod about;
 #[path = "../../../apps/files/mod.rs"]
 mod files;
 #[path = "../../../apps/forcequit/mod.rs"]

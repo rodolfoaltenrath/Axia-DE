@@ -45,7 +45,7 @@ WL_XML  := $(WLPROTO)/stable/xdg-shell/xdg-shell.xml $(WLPROTO)/unstable/xdg-dec
 WL_GEN  := build/gen/xdg-shell-protocol.h build/gen/xdg-decoration-unstable-v1-protocol.h
 WL_OBJ  := build/gen/xdg-shell-protocol.o build/gen/xdg-decoration-unstable-v1-protocol.o
 # dmabuf, presentation, viewporter and mouse for games (M7/GPU): they also work on the CPU path
-WL_MORE := stable/linux-dmabuf/linux-dmabuf-v1 stable/presentation-time/presentation-time stable/viewporter/viewporter \
+WL_MORE := staging/xdg-activation/xdg-activation-v1 stable/linux-dmabuf/linux-dmabuf-v1 stable/presentation-time/presentation-time stable/viewporter/viewporter \
            unstable/relative-pointer/relative-pointer-unstable-v1 unstable/pointer-constraints/pointer-constraints-unstable-v1 \
            unstable/pointer-gestures/pointer-gestures-unstable-v1 \
            staging/cursor-shape/cursor-shape-v1 unstable/tablet/tablet-unstable-v2 \
@@ -128,10 +128,15 @@ SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c src/ui/js_laun
 HDR += $(wildcard src/platform/*.h)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
+build/obj/wl/wl.o build/wl-activation-test build/wl-fullscreen-test build/wl-input-region-test build/wl-preview-test: src/wl/wl_activation.c
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
 test-platform: build/apps-actions-test build/defaults-test build/settings-hw-test
-test test-platform: build/wl-fullscreen-test
+test test-platform: build/wl-fullscreen-test build/wl-activation-test
+
+build/wl-activation-test: tests/wl_activation_test.c src/wl/wl.c $(HDR) $(WL_GEN) build/gen/xdg-activation-v1-protocol.o
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< build/gen/xdg-activation-v1-protocol.o -lwayland-server -lm
+	./$@ || { rm -f $@; exit 1; }
 
 build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
@@ -139,6 +144,7 @@ build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 
 test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/wl-fullscreen-test
+	./build/wl-activation-test
 	./build/ui-damage-test
 	./build/glass-damage-test
 	./build/brframe-test

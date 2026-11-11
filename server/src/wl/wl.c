@@ -139,6 +139,7 @@ struct Surf {
     int gx, gy, gw, gh, has_geom;
     char title[256], app_id[128];
     int maximized, fullscreen, activated, csd;
+    int activation_pending;
     int dialog, min_w, min_h, max_w, max_h;     /* xdg_toplevel: a parent, and its size limits */
     int kde_ssd;                    /* asked for a server frame via org_kde_kwin_server_decoration (GTK 3) */
     struct wl_resource *kde;
@@ -204,6 +205,15 @@ static Surf *pointer_focus, *key_focus;
 static int buttons_held;
 static float last_x, last_y, press_x, press_y;     /* where it was pressed: base for move/resize */
 static uint32_t mods_sent[4];
+static struct wl_client *activation_input_client;
+static uint32_t activation_input_time;
+static struct { struct wl_client *client; uint32_t serial, time; } activation_inputs[32];
+static unsigned activation_input_slot;
+static void activation_record(struct wl_client *client, uint32_t serial, uint32_t time, int press) {
+    unsigned slot = activation_input_slot++ % 32;
+    activation_inputs[slot].client = client; activation_inputs[slot].serial = serial; activation_inputs[slot].time = time;
+    if (press) { activation_input_client = client; activation_input_time = time; }
+}
 
 /* visible popup menus, bottom to top */
 static Surf *popups[32];
@@ -1195,7 +1205,9 @@ static void send_keymap(struct wl_resource *kb) {
 static void send_enter_keyboard(struct wl_resource *kb, Surf *s) {
     struct wl_array keys;
     wl_array_init(&keys);
-    wl_keyboard_send_enter(kb, wl_display_next_serial(dpy), s->res, &keys);
+    uint32_t serial = wl_display_next_serial(dpy);
+    activation_record(s->client, serial, now_ms(), 0);
+    wl_keyboard_send_enter(kb, serial, s->res, &keys);
     wl_array_release(&keys);
     uint32_t d, l, k, g;
     kb_mods(&d, &l, &k, &g);
@@ -2093,6 +2105,7 @@ static void surface_commit_role(Surf *s) {
         if (s->content && !s->mapped) {
             s->mapped = 1;
             emit_map(s, w, h);
+            if (s->activation_pending) { s->activation_pending = 0; emit(s, "activate", "{}"); }
             s->conf_w = w;
             s->conf_h = h;
         } else if (!s->content && s->mapped) {
@@ -2704,7 +2717,9 @@ static void pointer_enter(Surf *s, float lx, float ly) {
     pointer_focus = s;
     if (s) {
         FOR_CLIENT(&pointers, s->client, p) {
-            wl_pointer_send_enter(p, wl_display_next_serial(dpy), s->res, wl_fixed_from_double(lx), wl_fixed_from_double(ly));
+            uint32_t serial = wl_display_next_serial(dpy);
+            activation_record(s->client, serial, now_ms(), 0);
+            wl_pointer_send_enter(p, serial, s->res, wl_fixed_from_double(lx), wl_fixed_from_double(ly));
             if (wl_resource_get_version(p) >= 5) wl_pointer_send_frame(p);
         }
     }
@@ -2754,7 +2769,9 @@ int wl_pointer(float x, float y, Node *hit, int moved, int nbuttons, const int *
             wl_pointer_send_motion(p, t, wl_fixed_from_double(lx), wl_fixed_from_double(ly));
         for (int i = 0; i < nbuttons; i++) {
             uint32_t b = button[i] == 0 ? BTN_LEFT : button[i] == 1 ? BTN_MIDDLE : BTN_RIGHT;
-            wl_pointer_send_button(p, wl_display_next_serial(dpy), t, b,
+            uint32_t serial = wl_display_next_serial(dpy);
+            activation_record(target->client, serial, t, down[i]);
+            wl_pointer_send_button(p, serial, t, b,
                                    down[i] ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
         }
         if (wheel) wl_input_wheel(p, t, wheel);      /* axis + axis_source wheel + value120 (wl_input.c) */
@@ -2817,7 +2834,9 @@ static void send_key_to_focus(int code, int value) {
     kb_mods(&d, &l, &lk, &g);
     struct wl_resource *kb;
     FOR_CLIENT(&keyboards, key_focus->client, kb) {
-        wl_keyboard_send_key(kb, wl_display_next_serial(dpy), t, (uint32_t)code,
+        uint32_t serial = wl_display_next_serial(dpy);
+        activation_record(key_focus->client, serial, t, value);
+        wl_keyboard_send_key(kb, serial, t, (uint32_t)code,
                              value ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
         if (d != mods_sent[0] || l != mods_sent[1] || lk != mods_sent[2] || g != mods_sent[3])
             wl_keyboard_send_modifiers(kb, wl_display_next_serial(dpy), d, l, lk, g);
@@ -2877,7 +2896,9 @@ static void send_remapped(int code, int press) {
     struct wl_resource *kb;
     FOR_CLIENT(&keyboards, key_focus->client, kb) {
         if (press) wl_keyboard_send_modifiers(kb, wl_display_next_serial(dpy), held, l, lk, g);
-        wl_keyboard_send_key(kb, wl_display_next_serial(dpy), t, (uint32_t)code,
+        uint32_t serial = wl_display_next_serial(dpy);
+        activation_record(key_focus->client, serial, t, press);
+        wl_keyboard_send_key(kb, serial, t, (uint32_t)code,
                              press ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
         if (!press) wl_keyboard_send_modifiers(kb, wl_display_next_serial(dpy), d, l, lk, g);
     }
@@ -3631,6 +3652,13 @@ int wl_count(void) {
     return n;
 }
 
+int wl_activation_timestamp_valid(uint32_t timestamp) {
+    return timestamp && activation_input_client && (int32_t)(timestamp - activation_input_time) >= 0 &&
+        now_ms() - timestamp <= 10000u;
+}
+
+#include "wl_activation.c"
+
 /* ---- startup and loop ---- */
 
 int wl_start(void) {
@@ -3661,6 +3689,10 @@ int wl_start(void) {
     wl_list_init(&prim_devices);
     wl_list_init(&inhibitors);
     wl_global_create(dpy, &zwp_primary_selection_device_manager_v1_interface, 1, NULL, bind_pdm);   /* middle-click paste */
+    memset(activation_tokens, 0, sizeof activation_tokens);
+    activation_input_client = NULL;
+    memset(activation_inputs, 0, sizeof activation_inputs);
+    wl_global_create(dpy, &xdg_activation_v1_interface, 1, NULL, bind_activation);
     wl_global_create(dpy, &xdg_wm_base_interface, 6, NULL, bind_wm_base);
     wl_global_create(dpy, &zxdg_decoration_manager_v1_interface, 1, NULL, bind_decm);
     wl_list_init(&rel_pointers);
@@ -3809,6 +3841,7 @@ void wlx_request(int sid, int what, int arg) {
     Surf *s = find(sid);
     if (!s || s->role != R_TOPLEVEL) return;
     switch (what) {
+    case XREQ_ACTIVATE: if (s->mapped) emit(s, "activate", "{}"); break;
     case XREQ_MOVE: if (s->mapped) { buttons_held = 0; emit(s, "move", "{\"x\":%.0f,\"y\":%.0f}", press_x, press_y); } break;
     case XREQ_RESIZE: if (s->mapped) { buttons_held = 0; emit(s, "resize", "{\"edges\":%d,\"x\":%.0f,\"y\":%.0f}", arg, press_x, press_y); } break;
     case XREQ_MAXIMIZE: if (s->mapped) emit(s, "maximize", "{}"); break;
