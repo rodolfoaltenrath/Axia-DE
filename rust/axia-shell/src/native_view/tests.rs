@@ -313,3 +313,85 @@ fn icons_render_once_without_timers_or_input() {
     scene::destroy(mount);
     let _ = Map::<String, Value>::new();
 }
+
+#[test]
+fn custom_pointer_boundaries_and_actions_preserve_facts_and_coordinates() {
+    struct Panel(Rc<RefCell<Vec<Value>>>);
+    impl NativeApp for Panel {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                return json!({"tree":{"kind":"view","events":{
+                    "onMouseEnter":["enter"],"onMouseLeave":["leave"],
+                    "onMouseDown":["down"],"onMouseUp":["up"],"onClick":["activate"]},
+                    "children":[{"kind":"text","label":"Inside"}]}});
+            }
+            self.0.borrow_mut().push(input.clone());
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let outside = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Panel(log.clone())), "", None);
+    host.facts(json!({"windows":[{"id":"editor"}]}));
+    let label = node_with_text(mount, "Inside");
+    let parent = scene::parent(label);
+    host.pointer("move", label, 12., 23., 0);
+    host.pointer("move", parent, 13., 24., 0);
+    host.pointer("down", label, 14., 25., 0);
+    host.pointer("up", label, 14., 25., 0);
+    host.pointer("move", outside, 0., 0., 0);
+    let records = log.borrow();
+    assert_eq!(
+        records
+            .iter()
+            .map(|v| v["cmd"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["enter", "down", "up", "activate", "leave"]
+    );
+    assert_eq!(records[1]["x"], 14.);
+    assert_eq!(records[1]["y"], 25.);
+    assert_eq!(records[1]["windows"][0]["id"], "editor");
+    drop(records);
+    drop(host);
+    scene::destroy(mount);
+    scene::destroy(outside);
+}
+
+#[test]
+fn native_app_keyboard_requires_focus_opt_in_and_explicit_consumption() {
+    struct Keyboard(Rc<RefCell<Vec<String>>>);
+    impl NativeApp for Keyboard {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "key" {
+                self.0
+                    .borrow_mut()
+                    .push(input["event"].as_str().unwrap().into());
+                return json!({"handled": input["event"] == "Enter"});
+            }
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Keyboard(log.clone())), "", None);
+    host.facts(json!({"focused":true}));
+    assert!(!host.key("Enter", "", 0));
+    host.facts(json!({"focused":true,"keyboard":true}));
+    assert!(host.key("Enter", "", 0));
+    assert!(!host.key("F12", "", 0));
+    for modifier in [2, 4, 16] {
+        assert!(!host.key("Enter", "", modifier));
+    }
+    host.window_focus(false);
+    assert!(!host.key("Enter", "", 0));
+    assert_eq!(*log.borrow(), ["Enter", "F12"]);
+    drop(host);
+    scene::destroy(mount);
+}
