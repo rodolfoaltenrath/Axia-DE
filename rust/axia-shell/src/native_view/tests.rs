@@ -457,3 +457,49 @@ fn native_force_quit_uses_current_windows_and_clears_stale_selection() {
     drop(host);
     scene::destroy(mount);
 }
+
+#[test]
+fn a_native_text_field_has_priority_over_an_app_keyboard_and_blocks_fallthrough() {
+    struct Keys(Rc<RefCell<Vec<String>>>);
+    impl NativeApp for Keys {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "key" {
+                self.0
+                    .borrow_mut()
+                    .push(input["event"].as_str().unwrap().into());
+                json!({"handled":true})
+            } else {
+                json!({})
+            }
+        }
+    }
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let app_mount = scene::create(scene::VIEW);
+    let field_mount = scene::create(scene::VIEW);
+    let mut app = Host::new(app_mount, Box::new(Keys(log.clone())), "", None);
+    app.facts(json!({"focused":true,"keyboard":true}));
+    let mut field = Host::new(field_mount, Box::new(Demo::default()), "", None);
+    field.facts(json!({"focused":true}));
+    let input = field.find_text("Search");
+    field.pointer("down", input, 0., 0., 0);
+    super::with(|r| {
+        r.hosts.insert(10001, app);
+        r.hosts.insert(10002, field);
+    });
+    unsafe {
+        assert_eq!(super::axia_view_key(c"a".as_ptr(), c"a".as_ptr(), 0), 1);
+        assert_eq!(super::axia_view_key(c"F12".as_ptr(), c"".as_ptr(), 0), 0);
+    }
+    assert!(
+        log.borrow().is_empty(),
+        "neither handled nor declined field keys reach the app"
+    );
+    super::axia_view_unmount(10002);
+    unsafe {
+        assert_eq!(super::axia_view_key(c"Enter".as_ptr(), c"".as_ptr(), 0), 1);
+    }
+    assert_eq!(*log.borrow(), ["Enter"]);
+    super::axia_view_unmount(10001);
+    scene::destroy(field_mount);
+    scene::destroy(app_mount);
+}

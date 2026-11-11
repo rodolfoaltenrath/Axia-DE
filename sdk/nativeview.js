@@ -5,7 +5,8 @@
 // reads (settings, theme, services, catalog, focus) and runs the effects that belong to the shell:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { View } from '@lordos/runtime';
+import { View, shellHasKeyboard, onShellKeyboard } from '@lordos/runtime';
+import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
@@ -64,6 +65,10 @@ export function NativeView({ manifest, args, icon, style }) {
   useWindows();
   const [preferences] = useSettings();
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
+  const owner = useRef(null);
+  owner.current = { focused: win.focused !== false, shell: !!manifest.shell };
+  const ownsKeyboard = () => owner.current.focused && !textFieldActive()
+    && (owner.current.shell || !shellHasKeyboard());
   const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest) : {}));
   useEffect(() => {
     if (!manifest.services || icon) return undefined;
@@ -72,7 +77,7 @@ export function NativeView({ manifest, args, icon, style }) {
   }, [manifest, icon]);
   const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius } = theme;
   const facts = icon ? { icon, args: args || {} } : {
-    args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: win.focused !== false, refreshMs: manifest.refreshMs || 0,
+    args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: ownsKeyboard(), refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
     services: polled,
@@ -89,8 +94,11 @@ export function NativeView({ manifest, args, icon, style }) {
     m.sent = json;
     if (!m.handle) return undefined;
     runners.set(m.handle, runner(m.handle, manifest, win.id));
+    const syncFocus = () => { if (!icon) lord.nativeViews.focus(m.handle, ownsKeyboard()); };
+    const stopText = onTextField(syncFocus), stopShell = onShellKeyboard(syncFocus);
+    syncFocus();
     globalThis.__lordNativeView();
-    return () => { runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
+    return () => { stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
   }, [manifest.id, icon]);
   useEffect(() => {
     const m = mounted.current;

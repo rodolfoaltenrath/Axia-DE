@@ -188,15 +188,22 @@ fn real_compiled_app_widgets_and_effects() {
             .iter()
             .any(|v| v == text)
     };
-    assert!(has_text("calculator-arithmetic", "14"));
+    assert_eq!(get("calculator-arithmetic")["text"][1], "14");
     assert_eq!(
         get("calculator-arithmetic")["react"],
         0,
         "Calculator renders without React text nodes"
     );
-    assert!(has_text("calculator-keyboard-error", "Error"));
-    assert!(has_text("calculator-keyboard", "3"));
-    assert!(has_text("calculator-remount", "0"));
+    assert_eq!(get("calculator-keyboard-error")["text"][1], "Error");
+    assert_eq!(get("calculator-keyboard")["text"][1], "3");
+    assert_eq!(get("calculator-remount")["text"][1], "0");
+    assert_eq!(get("calculator-text-focus")["text"][1], "0");
+    assert!(get("calculator-text-focus")["field"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v == "7"));
+    assert_eq!(get("calculator-focus-restored")["text"][1], "2");
     assert_eq!(get("appabout")["title"], "About Calculator");
     assert_eq!(get("appabout")["react"], 0);
     assert!(has_text("appabout", "Version 0.9.0"));
@@ -265,7 +272,7 @@ import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
 import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/windows.js';
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
-import { AppWindowContext } from '@ROOT@/sdk/components.jsx';
+import { AppWindowContext, TextInput } from '@ROOT@/sdk/components.jsx';
 import { Dock, LaunchpadIcon } from '@ROOT@/themes/default/components/Dock.jsx';
 const catalog=lord.nativeApps.request(JSON.stringify({cmd:'catalog'}));
 const compiled=catalog.map(nativeApp), force=compiled.find(app=>app.id==='forcequit');
@@ -317,7 +324,7 @@ function DockHarness({args}){return h(Dock,{t:{...tokens,panelBg:'#222',windowBo
     {id:'shell:launcher',name:'Apps',Icon:LaunchpadIcon,pinned:true,launcher:true}],
   running:['app:calculator'],onOpen:id=>calls.push(['dockOpen',id]),position:args.position||'bottom',
   magnify:!!args.magnify,trashFull:!!args.full,size:54,maxSize:86,area:{x:0,y:0,w:1000,h:700}});}
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},mode==='dock'?h(DockHarness,{args}):app?h(app.Component,{key:mode+':'+instance}):null)));}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({}),[field,setField]=useState(false),[value,setValue]=useState('');control={setInstance,setMode,setArgs,setField};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},mode==='dock'?h(DockHarness,{args}):app?h('view',{style:{flex:1}},h(app.Component,{key:mode+':'+instance}),field?h(TextInput,{value,onChange:setValue,autoFocus:true}):null):null)));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
@@ -348,6 +355,10 @@ async function run(){
   key('Escape');key('1','1');key(',', ',');key('5','5');key('*','*');key('2','2');key('Enter');await pause();
   record('calculator-keyboard',{text:nativeTexts()});
   control.setInstance(2);await pause();record('calculator-remount',{text:nativeTexts()});
+  control.setField(true);await pause();key('7','7');await pause();
+  record('calculator-text-focus',{text:nativeTexts(),field:texts().map(n=>n.text)});
+  control.setField(false);await pause();key('2','2');key('Enter');await pause();
+  record('calculator-focus-restored',{text:nativeTexts()});
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:nativeTexts()});

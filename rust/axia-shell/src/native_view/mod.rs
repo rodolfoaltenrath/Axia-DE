@@ -215,7 +215,15 @@ pub unsafe extern "C" fn axia_view_gesture(
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_key(key: *const c_char, chr: *const c_char, flags: i32) -> i32 {
     let (key, chr) = (text(key).to_owned(), text(chr).to_owned());
-    for handle in handles() {
+    let handles: Vec<_> = handles().into_iter().rev().collect();
+    // An overlay's field wins over an application's keyboard controller. If it
+    // declines a key, give it back to the shell, never to a window underneath.
+    for &handle in &handles {
+        if with_host(handle, |h| h.owns_text_input()) == Some(true) {
+            return i32::from(with_host(handle, |h| h.key(&key, &chr, flags)) == Some(true));
+        }
+    }
+    for handle in handles {
         if with_host(handle, |h| h.key(&key, &chr, flags)) == Some(true) {
             return 1;
         }
