@@ -12,11 +12,13 @@ CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
 RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
-RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(wildcard ../rust/axia-shell/src/*.rs ../apps/*/*.rs ../rust/native_apps.rs ../rust/axia-shell/src/applications/*.rs ../rust/axia-shell/src/launcher/*.rs) ../.cargo/config.toml
+# Recurse through module directories: a native_view/ edit must rebuild the Rust
+# archive even when no top-level .rs file changed.
+rust_sources = $(wildcard $(1)/*.rs) $(foreach d,$(wildcard $(1)/*/),$(call rust_sources,$(patsubst %/,%,$(d))))
+RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(call rust_sources,../rust/axia-shell/src) $(call rust_sources,../apps) ../rust/native_apps.rs ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 RUST_INPUTS += $(CODEC_INPUTS)
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
-RUST_INPUTS += $(wildcard ../rust/axia-shell/src/search/*.rs ../rust/axia-shell/src/runtime/*.rs ../rust/axia-shell/src/clipboard/*.rs ../rust/axia-shell/src/snap/*.rs ../rust/axia-shell/src/winmodel/*.rs)
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
 CPPFLAGS += -DLORD_LIBSEAT $(shell pkg-config --cflags libseat)
