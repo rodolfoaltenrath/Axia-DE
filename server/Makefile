@@ -6,8 +6,11 @@ RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
 CODEC_LIB := build/codecs/release/libaxia_codecs.a
 VAULT_CODEC_LIB := build/vault-codecs/release/libaxia_codecs.a
+# axia-maild's archive also carries the mail parsers (rust/axia-mail, docs/RUST-MAIL.md).
+MAIL_CODEC_LIB := build/mail-codecs/release/libaxia_codecs.a
 CRYPTO_INPUTS := ../rust/axia-crypto/Cargo.toml $(wildcard ../rust/axia-crypto/src/*.rs) ../rust/vendor/argon2-0.6.0/src/lib.rs
 CODEC_INPUTS := $(CRYPTO_INPUTS) ../rust/axia-codecs/Cargo.toml $(wildcard ../rust/axia-codecs/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock
+MAIL_CODEC_INPUTS := $(CODEC_INPUTS) ../rust/axia-mail/Cargo.toml $(wildcard ../rust/axia-mail/src/*.rs)
 CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
@@ -740,6 +743,8 @@ $(CODEC_LIB): $(CODEC_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --target-dir $(abspath build/codecs) --release --locked --offline
 $(VAULT_CODEC_LIB): $(CODEC_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --no-default-features --features secure-memory --target-dir $(abspath build/vault-codecs) --release --locked --offline
+$(MAIL_CODEC_LIB): $(MAIL_CODEC_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --features mail --target-dir $(abspath build/mail-codecs) --release --locked --offline
 .PHONY: test-codecs
 test-codecs:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-codecs --target-dir $(abspath build/codecs) --locked --offline
@@ -756,6 +761,11 @@ test: test-codecs test-codecs-secure
 test-crypto:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-crypto --target-dir $(abspath build/crypto-tests) --locked --offline
 test: test-crypto
+
+.PHONY: test-mail-rust
+test-mail-rust:
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-mail --target-dir $(abspath build/mail-tests) --locked --offline
+test: test-mail-rust
 
 # Rust compatibility tests call the actual C format consumers against immutable
 # files produced by the previous crypto backend. Crypto itself is Rust only.

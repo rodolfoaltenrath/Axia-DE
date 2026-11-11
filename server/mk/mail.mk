@@ -1,17 +1,22 @@
 # Mail, Calendar, Contacts and Reminders (docs/MAIL.md). axia-maild is the sandboxed helper that
 # speaks IMAP, SMTP, CalDAV and CardDAV; with lord-sessiond it is the only binary linking OpenSSL.
-MAIL_PARSE := src/mail/xml.c src/mail/mime.c src/mail/html.c src/mail/imapp.c src/mail/ical.c src/mail/vcard.c
+# MIME and charsets, the WebDAV XML reader, the HTML sanitizer, iCalendar and vCard are Rust
+# (rust/axia-mail, docs/RUST-MAIL.md) behind the unchanged src/mail/*.h, linked through
+# $(MAIL_CODEC_LIB). The IMAP response parser stays C; the Rust side calls the C TZif reader.
+MAIL_PARSE := src/mail/imapp.c
 MAIL_HDR := $(wildcard src/mail/*.h) src/doc/wire.h src/sec/json.h src/ui/tzif.h
+MAIL_TEST_SRC := tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c src/ui/tzif.c
 # parsers: IMAP, MIME, HTML sanitizer, iCalendar, vCard and XML, with a small fuzzer (tests/mail_test.c)
 test: build/mail-test
-build/mail-test: tests/mail_test.c $(MAIL_PARSE) $(MAIL_HDR) src/doc/wire.c src/sec/json.c src/ui/tzif.c
+build/mail-test: $(MAIL_TEST_SRC) $(MAIL_HDR) $(MAIL_CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c src/ui/tzif.c -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(MAIL_TEST_SRC) $(MAIL_CODEC_LIB) $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
-# the same under AddressSanitizer + UBSan (not part of `test`: slower)
-build/mail-test-asan: tests/mail_test.c $(MAIL_PARSE) $(MAIL_HDR) src/doc/wire.c src/sec/json.c src/ui/tzif.c
+# the same under AddressSanitizer + UBSan (not part of `test`: slower); it instruments the C side
+# and every buffer the Rust parsers hand to it
+build/mail-test-asan: $(MAIL_TEST_SRC) $(MAIL_HDR) $(MAIL_CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer $(WARN) -std=c11 -o $@ tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c src/ui/tzif.c -lm
+	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer $(WARN) -std=c11 -o $@ $(MAIL_TEST_SRC) $(MAIL_CODEC_LIB) $(CODEC_NATIVE_LIBS)
 	./$@
 .PHONY: mail-asan
 mail-asan: build/mail-test-asan
@@ -49,9 +54,9 @@ LMD_SRC := src/mail/maild.c src/mail/store.c src/mail/search.c src/mail/imap.c s
 ifeq ($(MAILNET),1)
 all: build/axia-maild
 endif
-build/axia-maild: $(LMD_SRC) $(CODEC_LIB) $(MAIL_HDR) src/sec/sandbox.h src/sec/cgroup.h
+build/axia-maild: $(LMD_SRC) $(MAIL_CODEC_LIB) $(MAIL_HDR) src/sec/sandbox.h src/sec/cgroup.h
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LMD_SRC) $(CODEC_LIB) $(shell pkg-config --libs openssl) -lpthread -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LMD_SRC) $(MAIL_CODEC_LIB) $(shell pkg-config --libs openssl) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # manual driver for axia-maild (not in `make test`): build/maild-cli '{"op":"status"}' --wait 5
 build/maild-cli: tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c src/mail/mailc.h $(NETCONN_SRC)
 	@mkdir -p build
