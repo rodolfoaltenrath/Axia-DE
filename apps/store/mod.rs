@@ -134,7 +134,7 @@ impl crate::native_view::NativeApp for App {
     }
 }
 /// Compiled apps whose icons the store can draw (they are native views too).
-const DRAWN: [&str; 2] = ["monitor", "store"];
+const DRAWN: [&str; 3] = ["calculator", "monitor", "store"];
 /// A manifest string, possibly localized ({"en": …, "pt-BR": …}): the session's
 /// language, then its base language, then English, then any.
 pub fn catalog_text(v: &Value, lang: &str) -> Option<String> {

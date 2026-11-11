@@ -23,14 +23,18 @@ use std::{
 pub trait NativeApp {
     fn request(&mut self, input: &Value) -> Value;
     fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])>;
+    /// Optional window-level keyboard input (e.g. Calculator). Fields keep
+    /// their existing editing path; None leaves the key with the shell.
+    fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
+        None
+    }
 }
 fn app(id: &str) -> Option<Box<dyn NativeApp>> {
-    if id == crate::native_apps::monitor::ID {
-        Some(Box::new(crate::monitor::App::default()))
-    } else if id == crate::native_apps::store::ID {
-        Some(Box::new(crate::store::App::default()))
-    } else {
-        None
+    match id {
+        crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
+        crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
+        crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
+        _ => None,
     }
 }
 /// The icon tree a native-view app draws for itself (another app can show it).

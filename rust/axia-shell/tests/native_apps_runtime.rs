@@ -195,7 +195,12 @@ fn real_compiled_app_widgets_and_effects() {
             .iter()
             .any(|v| v == text)
     };
-    assert!(has_text("calculator-click", "14"));
+    assert!(has_text("calculator-precedence", "14"));
+    assert_eq!(
+        get("calculator-precedence")["react"],
+        0,
+        "calculator text bypasses React"
+    );
     assert!(has_text("calculator-keyboard-error", "Error"));
     assert!(has_text("calculator-keyboard", "3"));
     assert!(has_text("calculator-remount", "0"));
@@ -250,7 +255,7 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    println!("native Rust apps: Force Quit actions, Calculator clicks/keyboard/errors/remount, About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
+    println!("native Rust apps: Force Quit actions, Calculator native keyboard/errors/remount (zero React texts), About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
 }
 
 const DRIVER: &str = r#"
@@ -316,19 +321,19 @@ async function run(){
   wm.open('demo');await pause();click('Demo');await pause();control.setInstance(1);await pause();
   calls=[];click('Force Quit');await pause();record('remount',{calls});
   control.setMode('calculator');await pause();
-  for(const label of ['2','+','3','×','4','=']){click(label);await pause();}
-  record('calculator-click',{text:texts().map(n=>n.text)});
+  const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
   const key=(name,char='')=>{__lordKey(0,1,name,char,name,0);__lordKey(0,0,name,'',name,0);};
+  for(const label of ['2','+','3','×','4','Enter']){key(label,label);await pause();}
+  record('calculator-precedence',{text:nativeTexts(),react:texts().length});
   key('Escape');key('1','1');key('/','/');key('0','0');key('Enter');await pause();
-  record('calculator-keyboard-error',{text:texts().map(n=>n.text)});
+  record('calculator-keyboard-error',{text:nativeTexts()});
   key('Escape');key('1','1');key(',', ',');key('5','5');key('*','*');key('2','2');key('Enter');await pause();
-  record('calculator-keyboard',{text:texts().map(n=>n.text)});
-  control.setInstance(2);await pause();record('calculator-remount',{text:texts().map(n=>n.text)});
+  record('calculator-keyboard',{text:nativeTexts()});
+  control.setInstance(2);await pause();record('calculator-remount',{text:nativeTexts()});
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:texts().map(n=>n.text)});
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
-  const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
   for(let i=0;i<30&&!nativeTexts().includes('available for apps');i++)await pause();
@@ -338,7 +343,7 @@ async function run(){
     control.setArgs({tab});await pause();await pause();
     record('monitor-'+tab,{text:nativeTexts(),texts:nativeTexts().length});
   }
-  control.setMode('calculator');await pause();
+  control.setMode('forcequit');await pause();
   record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
   // Axia Store: a native view too, with the sidebar, the editorial cards and the apps.
   wm.open('store');control.setArgs({});control.setMode('store');

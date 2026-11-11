@@ -1,19 +1,16 @@
 //! Shared ownership/FFI for compiled applications drawn by the React widget host.
-//! Application behavior stays in apps/<id>. Monitor is a native view instead
-//! (native_view/): Rust mounts it into the scene and this host never creates it.
+//! Application behavior stays in apps/<id>. Monitor and Calculator are native views instead
+//! (native_view/): Rust mounts them into the scene and this host never creates them.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 pub enum NativeApp {
     ForceQuit(crate::forcequit::App),
-    Calculator(crate::calculator::App),
     AppAbout(crate::appabout::App),
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
         if id == crate::native_apps::forcequit::ID.as_bytes() {
             Some(Self::ForceQuit(Default::default()))
-        } else if id == crate::native_apps::calculator::ID.as_bytes() {
-            Some(Self::Calculator(Default::default()))
         } else if id == crate::native_apps::appabout::ID.as_bytes() {
             Some(Self::AppAbout(Default::default()))
         } else {
@@ -37,7 +34,6 @@ impl NativeApp {
     fn dispatch(&mut self, input: &Value) -> Value {
         match self {
             Self::ForceQuit(app) => app.request(input),
-            Self::Calculator(app) => app.request(input),
             Self::AppAbout(app) => app.request(input),
         }
     }

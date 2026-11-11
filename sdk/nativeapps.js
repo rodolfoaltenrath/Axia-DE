@@ -1,6 +1,6 @@
 // Compatibility host shared by compiled Rust apps. App layout, metadata and controllers live in Rust.
-import { createElement as h, Fragment, useEffect, useReducer, useState } from 'react';
-import { useAppWindow, useKeyboard } from './components.jsx';
+import { createElement as h, useEffect, useReducer, useState } from 'react';
+import { useAppWindow } from './components.jsx';
 import { useTheme } from './theme.js';
 import { typeScale } from './controls.jsx';
 import { useLocale, appName, formatNumber } from './i18n.js';
@@ -14,10 +14,6 @@ import { useSettings } from './settings.js';
 import { registerPrivacySection } from './privacy.js';
 import { NativeView, appFacts } from './nativeview.js';
 
-function KeyboardBinding({ send }) {
-  useKeyboard(event => send({ cmd: 'key', event: event.key, char: event.char || '' }));
-  return null;
-}
 function WidgetHost({ manifest }) {
   const theme = useTheme(), win = useAppWindow(), catalog = useLauncherApps();
   useLocale(); useWindows();
@@ -77,7 +73,7 @@ function WidgetHost({ manifest }) {
     memo.tree = tree;
     memo.element = h(RustWidget, { node: tree, send: handlers.send, icon: handlers.icon });
   }
-  return h(Fragment, null, manifest.keyboard ? h(KeyboardBinding, { send: handlers.dispatch }) : null, memo.element);
+  return memo.element;
 }
 export function nativeApp(manifest) {
   // Mounted by Rust into the scene: no React widget tree (sdk/nativeview.js).
