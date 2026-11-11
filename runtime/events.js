@@ -4,7 +4,21 @@
 // keepFocus on a View: a press inside it is not a click elsewhere: the global 'pointerdown' listeners
 // don't hear it, so a text field keeps the focus and an open menu stays (the on-screen keyboard).
 import { DiscreteEventPriority, ContinuousEventPriority, DefaultEventPriority } from 'react-reconciler/constants';
-import { translate, nativeKey, modifiers } from './keymap.js';
+
+// ---- keys: axia-server translates (libxkbcommon, or Rust's fallback tables without XKB:
+// rust/axia-shell/src/keymap.rs) and sends __lordKey(code, value, key, chr, base, flags); flags:
+// 1 Shift, 2 Ctrl, 4 Alt, 8 AltGr, 16 Super, 32 Caps Lock, 128 forwarded (a Linux app already got it
+// as Ctrl: the shell only learns it happened). Here the event is only put together.
+const mods = { shift: false, ctrl: false, alt: false, altgr: false, meta: false, caps: false };
+// Modifiers in use, as a mask: 1 Shift, 2 Alt, 4 Ctrl, 8 Super.
+export const modifiers = () => (mods.shift ? 1 : 0) | (mods.alt ? 2 : 0) | (mods.ctrl ? 4 : 0) | (mods.meta ? 8 : 0);
+function nativeKey(code, value, key, chr, base, flags) {
+  const down = value !== 0;
+  mods.shift = !!(flags & 1); mods.ctrl = !!(flags & 2); mods.alt = !!(flags & 4);
+  mods.altgr = !!(flags & 8); mods.meta = !!(flags & 16); mods.caps = !!(flags & 32);
+  return { code, down, repeat: value === 2, key: key || '', char: down ? chr : '', base: down ? base : '',
+    shift: mods.shift, ctrl: mods.ctrl, alt: mods.alt, altgr: mods.altgr, meta: mods.meta, mods: modifiers(), forwarded: !!(flags & 128) };
+}
 
 const instances = new Map();          // native id → reconciler instance
 const listeners = { pointermove: new Set(), pointerdown: new Set(), pointerup: new Set(), keydown: new Set(), keyup: new Set(), swipe: new Set(), pinch: new Set() };
@@ -109,10 +123,8 @@ globalThis.__lordEvent = (type, id, x, y, button) => {
   });
 };
 
-// With libxkbcommon (server/src/keyboard.c) the server already sends the translated key; if no
-// XKB layout is loaded only the code and value arrive and keymap.js is used as a fallback.
 globalThis.__lordKey = (code, value, key, chr, base, flags) => {
-  const ev = key === undefined ? translate(code, value) : nativeKey(code, value, key, chr, base, flags);
+  const ev = nativeKey(code, value, key, chr, base, flags | 0);
   // each listener on its own: one that throws doesn't take the key from the others (a text field)
   run(DiscreteEventPriority, () => {
     if (keyFilter) { try { if (keyFilter(ev)) return; } catch (e) { console.error('key filter:', e); } }

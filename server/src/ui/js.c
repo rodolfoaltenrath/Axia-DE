@@ -318,7 +318,40 @@ static JSValue f_stats(JSContext *c, JSValueConst this_val, int argc, JSValueCon
     return o;
 }
 
+/* lord.css(json): a CSS/React style object (key order kept) → its native properties
+ * (rust/axia-shell/src/css_style.rs). runtime/index.js sends only the ones that changed. */
+extern char *axia_css_normalize(const char *input);
+extern void axia_css_free(char *reply);
+static JSValue f_css(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    const char *in = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    if (!in) return JS_ThrowTypeError(c, "lord.css requires JSON");
+    char *reply = axia_css_normalize(in);
+    JS_FreeCString(c, in);
+    if (!reply) return JS_ThrowOutOfMemory(c);
+    JSValue v = JS_ParseJSON(c, reply, strlen(reply), "<css>");
+    axia_css_free(reply);
+    return v;
+}
+
+/* lord.textEdit(json): a one-line field's caret, selection and keys (rust/axia-shell/src/text_edit.rs) */
+extern char *axia_text_edit(const char *input);
+extern void axia_text_edit_free(char *reply);
+static JSValue f_text_edit(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    const char *in = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    if (!in) return JS_ThrowTypeError(c, "lord.textEdit requires JSON");
+    char *reply = axia_text_edit(in);
+    JS_FreeCString(c, in);
+    if (!reply) return JS_ThrowOutOfMemory(c);
+    JSValue v = JS_ParseJSON(c, reply, strlen(reply), "<textEdit>");
+    axia_text_edit_free(reply);
+    return v;
+}
+
 static const JSCFunctionListEntry lord_funcs[] = {
+    JS_CFUNC_DEF("css", 1, f_css),
+    JS_CFUNC_DEF("textEdit", 1, f_text_edit),
     JS_CFUNC_DEF("createNode", 1, f_create_node),
     JS_CFUNC_DEF("setText", 2, f_set_text),
     JS_CFUNC_DEF("setStyle", 3, f_set_style),
@@ -743,14 +776,22 @@ static void ime_commit(const char *text) {
 /* Key → __lordKey(code, value, key, text, base, flags). With libxkbcommon (keyboard.c)
  * C does the translation; if no layout is loaded, only code and value. If there is an
  * active input method (ime.c) and a focused text field, the key goes through it first. */
+/* Without an XKB keymap the fallback tables translate (rust/axia-shell/src/keymap.rs). */
+extern int axia_keymap_translate(int code, int value, char *key, char *chr, char *base, size_t n);
+extern void axia_keymap_name(int code, char *out, size_t n);
+
 void js_key(int code, int value) {
     KeyInfo k;
     kb_key(code, value, &k);
     grab_note_shift(k.shift);           /* Shift while moving a window: the thirds (grab.c) */
     js_wm_zone_flush();
-    if (!kb_ready()) {
-        JSValueConst args[2] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value) };
-        JS_FreeValue(ctx, call_global("__lordKey", 2, args));
+    if (!kb_ready()) {                  /* the shell gets the same event as with XKB */
+        char key[64], chr[64], base[64];
+        int flags = axia_keymap_translate(code, value, key, chr, base, sizeof key);
+        JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, key),
+                                 JS_NewString(ctx, chr), JS_NewString(ctx, base), JS_NewInt32(ctx, flags) };
+        JS_FreeValue(ctx, call_global("__lordKey", 6, args));
+        for (int i = 2; i < 5; i++) JS_FreeValue(ctx, args[i]);
         drain_jobs();
         return;
     }
@@ -764,7 +805,9 @@ void js_key(int code, int value) {
         if (used) { drain_jobs(); return; }
     }
     int flags = k.shift | k.ctrl << 1 | k.alt << 2 | k.altgr << 3 | k.meta << 4 | k.caps << 5 | k.dead << 6 | (to_app == 2) << 7;
-    JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, k.key),
+    char named[32];
+    if (!k.key[0]) axia_keymap_name(code, named, sizeof named);     /* XKB gave no name (Rust's table) */
+    JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, k.key[0] ? k.key : named),
                              JS_NewString(ctx, k.chr), JS_NewString(ctx, k.base), JS_NewInt32(ctx, flags) };
     JS_FreeValue(ctx, call_global("__lordKey", 6, args));
     for (int i = 2; i < 5; i++) JS_FreeValue(ctx, args[i]);

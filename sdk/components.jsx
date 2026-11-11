@@ -320,19 +320,35 @@ export function pasteIntoFocused() {
 // onKeyDown(e) optional: return true if the key was already handled (e.g. Shift+Enter).
 // secure: password field (shows •, does not go through the input method and cannot be copied).
 // selectAll: starts with all the text selected (the first key replaces it; the arrows
-// deselect it), as when renaming in Files.
-export function TextInput({ value, onChange, placeholder, onSubmit, onCancel, onKeyDown, autoFocus, style, secure, size = 13, selectAll = false }) {
+// deselect it). select: [start, end] starts with that part selected instead (Files selects a
+// name without its extension). What each key does to the value, the caret and the selection is
+// decided in Rust (lord.textEdit, rust/axia-shell/src/text_edit.rs); this keeps them and draws.
+const codepoints = (v) => [...(v ?? '')];
+function initialSelection(value, selectAll, select) {
+  const n = codepoints(value).length;
+  if (Array.isArray(select) && select.length === 2) {
+    const a = Math.max(0, Math.min(n, select[0] | 0)), b = Math.max(0, Math.min(n, select[1] | 0));
+    return { anchor: a, caret: b };
+  }
+  return selectAll ? { anchor: 0, caret: n } : { anchor: n, caret: n };
+}
+export function TextInput({ value, onChange, placeholder, onSubmit, onCancel, onKeyDown, autoFocus, style, secure, size = 13, selectAll = false, select = null }) {
   const t = useTheme();
   const token = useRef({}).current;
   const [isFocused, setIsFocused] = useState(false);
   const [blink, setBlink] = useState(true);
+  const [, redraw] = useState(0);
   const latest = useRef();
   const caret = useRef(null);
   const secureRef = useRef(secure);
   secureRef.current = secure;
-  const [allSel, setAllSel] = useState(selectAll);
-  const allRef = useRef(selectAll);
-  allRef.current = allSel;
+  // the caret and the selection, for the value they were measured in (known): a value set from
+  // outside (the app replaced it) puts the caret at its end
+  const sel = useRef(null);
+  const known = useRef(value);
+  if (sel.current === null) sel.current = initialSelection(value, selectAll, select);
+  else if (value !== known.current) { const n = codepoints(value).length; sel.current = { anchor: n, caret: n }; }
+  known.current = value;
   latest.current = { value, onChange, onSubmit, onCancel, onKeyDown };
   const order = useContext(FieldOrder);
 
@@ -353,14 +369,21 @@ export function TextInput({ value, onChange, placeholder, onSubmit, onCancel, on
         setFocus(order[(i + (e.shift ? order.length - 1 : 1)) % order.length]);
         return;
       }
-      const all = allRef.current;
-      if (all && (e.char || e.key === 'Backspace' || e.key === 'Delete' || ((e.ctrl || e.meta) && e.base === 'v'))) { setAllSel(false); allRef.current = false; p.value = ''; }
-      else if (all && /^Arrow|^Home$|^End$/.test(e.key || '')) { setAllSel(false); allRef.current = false; return; }
-      if ((e.ctrl || e.meta) && e.base === 'v') { p.onChange(p.value + lord.clipboard.get().replace(/\n/g, ' ')); return; }
-      if (e.key === 'Backspace' || e.key === 'Delete') p.onChange(all ? '' : e.key === 'Delete' ? p.value : [...p.value].slice(0, -1).join(''));
-      else if (e.key === 'Enter') p.onSubmit?.(p.value);
-      else if (e.key === 'Escape') p.onCancel?.();
-      else if (e.char) p.onChange(p.value + e.char);
+      const value = p.value ?? '', { caret: at, anchor } = sel.current;
+      let r = lord.textEdit(JSON.stringify({ value, caret: at, anchor, secure: !!secureRef.current, key: e.key || '', char: e.char || '',
+        ctrl: !!e.ctrl, meta: !!e.meta, alt: !!e.alt, shift: !!e.shift, base: e.base || '' }));
+      if (r.paste) r = lord.textEdit(JSON.stringify({ value, caret: at, anchor, insert: String(lord.clipboard.get() ?? '') }));
+      if (r.copy != null) lord.clipboard.set(r.copy);
+      sel.current = { caret: r.caret, anchor: r.anchor };
+      if (r.changed) {
+        // the next key, before this render, already edits the new value
+        known.current = r.value;
+        p.value = r.value;
+        p.onChange?.(r.value);
+      }
+      if (r.submit) p.onSubmit?.(r.value);
+      else if (r.cancel) p.onCancel?.();
+      redraw((n) => n + 1);
       setBlink(true);
     });
     order?.push(token);
@@ -386,6 +409,21 @@ export function TextInput({ value, onChange, placeholder, onSubmit, onCancel, on
     return () => clearInterval(id);
   }, [isFocused]);
 
+  // the text in up to three parts around the caret, the selected one highlighted while focused
+  const chars = secure ? codepoints(value).map(() => '•') : codepoints(value);
+  const { caret: at, anchor } = sel.current;
+  const a = Math.min(at, anchor, chars.length), b = Math.min(Math.max(at, anchor), chars.length);
+  const marked = isFocused && a < b;
+  const text = (key, part, hi) => part ? <Text key={key} style={{ fontSize: size, color: hi ? '#fff' : t.text, whiteSpace: 'nowrap', flexShrink: 0,
+    backgroundColor: hi ? t.accent : 'transparent' }}>{part}</Text> : null;
+  const cursor = isFocused ? [
+    preedit && !secure ? <Preedit key="ime" st={imeSt} size={size} color={t.text} accent={t.accent} /> : null,
+    <View key="caret" ref={caret} style={{ width: 1.5, height: size + 3, marginLeft: 1, backgroundColor: blink ? t.accent : 'transparent' }} />,
+  ] : null;
+  const parts = !marked
+    ? [text('a', chars.slice(0, isFocused ? Math.min(at, chars.length) : chars.length).join('')), cursor, isFocused ? text('c', chars.slice(Math.min(at, chars.length)).join('')) : null]
+    : [text('a', chars.slice(0, a).join('')), at === a ? cursor : null, text('b', chars.slice(a, b).join(''), true), at === b ? cursor : null, text('c', chars.slice(b).join(''))];
+
   return (
     <View onMouseDown={() => { focusedNow = true; setFocus(token); }}
       style={[{ height: Math.max(28, size + 15), paddingHorizontal: 10, borderRadius: t.controlRadius, flexDirection: 'row', alignItems: 'center',
@@ -394,10 +432,7 @@ export function TextInput({ value, onChange, placeholder, onSubmit, onCancel, on
         backgroundColor: t.inputBg, border: `1px solid ${isFocused && t.inputFocus !== 'underline' ? t.accent : t.separator}`, overflow: 'hidden' }, style]}>
       {/* inputFocus 'underline' (a theme token): an accent line along the bottom edge */}
       {isFocused && t.inputFocus === 'underline' ? <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: t.accent, pointerEvents: 'none' }} /> : null}
-      {value ? <Text style={{ fontSize: size, color: allSel && isFocused ? '#fff' : t.text, whiteSpace: 'nowrap',
-        backgroundColor: allSel && isFocused ? t.accent : 'transparent' }}>{secure ? '•'.repeat([...value].length) : value}</Text> : null}
-      {preedit && !secure ? <Preedit st={imeSt} size={size} color={t.text} accent={t.accent} /> : null}
-      {isFocused && <View ref={caret} style={{ width: 1.5, height: size + 3, marginLeft: 1, backgroundColor: blink ? t.accent : 'transparent' }} />}
+      {value ? parts : cursor}
       {!value && !preedit && <Text style={{ fontSize: size, color: t.textDim, whiteSpace: 'nowrap' }}>{placeholder || ''}</Text>}
     </View>
   );

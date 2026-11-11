@@ -3677,10 +3677,10 @@ int wl_start(void) {
     wl_global_create(dpy, &kde_mgr_interface, 1, NULL, bind_kde_deco);   /* theme frame for GTK 3 (Firefox) */
     wl_input_globals(dpy);              /* zwp_pointer_gestures_v1 (wl_input.c) */
     wl_textinput_globals(dpy, text_field_report);    /* zwp_text_input_v3 (wl_textinput.c) */
-    /* inherited by apps opened from the LordOS terminal */
+    /* inherited by every app the session starts */
     setenv("WAYLAND_DISPLAY", socket_name, 1);
     setenv("XDG_SESSION_TYPE", "wayland", 1);
-    setenv("XDG_CURRENT_DESKTOP", "LordOS", 1);
+    setenv("XDG_CURRENT_DESKTOP", "Axia", 1);     /* the session's name: .desktop OnlyShowIn and toolkits read it */
     setenv("GDK_BACKEND", "wayland", 1);
     setenv("QT_QPA_PLATFORM", "wayland", 1);
     setenv("MOZ_ENABLE_WAYLAND", "1", 1);

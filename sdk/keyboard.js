@@ -5,7 +5,6 @@
 // or ❖⌥Space). Any xkb-data layout works: keyboard.list() returns all of them with
 // their variants. With `ime` it is an input method (ime.c) on top of the Latin keyboard `layout`:
 // hangul (Korean), kana (Japanese), pinyin (Simplified Chinese).
-import { setLayout } from '@lordos/runtime';
 import { settings } from './settings.js';
 
 const native = () => typeof lord.keyboard !== 'undefined' && lord.keyboard.current().xkb;
@@ -35,7 +34,7 @@ function apply() {
     imeStatus = lord.ime ? lord.ime.set(list[idx].ime || '') : -1;
     if (ok) return;
   }
-  setLayout(list[idx].layout === 'us' ? 'us' : 'latam');        // fallback without XKB
+  lord.keyboard?.fallbackLayout?.(list[idx].layout);              // the tables used without XKB (Rust)
 }
 
 let catalog = null;

@@ -3,7 +3,7 @@
 // A Linux app's own request doesn't override this, except a dialog or a window of fixed size (sdk/wayland.js).
 import { screen, displayFor, mainDisplay } from '@lordos/runtime';
 import { settings } from './settings.js';
-import { windows, workAreaOf, getApp, setWindowMemory, assignedDisplayOf, isLiveSystem } from './windows.js';
+import { windows, workAreaOf, getApp, setWindowMemory, assignedDisplayOf, isLiveSystem, remembersWindow } from './windows.js';
 import { dockIdOfWindow } from './dock.js';
 import { placeOf, putPlace, restoreFrame } from './winmodel.js';
 
@@ -18,7 +18,7 @@ function save() {
   let all = settings.get().windowPlaces || {};
   let changed = false;
   for (const w of windows.get()) {
-    if (w.args?.dialog || (getApp(w.app)?.builtin && !String(w.id).startsWith('linux#'))) continue;
+    if (!remembersWindow(w) || (getApp(w.app)?.builtin && !String(w.id).startsWith('linux#'))) continue;
     if (keyOf(w).startsWith('linux:linux#') || keyOf(w) === 'linux:') continue;   // nothing names this app
     const p = placeOf(w, displayFor(w.snapped && w.restore ? w.restore : w));
     if (!p) continue;

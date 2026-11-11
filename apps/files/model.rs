@@ -226,6 +226,8 @@ pub struct Session {
 
     last_jobs: Value,
     owned_jobs: HashSet<i32>,
+    /// renamed or created here: selected once the folder's next listing has it
+    reveal: Option<PathBuf>,
     thumbnail_revision: u64,
     pub pdf_thumbnails: super::pdf_thumbnails::Cache,
     pub volume_busy: Option<String>,
@@ -539,6 +541,7 @@ impl Session {
 
             last_jobs: Value::Null,
             owned_jobs: HashSet::new(),
+            reveal: None,
             thumbnail_revision: 0,
             pdf_thumbnails: super::pdf_thumbnails::Cache::default(),
             volume_busy: None,
@@ -1167,6 +1170,7 @@ impl Session {
                             self.tab_mut().entries.clear();
                         }
                     }
+                    self.select_revealed();
                     self.dirty = true;
                 }
                 Notice::Writable(generation, writable)
@@ -1489,6 +1493,17 @@ impl Session {
         }
         self.effects.push(json!({"kind":"choose","paths":paths}));
         self.closed = true;
+    }
+    /// What was just renamed or created, selected (with the cursor) once the listing has it.
+    fn select_revealed(&mut self) {
+        let Some(want) = self.reveal.take() else { return };
+        let Some(i) = self.tab().entries.iter().position(|e| e.raw == want) else {
+            return;
+        };
+        let tab = self.tab_mut();
+        tab.selected = BTreeSet::from([i]);
+        tab.cursor = Some(i);
+        tab.anchor = i;
     }
     fn text_dialog(&mut self, action: &str, title: &str, value: String, paths: Vec<PathBuf>) {
         self.context = None;
@@ -2021,6 +2036,7 @@ impl Session {
                                 }
                                 ops::rename(&paths[0], &paths[1])?;
                                 shared.moved(&self.policy, &paths[0], &paths[1]);
+                                self.reveal = Some(paths[1].clone());
                                 self.load(shared);
                             }
                             "delete" => self.mutate("delete", paths)?,
@@ -2434,11 +2450,12 @@ impl Session {
                 let source = paths.first().ok_or("sys.badArgument")?;
                 if action == "rename" {
                     let to = source.with_file_name(&value);
+                    let ext = |p: &Path| p.extension().map(|e| e.to_string_lossy().to_lowercase());
                     if shared.preferences["warnExtension"]
                         .as_bool()
                         .unwrap_or(true)
                         && source.is_file()
-                        && source.extension() != to.extension()
+                        && ext(source) != ext(&to)
                     {
                         self.dialog = Some(Dialog::Confirm {
                             action: "extension".into(),
@@ -2448,8 +2465,11 @@ impl Session {
                     }
                     ops::rename(source, &to)?;
                     shared.moved(&self.policy, source, &to);
+                    self.reveal = Some(to);
                 } else {
-                    ops::mkdir(&source.join(&value))?;
+                    let folder = source.join(&value);
+                    ops::mkdir(&folder)?;
+                    self.reveal = Some(folder);
                 }
                 self.dialog = None;
                 self.load(shared);

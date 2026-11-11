@@ -6,7 +6,7 @@ import { settings } from './settings.js';
 import { createStore, useStore } from './store.js';
 import { locale, tOptional } from './i18n.js';
 
-export { View, Text, Image, Terminal, Surface, MediaView, screen, addListener, useClock, system, layouts, getLayout, modifiers } from '@lordos/runtime';
+export { View, Text, Image, Terminal, Surface, MediaView, screen, addListener, useClock, system, modifiers } from '@lordos/runtime';
 export { displays as screenDisplays, mainDisplay, displayAt, displayFor, mainBox } from '@lordos/runtime';
 export { createStore, useStore } from './store.js';
 export { settings, useSettings } from './settings.js';

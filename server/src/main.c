@@ -486,7 +486,7 @@ static void dispatch_pointer(Server *s) {
     double t_wl = now_ms();                 /* the drag line splits Wayland delivery from the theme's JS */
     if (over == 2) id = 0;                  /* sobre un menú de una app Linux: el árbol no lo ve */
     js_wm_zone_flush();                     /* the snapping preview, only when its zone changed */
-    if (ended) js_wm_end(&gend);
+    if (ended) { grab_restore(); js_wm_end(&gend); }
     int shape = over == 2 ? CUR_DEFAULT : node_cursor(target);
     if (shape != s->shape || grabbing != grab_active() || (over != 0) != s->over_app) { s->shape = shape; s->cursor_dirty = 1; }
     s->over_app = over != 0;                /* el cursor de la app solo vale sobre sus superficies */

@@ -147,6 +147,13 @@ impl Facts {
         i.and_then(|i| self.displays.get(i)).map(|d| d.work)
     }
 
+    /// `r` with its top no higher than the work area of the display under the middle of that top:
+    /// a title bar under the menu bar can't be grabbed again.
+    fn under_bar(&self, r: Rect) -> Rect {
+        let top = self.work(self.display_at(r.x + r.w / 2.0, r.y)).map_or(f64::NEG_INFINITY, |a| a.y);
+        Rect { y: r.y.max(top), ..r }
+    }
+
     fn app_pair(&self, app: &str, key: &str, default: (f64, f64)) -> (f64, f64) {
         self.apps
             .get(app)
@@ -521,7 +528,7 @@ impl Session {
                 return json!({ "assist": zone.name(), "display": display });
             }
             let w = &mut self.wins[i];
-            w.set_rect(Rect::new(nx, ny, js_round(start.w + dw), js_round(start.h + dh)));
+            w.set_rect(f.under_bar(Rect::new(nx, ny, js_round(start.w + dw), js_round(start.h + dh))));
             w.patch(json!({ "maximized": false, "snapped": null, "restore": null }));
             return Value::Null;
         }
@@ -541,13 +548,13 @@ impl Session {
                 let r = w.data.get("restore").and_then(Rect::from_value).unwrap_or(start);
                 let rel = if start.w != 0.0 { ((pointer.0 - nx) / start.w).clamp(0.0, 1.0) } else { 0.5 };
                 let w = &mut self.wins[i];
-                w.set_rect(Rect::new(js_round(pointer.0 - rel * r.w), ny, r.w, r.h));
+                w.set_rect(f.under_bar(Rect::new(js_round(pointer.0 - rel * r.w), ny, r.w, r.h)));
                 w.patch(Win::unsnapped());
                 return Value::Null;
             }
         }
         let w = &mut self.wins[i];
-        w.set_rect(Rect::new(nx, ny, js_round(start.w + dw), js_round(start.h + dh)));
+        w.set_rect(f.under_bar(Rect::new(nx, ny, js_round(start.w + dw), js_round(start.h + dh))));
         w.set("maximized", Value::Bool(false));
         if edges != 0 {
             w.patch(json!({ "snapped": null, "restore": null }));

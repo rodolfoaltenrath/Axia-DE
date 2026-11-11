@@ -14,6 +14,8 @@
  *       LordBench's desktop scene (docs/BENCHMARK.md): the node moves along a figure of eight, rx × ry px,
  *       one turn every periodMs (500–60000), one step per frame through the drag's own path (grab.c),
  *       with no button held; pointer input or cancel() stops it. No end notice: the scene's window closes.
+ *   lord.wm.policy(json) → object: where a Linux app's new window opens and which windows the session
+ *       remembers (rust/axia-shell/src/window_policy.rs; dialogs never take or leave a saved frame).
  *   lord.wm.pointer() → { x, y, active, edges }: the pointer now and the drag in progress (no
  *       arguments, read only).
  * On release: __lordWm('end', { node, edges, dx, dy, dw, dh, zone, detached, links: [{ node, dx, dy, dw, dh }] })
@@ -34,6 +36,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+extern char *axia_window_policy(const char *input);
+extern void axia_window_policy_free(char *reply);
 
 static JSContext *wctx;
 
@@ -326,6 +331,19 @@ static const JSCFunctionListEntry portal_funcs[] = {
     JS_CFUNC_DEF("pickResult", 2, f_portal_pick_result),
 };
 
+/* lord.wm.policy(json): the decision is Rust's; this only carries the JSON. */
+static JSValue f_policy(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    const char *in = argc > 0 && JS_IsString(argv[0]) ? JS_ToCString(c, argv[0]) : NULL;
+    if (!in) return JS_ThrowTypeError(c, "window policy requires JSON");
+    char *reply = axia_window_policy(in);
+    JS_FreeCString(c, in);
+    if (!reply) return JS_ThrowOutOfMemory(c);
+    JSValue v = JS_ParseJSON(c, reply, strlen(reply), "<window-policy>");
+    axia_window_policy_free(reply);
+    return v;
+}
+
 static const JSCFunctionListEntry wm_funcs[] = {
     JS_CFUNC_DEF("preview", 1, f_preview),
     JS_CFUNC_DEF("thumbnail", 5, f_thumbnail),
@@ -334,6 +352,7 @@ static const JSCFunctionListEntry wm_funcs[] = {
     JS_CFUNC_DEF("cancel", 0, f_cancel),
     JS_CFUNC_DEF("pointer", 0, f_pointer),
     JS_CFUNC_DEF("script", 2, f_script),
+    JS_CFUNC_DEF("policy", 1, f_policy),
 };
 
 void js_wm_register(JSContext *c, JSValue lord) {

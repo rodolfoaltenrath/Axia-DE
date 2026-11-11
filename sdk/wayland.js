@@ -8,7 +8,7 @@
 // menu from the app's own bar arrive as requests from the compositor.
 import { createElement as h } from 'react';
 import { View, Text, Surface, addListener, onShellKeyboard, shellHasKeyboard } from '@lordos/runtime';
-import { windows, wm, registerBuiltinApp, windowChrome, pointerWorkArea, openingArea, getApp, placeLinuxWindow, activeDesktop, onActiveDesktop, surfaceState } from './windows.js';
+import { windows, wm, registerBuiltinApp, windowChrome, pointerWorkArea, openingArea, getApp, placeLinuxWindow, activeDesktop, onActiveDesktop, surfaceState, windowPolicy } from './windows.js';
 import { desktopOfSurface } from './desktops.js';
 import { useAppWindow } from './components.jsx';
 import { locale, appName } from './i18n.js';
@@ -69,24 +69,24 @@ globalThis.__lordWayland = (sid, type, d = {}) => {
       if (d.x11 && d.appAlt && !linuxAppFor(d.appId) && linuxAppFor(d.appAlt)) d = { ...d, appId: d.appAlt };
       const c = d.csd ? { w: 0, h: 0 } : windowChrome();
       const area = openingArea(launcherKeyFor(d.appId));   // its assigned display, or under the pointer (docs/DISPLAYS.md)
-      const w = Math.min(area.w, d.width + c.w), hh = Math.min(area.h, d.height + c.h);
-      const n = windows.get().length;
-      // cascaded, but always inside the work area (never under the Dock)
-      const x = Math.round(area.x + (area.w - w) / 2 + (n % 5) * 24), y = Math.round(area.y + Math.max(8, (area.h - hh) / 2 - 30) + (n % 5) * 24);
       const args = { surface: sid, csd: !!d.csd, appId: d.appId || '', x11: !!d.x11, pkg: !!(d.appId && (getApp(d.appId)?.package || getApp(d.appId)?.isolated)) };
-      const saved = placeLinuxWindow(dockIdOfWindow({ id, args }));   // session restore: the place it had
-      // a dialog goes where its app asks and isn't remembered; a fixed window keeps its size
-      if (d.dialog) args.dialog = true;
+      if (d.dialog) args.dialog = true;                    // a fixed window keeps its size
       if (d.fixed) args.fixedLinux = true;
-      const kept = saved || d.dialog ? null : rememberedFrame(dockIdOfWindow({ id, args }), { fixed: !!d.fixed, size: [w, hh] });
+      // Rust decides (window_policy.rs): a dialog never takes, nor uses up, a frame saved for its app
+      const dockId = dockIdOfWindow({ id, args });
+      const remembered = windowPolicy({ op: 'remembers', dialog: !!d.dialog })?.remembers === true;
+      const saved = remembered ? placeLinuxWindow(dockId) : null;     // session restore: the place it had
+      const kept = remembered && !saved ? rememberedFrame(dockId, { fixed: !!d.fixed, size: [d.width + c.w, d.height + c.h] }) : null;
+      const plan = windowPolicy({ op: 'placeLinux', area, chrome: windowChrome(), csd: !!d.csd, width: d.width, height: d.height,
+        count: windows.get().length, dialog: !!d.dialog, saved: saved?.frame || null, kept: kept || null });
       wm.open('linux', {
         instance: String(sid),
-        frame: saved?.frame || (kept ? { x: kept.x, y: kept.y, w: kept.w, h: kept.h } : { w, h: hh, x: Math.max(area.x, Math.min(x, area.x + area.w - w)), y: Math.max(area.y, Math.min(y, area.y + area.h - hh)) }),
+        frame: plan.frame,
         args,
-        desktop: saved?.desktop ?? desktopOfSurface(sid),    // restored, or still open across a theme switch
+        desktop: (plan.source === 'saved' ? saved.desktop : null) ?? desktopOfSurface(sid),    // restored, or still open across a theme switch
       });
-      saved?.then(id);
-      if (kept?.maximized) wm.toggleMaximize(id);
+      if (plan.source === 'saved') saved.then(id);
+      if (plan.maximize) wm.toggleMaximize(id);
       // app .lpk aislada: su nombre (del manifest) en vez del id
       { const pkg = d.appId ? getApp(d.appId) : null; wm.setTitle(id, pkg && (pkg.package || pkg.isolated) && (!d.title || d.title === d.appId) ? (pkg.isolated ? appName(pkg) : pkg.name) : (d.title || d.appId || null)); }
       // a built-in isolated app that asks for it (manifest "protected": Passwords) is black in captures
