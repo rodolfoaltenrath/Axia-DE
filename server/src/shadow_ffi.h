@@ -13,4 +13,8 @@ void axia_shadow_blend(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, i
                        int32_t x, int32_t y, const AxiaShadowMask *m, uint32_t argb);
 /* canvas_clear (rust/axia-shell/src/canvas_ops.rs): fills [x0, x1) × [y0, y1) with value. */
 void axia_canvas_fill(uint32_t *px, int32_t stride, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t value);
+/* canvas_rrect_gradient (canvas_ops.rs), inside the clip [cx0, cx1) × [cy0, cy1). */
+void axia_canvas_rrect_gradient(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, int32_t cx1, int32_t cy1,
+                                float x, float y, float w, float h, float r, uint32_t from, uint32_t to,
+                                float angle_deg, float opacity);
 #endif
