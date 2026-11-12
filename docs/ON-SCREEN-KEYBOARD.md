@@ -43,20 +43,20 @@ tells them apart. Use Always, or the menu bar button, on such a machine.
 |---|---|
 | LordOS: `TextInput`, and custom fields that use `ime.attach` (Notes, Terminal, Text Editor) | `sdk/textfocus.js` |
 | Isolated apps (`axia-server --app`: Mail, Passwords…) | the `BOP_TEXT_FOCUS` broker hint, obeyed only for the window in front |
-| Linux apps that use `zwp_text_input_v3` (GTK, Qt) | `server/src/wl/wl_textinput.c` → `textinput` event |
+| Linux apps that use `zwp_text_input_v3` (GTK, Qt) | `rust/axia-shell/src/wayland/text_input.rs` → `textinput` event |
 | Linux apps that don't (X11 apps; Chromium by default) | not known: **the menu bar button opens it** and the keys work the same |
 
 ## How a key is typed
 
 Rows are lists of Linux key codes (`sdk/oskmodel.js`). What each key shows comes from the active XKB
-layout (`lord.input.keyLabels()`, from scratch states in `keyboard.c`), so Latin American shows `ñ` and
+layout (`lord.input.keyLabels()`, from scratch states in `rust/axia-shell/src/keyboard`), so Latin American shows `ñ` and
 its dead acute, Brazilian `ç`, Dvorak its own order and Arabic its letters. The symbol pages find each
 symbol in the layout (`keyFor`) and offer only what it can type, through Shift or AltGr; a symbol that
 exists only as a dead key is that key and then space.
 
 `lord.input.tap(code, level)` queues a key; the main loop (`js_input_flush`) presses and releases it
 through `js_key`, the same path as a physical key. So layouts, dead keys, compose and input methods
-(`ime.c`) work as usual, and from there the key goes to the focused field or `wl_key`, which sends it
+(Rust `input_method`) work as usual, and from there the key goes to the focused field or `wl_key`, which sends it
 only to the client with the keyboard: a Wayland app, an X11 app through Xwayland, or an isolated app.
 
 Keys act on release, as on a tablet: Return can close the field and the keyboard with it, and the finger

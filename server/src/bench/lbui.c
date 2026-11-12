@@ -225,7 +225,7 @@ static void build_scene(void) {
     }
 }
 
-/* ---- paint threads: the same row bands as axia-server's pool (par.c), without its priority ---- */
+/* ---- paint threads: the same row bands as axia-server's pool (Rust parallel.rs), without its priority ---- */
 
 typedef void (*BandFn)(void *ctx, int a, int b);
 static struct {

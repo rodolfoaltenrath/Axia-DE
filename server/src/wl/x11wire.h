@@ -1,7 +1,8 @@
 /* x11wire.h — the small part of the X11 wire protocol that LordOS's X window manager (xwm.c)
  * speaks with Xwayland. Our own code, no libxcb/libX11 (dependency policy, docs/ARCHITECTURE.md):
  * request encoding, packet framing, the connection setup reply and the ICCCM/EWMH properties the
- * window manager reads. Pure functions with no I/O, tested by tests/xwm_test.c. */
+ * window manager reads. Implemented in Rust x11/{wire,ffi}.rs, with no I/O,
+ * tested by tests/xwm_test.c. Compatibility declarations remain while callers migrate. */
 #ifndef LORD_X11WIRE_H
 #define LORD_X11WIRE_H
 
@@ -47,17 +48,19 @@ enum {
 enum { X_Above = 0, X_Below = 1 };
 
 /* ---- output: requests are appended to one buffer ---- */
-typedef struct {
-    uint8_t *b;
-    size_t n, cap, start;
-    int oom;                    /* an allocation failed: the connection is dropped */
-} XOut;
+/* Zero-initialize; do not copy, mutate these private fields or free the handle
+ * yourself. Rust owns the bounded buffer. All access is on the owning thread. */
+typedef struct { void *state; int allocation_failed; } XOut;
+size_t xo_len(const XOut *o);
+const uint8_t *xo_data(const XOut *o);  /* borrowed until the next buffer mutation */
+int xo_failed(const XOut *o);          /* sticky allocation/connection failure */
+void xo_fail(XOut *o);                 /* mark a pending-request queue overflow */
 
 void xo_begin(XOut *o, uint8_t opcode, uint8_t data);   /* opens a request (4-byte header) */
 void xo_u8(XOut *o, uint8_t v);
 void xo_u16(XOut *o, uint16_t v);
 void xo_u32(XOut *o, uint32_t v);
-void xo_bytes(XOut *o, const void *p, size_t n);        /* padded to 4 */
+void xo_bytes(XOut *o, const void *p, size_t n);        /* padded to 4; p must not alias o's bytes */
 void xo_pad(XOut *o, size_t n);
 void xo_end(XOut *o);                                   /* writes the length (in 4-byte units) */
 void xo_drop(XOut *o, size_t n);                        /* n bytes were written to the socket */
@@ -82,8 +85,8 @@ size_t x11_packet_len(const uint8_t *p, size_t n);
 /* The full sequence number of a reply/event, from its 16 low bits and the last one sent. */
 uint32_t x11_seq_widen(uint32_t last_sent, uint16_t s16);
 
-static inline uint16_t x11_get16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
-static inline uint32_t x11_get32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
+uint16_t x11_get16(const uint8_t *p);  /* two readable bytes, no alignment requirement */
+uint32_t x11_get32(const uint8_t *p);  /* four readable bytes, no alignment requirement */
 
 /* ---- properties (ICCCM / EWMH / Motif) ---- */
 
@@ -115,7 +118,7 @@ int x11_text_rank(const char *name);
 
 /* Do two X resource ids belong to the same client? (The bits above the server's resource mask
  * are the client.) The window manager answers a paste request only from the focused window's client. */
-static inline int x11_same_client(uint32_t a, uint32_t b, uint32_t id_mask) { return (a & ~id_mask) == (b & ~id_mask); }
+int x11_same_client(uint32_t a, uint32_t b, uint32_t id_mask);
 
 /* First free display number (0..63), given a test for whether :n is in use (a live lock file or
  * a socket). -1 if they are all taken. */

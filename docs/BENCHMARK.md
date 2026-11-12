@@ -261,7 +261,7 @@ development package.
       lays the tree out, computes the damage and paints the whole screen; the glyph, text and shadow caches stay
       warm, as on a running desktop (one frame before the clock starts fills them). `cpu.ui.1` is everything on
       one core; `cpu.ui.n` the same frames with the paint's row-local loops split in bands over up to 8 threads
-      (`canvas_parallel`, the same pieces as axia-server's paint threads, `par.c`, without their real-time
+      (`canvas_parallel`, the same pieces as axia-server's paint threads, `rust/axia-shell/src/parallel.rs`, without their real-time
       priority), so it measures what the compositor's own threads gain, not N independent copies: the engine
       keeps one tree per process.
     - **Shaping** (`cpu.shape.1`, `cpu.shape.n`, runs per second, summed over the threads): one run shapes five
@@ -577,7 +577,7 @@ threads run at `SCHED_RR` priority 2 (the lowest real-time levels: ahead of ever
 own), as KWin does for its compositor and Mutter for the thread that sends frames to the screen:
 
 - lord-sessiond starts the session's axia-server with `RLIMIT_RTPRIO` 2 and `RLIMIT_RTTIME` 5 s (soft; `remote/sess.c`).
-- axia-server takes it in `par_init` (`par.c`) right after dropping root, before it starts any process or other
+- axia-server takes it in `par_init` (`rust/axia-shell/src/parallel.rs`) right after dropping root, before it starts any process or other
   thread: the main thread takes `SCHED_RR`, the paint threads inherit it, then the main thread adds
   `SCHED_RESET_ON_FORK`, so every thread and process it starts later (apps, helpers, Mesa's threads, LordBench's
   load) gets the normal policy. Then it lowers `RLIMIT_RTPRIO` to 0, soft and hard: nothing it starts can ask for

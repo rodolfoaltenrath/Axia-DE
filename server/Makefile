@@ -11,7 +11,7 @@ CODEC_INPUTS := $(CRYPTO_INPUTS) ../rust/axia-codecs/Cargo.toml $(wildcard ../ru
 CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
-RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0)
+RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0) -lxkbcommon
 # Recurse through module directories: a native_view/ edit must rebuild the Rust
 # archive even when no top-level .rs file changed.
 rust_sources = $(wildcard $(1)/*.rs) $(foreach d,$(wildcard $(1)/*/),$(call rust_sources,$(patsubst %/,%,$(d))))
@@ -48,11 +48,9 @@ WL_OBJ  := build/gen/xdg-shell-protocol.o build/gen/xdg-decoration-unstable-v1-p
 # dmabuf, presentation, viewporter and mouse for games (M7/GPU): they also work on the CPU path
 WL_MORE := stable/linux-dmabuf/linux-dmabuf-v1 stable/presentation-time/presentation-time stable/viewporter/viewporter \
            unstable/relative-pointer/relative-pointer-unstable-v1 unstable/pointer-constraints/pointer-constraints-unstable-v1 \
-           unstable/pointer-gestures/pointer-gestures-unstable-v1 \
            staging/cursor-shape/cursor-shape-v1 unstable/tablet/tablet-unstable-v2 \
            staging/fractional-scale/fractional-scale-v1 unstable/xdg-output/xdg-output-unstable-v1 \
-           unstable/primary-selection/primary-selection-unstable-v1 unstable/idle-inhibit/idle-inhibit-unstable-v1 \
-           unstable/text-input/text-input-unstable-v3
+           unstable/primary-selection/primary-selection-unstable-v1 unstable/idle-inhibit/idle-inhibit-unstable-v1
 WL_GEN  += $(foreach p,$(WL_MORE),build/gen/$(notdir $(p))-protocol.h)
 WL_OBJ  += $(foreach p,$(WL_MORE),build/gen/$(notdir $(p))-protocol.o)
 
@@ -79,7 +77,7 @@ MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/cap
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
-SRC := src/main.c src/fpipe.c src/kms.c src/gpu/gpu.c src/gpu/gscissor.c src/input.c src/canvas.c src/par.c src/lpk.c src/users/admin_rescue.c src/users/homedirs.c src/keyboard.c src/keylag.c src/ime.c src/wl/wl.c src/wl/keygrab.c src/wl/x11wire.c src/wl/xwm.c src/wl/xwayland.c src/osk.c \
+SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/lpk.c src/users/admin_rescue.c src/users/homedirs.c src/wl/wl.c src/wl/xwm.c \
        src/ui/text.c \
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
@@ -99,14 +97,14 @@ OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
 HDR += $(wildcard src/fw/*.h)
 # Touchpad and touchscreens: our own driver (src/tp, no libinput), gestures and touches for the
-# Wayland apps (src/wl/wl_input.c) and lord.input (src/ui/js_input.c). See docs/TRACKPAD.md.
-TP_SRC := src/tp/tp.c src/tp/tp_route.c src/wl/wl_input.c src/wl/wl_textinput.c src/ui/js_input.c
+# Wayland apps (Rust wayland/input.rs) and lord.input (src/ui/js_input.c). See docs/TRACKPAD.md.
+TP_SRC := src/ui/js_input.c
 SRC += $(TP_SRC)
-# Window management: dragging in C, a layer for the window being moved and our own cursors (docs/WINDOWS.md).
+# Window management: Rust dragging and cursors, with the existing painter's drag layer (docs/WINDOWS.md).
 # cursor-shape-v1 needs the tablet-v2 interfaces (they're only linked, not advertised).
 # GTK/GNOME/Qt apps: our own org.freedesktop.portal.Settings (src/ui/portal.c) with the D-Bus client from
 # Passwords (src/vault/dbus.c, docs/PASSWORDS.md).
-WM_SRC := src/cursor.c src/ui/grab.c src/ui/js_wm.c src/ui/js_snap.c src/ui/js_winmodel.c src/ui/js_switcher.c src/ui/portal.c src/ui/portal_files.c src/vault/dbus.c
+WM_SRC := src/ui/js_wm.c src/ui/js_snap.c src/ui/js_winmodel.c src/ui/js_switcher.c src/ui/portal.c src/ui/portal_files.c src/vault/dbus.c
 SRC += $(WM_SRC)
 # Clock and Help (docs/SYSTEM.md): time zones with our own TZif reader, and the help articles
 CLOCK_SRC := src/ui/tzif.c src/ui/js_help.c
@@ -163,8 +161,8 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 	./build/apps-actions-test
 	./build/defaults-test
 	./build/settings-hw-test
-build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_golden.h src/canvas.c src/canvas.h src/glass_ffi.h src/par.c $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/glass-renderer-test: tests/glass_renderer_test.c tests/glass_renderer_golden.h src/canvas.c src/canvas.h src/glass_ffi.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $< src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/glass-damage-test: tests/glass_damage_test.c src/ui/paint.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lm
 build/ui-damage-test: tests/ui_damage_test.c src/main.c $(HDR)
@@ -186,9 +184,9 @@ build/kms-cursor-test: tests/kms_cursor_test.c src/kms.c src/kms.h
 # separate from the production Rust runtime carried by the same static archive.
 build/wl-preview-test build/gpu-capture-test: CPPFLAGS += -Dui=axia_fixture_ui -Dnode_get=axia_fixture_node_get
 build/wl-preview-test: tests/wl_preview_test.c src/wl/wl.c $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -lwayland-client -ldl -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -lwayland-client -ldl -lpthread -lm
 build/gpu-capture-test: tests/gpu_capture_test.c src/wl/wl.c src/gpu/gpu.c $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/gpu/gpu.c src/kms.c src/canvas.c src/par.c $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS) -ldl
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/gpu/gpu.c src/kms.c src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS) -ldl
 # Optional surfaceless Mesa probe (mesa-dri-drivers), without opening a display.
 build/gpu-round-test: tests/gpu_round_test.c src/gpu/gpu.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< $(shell pkg-config --libs gbm egl glesv2) -lm
@@ -196,6 +194,35 @@ build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --locked --offline
+test test-platform: build/input-ffi-test
+build/input-ffi-test: tests/input_ffi_test.c src/input.h src/tp/tp.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -Wl,--wrap=ioctl,--wrap=stat -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
+test test-platform: build/key-latency-ffi-test
+build/key-latency-ffi-test: tests/key_latency_ffi_test.c src/keylag.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -Wl,--wrap=clock_gettime -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
+test test-platform: build/touch-route-ffi-test
+build/touch-route-ffi-test: tests/touch_route_ffi_test.c tests/wayland_input_fixture.c tests/wayland_input_fixture.h src/tp/tp.h src/tp/tp_route.h src/ui/ui.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -Wl,--wrap=clock_gettime -o $@ tests/touch_route_ffi_test.c tests/wayland_input_fixture.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
+test test-platform: build/window-grab-ffi-test
+build/window-grab-ffi-test: tests/window_grab_ffi_test.c src/ui/grab.h src/cursor.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
+test test-platform: build/text-input-ffi-test
+test test-platform: build/wayland-input-ffi-test
+XWL_TEST_WRAP := stat lstat open unlink chmod mkdir bind listen socket socketpair fork waitpid kill syscall getenv execve unshare usleep time fcntl dup2 wl_client_create wl_event_loop_add_fd wl_event_source_remove
+test test-platform: build/xwayland-ffi-test
+build/xwayland-ffi-test: tests/xwayland_ffi_test.c src/wl/xwayland.h src/sec/cgroup.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(foreach f,$(XWL_TEST_WRAP),-Wl,--wrap=$(f)) -o $@ tests/xwayland_ffi_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
+build/wayland-input-ffi-test: tests/wayland_input_ffi_test.c tests/wayland_input_fixture.c tests/wayland_input_fixture.h src/wl/wl_input.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -Wl,--wrap=clock_gettime -o $@ tests/wayland_input_ffi_test.c tests/wayland_input_fixture.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
+build/text-input-ffi-test: tests/text_input_ffi_test.c src/wl/wl_input.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ tests/text_input_ffi_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
+	./$@ || { rm -f $@; exit 1; }
 $(RUST_LIB): $(RUST_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
 build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
@@ -322,17 +349,17 @@ build/codesig-test: tests/codesig_test.c src/sec/codesig.c src/sec/json.c src/pk
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/codesig_test.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c -lpthread
 	./$@ ../tools/release/lordos-release.pub.pem || { rm -f $@; exit 1; }
 # Clock time zones: TZif and POSIX rules against glibc (docs/SYSTEM.md)
-# tests/xwm_test.c: the X11 wire helpers of the window manager (src/wl/x11wire.c, docs/WAYLAND.md)
+# tests/xwm_test.c: Rust X11 wire helpers of the window manager (x11/wire.rs, docs/WAYLAND.md)
 test: build/keygrab-test
-build/keygrab-test: tests/keygrab_test.c src/wl/keygrab.c src/wl/keygrab.h
+build/keygrab-test: tests/keygrab_test.c src/wl/keygrab.h $(RUST_LIB)
 	@mkdir -p build
-	$(CC) $(CFLAGS) -o $@ tests/keygrab_test.c src/wl/keygrab.c
+	$(CC) $(CFLAGS) $(WARN) -o $@ tests/keygrab_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 	./$@
 
-test: build/xwm-test
-build/xwm-test: tests/xwm_test.c src/wl/x11wire.c src/wl/x11wire.h
+test test-platform: build/xwm-test
+build/xwm-test: tests/xwm_test.c src/wl/x11wire.h $(RUST_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/xwm_test.c src/wl/x11wire.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/xwm_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 	./$@ || { rm -f $@; exit 1; }
 # tests/timer_order_test.c: the JS timers (src/ui/js_prelude.h) against the prelude they replaced
 .PHONY: test-timers
@@ -455,7 +482,7 @@ test: test-rust
 # per-corner radii, logical edges, transforms and hit testing, and the dragged window's frames against
 # the golden hashes in tests/drag_golden_{cpu,gpu}.txt; `build/engine-test bench` times a 2000-row
 # list and a window drag on one and two displays
-ENGINE_SRC := src/gpu/gscissor.c src/gpu/gcontend.c src/ui/text.c src/ui/textlayout.c \
+ENGINE_SRC := src/gpu/gcontend.c src/ui/text.c src/ui/textlayout.c \
               src/ui/paint.c src/ui/otf.c src/ui/fonts.c src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c \
               src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/canvas.c
 test: build/engine-test
@@ -468,12 +495,12 @@ WLR_PKGS := wlroots-0.20 wayland-server xkbcommon pixman-1 libdrm
 build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) -DWLR_USE_UNSTABLE $(shell pkg-config --cflags $(WLR_PKGS)) $(CFLAGS) $(WARN) -std=c11 -o $@ \
 	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
-# the frame pipeline's decisions (src/fpipe.c, docs/GPU.md "The frame pipeline"): LORD_PIPELINE, the auto
+# the frame pipeline's decisions (Rust frame_pipeline.rs, docs/GPU.md "The frame pipeline"): LORD_PIPELINE, the auto
 # mode, what a display does next, when input waits, and a display on a vblank grid with and without it
 test: build/fpipe-test
-build/fpipe-test: tests/fpipe_test.c src/fpipe.c src/fpipe.h
+build/fpipe-test: tests/fpipe_test.c src/fpipe.h $(RUST_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fpipe_test.c src/fpipe.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fpipe_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 	./$@ || { rm -f $@; exit 1; }
 # Re-record only after an intentional rasterizer change has been reviewed and
 # independent damage/composition checks pass. Never use this to mask a regression.
@@ -487,17 +514,17 @@ build/canvas-test: tests/canvas_test.c src/canvas.c src/canvas.h $(RUST_LIB)
 build/fsops-test: tests/fsops_test.c src/fsops.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fsops_test.c -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 # touchpad driver (src/tp): gestures of the simulated touchpad (../tests/touchpad-sim) → what's recognized
-build/tp-test: tests/tp_test.c src/tp/tp.c src/tp/tp.h ../tests/touchpad-sim/gestures.c ../tests/touchpad-sim/gestures.h
+build/tp-test: tests/tp_test.c src/tp/tp.h ../tests/touchpad-sim/gestures.c ../tests/touchpad-sim/gestures.h $(RUST_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/tp_test.c src/tp/tp.c ../tests/touchpad-sim/gestures.c -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/tp_test.c ../tests/touchpad-sim/gestures.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 # the on-screen keyboard: devices, allowed keys, the queue and XKB labels
 test: build/osk-test
-build/osk-test: tests/osk_test.c src/osk.c src/osk.h src/keyboard.c src/keyboard.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/osk_test.c src/osk.c src/keyboard.c -lxkbcommon
+build/osk-test: tests/osk_test.c src/osk.h src/keyboard.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/osk_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm -lxkbcommon
 	./$@ || (rm -f $@; exit 1)
 
-build/ime-test: tests/ime_test.c src/ime.c src/ime.h src/keyboard.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ime_test.c src/ime.c
+build/ime-test: tests/ime_test.c src/ime.h src/keyboard.h $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ime_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/bidi-test: tests/bidi_test.c src/ui/bidi.c src/ui/unicode.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/bidi_test.c src/ui/bidi.c src/ui/unicode.c
 build/sound-test: tests/sound_test.c src/sound/pulse.c src/sound/pulse.h

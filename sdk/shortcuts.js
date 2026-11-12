@@ -7,7 +7,7 @@
 //   BASE                      the keys every theme shares
 //   useShortcuts({ grabs, table, onSuperTap, appsPaste })  a theme's own: its table, which fixed list
 //                             of keys axia-server keeps from apps ('flow' or 'classic',
-//                             server/src/wl/keygrab.c), what ❖ pressed alone does and whether ❖V
+//                             rust/axia-shell/src/keygrab.rs), what ❖ pressed alone does and whether ❖V
 //                             belongs to the apps
 //   addShortcuts(entries)     a module's own (Screenshots, the Terminal's drop-down window);
 //                             runShortcut(id) runs one from elsewhere
@@ -47,7 +47,7 @@ const LETTERS = { 16: 'q', 17: 'w', 18: 'e', 19: 'r', 20: 't', 21: 'y', 22: 'u',
   33: 'f', 34: 'g', 35: 'h', 36: 'j', 37: 'k', 38: 'l', 44: 'z', 45: 'x', 46: 'c', 47: 'v', 48: 'b', 49: 'n', 50: 'm' };
 const SUPER = (code) => code === 125 || code === 126;
 
-// As keygrab_letter in server/src/wl/keygrab.c: the layout's letter, or the position's on a layout
+// As keygrab_letter in rust/axia-shell/src/keygrab.rs: the layout's letter, or the position's on a layout
 // without Latin letters.
 function keyName(e) {
   const b = String(e.base || '').toLowerCase();

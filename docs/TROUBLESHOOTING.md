@@ -94,7 +94,7 @@ The trace measures time. It is not a key log:
 - **How long it runs:** it stops by itself 120 s after the first traced key, or after 4000 lines.
   Log out and back in for a new one.
 
-The code is in `server/src/keylag.c`.
+The code is in `rust/axia-shell/src/key_latency.rs`.
 
 ### The 0.8.1 fix: Linux apps' frames on the GPU path
 

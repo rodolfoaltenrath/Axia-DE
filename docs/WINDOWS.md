@@ -11,7 +11,7 @@ and the cursor shows the arrow for each direction.
 | ![move](windows-move.png) | ![gtk](windows-gtk-move.png) |
 | Moving a window: move cursor, the Dock stays on top | GTK Demo (own frame, CSD) moved from its bar: axia-server follows `xdg_toplevel.move` in C |
 | ![cursors](windows-resize-cursors.png) | ![app](windows-app-cursor.png) |
-| LordOS cursors (`server/src/cursor.c`) at 2x over light and dark backgrounds; the red dot is the hotspot | The I-beam in Chromium's address bar: it asks for it via `cursor-shape-v1` and LordOS draws it |
+| LordOS cursors (`rust/axia-shell/src/cursor.rs`) at 2x over light and dark backgrounds; the red dot is the hotspot | The I-beam in Chromium's address bar: it asks for it via `cursor-shape-v1` and LordOS draws it |
 
 The screenshots are from VM 118 before CPU cursor-plane support. A hardware cursor is not part of
 the primary framebuffer, so `screendump` does not show it.
@@ -82,7 +82,7 @@ whatever motion has accumulated up to that moment). That way a 1000 Hz mouse doe
 Linux apps a thousand times per second. Raw motion for games (`relative-pointer`) and the cursor
 plane are still per event.
 
-### C does the dragging (`ui/grab.c`, `lord.wm`)
+### Rust does the dragging (`runtime/window_grab.rs`, `lord.wm`)
 
 The theme starts the drag and axia-server follows it on its own:
 
@@ -91,13 +91,13 @@ wm.beginMove(id)              // in the title bar's onMouseDown
 wm.beginResize(id, edges)     // edges as in xdg_toplevel.resize: 1 top, 2 bottom, 4 left, 8 right
 ```
 
-- Per frame, C shifts the window's node (`left`/`top`, and `width`/`height` when resizing) and redoes
+- Per frame, Rust shifts the window's node (`left`/`top`, and `width`/`height` when resizing) and redoes
   the layout. **JS is not called and React doesn't re-render.** Where the node goes (the limits below,
   a maximized or snapped window coming loose) is decided in Rust (`rust/axia-shell/src/snap/grab.rs`);
-  `grab.c` only writes it to the node.
+  `runtime/window_grab.rs` applies the geometry to the Rust-owned node.
 - While it lasts, Linux apps don't receive the pointer (`wl_pointer_grab`: `leave`), as in Weston.
 - On release, JS receives `__lordWm('end', { node, dx, dy, dw, dh })` and the window list (Rust,
-  `grabEnd`) stores the geometry. Right before that, `grab.c` puts every node it moved back to what
+  `grabEnd`) stores the geometry. Right before that, `runtime/window_grab.rs` puts every node it moved back to what
   the theme had set (`grab_restore`): the renderer sends a node only the styles that changed since its
   own last render, so a node left where the drag put it kept that place whenever the window list gave
   the same style as before (a window snapped back to the side it came from stayed at its loose size,
@@ -290,7 +290,7 @@ crops.
 </WindowShell>
 ```
 
-### Cursors (`server/src/cursor.c`)
+### Cursors (`rust/axia-shell/src/cursor.rs`)
 
 - **Own cursor set, drawn by LordOS.** They are vector shapes (polygons, capsules, rings with signed
   distance), rasterized with 4×4 samples per pixel at 1x (32 px) and 2x (64 px, on screens from
@@ -380,7 +380,7 @@ was checked against this path:
 
 - **Layout of what didn't change is skipped.** A node whose subtree had no change (`node_invalidate`
   clears `layout_ok` up to the root) and that gets the same box keeps its children's layout. Moving a
-  window only changes its `left`/`top` (`grab.c` calls `node_moved`), so a frame of a drag lays out the
+  window only changes its `left`/`top` (`runtime/window_grab.rs` calls `node_moved`), so a frame of a drag lays out the
   desktop's top level and places the rest (`place()`), instead of laying out every window.
 - **A transform-only setStyle keeps the node's layout** (0.8.6; `node_restyled` in
   `rust/axia-shell/src/runtime/scene.rs`). A change of only `rotate`, `scaleX`, `scaleY` or `transformOriginX/Y` on a node that
@@ -443,15 +443,15 @@ A theme turns it on with `configureWindows({ snap: true })` (both Lord Classic a
   a quarter; at the top edge it is maximized. **With Shift held** the sides give the left and right
   thirds and the top edge the middle third. Halves, thirds and quarters round to whole pixels and
   share their middle line, so two snapped windows never overlap or leave a gap.
-- **The preview** while dragging: the window still moves in C (no JS per frame). `lord.wm.grab`
-  receives each display and its work area (`snap`); `grab.c` hands every pointer motion, and every
+- **The preview** while dragging: the window still moves in Rust (no JS per frame). `lord.wm.grab`
+  receives each display and its work area (`snap`); `runtime/window_grab.rs` hands every pointer motion, and every
   Shift change (`grab_note_shift` from `js_key`), to Rust (`DragZones`), which says whether the zone
   under the pointer changed. Only then axia-server calls `__lordWm('zone', { zone, x, y, w, h })`
   and the SDK sets `snapPreview`; the theme draws it under the moving window. There is no polling:
   the 90 ms timer that read `lord.wm.pointer()` is gone.
 - **A scripted move (0.8.6, LordBench):** `wm.scriptMove(id, { rx, ry, periodMs })` asks axia-server to move
   the window along a figure of eight through this same path (`lord.wm.script`, `grab_script_begin` in
-  `ui/grab.c`: the window painted once into a layer, one step per frame from the main loop, no button held
+  `runtime/window_grab.rs`: the window painted once into a layer, one step per frame from the main loop, no button held
   and no JS per frame). The positions come from LordBench's synthetic pointer (`bench/lbinput.c`, a 125 Hz
   thread on an eventfd the main loop polls like a device; taken once per frame like a real mouse's motion), so
   the test also measures pointer-to-screen latency; without that thread the path follows the clock. Pointer
@@ -461,8 +461,8 @@ A theme turns it on with `configureWindows({ snap: true })` (both Lord Classic a
   and Shift once more) and the SDK snaps; the size from before the first snap is kept in `w.restore`.
   Dragging a snapped or maximized window away gives it that size back as soon as it moves (past
   6 px, so a click on its bar changes nothing), under the pointer at the same share of its width, as
-  Windows does: it follows the pointer at the size it will have and can be snapped again. C does it
-  during the drag (`detach` in `lord.wm.grab`, grab.c) and the end reports `detached`.
+  Windows does: it follows the pointer at the size it will have and can be snapped again. Rust does it
+  during the drag (`detach` in `lord.wm.grab`, runtime/window_grab.rs) and the end reports `detached`.
 - **Snap Assist:** after a window snaps by dragging, from a snap layout or with Super+arrow from a
   free window, the rest of its layout is offered: halves offer the other half, quarters the other
   three, thirds the other two, and a layout picked in the flyout its own other cells
@@ -476,7 +476,7 @@ A theme turns it on with `configureWindows({ snap: true })` (both Lord Classic a
 - **Resizing snapped windows together:** dragging an edge of a snapped window that another snapped
   window on the same display touches moves that line for every window along it (two halves; the
   middle line of four quarters moves all four). `lord.wm.grab` receives the other snapped windows'
-  nodes (`links`) and `grab.c` asks Rust (`LinkedResize`) for every frame on each motion, keeping
+  nodes (`links`) and `runtime/window_grab.rs` calls `LinkedResize` for every frame on each motion, keeping
   each window inside its minimum size; those windows aren't painted through the drag layer, which
   only keeps what is below one window. `__lordWm('end')` reports each one's change and they all stay
   snapped. An edge on the border of the work area has nobody behind it and resizes only that window;

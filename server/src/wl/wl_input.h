@@ -1,6 +1,6 @@
-/* wl_input.h — gestures and touches for Wayland apps (wl_input.c): zwp_pointer_gestures_v1
+/* wl_input.h — gestures and touches for Wayland apps (Rust wayland/input.rs): zwp_pointer_gestures_v1
  * (pinch, swipe, hold), fine touchpad scrolling (axis_source finger, axis_stop,
- * axis_value120) and wl_touch for touchscreens. Used by tp/tp_route.c. */
+ * axis_value120) and wl_touch for touchscreens. Used by the Rust touch router. */
 #ifndef LORD_WL_INPUT_H
 #define LORD_WL_INPUT_H
 
@@ -9,6 +9,10 @@
 struct wl_display;
 struct wl_client;
 struct wl_resource;
+
+/* All entry points, resource dispatch and destruction run on the display's
+ * Wayland/UI thread. Host queries must not recursively dispatch this controller.
+ * Rust owns gesture/touch state and removes borrowed handles on destruction. */
 
 /* scroll sources */
 enum { WLI_FINGER = 0, WLI_WHEEL = 1, WLI_CONTINUOUS = 2 };
@@ -28,8 +32,11 @@ void wl_input_devices_changed(void);    /* a touchscreen was connected or remove
 /* called by wl.c */
 void wl_input_globals(struct wl_display *dpy);
 void wl_input_get_touch(struct wl_client *c, struct wl_resource *seat, uint32_t id);
-/* zwp_text_input_v3 (wl_textinput.c): fn(on, x, y, w, h) when the focused client's field takes or
+/* zwp_text_input_v3 (Rust wayland/text_input.rs): fn(on, x, y, w, h) when the focused client's field takes or
  * loses focus, or its caret moves (surface coordinates). */
+/* Initialize once per display lifetime. All text-input entry points and resource
+ * dispatch/destruction run on that display's thread. The report callback must
+ * not recursively change focus or destroy protocol resources. */
 void wl_textinput_globals(struct wl_display *dpy, void (*fn)(int on, int x, int y, int w, int h));
 void wl_textinput_focus(struct wl_client *client, struct wl_resource *surface);    /* NULL: nobody */
 void wl_textinput_gone(void);           /* the surface with the keyboard is being destroyed */
@@ -39,7 +46,7 @@ void wl_input_wheel(struct wl_resource *pointer, uint32_t time, int steps);
 /* high-resolution or horizontal wheel: 1/120 of a step (+ up, + right), to the app with the pointer */
 void wl_input_wheel120(int v120, int h120);
 
-/* from wl.c, only for wl_input.c */
+/* Borrowed compositor queries from wl.c for Rust wayland/input.rs. */
 struct wl_display  *wl__display(void);
 struct wl_resource *wl__pointer_focus(void);          /* wl_surface under the pointer, or NULL */
 struct wl_list     *wl__pointers(void);

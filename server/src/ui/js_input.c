@@ -1,5 +1,5 @@
 /* js_input.c — lord.input: which touchpads and touchscreens exist and the driver settings
- * (tp/tp.c). It only reads and changes the driver's in-memory configuration: it opens no devices and
+ * (Rust touch driver). It only reads and changes the driver's in-memory configuration: it opens no devices and
  * touches no files (settings are saved to settings.json from the SDK, sdk/trackpad.js).
  *
  *   lord.input.devices()      → [{ name, kind: 'touchpad'|'touchscreen', clickpad, width, height, fingers }]

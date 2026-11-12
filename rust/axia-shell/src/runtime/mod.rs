@@ -6,6 +6,7 @@
 //! live views returned by node_new/node_get. C cannot free or relink views, text,
 //! style extensions or transforms. Style snapshots never own their ext pointer.
 mod damage;
+mod window_grab;
 mod edges;
 mod image;
 mod image_sampling;
@@ -300,4 +301,29 @@ pub unsafe extern "C" fn ui_reset() {
         s.reset(ui);
         LAYOUT.with(|l| *l.borrow_mut() = layout::Layout::default());
     });
+}
+
+/// Input routing borrows the UI-thread dimensions without creating a reference
+/// spanning a foreign callback. The compositor must serialize access to ui.
+pub(crate) unsafe fn input_dimensions() -> (i32, i32) {
+    (
+        ptr::addr_of!(state::ui.width).read() as i32,
+        ptr::addr_of!(state::ui.height).read() as i32,
+    )
+}
+/// UI-thread hit testing continues through the current painter until its migration.
+pub(crate) unsafe fn input_hit_id(x: f32, y: f32) -> i32 {
+    extern "C" {
+        fn hit_test(root: *mut Node, x: f32, y: f32) -> *mut Node;
+    }
+    let root = ptr::addr_of!(state::ui.root).read();
+    if root.is_null() {
+        return 0;
+    }
+    let node = hit_test(root, x, y);
+    if node.is_null() {
+        0
+    } else {
+        (*node).id
+    }
 }

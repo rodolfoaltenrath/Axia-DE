@@ -298,7 +298,7 @@ second vblank and the rate locks at half the refresh. That is the Raspberry Pi 5
 (`docs/BENCHMARK.md`, "The desktop under load"): about 13 ms to build a frame, 3–5 ms more of GPU and submission,
 98 % of the frames late, 30 fps; alone it builds in 7 ms and shows 60.
 
-**What changed** (`main.c`; the decisions in `fpipe.c`, without I/O, tested by `build/fpipe-test`): while the flip
+**What changed** (`main.c`; the decisions in `rust/axia-shell/src/frame_pipeline.rs`, without I/O, tested by `build/fpipe-test`): while the flip
 of frame N is pending, the CPU part of frame N+1 is done ahead (it is *prepared*): pointer input and LordBench's
 scripted step are dispatched, the JS frame callbacks and the layout run (`paint_ui`) and its damage is painted into
 the display's scene (`paint_out`, `out_prepare`), keeping what the submission needs on the display (`Out`): the rect
@@ -443,7 +443,7 @@ drag in the same session composed 893 of 905. `LORD_GPU_VERIFY` was not repeated
 ## The buffer-age scissor (0.8.7, measured on the Pi 5, off by default)
 
 Every frame on the GPU path clears and composes the whole output, even when a few pixels changed. On a tiling GPU that
-is memory traffic the frame doesn't need. `LORD_GPU_SCISSOR=1` turns on the alternative (`gpu/gscissor.c`, no GL, and
+is memory traffic the frame doesn't need. `LORD_GPU_SCISSOR=1` turns on the alternative (`rust/axia-shell/src/gpu_scissor.rs`, no GL, and
 `gpu_frame_ex`); the session log says `gpu: buffer-age scissor on`, or why it is off, and at the end
 `gpu: buffer-age scissor: N frames, K of them partial, composed X Mpx of Y`.
 
@@ -511,7 +511,7 @@ reads a real desktop load does, and how much of this a change in the compositor 
 ## The CPU path on several threads (0.8.5)
 
 Without a GPU (a virtual machine like VM 116, a board without a working driver) the CPU path paints
-every frame. Its heavy pixel loops run on a small pool of threads (`server/src/par.c`, up to 8): the
+every frame. Its heavy pixel loops run on a small pool of threads (`rust/axia-shell/src/parallel.rs`, up to 8): the
 backdrop blur in phases (downsample, the box passes by rows and by columns, the upsample), and the
 row-local primitives (fills, strokes, gradients, blits, shadow masks) as the same call on each
 thread with the clip cut to a band of rows; the remote desktop's tile comparison and the copies into

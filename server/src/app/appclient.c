@@ -402,7 +402,7 @@ static void gestures_setup(void) {
 }
 
 /* The compositor's keymap (the user's layouts, already expanded): compiling it reads no files,
- * so it also works inside the sandbox (keyboard.c kb_set_keymap_string). */
+ * so it also works inside the sandbox (Rust keyboard kb_set_keymap_string). */
 static void k_keymap(void *d, struct wl_keyboard *k, uint32_t fmt, int32_t fd, uint32_t sz) {
     (void)d; (void)k;
     if (fd < 0) return;

@@ -1,4 +1,4 @@
-/* osk.h — what the on-screen keyboard needs from C (docs/ON-SCREEN-KEYBOARD.md), with no dependencies
+/* osk.h — compatibility ABI for the Rust on-screen keyboard (docs/ON-SCREEN-KEYBOARD.md), with no dependencies
  * so tests/osk_test.c covers it: is a device a keyboard someone can type on, which keys a tap may
  * press, and the short queue of taps. Never stores or prints what is typed: a queued tap is a key
  * code that leaves the queue at the next pass of the main loop. */

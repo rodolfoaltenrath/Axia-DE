@@ -1,5 +1,5 @@
 // ime.js — input methods (Korean, Japanese, Chinese). The engine lives in the server
-// (server/src/ime.c); here we track who has focus and draw the candidate window.
+// (rust/axia-shell/src/input_method/); here we track who has focus and draw the candidate window.
 //
 //   ime.attach(token, caret, { inline })   a text field or a terminal takes focus;
 //                                          caret() → { x, y, h } on screen

@@ -1,10 +1,10 @@
-/* cursor.h — LordOS cursor shapes (own vector drawing, at 1x and 2x). See docs/WINDOWS.md. */
+/* cursor.h — LordOS cursor shapes (Rust-owned vector drawing, at 100–200%). See docs/WINDOWS.md. */
 #ifndef LORD_CURSOR_H
 #define LORD_CURSOR_H
 
 #include <stdint.h>
 
-/* The order matches CURSOR_CSS_NAMES (the nodes' `cursor` style, Rust runtime/style.rs). */
+/* The order matches CURSOR_CSS_NAMES and Rust cursor::CSS_NAMES (the nodes' `cursor` style). */
 enum {
     CUR_AUTO = 0, CUR_DEFAULT, CUR_POINTER, CUR_TEXT, CUR_MOVE, CUR_GRAB, CUR_GRABBING, CUR_NOT_ALLOWED,
     CUR_WAIT, CUR_PROGRESS, CUR_CROSSHAIR,

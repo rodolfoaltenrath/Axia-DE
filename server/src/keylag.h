@@ -1,6 +1,6 @@
 /* keylag.h — key latency trace (docs/TROUBLESHOOTING.md, "Typing feels slow").
  *
- * Off by default and free when off (one branch per key). It only turns on when axia-server starts
+ * Off by default and cheap when off (an atomic flag query per key). It only turns on when axia-server starts
  * with LORD_INPUT_DEBUG=1, which lord-sessiond passes to user sessions (never the login screen)
  * only when the kernel command line has lordos.inputdebug=1 or its own service sets
  * LORD_INPUT_DEBUG=1: root decides, for one boot. There is no run-time switch.
@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 
-extern int keylag_enabled;
+int keylag_enabled(void); /* atomic query of the Rust trace state */
 
 void keylag_init(int greeter);                  /* reads LORD_INPUT_DEBUG once, at start */
 void keylag_rx(int value, const struct timeval *ev_time);   /* main.c: a key (not kept unless sent below) */

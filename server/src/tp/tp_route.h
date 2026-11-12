@@ -1,5 +1,5 @@
-/* tp_route.h — splits what the driver (tp.c) produces between the LordOS UI (JS) and the
- * Wayland apps (wl/wl_input.c). main.c gives it the pointer. */
+/* tp_route.h — splits what the Rust touch driver produces between the LordOS UI (JS) and the
+ * Wayland apps (Rust wayland/input.rs). main.c gives it the pointer. */
 #ifndef LORD_TP_ROUTE_H
 #define LORD_TP_ROUTE_H
 

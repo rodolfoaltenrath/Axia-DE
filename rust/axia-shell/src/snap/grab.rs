@@ -1,6 +1,6 @@
 //! Where a window's node goes while it is moved or resized with the pointer (docs/WINDOWS.md).
 //!
-//! `server/src/ui/grab.c` owns the node and calls in once per frame with the pointer; this decides
+//! `runtime/window_grab.rs` updates the node and calls in once per frame with the pointer; this decides
 //! the node's left, top, width and height, in its parent's coordinates (the node is the frame enlarged
 //! by `inset` per side):
 //! - moved, the frame keeps `KEEP` px on screen and its top no higher than the work area of the
@@ -9,8 +9,8 @@
 //! - a maximized or snapped window comes loose at its own size once the pointer has moved `DETACH`
 //!   px, the point grabbed staying under the pointer at the same fraction of the width.
 //!
-//! At the end, C reports the change from the node at the start (`delta`), and puts the node back
-//! where the theme had it, for the window list to place it (grab.c, `restore_nodes`).
+//! At the end, the runtime reports the change from the node at the start (`delta`), and puts the node back
+//! where the theme had it, for the window list to place it (runtime/window_grab.rs, `restore_nodes`).
 use super::SnapRect;
 
 /// px of the frame that always stay on screen

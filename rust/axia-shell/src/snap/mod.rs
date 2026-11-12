@@ -2,8 +2,8 @@
 //!
 //! The geometry of the zones, the zone under the pointer while a window is dragged, the windows that
 //! resize together when a snapped window's inner edge is dragged, and what Snap Assist offers after a
-//! snap. Everything is pure and works on frames in screen pixels; C (`server/src/ui/grab.c`,
-//! `server/src/ui/js_snap.c`) owns the nodes and the JS session owns the window list.
+//! snap. Everything is pure and works on frames in screen pixels; the Rust runtime
+//! (`runtime/window_grab.rs`) owns drag state and updates Rust-owned nodes and the JS session owns the window list.
 mod assist;
 mod drag;
 mod ffi;
@@ -13,6 +13,7 @@ mod resize;
 mod tests;
 
 pub use assist::assist_zones;
+pub(crate) use grab::{Grab, GrabStart, GrabArea, MOVED, SIZED, DETACHED};
 pub use drag::{DragZones, SnapDisplay};
 pub use resize::{LinkedResize, SnapMember};
 

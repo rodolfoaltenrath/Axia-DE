@@ -73,7 +73,7 @@ behind itself. Super combinations, including the app switcher and the fullscreen
 
 ## The keys kept from apps
 
-`server/src/wl/keygrab.c` holds fixed tables, one per theme, written at build time: keyboard keys only, each
+`rust/axia-shell/src/keygrab.rs` holds fixed tables, one per theme, written at build time: keyboard keys only, each
 a modifier set plus a letter or an evdev code. `wl_key` compares modifiers exactly, so ⌃Tab and plain ⌃Q
 always stay with the app. The shell picks a table by name, `lord.wayland.grabKeys('flow' | 'flow-desktops' | 'classic' | '')`:
 any other name is refused, and nothing can add a key. `lord.wayland` does not exist in an isolated app's

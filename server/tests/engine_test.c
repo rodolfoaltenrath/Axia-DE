@@ -876,7 +876,7 @@ static void test_hidden_blur_damage(void) {
  * that bookkeeping (kept in step with main.c: paint_ui, paint_out, present_cpu) checks every
  * painted scene against a full repaint and every presented buffer against the scene. */
 enum { SW = 1280, SH = 800 };
-/* The buffer-age scissor (gpu/gscissor.c, docs/GPU.md) against a swap chain as Mesa's on GBM: three buffers of
+/* The buffer-age scissor (Rust gpu_scissor.rs, docs/GPU.md) against a swap chain as Mesa's on GBM: three buffers of
  * undefined content, the frame drawn into a free one, with the region gsc_region gives for its age, and
  * compared with what a whole composition shows. Now and then a frame is drawn and not swapped (gpu_frame_ex's
  * -2: the region written with junk, the history forgotten, the next one whole). */

@@ -1,10 +1,10 @@
 /* tp.h — our own driver for touchpads and touchscreens (evdev multitouch, protocol B), without
  * libinput. See docs/TRACKPAD.md.
  *
- * tp.c is pure logic: it receives a device's evdev events (with their time) and produces
+ * The Rust touch driver receives a device's evdev events (with their time) and produces
  * pointer motion, buttons, pixel-exact scroll (and inertia), gestures (pinch,
  * 3/4-finger swipe, hold) and direct touches. What it produces goes to a TpSink: in
- * axia-server it's tp_route.c (which splits it between the UI and the Wayland apps); in the tests
+ * axia-server it's Rust touch/route.rs (which splits it between the UI and the Wayland apps); in the tests
  * (tests/tp_test.c) it's a recorder. */
 #ifndef LORD_TP_H
 #define LORD_TP_H
@@ -94,7 +94,7 @@ void   tp_tick(double now_ms);
 int tp_count(int kind);
 int tp_list_json(char *out, int size);
 
-/* Acceleration curve (px per mm depending on the speed in mm/s): used by tp.c and the test. */
+/* Acceleration curve (px per mm depending on the speed in mm/s): used by the driver and the test. */
 double tp_accel(double speed_mm_s, double setting);
 
 #endif

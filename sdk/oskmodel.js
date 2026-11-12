@@ -1,7 +1,7 @@
 // oskmodel.js — the on-screen keyboard's logic with nothing on screen (server/tests/osk_model_test.mjs).
 //
 // The layout is not data of our own: rows are lists of Linux key codes, and what each key shows comes
-// from the active XKB layout (lord.input.keyLabels, server/src/keyboard.c), so the keyboard follows it
+// from the active XKB layout (lord.input.keyLabels, rust/axia-shell/src/keyboard), so the keyboard follows it
 // like a physical one. `labels` = { altgr, keys: { code: [plain, shift, altgr, altgr + shift] } }.
 // A key here is { code, level, label } ready for lord.input.tap(code, level); level 1 is Shift, 2 AltGr.
 

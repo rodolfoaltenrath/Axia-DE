@@ -1,7 +1,7 @@
 #include "clipboard_native.h"
 /* xwm.c — LordOS's X window manager for Xwayland (see xwm.h).
  *
- * It speaks the X11 protocol itself (x11wire.c), on the connection Xwayland opened for it with
+ * It speaks the X11 protocol itself (Rust x11/wire.rs), on the connection Xwayland opened for it with
  * `-wm`, fully asynchronously: it never waits for a reply, so axia-server can't stall on
  * Xwayland while Xwayland waits on the compositor. Replies are matched by sequence number to a
  * FIFO of callbacks.
@@ -29,6 +29,7 @@
  * apps and LordOS (docs/PRIVACY.md, "X11 apps").
  * See docs/WAYLAND.md, "X11 apps (Xwayland)". */
 #include "xwm.h"
+#include "xwayland.h"
 #include "x11wire.h"
 #include "wl.h"
 #include "../cursor.h"
@@ -43,8 +44,6 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 
-void xwl_wm_lost(void);                 /* xwayland.c: the window manager connection is gone */
-void xwl_idle(void);                    /* xwayland.c: no X11 app left: Xwayland may stop */
 #define IDLE_MS 10000                   /* grace period after the last X11 app closes */
 
 /* predefined atoms */
@@ -148,7 +147,7 @@ static void idle_arm(void);
 
 static void req(uint8_t op, uint8_t data) { X.seq++; xo_begin(&X.out, op, data); }
 static void expect(ReplyFn fn, uint32_t a, uint32_t b) {
-    if (X.pn == NPEND) { X.out.oom = 1; return; }
+    if (X.pn == NPEND) { xo_fail(&X.out); return; }
     X.pend[(X.ph + X.pn) % NPEND] = (Pend){ X.seq, fn, a, b };
     X.pn++;
 }
@@ -225,16 +224,16 @@ static void client_message(uint32_t win, uint32_t type, const uint32_t d[5]) {
 
 static void flush(void) {
     if (X.fd < 0) return;
-    if (X.out.oom) { lost("out of memory"); return; }
-    while (X.out.n) {
-        ssize_t w = send(X.fd, X.out.b, X.out.n, MSG_NOSIGNAL | MSG_DONTWAIT);
+    if (xo_failed(&X.out)) { lost("out of memory"); return; }
+    while (xo_len(&X.out)) {
+        ssize_t w = send(X.fd, xo_data(&X.out), xo_len(&X.out), MSG_NOSIGNAL | MSG_DONTWAIT);
         if (w > 0) { xo_drop(&X.out, (size_t)w); continue; }
         if (w < 0 && errno == EINTR) continue;
         if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
         lost("write failed");
         return;
     }
-    wl_event_source_fd_update(X.ev, WL_EVENT_READABLE | (X.out.n ? WL_EVENT_WRITABLE : 0));
+    wl_event_source_fd_update(X.ev, WL_EVENT_READABLE | (xo_len(&X.out) ? WL_EVENT_WRITABLE : 0));
 }
 
 /* ---- windows ---- */

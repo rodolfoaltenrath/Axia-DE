@@ -39,14 +39,14 @@ like React Native but on top of our display server.
 | `server/src/ui/otf.c`, `fonts.c` | **M4 done** | Our own OpenType (GSUB substitutions, CBDT emoji) and catalog of installed fonts: no HarfBuzz or fontconfig |
 | `apps/terminal/` | **M4 done** | Native Terminal app (tabs, panes, profiles…) |
 | `sdk/i18n.js`, `assets/locales/` | **M5 done** | Text, plurals and formats per language and region (see `LANGUAGES.md`) |
-| `server/src/keyboard.c` | **M5 done** | Keyboard with libxkbcommon: every XKB layout, compose |
+| `rust/axia-shell/src/keyboard` | **M5 done** | Keyboard with libxkbcommon: every XKB layout, compose |
 | `server/src/admin.c` | **M5 done** | Privileged helper with closed actions (region, time zone, language packs) |
 | `server/src/ui/bidi.c`, `unicode.c`, `shape.c`, `textlayout.c` | **M5b done** | Full Unicode bidi, Arabic shaping and marks (GSUB/GPOS), per-script font fallback, CJK line breaking, mirrored interface (`direction`) |
-| `server/src/ime.c`, `sdk/ime.js` | **M5b done** | Input methods: Korean, Japanese (SKK), Chinese (pinyin) |
+| `rust/axia-shell/src/input_method/`, `sdk/ime.js` | **M5b done** | Input methods: Korean, Japanese (SKK), Chinese (pinyin) |
 | `server/src/app/`, `ui/js_broker.c`, `runtime/app-host.js` | **M8 done** | App mode: each `.lpk` as an isolated process (`axia-server --app <id>`), a Wayland client of the compositor, with a permission broker (see `PRIVACY.md`) |
 | `server/src/sec/`, `ui/js_sec.c` | **M8 done** | Isolation of .lpk apps (Landlock+seccomp+cgroup), per-app permissions and Ed25519 signing (see `PRIVACY.md`, `SIGNING.md`) |
 | `server/src/wl/`, `sdk/wayland.js` | **M6 done** | Our own Wayland compositor on libwayland-server: GTK and Qt apps as theme windows (see `WAYLAND.md`) |
-| `server/src/tp/`, `wl/wl_input.c`, `js_input.c`, `sdk/trackpad.js` | **done (VM, uinput)** | Our own touchpad and touchscreen driver on evdev (no libinput): pointer acceleration, tap, finger clicks, palm rejection, kinetic scrolling, pinch, swipe; gestures and touches for Wayland apps (see `TRACKPAD.md`) |
+| `rust/axia-shell/src/touch/`, `rust/axia-shell/src/wayland/input.rs`, `js_input.c`, `sdk/trackpad.js` | **done (VM, uinput)** | Our own touchpad and touchscreen driver on evdev (no libinput): pointer acceleration, tap, finger clicks, palm rejection, kinetic scrolling, pinch, swipe; gestures and touches for Wayland apps (see `TRACKPAD.md`) |
 | `server/src/doc/`, `js_doc.c`, `apps/pdf`, `apps/fonts`, `apps/characters` | **M9** | Documents: the sandboxed helper `axia-doc` (Poppler, libarchive, FreeType) and its apps: PDF Viewer, archives and Quick Preview in Files, Fonts, Emoji & Symbols (see `DOCUMENTS.md`) |
 | `server/src/print/`, `js_print.c`, `sdk/printdialog.jsx`, `apps/scanner` | **M9** | Printing: our own IPP client against CUPS, our own mDNS, eSCL scanners, the system print dialog (see `PRINTING.md`) |
 | `server/src/media/`, `js_media.c`, `sdk/media.js`, `apps/{photos,player,screenshots,camera,recorder}` | **M9** | Media: the sandboxed helper `axia-media` (FFmpeg, libva) and the Photos, Player, Screenshots, Camera and Recorder apps; `media` node, audio over shared memory with the PipeWire stream in axia-server, protected windows in screenshots and recording (see `MEDIA.md`) |
@@ -67,7 +67,7 @@ like React Native but on top of our display server.
 | `server/src/backup/`, `js_backup.c`, `sdk/backup.js`, `apps/backup` | **M9** | Backups: hard-link snapshots in a axia-server thread (nice 19, idle I/O), hourly/daily/weekly retention, optional encryption with RustCrypto primitives; no root and no `admin.c` actions (see `SYSTEM.md`) |
 | `server/src/logs/`, `js_logs.c`, `sdk/logs.js`, `apps/logs` | **M9** | Logs: our own systemd journal reader (no libsystemd), LordOS logs, system logs for admins through a closed action, live follow with inotify (see `SYSTEM.md`) |
 | `server/src/ui/tzif.c`, `js_help.c`, `sdk/{notify,alarms,statusitems,help}.js`, `apps/{clock,help}` | **M9** | Clock (our own TZif reader, session alarms with the app closed), session notifications, menu-bar status items, Help (markdown articles in es/en/pt, welcome tour, Search source) (see `SYSTEM.md`) |
-| `server/src/ui/grab.c`, `cursor.c`, `sdk/windowshell.jsx` | **M8** | Windows: moving and resizing in C (one event per frame, no JS), a layer for the window being moved, edges on all 4 sides and corners, our own cursors and `cursor-shape-v1` (see `WINDOWS.md`) |
+| `rust/axia-shell/src/runtime/window_grab.rs`, `rust/axia-shell/src/cursor.rs`, `sdk/windowshell.jsx` | **M8** | Windows: moving and resizing in Rust (one event per frame, no JS), a layer for the window being moved, edges on all 4 sides and corners, our own cursors and `cursor-shape-v1` (see `WINDOWS.md`) |
 | `server/src/outputs.c`, `kms.c`, `hw/display.c`, `ui/paint.c` (`paint_view`) | **M9** | Several displays (extend and mirror, arrangement by EDID identity, hotplug) and sharp HiDPI at 100–200 % per display: one logical space, each display painted at its own resolution; one `wl_output` per display, xdg-output, fractional-scale-v1 (see `DISPLAYS.md`) |
 | `server/src/hw/`, `ui/js_hw.c`, `sdk/hardware.jsx`, `sdk/defaults.js` | **M9** | Settings' hardware pages: displays (EDID, live modes with a 15 s revert, per-display persistence, software rotation and 200 % scale, Night Light on the gamma LUT or by software), Bluetooth (BlueZ over our own D-Bus client, pairing agent), battery and power profiles, idle (DPMS, lock, sleep), date and time, notifications from Linux apps (`org.freedesktop.Notifications`) and default apps (`mimeapps.list`); kernel uevents and D-Bus signals, no polling (see `SETTINGS.md`) |
 
@@ -111,7 +111,7 @@ Besides the kernel and libc, only these are allowed:
 **Xwayland** (Debian's `xwayland` package, 0.8.3) is not linked by anything: it is a separate
 program that `axia-server` starts on demand for X11 apps (`WAYLAND.md`, "X11 apps (Xwayland)").
 The X window manager inside `axia-server` speaks the X11 protocol itself (`server/src/wl/xwm.c`,
-`x11wire.c`): no libxcb or libX11. Without the package, X11 apps simply don't open.
+`rust/axia-shell/src/x11/wire.rs`): no libxcb or libX11. Without the package, X11 apps simply don't open.
 
 React (`react`, `react-reconciler`) is a dependency **of the theme**, not of the system: it is bundled
 with esbuild inside the theme's `.js`. Since 0.7.0 it is React 19.3.1 with `react-reconciler` 0.34

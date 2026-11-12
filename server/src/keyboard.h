@@ -1,4 +1,4 @@
-/* keyboard.h — keyboard layouts with libxkbcommon (see keyboard.c). */
+/* keyboard.h — keyboard layouts with libxkbcommon (Rust keyboard compatibility ABI). */
 #ifndef LORD_KEYBOARD_H
 #define LORD_KEYBOARD_H
 

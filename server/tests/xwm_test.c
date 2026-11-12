@@ -1,4 +1,4 @@
-/* xwm_test.c — the X11 wire helpers of the window manager (src/wl/x11wire.c): request encoding,
+/* xwm_test.c — the Rust X11 wire helpers of the window manager (x11/wire.rs): request encoding,
  * the setup reply, packet framing, sequence numbers and the ICCCM/EWMH/Motif properties. No X
  * server needed; the window manager itself is tested on a VM (docs/WAYLAND.md, "X11 apps"). */
 #include "../src/wl/x11wire.h"
@@ -18,16 +18,16 @@ static void test_requests(void) {
     xo_u16(&o, 5); xo_u16(&o, 0);
     xo_bytes(&o, "WM_S0", 5);
     xo_end(&o);
-    CHECK(o.n == 16);                                       /* 4 header + 4 + "WM_S0" padded to 8 */
-    CHECK(o.b[0] == X_InternAtom && x11_get16(o.b + 2) == 4);
-    CHECK(!memcmp(o.b + 8, "WM_S0\0\0\0", 8));
-    size_t first = o.n;
+    CHECK(xo_len(&o) == 16);                                       /* 4 header + 4 + "WM_S0" padded to 8 */
+    CHECK(xo_data(&o)[0] == X_InternAtom && x11_get16(xo_data(&o) + 2) == 4);
+    CHECK(!memcmp(xo_data(&o) + 8, "WM_S0\0\0\0", 8));
+    size_t first = xo_len(&o);
     xo_begin(&o, X_MapWindow, 0);
     xo_u32(&o, 0x400001);
     xo_end(&o);
-    CHECK(o.n == first + 8 && x11_get16(o.b + first + 2) == 2 && x11_get32(o.b + first + 4) == 0x400001);
+    CHECK(xo_len(&o) == first + 8 && x11_get16(xo_data(&o) + first + 2) == 2 && x11_get32(xo_data(&o) + first + 4) == 0x400001);
     xo_drop(&o, first);
-    CHECK(o.n == 8 && o.b[0] == X_MapWindow);
+    CHECK(xo_len(&o) == 8 && xo_data(&o)[0] == X_MapWindow);
     xo_free(&o);
     uint8_t setup[12];
     x11_setup_request(setup);
@@ -65,6 +65,23 @@ static void test_setup(void) {
     CHECK(s.max_req_bytes == 65535u * 4 && s.min_keycode == 8 && s.max_keycode == 255);
     r[0] = 0;                                               /* refused */
     CHECK(x11_parse_setup(r, 8 + data, &s, &used) == -1);
+}
+
+static void test_buffer_lifecycle(void) {
+    XOut o = {0};
+    CHECK(xo_len(&o) == 0 && !xo_failed(&o));
+    xo_pad(&o, 4092); xo_begin(&o, X_MapWindow, 0); xo_u32(&o, 0x12345678); xo_end(&o);
+    CHECK(xo_len(&o) == 4100 && x11_get16(xo_data(&o) + 4094) == 2);
+    xo_drop(&o, 4092);
+    CHECK(xo_len(&o) == 8 && x11_get32(xo_data(&o) + 4) == 0x12345678);
+    xo_fail(&o); xo_u32(&o, 7); xo_begin(&o, X_MapWindow, 0); xo_end(&o);
+    CHECK(xo_failed(&o) && xo_len(&o) == 8);
+    xo_drop(&o, 99); CHECK(xo_len(&o) == 0 && xo_failed(&o));
+    xo_free(&o); xo_free(&o); CHECK(!xo_failed(&o) && xo_len(&o) == 0);
+    xo_pad(&o, (64u << 20) + 1); CHECK(xo_failed(&o) && xo_len(&o) == 0);
+    xo_free(&o); xo_pad(&o, SIZE_MAX); CHECK(xo_failed(&o) && xo_len(&o) == 0);
+    xo_free(&o); xo_begin(&o, X_MapWindow, 0); xo_u32(&o, 42); xo_end(&o);
+    CHECK(xo_len(&o) == 8 && !xo_failed(&o)); xo_free(&o);
 }
 
 static void test_framing(void) {
@@ -160,6 +177,7 @@ static void test_display(void) {
 
 int main(void) {
     test_requests();
+    test_buffer_lifecycle();
     test_setup();
     test_framing();
     test_props();

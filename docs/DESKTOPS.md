@@ -93,7 +93,7 @@ showing. The last desktop can't be closed.
 
 ⌃ arrows are word movement in apps, in Linux apps and in the Terminal. **Settings → Keyboard → Use Ctrl + arrow
 keys for Desktops** turns them off (`settings.desktopArrows`): the entries stop applying and the theme asks for the
-`flow` key table instead of `flow-desktops` (`server/src/wl/keygrab.c`), so the keys reach apps. ❖⌃ arrows stay. See
+`flow` key table instead of `flow-desktops` (`rust/axia-shell/src/keygrab.rs`), so the keys reach apps. ❖⌃ arrows stay. See
 [SHORTCUTS.md](SHORTCUTS.md).
 
 Left and Right follow the layout: in a right-to-left language the strip is mirrored, and ⌃← goes to the next

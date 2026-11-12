@@ -1,4 +1,4 @@
-/* keygrab.h — the keys the desktop keeps from a focused Wayland app (see keygrab.c). */
+/* keygrab.h — compatibility ABI for rust/axia-shell/src/keygrab.rs. */
 #ifndef LORD_KEYGRAB_H
 #define LORD_KEYGRAB_H
 

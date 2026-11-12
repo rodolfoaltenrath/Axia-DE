@@ -1,4 +1,4 @@
-//! The zone under the pointer while a window is moved. grab.c feeds it every pointer motion (and
+//! The zone under the pointer while a window is moved. runtime/window_grab.rs feeds it every pointer motion (and
 //! Shift changes) with no JS per frame, and tells the session only when the zone changes.
 use super::{zone_at, zone_rect, SnapRect, Zone};
 
