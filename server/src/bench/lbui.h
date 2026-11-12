@@ -9,7 +9,7 @@
 
 #define LB_UI_W 1920                    /* the scene's size, logical pixels at scale 1 */
 #define LB_UI_H 1080
-#define LB_UI_POOL_MAX 8                /* paint threads at most, as axia-server's (par.c) */
+#define LB_UI_POOL_MAX 8                /* paint threads at most, as axia-server's (Rust parallel.rs) */
 
 /* one-time setup of the engine with the built-in interface font; 0 ok */
 int lb_ui_init(void);

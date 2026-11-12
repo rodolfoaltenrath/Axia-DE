@@ -1,4 +1,4 @@
-/* fpipe_test.c — the frame pipeline's decisions (src/fpipe.c, docs/GPU.md "The frame pipeline"):
+/* fpipe_test.c — the Rust frame pipeline's C ABI (docs/GPU.md "The frame pipeline"):
  *   - LORD_PIPELINE and the auto mode's hysteresis;
  *   - what a display does next (build, submit, prepare, wait) and when input waits for the flip;
  *   - a display driven the way main.c drives it, on a vblank grid: a frame whose CPU part plus the GPU's

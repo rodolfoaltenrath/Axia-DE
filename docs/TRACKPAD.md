@@ -42,10 +42,10 @@ but badly.
 
 | File | What it does |
 |---|---|
-| `server/src/tp/tp.c`, `tp.h` | The driver: contacts, palms, pointer, tap, clicks, scroll, inertia, gestures, touchscreen. Pure logic: it receives timestamped events and produces output. Tested by `tests/tp_test.c` |
-| `server/src/tp/tp_route.c` | Distributes the output: motion and buttons go to the usual pointer (`dispatch_pointer`); scroll and gestures go to the Wayland app under the pointer or to the interface node |
-| `server/src/wl/wl_input.c` | For Wayland apps: `zwp_pointer_gestures_v1`, `wl_pointer` fine scrolling and `wl_touch` |
-| `server/src/input.c` | Detects the device and creates its `TpDevice` |
+| `rust/axia-shell/src/touch/`, `server/src/tp/tp.h` | The driver: contacts, palms, pointer, tap, clicks, scroll, inertia, gestures, touchscreen. Pure logic: it receives timestamped events and produces output. Tested by `tests/tp_test.c` |
+| `rust/axia-shell/src/touch/route.rs` | Distributes the output: motion and buttons go to the usual pointer (`dispatch_pointer`); scroll and gestures go to the Wayland app under the pointer or to the interface node |
+| `rust/axia-shell/src/wayland/input.rs` | For Wayland apps: `zwp_pointer_gestures_v1`, `wl_pointer` fine scrolling and `wl_touch` |
+| `rust/axia-shell/src/evdev.rs` | Detects the device and creates its `TpDevice` |
 | `server/src/main.c` | Minimal: touchpad events go to the driver, and timers to the loop |
 | `server/src/ui/js_input.c` | `lord.input.devices()`, `config()`, `configure(obj)` |
 | `runtime/events.js` | `__lordGesture` → fine `onWheel`, `onPinch`, `onSwipe` |

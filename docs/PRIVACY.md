@@ -675,7 +675,7 @@ Now the subtree stays **root-owned** and the scopes are created by root:
   don't count between cgroups; `BENCHMARK.md`, "The desktop under load"). lord-sessiond also starts the
   session's axia-server with `RLIMIT_RTPRIO` 2 (and `RLIMIT_RTTIME` 5 s): axia-server puts its main and paint threads
   at `SCHED_RR` 2 (`SCHED_RESET_ON_FORK` on the thread that starts things) and lowers the limit to 0, soft and hard,
-  before it starts any process, so no app, helper or shell can ask for real time (`par.c`; the root admin helper,
+  before it starts any process, so no app, helper or shell can ask for real time (`rust/axia-shell/src/parallel.rs`; the root admin helper,
   forked earlier, lowers its own to 0 too). At startup, `cgroup_service_init()` hardens the subtrees left by an
   older `lord-sessiond` (sessions survive a restart).
 - `lord-sessiond` forks a small root child (`server/src/remote/cgsup.c`) that listens on
@@ -839,7 +839,7 @@ synchronous RPC (`js_broker_pending`), events are NUL-terminated before `JS_Pars
   (`brokersrv_app_of_pid`). That client also receives ❖ combinations (❖N, ❖C, ❖A, ❖W…) together
   with the ❖ key itself, as an app inside the theme would. The system keeps ❖L, ❖⌃Q, ❖Q,
   ❖Space, ❖⌥Space, ❖V, ❖., ❖Tab, ❖`, ❖Esc, ❖⇧3/4/5 and ❖F1–F12 (`system_meta_key` in
-  `wl/wl.c`) and those of the theme's fixed table (`wl/keygrab.c`, [SHORTCUTS.md](SHORTCUTS.md)), which
+  `wl/wl.c`) and those of the theme's fixed table (`rust/axia-shell/src/keygrab.rs`, [SHORTCUTS.md](SHORTCUTS.md)), which
   isolated apps cannot change: `lord.wayland` does not exist in their process. A Linux app still gets no ❖
   combination, except Lord Flow's ❖ as Ctrl, sent as Ctrl to that client only.
 - **Keyboard layout:** the app compiles the keymap that the compositor sends over

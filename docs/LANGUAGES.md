@@ -9,12 +9,12 @@ LordOS handles language across the whole system, not just in the interface. It s
 | User region | `LANG`/`LC_*` in `~/.config/locale.conf`; inherited by shells (and by Linux apps in M6) | `server/src/ui/js_sys.c` |
 | glibc regions | generates `es_AR.UTF-8`, `pt_BR.UTF-8`… (`locale-gen`), system default region | helper `server/src/admin.c` |
 | Program messages | Debian's translations (gettext): `ls`, `date`, `man`… come out in the chosen language | Debian |
-| Keyboard | every XKB layout via libxkbcommon: variants, AltGr, dead keys, compose | `server/src/keyboard.c`, `sdk/keyboard.js` |
+| Keyboard | every XKB layout via libxkbcommon: variants, AltGr, dead keys, compose | `rust/axia-shell/src/keyboard`, `sdk/keyboard.js` |
 | Time zone | `timedatectl set-timezone` (or `/etc/localtime`) | helper `server/src/admin.c` |
 | Debian language packages | manpages, hunspell, aspell, hyphen, mythes, fonts for the script and the input method dictionary | helper `server/src/admin.c` |
 | Complex scripts | right to left (bidi), Arabic forms, marks, CJK, per-script font fallback | `server/src/ui/bidi.c`, `shape.c`, `otf.c`, `textlayout.c` |
 | Mirrored interface | with Arabic, Hebrew, Persian… the whole interface runs right to left | `direction` in `rust/axia-shell/src/runtime/layout.rs`, `sdk/i18n.js` |
-| Input methods | Korean (hangul), Japanese (kana + SKK), Chinese (pinyin) | `server/src/ime.c`, `sdk/ime.js` |
+| Input methods | Korean (hangul), Japanese (kana + SKK), Chinese (pinyin) | `rust/axia-shell/src/input_method/`, `sdk/ime.js` |
 | On-screen keyboard | shows the active XKB layout and sends real key codes, so layouts, dead keys and input methods work on it | `sdk/osk.js`, `ON-SCREEN-KEYBOARD.md` |
 
 Everything is managed from **Settings → Language & Region** and **Settings → Keyboard**.
@@ -154,7 +154,7 @@ actions are few and narrow.
 
 ## Keyboard
 
-`server/src/keyboard.c` uses **libxkbcommon** with the **xkb-data** data, like GNOME and KDE.
+`rust/axia-shell/src/keyboard` uses **libxkbcommon** with the **xkb-data** data, like GNOME and KDE.
 Any layout and variant is available (`latam`, `br`, `pt`, `us(intl)`, `fr(oss)`…), up to 4 at a
 time; the menu bar button switches to the next. Dead keys and compose sequences use the region's
 compose table (package `libx11-data`, which is data only). If XKB can't be loaded, the UI falls
@@ -301,14 +301,14 @@ APIs: `direction()` (the interface direction), `textDirection(text)` (that of a 
 
 ### Input methods
 
-`server/src/ime.c` has three methods on top of the Latin (us) keyboard. They are added as input
+`rust/axia-shell/src/input_method/` has three methods on top of the Latin (us) keyboard. They are added as input
 sources in **Settings → Keyboard → Input Methods**; the bar button (한, あ, 拼) and
 **❖⌥Space** (or Ctrl+⌥Space) switch from one source to the next. ❖Space and Ctrl+Space open Search (`SPOTLIGHT.md`).
 
 | Method | How you type | Dictionary (Debian) |
 |---|---|---|
 | Korean (hangul) | 2-set keyboard (dubeolsik): `gksrmf` → 한글, compound vowels and finals, the final moves to the next syllable; Backspace undoes one jamo at a time | none |
-| Japanese (kana) | romaji → hiragana (Hepburn and kunrei, っ for a double consonant, nn/n' → ん, ー 、。「」); Space converts **the phrase**: it's split into words (dictionary, okurigana like 書く/行きます, particles and endings like です/ています that stay in hiragana) and the focused segment is highlighted; ←/→ change segment, Shift+←/→ shrink or grow it, Space/↓ cycle through its candidates (always with hiragana and katakana), 1–9 pick, Enter commits everything, Esc goes back to kana | `skkdic` (SKK-JISYO.L, EUC-JP, binary search over the mapped file, entries with and without okurigana) |
+| Japanese (kana) | romaji → hiragana (Hepburn and kunrei, っ for a double consonant, nn/n' → ん, ー 、。「」); Space converts **the phrase**: it's split into words (dictionary, okurigana like 書く/行きます, particles and endings like です/ています that stay in hiragana) and the focused segment is highlighted; ←/→ change segment, Shift+←/→ shrink or grow it, Space/↓ cycle through its candidates (always with hiragana and katakana), 1–9 pick, Enter commits everything, Esc goes back to kana | `skkdic` (SKK-JISYO.L, EUC-JP, binary search over dictionary data, entries with and without okurigana) |
 | Simplified Chinese (pinyin) | letters → candidates by frequency: the whole phrase, **initial-letter abbreviations** (`zg` → 这个/中国, `bjdx` → 北京大学, also `zhg`), phrases that start with what was typed (`zhongg` → 中国, 中国人) and those covering the beginning (the rest stays in composition); 1–9 or Space pick; − = turn the page; Enter leaves the letters | `rime-data-pinyin-simp` (65,000 characters and phrases) |
 
 The Debian language pack for Japanese or Chinese also installs its dictionary (and the CJK
@@ -352,7 +352,7 @@ terminal uses the script's Noto font first, so a word doesn't mix fonts.
 | Japanese phrases (`tests/ime-ja.txt`) | 16 / 18 (私は日本語を勉強しています, 東京に行きます, 学校へ行きました…) |
 | VM: Arabic interface with both themes, file names in 7 scripts, the three methods in the Terminal and in a text field | see screenshots |
 
-Memory: with the CJK fonts and both dictionaries loaded, axia-server goes from ~43 to 55 MB of
+Legacy C memory measurements (before the Rust migration): with the CJK fonts and both dictionaries loaded, axia-server goes from ~43 to 55 MB of
 RSS (36 MB anonymous; 19 MB are the mapped fonts and dictionaries, which the kernel shares and
 can drop).
 

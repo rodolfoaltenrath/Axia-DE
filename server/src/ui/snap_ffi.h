@@ -25,14 +25,14 @@ int         axia_snap_next(int at, int dir);
  * given the zones other windows hold; returns how many were written. */
 size_t axia_snap_assist_zones(int zone, const int *layout, size_t nlayout, const int *occupied, size_t n, int *out, size_t max);
 
-/* While a window is moved (grab.c): the zone under the pointer. update returns 1 when it changed. */
+/* While a window is moved (Rust runtime/window_grab.rs): the zone under the pointer. update returns 1 when it changed. */
 typedef struct AxiaSnapDrag AxiaSnapDrag;
 AxiaSnapDrag *axia_snap_drag_new(const AxiaSnapDisplay *displays, size_t n);
 void          axia_snap_drag_free(AxiaSnapDrag *);
 int           axia_snap_drag_update(AxiaSnapDrag *, double x, double y, bool thirds);
 int           axia_snap_drag_zone(const AxiaSnapDrag *, AxiaSnapRect *rect);    /* rect may be NULL */
 
-/* Snapped windows that share the dragged edge of members[0] resize with it (grab.c). NULL when no
+/* Snapped windows that share the dragged edge of members[0] resize with it (Rust runtime/window_grab.rs). NULL when no
  * dragged edge is shared: the plain resize applies. apply writes every member's frame. */
 typedef struct AxiaSnapResize AxiaSnapResize;
 AxiaSnapResize *axia_snap_resize_new(int edges, const AxiaSnapMember *members, size_t n, AxiaSnapRect area);
@@ -40,7 +40,7 @@ void            axia_snap_resize_free(AxiaSnapResize *);
 int             axia_snap_resize_moves(const AxiaSnapResize *, size_t i);
 size_t          axia_snap_resize_apply(const AxiaSnapResize *, double dx, double dy, AxiaSnapRect *out, size_t max);
 
-/* Moving or resizing a window's node with the pointer (rust snap/grab.rs; grab.c owns the node). In the
+/* Moving or resizing a window's node with the pointer (rust snap/grab.rs; the Rust runtime owns the node). In the
  * node's parent coordinates; the node is the frame enlarged by `inset` per side. */
 typedef struct { double x, w, top; } AxiaGrabArea;     /* a display's span [x, x + w) and its work area's top */
 typedef struct {

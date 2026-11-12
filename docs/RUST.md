@@ -4,6 +4,10 @@ O primeiro módulo Rust da DE é o modelo do alternador de aplicativos em
 `rust/axia-shell`. Ele é compilado como biblioteca estática e ligado ao
 mesmo executável `axia-server` em C. Não há serviço Rust separado.
 
+Este documento descreve a integração inicial e os contratos de cada módulo.
+A substituição completa do código próprio do server está em andamento; o
+inventário e as validações por etapa estão em [SERVER-RUST-MIGRATION.md](SERVER-RUST-MIGRATION.md).
+
 ## Responsabilidades
 
 - Rust mantém o histórico de foco, ordena os candidatos e controla a seleção,
@@ -45,6 +49,11 @@ O build requer Cargo e rustc. As dependências externas estão fixadas em `rust/
 `rust/vendor`. A configuração `.cargo/config.toml` direciona o Cargo para essas
 cópias: a compilação usa `--locked --offline` e não baixa crates dentro do
 builder do RPM. As licenças dos autores acompanham o pacote.
+
+Os testes da biblioteca também precisam das bibliotecas nativas usadas pelos
+módulos migrados: GLib/GIO, libxkbcommon e libwayland-server, com seus arquivos
+de desenvolvimento para o linker. O teste `build/text-input-ffi-test` usa
+libwayland-server real e dois clientes locais por socketpair, sem sessão gráfica.
 
 ```sh
 cargo test --manifest-path rust/Cargo.toml --locked --offline

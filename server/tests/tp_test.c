@@ -1,4 +1,4 @@
-/* tp_test.c — test of the touchpad driver (src/tp/tp.c) without a device: feeds it the same
+/* tp_test.c — test of the touchpad driver (Rust touch module) without a device: feeds it the same
  * evdev sequences the simulated touchpad replays (tests/touchpad-sim/gestures.c), with their
  * timing, and checks what it recognizes (pointer, clicks, scroll with momentum, pinch, swipe,
  * palms, disable-while-typing, touchscreen). It also measures how long it takes to recognize each

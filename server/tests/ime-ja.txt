@@ -1,4 +1,4 @@
-# Frases para la conversión japonesa por frase (ime.c). romaji|esperado. Ver tests/ime_test.c.
+# Frases para la conversión japonesa por frase (Rust input_method). romaji|esperado. Ver tests/ime_test.c.
 # 16/18 al 2026-10-16: 機能/昨日 y 画布/が降り necesitan frecuencias que SKK no trae.
 watashihanihongowobenkyoushiteimasu|私は日本語を勉強しています
 kyouhaiitenkidesune|今日はいい天気ですね

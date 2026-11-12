@@ -16,7 +16,7 @@ struct wl_client;
 struct wl_event_loop;
 typedef struct XWin XWin;
 
-/* ---- xwm.c, called by xwayland.c ---- */
+/* ---- xwm.c, called by Rust x11/xwayland.rs ---- */
 int  xwm_start(int fd, struct wl_event_loop *loop);    /* the -wm connection; 0 ok (takes the fd) */
 void xwm_stop(void);
 int  xwm_running(void);

@@ -1,4 +1,4 @@
-/* ime.h — input methods for Korean, Japanese and Chinese (see ime.c). */
+/* ime.h — input methods for Korean, Japanese and Chinese (Rust input_method compatibility ABI). */
 #ifndef LORD_IME_H
 #define LORD_IME_H
 

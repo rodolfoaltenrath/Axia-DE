@@ -4,7 +4,7 @@
  * allows it since M1) and the code wayland-scanner generates for xdg-shell and xdg-decoration.
  *
  * Globals: wl_compositor 6, wl_subcompositor, wl_shm (from libwayland), wl_output 4, wl_seat 7
- * (pointer and keyboard with the XKB keymap from keyboard.c), wl_data_device_manager 3 (clipboard
+ * (pointer and keyboard with the XKB keymap from Rust keyboard), wl_data_device_manager 3 (clipboard
  * shared with LordOS's), xdg_wm_base 6 and zxdg_decoration_manager_v1.
  *
  * Each surface copies its shared-memory buffer on commit (and releases it right away):
@@ -643,7 +643,7 @@ static void commit_input_region(Surf *s) {
 static void srf_commit(struct wl_client *c, struct wl_resource *r) {
     (void)c;
     Surf *s = wl_resource_get_user_data(r);
-    if (keylag_enabled && key_focus && c == key_focus->client) keylag_commit();
+    if (keylag_enabled() && key_focus && c == key_focus->client) keylag_commit();
     s->preview_gen++;
     commit_input_region(s);
     /* the glass over this window asks what changed (surface_commit_area): moving or resizing
@@ -1221,7 +1221,7 @@ static void seat_get_keyboard(struct wl_client *c, struct wl_resource *r, uint32
 
 static void seat_get_touch(struct wl_client *c, struct wl_resource *r, uint32_t id) {
     (void)touch_impl;
-    wl_input_get_touch(c, r, id);       /* touchscreens: wl_input.c */
+    wl_input_get_touch(c, r, id);       /* touchscreens: Rust wayland/input.rs */
 }
 
 static const struct wl_seat_interface seat_impl = {
@@ -2658,7 +2658,7 @@ void wl_frame_done(unsigned t) {
         wl_list_init(&s->feedback);
     }
     wl_display_flush_clients(dpy);
-    if (keylag_enabled) keylag_flushed();
+    if (keylag_enabled()) keylag_flushed();
 }
 
 int wl_frame_unseen(unsigned t) {
@@ -2757,7 +2757,7 @@ int wl_pointer(float x, float y, Node *hit, int moved, int nbuttons, const int *
             wl_pointer_send_button(p, wl_display_next_serial(dpy), t, b,
                                    down[i] ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
         }
-        if (wheel) wl_input_wheel(p, t, wheel);      /* axis + axis_source wheel + value120 (wl_input.c) */
+        if (wheel) wl_input_wheel(p, t, wheel);      /* axis + axis_source wheel + value120 (Rust wayland/input.rs) */
         if (wl_resource_get_version(p) >= 5) wl_pointer_send_frame(p);
     }
     for (int i = 0; i < nbuttons; i++) {
@@ -2812,7 +2812,7 @@ static int keylag_traceable(void) {
 
 static void send_key_to_focus(int code, int value) {
     unsigned t = now_ms();
-    if (keylag_enabled) keylag_sent_wl(keylag_traceable());
+    if (keylag_enabled()) keylag_sent_wl(keylag_traceable());
     uint32_t d, l, lk, g;
     kb_mods(&d, &l, &lk, &g);
     struct wl_resource *kb;
@@ -2850,7 +2850,7 @@ static int system_meta_key(int code, const KeyInfo *k) {
     }
 }
 
-/* Keys the shell keeps (keygrab.c) and the ❖ → Ctrl of Lord Flow. grabbed[code]: its press went to
+/* Keys the shell keeps (Rust keygrab.rs) and the ❖ → Ctrl of Lord Flow. grabbed[code]: its press went to
  * the shell, so its release does too. remapped[code]: its press went to the app as Ctrl+key.
  * grab_hold: the modifier of a switcher in progress; until it is released every key is the shell's,
  * while modifiers still reach the app too, so it never keeps one stuck. */
@@ -3675,8 +3675,8 @@ int wl_start(void) {
     wl_global_create(dpy, &wp_cursor_shape_manager_v1_interface, 1, NULL, bind_csm);   /* cursors by name */
     wl_global_create(dpy, &zwp_idle_inhibit_manager_v1_interface, 1, NULL, bind_iim);  /* video keeps the screen on */
     wl_global_create(dpy, &kde_mgr_interface, 1, NULL, bind_kde_deco);   /* theme frame for GTK 3 (Firefox) */
-    wl_input_globals(dpy);              /* zwp_pointer_gestures_v1 (wl_input.c) */
-    wl_textinput_globals(dpy, text_field_report);    /* zwp_text_input_v3 (wl_textinput.c) */
+    wl_input_globals(dpy);              /* zwp_pointer_gestures_v1 (Rust wayland/input.rs) */
+    wl_textinput_globals(dpy, text_field_report);    /* Rust wayland/text_input.rs: zwp_text_input_v3 */
     /* inherited by every app the session starts */
     setenv("WAYLAND_DISPLAY", socket_name, 1);
     setenv("XDG_SESSION_TYPE", "wayland", 1);
@@ -3720,10 +3720,10 @@ void wl_flush(void) {
     }
     xwm_tick();                         /* X11: clipboard changes, pending requests */
     wl_display_flush_clients(dpy);
-    if (keylag_enabled) keylag_flushed();
+    if (keylag_enabled()) keylag_flushed();
 }
 
-/* ---- for wl_input.c (gestures, fine scrolling and touches) ---- */
+/* ---- for Rust wayland/input.rs (gestures, fine scrolling and touches) ---- */
 struct wl_display *wl__display(void) { return dpy; }
 struct wl_resource *wl__pointer_focus(void) { return dpy && pointer_focus ? pointer_focus->res : NULL; }
 struct wl_list *wl__pointers(void) { return &pointers; }

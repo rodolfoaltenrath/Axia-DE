@@ -1,0 +1,92 @@
+# Synthetic Rime fixture
+---
+name: pinyin_simp
+version: 1
+...
+中国	zhong guo	1000
+中国	zhong guo	800
+中国人	zhong guo ren	900
+中国人民	zhong guo ren min	850
+中	zhong	1000
+众	zhong	800
+国	guo	500
+你好	ni hao	1000
+你	ni	800
+好	hao	800
+北京	bei jing	1000
+背景	bei jing	900
+北京大学	bei jing da xue	1100
+北	bei	500
+大	da	500
+大学	da xue	800
+你们	ni men	600
+一	zhong	400
+丁	zhong	399
+丂	zhong	398
+七	zhong	397
+丄	zhong	396
+丅	zhong	395
+丆	zhong	394
+万	zhong	393
+丈	zhong	392
+三	zhong	391
+上	zhong	390
+下	zhong	389
+丌	zhong	388
+不	zhong	387
+与	zhong	386
+丏	zhong	385
+丐	zhong	384
+丑	zhong	383
+丒	zhong	382
+专	zhong	381
+且	zhong	380
+丕	zhong	379
+世	zhong	378
+丗	zhong	377
+丘	zhong	376
+丙	zhong	375
+业	zhong	374
+丛	zhong	373
+东	zhong	372
+丝	zhong	371
+丞	zhong	370
+丟	zhong	369
+丠	zhong	368
+両	zhong	367
+丢	zhong	366
+丣	zhong	365
+两	zhong	364
+严	zhong	363
+並	zhong	362
+丧	zhong	361
+丨	zhong	360
+丩	zhong	359
+个	zhong	358
+丫	zhong	357
+丬	zhong	356
+中	zhong	355
+丮	zhong	354
+丯	zhong	353
+丰	zhong	352
+丱	zhong	351
+串	zhong	350
+丳	zhong	349
+临	zhong	348
+丵	zhong	347
+丶	zhong	346
+丷	zhong	345
+丸	zhong	344
+丹	zhong	343
+为	zhong	342
+主	zhong	341
+丼	zhong	340
+丽	zhong	339
+举	zhong	338
+丿	zhong	337
+乀	zhong	336
+乁	zhong	335
+乂	zhong	334
+乃	zhong	333
+乄	zhong	332
+久	zhong	331

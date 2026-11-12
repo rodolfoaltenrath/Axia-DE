@@ -3,7 +3,7 @@
 // settings.keyboards = [{ layout: 'latam', variant: '' }, { layout: 'us', variant: '', ime: 'kana' }]
 // settings.keyboardIndex = the active one. keyboard.next() switches to the next one (menu bar button
 // or ❖⌥Space). Any xkb-data layout works: keyboard.list() returns all of them with
-// their variants. With `ime` it is an input method (ime.c) on top of the Latin keyboard `layout`:
+// their variants. With `ime` it is an input method (Rust input_method) on top of the Latin keyboard `layout`:
 // hangul (Korean), kana (Japanese), pinyin (Simplified Chinese).
 import { settings } from './settings.js';
 

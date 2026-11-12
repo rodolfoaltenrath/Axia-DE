@@ -1,4 +1,4 @@
-/* grab.h — moving and resizing windows in C (docs/WINDOWS.md).
+/* grab.h — moving and resizing windows in Rust (runtime/window_grab.rs) (docs/WINDOWS.md).
  *
  * The theme starts the drag (lord.wm.grab) and axia-server follows it on its own: each frame moves the
  * window's node with the pointer, without calling JS or repainting its content (when moving,

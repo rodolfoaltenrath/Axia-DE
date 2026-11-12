@@ -1,4 +1,4 @@
-/* ime_test.c — headless test of the input methods (ime.c): simulates keys and
+/* ime_test.c — headless test of the input methods (Rust input_method): simulates keys and
  * prints the committed text, the preedit and the candidates.
  *   build/ime-test hangul|kana|pinyin "keys"
  * In the keys: _ = Space, ^ = Enter, < = Backspace, ~ = Escape, everything else letter by letter. */

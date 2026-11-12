@@ -923,7 +923,7 @@ static void on_input(void *ud, const InputDevice *d, const struct input_event *e
     if (ev->type == EV_KEY || ev->type == EV_REL || ev->type == EV_ABS) display_activity(now_ms());
     if (s->debug && ev->type != EV_SYN)
         fprintf(stderr, "ev %s type=%u code=%u value=%d\n", d->name, ev->type, ev->code, ev->value);
-    if (d->tp) {                        /* touchpad o pantalla táctil: driver propio (tp/tp.c) */
+    if (d->tp) {                        /* touchpad o pantalla táctil: driver propio (Rust touch driver) */
         tp_event(d->tp, ev);
         if (ev->type != EV_SYN || ev->code != SYN_REPORT) return;
     }
@@ -931,7 +931,7 @@ static void on_input(void *ud, const InputDevice *d, const struct input_event *e
     case EV_REL:
         if (ev->code == REL_X) { s->cx += ev->value; s->rdx += ev->value; s->moved = 1; }
         if (ev->code == REL_Y) { s->cy += ev->value; s->rdy += ev->value; s->moved = 1; }
-        /* ruedas: la de alta resolución y la horizontal van como scroll fino (tp/tp_route.c, value120);
+        /* ruedas: la de alta resolución y la horizontal van como scroll fino (Rust touch route, value120);
          * los pasos enteros de siempre, solo si el mouse no tiene la de alta resolución */
         if (ev->code == REL_WHEEL && !d->wheel_hires) s->wheel += ev->value;
         if (ev->code == REL_WHEEL_HI_RES) tp_route_wheel120(ev->value, 0);
@@ -973,9 +973,9 @@ static void on_input(void *ud, const InputDevice *d, const struct input_event *e
         if (button >= 0 && ev->value != 2 && s->nbuttons < MAX_BUTTONS)
             s->buttons[s->nbuttons++] = (ButtonEvent){ ev->value == 1, button };
         else if (ev->code < BTN_MISC) {
-            if (keylag_enabled) keylag_rx(ev->value, &ev->time);
+            if (keylag_enabled()) keylag_rx(ev->value, &ev->time);
             js_key(ev->code, ev->value);
-            if (keylag_enabled) keylag_handled();
+            if (keylag_enabled()) keylag_handled();
         }
         break;
     }
@@ -1822,7 +1822,7 @@ static int render_frame(Server *s) {
     int prep_only = !s->headless && all_busy(s);
     ui.layout_ms = ui.paint_ms = 0;
     ui.damage_px = 0;
-    if (keylag_enabled) keylag_render();
+    if (keylag_enabled()) keylag_render();
     /* GPU path: a Linux app's new frame is only a texture (wl.c damage_node), not UI damage. Every
      * GPU display must still present it: before 0.8.1 nothing was flipped until some other part of
      * the screen changed (the clock, the cursor...), so typing in Chromium or Firefox showed up to a
@@ -1966,7 +1966,7 @@ static int render_frame(Server *s) {
         uint64_t ns = (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
         wl_presented(ns, mo->kms.flip_seq, mo->kms.mode.vrefresh ? 1000000000u / mo->kms.mode.vrefresh : 16666667u);
         lbf_presented(ns, mo->kms.mode.vrefresh ? 1000000000u / mo->kms.mode.vrefresh : 16666667u);
-        if (keylag_enabled) keylag_presented(ns);
+        if (keylag_enabled()) keylag_presented(ns);
     }
     if (!prep_only) frame_stats(s, now_ms() - t0, ui.layout_ms + ui.paint_ms);
     return !prep_only;
@@ -2342,7 +2342,7 @@ int main(int argc, char **argv) {
         if (term_damage()) ui.dirty = 1;
         double td = term_timeout(now);
         if (td >= 0 && (delay < 0 || td < delay)) delay = td;
-        tp_tick(now);                       /* touchpad: tocar, arrastrar, inercia (tp/tp.c) */
+        tp_tick(now);                       /* touchpad: tocar, arrastrar, inercia (Rust touch driver) */
         if (wl_idle_inhibited()) display_activity(now_ms());   /* a video or a presentation keeps the screen on */
         display_tick(now_ms());             /* screen off, lock and sleep after N minutes (src/hw) */
         hw_tick(now);
@@ -2474,7 +2474,7 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "kms: page flips complete before vblank: pacing to %d Hz\n", mk->mode.vrefresh ? mk->mode.vrefresh : 60);
                 wl_presented(mk->flip_ns, mk->flip_seq, mk->mode.vrefresh ? 1000000000u / mk->mode.vrefresh : 16666667u);
                 lbf_presented(mk->flip_ns, mk->mode.vrefresh ? 1000000000u / mk->mode.vrefresh : 16666667u);
-                if (keylag_enabled) keylag_presented(mk->flip_ns);
+                if (keylag_enabled()) keylag_presented(mk->flip_ns);
                 if (lbf_recording()) {
                     uint64_t done = 0;
                     if (gpu_active() && main_out(&s)->gpu >= 0) gpu_fence_time(main_out(&s)->gpu, &done);

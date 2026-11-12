@@ -1,12 +1,12 @@
 //! The keyboard's fallback translation, used only when axia-server could not load an XKB keymap
 //! (formerly runtime/keymap.js). Normally libxkbcommon translates every layout, compose and dead key
-//! in C (server/src/keyboard.c); without it, these two tables ('latam' and 'us') still give the shell
+//! in Rust (rust/axia-shell/src/keyboard); without it, these two tables ('latam' and 'us') still give the shell
 //! a working keyboard. The compositor then hands the shell the same event either way: key name,
 //! character, base character and modifier flags (`__lordKey(code, value, key, chr, base, flags)`).
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr};
 
-fn letter(code: i32) -> Option<char> {
+pub(super) fn letter(code: i32) -> Option<char> {
     Some(match code {
         16 => 'q', 17 => 'w', 18 => 'e', 19 => 'r', 20 => 't', 21 => 'y', 22 => 'u', 23 => 'i', 24 => 'o', 25 => 'p',
         30 => 'a', 31 => 's', 32 => 'd', 33 => 'f', 34 => 'g', 35 => 'h', 36 => 'j', 37 => 'k', 38 => 'l',

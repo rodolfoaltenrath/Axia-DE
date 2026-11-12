@@ -108,7 +108,7 @@ static int rpc(int op, const void *payload, uint32_t len, int *status, char **ou
     return rpc_fds(op, payload, len, NULL, 0, status, out, outlen);
 }
 
-/* Un evento: "tipo\0json". El teclado se aplica acá (keyboard.c); el resto va a JS
+/* Un evento: "tipo\0json". El teclado se aplica acá (Rust keyboard); el resto va a JS
  * (__lordBrokerEvent: tokens del tema, idioma, estado completo). */
 /* The layout itself comes from the compositor's keymap (wl_keyboard.keymap, appclient.c):
  * kb_set() here would run inside the sandbox, where xkbcommon cannot read its rules. Only the

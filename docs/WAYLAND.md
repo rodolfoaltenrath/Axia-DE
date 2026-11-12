@@ -31,8 +31,8 @@ Apps that only speak X11 open through Xwayland, started on demand, with our own 
 | `wl_output` | 4 | one per display: logical position, physical mode, scale rounded up, name and description (`DISPLAYS.md`) |
 | `zxdg_output_manager_v1` | 3 | logical position and size of each display |
 | `wp_fractional_scale_v1` | 1 | the exact scale of the display(s) a surface is on (GTK 4, Qt 6, Chromium render sharp at 125–175 %) |
-| `wl_seat` | 9 | pointer (enter, leave, motion, buttons, wheel with `axis_source` and `axis_value120`; fine touchpad scrolling with `axis_source finger`, `axis_stop` and `axis_relative_direction` for natural scrolling), keyboard with LordOS's XKB keymap (`keyboard.c`), modifiers and repeat, and `wl_touch` if there's a touchscreen |
-| `zwp_pointer_gestures_v1` | 3 | touchpad gestures: pinch (zoom in Chromium, GTK, Firefox), swipe and hold (`wl_input.c`, see `TRACKPAD.md`) |
+| `wl_seat` | 9 | pointer (enter, leave, motion, buttons, wheel with `axis_source` and `axis_value120`; fine touchpad scrolling with `axis_source finger`, `axis_stop` and `axis_relative_direction` for natural scrolling), keyboard with LordOS's XKB keymap (`rust/axia-shell/src/keyboard`), modifiers and repeat, and `wl_touch` if there's a touchscreen |
+| `zwp_pointer_gestures_v1` | 3 | touchpad gestures: pinch (zoom in Chromium, GTK, Firefox), swipe and hold (Rust `wayland/input.rs`, see `TRACKPAD.md`) |
 | `wl_data_device_manager` | 3 | clipboard shared with LordOS's in both directions (see below) |
 | `zwp_primary_selection_device_manager_v1` | 1 | primary selection: select to copy, middle click to paste (0.8.3, see "X11 apps") |
 | `xdg_wm_base` | 6 | windows (`xdg_toplevel`: title, move, resize, maximize, minimize, close) and popup menus (`xdg_popup` with `xdg_positioner`: anchor, gravity, flip and slide within the screen) |
@@ -40,7 +40,7 @@ Apps that only speak X11 open through Xwayland, started on demand, with our own 
 | `wp_cursor_shape_manager_v1` | 1 | the app asks for the cursor by name (Chromium, GTK 4, Qt 6) and LordOS draws its own (`cursor.c`, see `WINDOWS.md`) |
 | `org_kde_kwin_server_decoration_manager` | 1 | GTK 3's way to ask for the frame (Firefox, Mousepad; see "Who draws the frame") |
 | `zwp_idle_inhibit_manager_v1` | 1 | a video or presentation keeps the screen on while its surface is mapped (0.8.5, see the end of this page) |
-| `zwp_text_input_manager_v3` | 1 | a text field took focus and where its caret is: only a hint for the on-screen keyboard; text keeps arriving on `wl_keyboard` (0.8.7, `wl_textinput.c`, see `ON-SCREEN-KEYBOARD.md`) |
+| `zwp_text_input_manager_v3` | 1 | a text field took focus and where its caret is: only a hint for the on-screen keyboard; text keeps arriving on `wl_keyboard` (0.8.7, Rust `wayland/text_input.rs`, see `ON-SCREEN-KEYBOARD.md`) |
 | `zwp_linux_dmabuf_v1` 4, `wp_presentation` 1, `wp_viewporter` 1, `zwp_relative_pointer_manager_v1` 1, `zwp_pointer_constraints_v1` 1 | | GPU buffers, presentation feedback, cropping and scaling, games' pointer (see `GPU.md` and `DISPLAYS.md`) |
 
 Windows enter the SDK's window manager (`sdk/wayland.js`) as the internal app `linux` (id
@@ -373,7 +373,7 @@ like any other Linux app.
 | ![gpu](xwayland-gpu.png) | ![firewall](xwayland-firewall.png) |
 | The same on the GPU composition path (`LORD_GPU=1`) | XTerm restricted to no internet (Settings → Firewall): its `curl` is refused, the per-app rules apply to X11 apps |
 
-### How it starts (`server/src/wl/xwayland.c`)
+### How it starts (`rust/axia-shell/src/x11/xwayland.rs`)
 
 - At the start of a user session (not the login screen, not app mode), if `/usr/bin/Xwayland`
   exists, axia-server reserves a display: the lock file `/tmp/.X<n>-lock` and the socket
@@ -401,7 +401,7 @@ like any other Linux app.
   stops Xwayland. The socket stays in axia-server, so the next X11 app starts it again (about a
   second). Three failed starts in a row → X11 apps are refused for a minute (logged).
 
-### The window manager (`server/src/wl/xwm.c`, `x11wire.c`)
+### The window manager (`server/src/wl/xwm.c`, Rust `x11/wire.rs`)
 
 Our own, in C: it speaks the X11 protocol itself (no libxcb or libX11, dependency policy), fully
 asynchronously, so axia-server never waits on Xwayland while Xwayland waits on the compositor.

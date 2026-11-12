@@ -3,7 +3,7 @@
  * and the flip run one after another and a frame that takes more than a refresh period in all waits for the
  * second vblank. With it, while the flip of frame N is pending the CPU part of frame N+1 is done ahead
  * ("prepared": painted into the display's scene), and at N's flip only the upload, the GPU's draw and the
- * page flip of that frame remain. main.c keeps the per-display state; the rules are here, without I/O, so
+ * page flip of that frame remain. main.c keeps the per-display state; the rules are in Rust frame_pipeline.rs, without I/O, so
  * tests/fpipe_test.c can check them. */
 #ifndef LORD_FPIPE_H
 #define LORD_FPIPE_H

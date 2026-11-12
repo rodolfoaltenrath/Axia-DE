@@ -811,7 +811,7 @@ static JSValue f_locale_install(JSContext *c, JSValueConst this_val, int argc, J
     return JS_NewBool(c, ok);
 }
 
-/* ---- lord.keyboard: layouts (libxkbcommon, keyboard.c) ---- */
+/* ---- lord.keyboard: layouts (libxkbcommon, Rust keyboard) ---- */
 
 static JSValue f_kb_set(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val; (void)argc;
@@ -841,7 +841,7 @@ static JSValue f_kb_group(JSContext *c, JSValueConst this_val, int argc, JSValue
     return JS_UNDEFINED;
 }
 
-/* ---- lord.ime: input methods (ime.c) ---- */
+/* ---- lord.ime: input methods (Rust input_method) ---- */
 
 static JSValue f_ime_set(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val; (void)argc;
@@ -1568,7 +1568,7 @@ static JSValue f_wl_has_focus(JSContext *c, JSValueConst this_val, int argc, JSV
 }
 
 /* lord.wayland.grabKeys(name) → bool: which fixed table of keys the shell keeps from apps, by name
- * only (wl/keygrab.c). There is no way to pass a key. lord.wayland exists only in the session. */
+ * only (Rust keygrab.rs). There is no way to pass a key. lord.wayland exists only in the session. */
 static JSValue f_wl_grab_keys(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
     if (argc < 1 || !JS_IsString(argv[0])) return JS_FALSE;

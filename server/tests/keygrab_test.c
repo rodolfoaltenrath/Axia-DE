@@ -1,4 +1,4 @@
-/* keygrab_test.c — the fixed tables of keys the desktop keeps from Wayland apps (src/wl/keygrab.c). */
+/* keygrab_test.c — Rust shortcut profiles through the compositor's C ABI. */
 #include "../src/wl/keygrab.h"
 #include <linux/input-event-codes.h>
 #include <stdio.h>

@@ -773,9 +773,9 @@ static void ime_commit(const char *text) {
     for (int i = 2; i < 5; i++) JS_FreeValue(ctx, args[i]);
 }
 
-/* Key → __lordKey(code, value, key, text, base, flags). With libxkbcommon (keyboard.c)
+/* Key → __lordKey(code, value, key, text, base, flags). With libxkbcommon (Rust keyboard)
  * C does the translation; if no layout is loaded, only code and value. If there is an
- * active input method (ime.c) and a focused text field, the key goes through it first. */
+ * active input method (Rust input_method) and a focused text field, the key goes through it first. */
 /* Without an XKB keymap the fallback tables translate (rust/axia-shell/src/keymap.rs). */
 extern int axia_keymap_translate(int code, int value, char *key, char *chr, char *base, size_t n);
 extern void axia_keymap_name(int code, char *out, size_t n);

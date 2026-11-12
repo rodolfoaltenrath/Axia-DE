@@ -20,7 +20,7 @@ double js_frame_wait(double now, int waiting, unsigned epoch);
 void   js_anim_done(unsigned id);    /* a native animation ended → __lordAnimDone(id) (js_anim.c) */
 void   js_pointer(const char *type, int target, float x, float y, int button);
 void   js_native_view_notify(void);   /* native views have shell effects → __lordNativeView() */
-/* Touchpad (tp/tp_route.c) → __lordGesture(kind, phase, id, x, y, a, b, c, d):
+/* Touchpad (Rust touch/route.rs) → __lordGesture(kind, phase, id, x, y, a, b, c, d):
  * "scroll" (dx, dy, source), "pinch" (scale, rotation, dx, dy), "swipe" (dx, dy, fingers, system). */
 void   js_gesture(const char *kind, const char *phase, int target, float x, float y, double a, double b, double c, double d);
 void   js_key(int code, int value);
