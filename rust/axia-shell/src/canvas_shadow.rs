@@ -238,7 +238,7 @@ pub extern "C" fn axia_shadow_mask(w: i32, h: i32, r: i32, blur: i32, dx: i32, d
 /// rows inside [cx0, cx1) × [cy0, cy1).
 ///
 /// # Safety
-/// `px` is a canvas of at least `cy1` rows of `stride` pixels, and the clip lies inside it.
+/// Every pixel `px + j * stride + i` inside the clip is addressable (a canvas.c canvas and its clip).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn axia_shadow_blend(
@@ -254,7 +254,10 @@ pub unsafe extern "C" fn axia_shadow_blend(
     argb: u32,
 ) {
     let Some(m) = m.as_ref() else { return };
-    if px.is_null() || stride <= 0 || cx0 >= cx1 || cy0 >= cy1 || cx0 < 0 || cy0 < 0 || cx1 > stride {
+    // No bounds of its own beyond the clip: canvas.c also gives canvases whose `px` starts before
+    // their buffer and whose width passes the stride (the dragged window's layer, ui/paint.c), and
+    // their clip holds only addressable pixels, as for every other primitive.
+    if px.is_null() || stride <= 0 || cx0 >= cx1 || cy0 >= cy1 {
         return;
     }
     blend(px, stride, [cx0, cy0, cx1, cy1], x, y, m, argb);
