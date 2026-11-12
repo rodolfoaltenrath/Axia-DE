@@ -1,6 +1,7 @@
 /* canvas.c — primitives with alpha, signed-distance antialiasing and clipping. */
 #include "canvas.h"
 #include "glass_ffi.h"
+#include "shadow_ffi.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -399,59 +400,24 @@ void canvas_rrect_stroke(Canvas *c, float x, float y, float w, float h, float r,
     }
 }
 
-/* Shadow masks cached by size: moving a window does not recompute the shadow. */
-typedef struct {
-    int w, h, r, blur, dx, dy;
-    int x0, y0, mw, mh;
-    uint8_t *a;
-    unsigned long used;
-} ShadowMask;
-
-#define SHADOW_CACHE 32
-static ShadowMask shadow_cache[SHADOW_CACHE];
-static unsigned long shadow_stamp;
-
-static ShadowMask *shadow_mask(int w, int h, int r, int blur, int dx, int dy) {
-    ShadowMask *m = NULL, *lru = &shadow_cache[0];
-    for (int i = 0; i < SHADOW_CACHE; i++) {
-        ShadowMask *k = &shadow_cache[i];
-        if (k->a && k->w == w && k->h == h && k->r == r && k->blur == blur && k->dx == dx && k->dy == dy) { m = k; break; }
-        if (k->used < lru->used) lru = k;
-    }
-    if (!m) {
-        m = lru;
-        free(m->a);
-        *m = (ShadowMask){ w, h, r, blur, dx, dy, 0, 0, 0, 0, NULL, 0 };
-        m->x0 = (dx < 0 ? dx : 0) - blur;
-        m->y0 = (dy < 0 ? dy : 0) - blur;
-        m->mw = w + abs(dx) + 2 * blur;
-        m->mh = h + abs(dy) + 2 * blur;
-        m->a = calloc((size_t)m->mw * m->mh, 1);
-        if (!m->a) return NULL;
-        float fr = fix_radius((float)r, (float)w, (float)h), fb = (float)blur;
-        float bcx = w * 0.5f, bcy = h * 0.5f, scx = bcx + dx, scy = bcy + dy, hw = w * 0.5f, hh = h * 0.5f;
-        for (int j = 0; j < m->mh; j++)
-            for (int i = 0; i < m->mw; i++) {
-                float px = m->x0 + i + 0.5f, py = m->y0 + j + 0.5f;
-                float inside = cov_of(rr_sdf(px, py, bcx, bcy, hw, hh, fr));
-                if (inside >= 1) continue;
-                float t = (rr_sdf(px, py, scx, scy, hw, hh, fr) + fb) / (2 * fb);
-                if (t >= 1) continue;
-                if (t < 0) t = 0;
-                float f = (1 - t * t * (3 - 2 * t)) * (1 - inside);
-                m->a[(size_t)j * m->mw + i] = (uint8_t)(f * 255 + 0.5f);
-            }
-    }
-    m->used = ++shadow_stamp;
-    return m;
+/* Shadows (rust/axia-shell/src/canvas_shadow.rs): the mask is cached by size in Rust, which also
+ * keeps where each row's coverage is, so the blend walks the ring around the box, not the zeros
+ * under it (two million bytes per repaint for a maximized window). */
+typedef struct { const AxiaShadowMask *m; int x, y; uint32_t argb; } ShadowArgs;
+static void shadow_apply(Canvas *c, const void *p) {
+    const ShadowArgs *s = p;
+    axia_shadow_blend(c->px, c->stride, c->clip.x0, c->clip.y0, c->clip.x1, c->clip.y1, s->x, s->y, s->m, s->argb);
 }
 
 void canvas_shadow(Canvas *c, float x, float y, float w, float h, float r,
                    float dx, float dy, float blur, uint32_t argb) {
     if (!(argb >> 24) || w <= 0 || h <= 0) return;
     int b = blur < 1 ? 1 : (int)roundf(blur);
-    ShadowMask *m = shadow_mask((int)roundf(w), (int)roundf(h), (int)roundf(r), b, (int)roundf(dx), (int)roundf(dy));
-    if (m) canvas_alpha_mask(c, (int)roundf(x) + m->x0, (int)roundf(y) + m->y0, m->a, m->mw, m->mh, m->mw, argb);
+    const AxiaShadowMask *m = axia_shadow_mask((int)roundf(w), (int)roundf(h), (int)roundf(r), b, (int)roundf(dx), (int)roundf(dy));
+    if (!m) return;
+    ShadowArgs s = { m, (int)roundf(x) + m->x0, (int)roundf(y) + m->y0, argb };
+    if (banded(c, (float)s.x, (float)s.y, (float)m->mw, (float)m->mh)) in_bands(c, (float)s.y, (float)m->mh, shadow_apply, &s);
+    else shadow_apply(c, &s);
 }
 
 /* Rust owns all backdrop pixels and geometry. Keep the existing synchronous

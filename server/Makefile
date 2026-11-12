@@ -145,7 +145,7 @@ build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
 	./$@ || { rm -f $@; exit 1; }
 
-test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/shadow-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/wl-fullscreen-test
 	./build/wl-activation-test
 	./build/ui-damage-test
@@ -163,6 +163,7 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 	./build/platform-admin-test
 	./build/switcher-ffi-test
 	./build/snap-ffi-test
+	./build/shadow-ffi-test
 	./build/winmodel-ffi-test
 	./build/keygrab-test
 	./build/wl-input-region-test
@@ -518,6 +519,9 @@ build/fpipe-test: tests/fpipe_test.c src/fpipe.h $(RUST_LIB)
 drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./build/engine-golden drag-golden
+build/shadow-ffi-test: tests/shadow_ffi_test.c src/canvas.c src/canvas.h src/shadow_ffi.h $(RUST_LIB)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/shadow_ffi_test.c src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/canvas-test: tests/canvas_test.c src/canvas.c src/canvas.h $(RUST_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_CANVAS_TEST -o $@ tests/canvas_test.c src/canvas.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
