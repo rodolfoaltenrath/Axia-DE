@@ -2359,6 +2359,10 @@ int main(int argc, char **argv) {
         axia_view_tick(now_ms());
         double nvd = axia_view_timeout(now_ms());
         if (nvd >= 0 && (delay < 0 || nvd < delay)) delay = nvd;
+        /* glass over app windows: their frames refresh it at most 30 times a second (glass_pacing.rs) */
+        paint_glass_tick(now_ms());
+        double gpd = paint_glass_timeout(now_ms());
+        if (gpd >= 0 && (delay < 0 || gpd < delay)) delay = gpd;
         js_native_view_notify();
         double tpd = tp_timeout(now_ms());
         if (tpd >= 0 && (delay < 0 || tpd < delay)) delay = tpd;

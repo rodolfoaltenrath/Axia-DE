@@ -5,6 +5,7 @@
 #include "../media/media.h"
 #include "grab.h"
 #include "../gpu/gpu.h"
+#include "../glass_pacing_ffi.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -1551,17 +1552,58 @@ static int blur_hidden(Node *n) {
 static Box glass_refresh[BLUR_MAX];
 static int nglass_refresh, glass_refresh_over;
 
-static int external_glass_walk(Node *n, Box area) {
-    if (!n || n->type == NODE_RAW || n->s.display_none) return 0;
-    int hits = 0;
+/* Glass that app frames touched while the pacing (rust/axia-shell/src/glass_pacing.rs) holds it:
+ * repainted together in its next refresh (paint_glass_tick). */
+static Box glass_wait[BLUR_MAX];
+static int nglass_wait;
+
+static void glass_refresh_now(Box near) {
+    damage_add(near);
+    if (nglass_refresh < BLUR_MAX) glass_refresh[nglass_refresh++] = near; else glass_refresh_over = 1;
+}
+
+static void glass_flush_wait(void) {
+    for (int i = 0; i < nglass_wait; i++) glass_refresh_now(glass_wait[i]);
+    nglass_wait = 0;
+}
+
+static void external_glass_walk(Node *n, Box area, Box *hit, int *nhit, int *over) {
+    if (!n || n->type == NODE_RAW || n->s.display_none) return;
     if (n->s.backdrop_blur >= 1 && n->w > 0 && n->h > 0) {
         Box near = blur_near(n);
-        if (box_meets(area, near)) { damage_add(near); hits = 1; if (nglass_refresh < BLUR_MAX) glass_refresh[nglass_refresh++] = near; else glass_refresh_over = 1; }
+        if (box_meets(area, near)) { if (*nhit < BLUR_MAX) hit[(*nhit)++] = near; else *over = 1; }
     }
-    for (Node *child=n->first;child;child=child->next) hits |= external_glass_walk(child,area);
-    return hits;
+    for (Node *child = n->first; child; child = child->next) external_glass_walk(child, area, hit, nhit, over);
 }
-int paint_external_glass_damage(Box area) { return external_glass_walk(ui.root,area); }
+
+/* An app's frame changed `area`: the glass sampling it is refreshed now or, while apps keep drawing,
+ * at the pacing's next refresh (never more than 30 times a second for app frames). */
+int paint_external_glass_damage(Box area) {
+    Box hit[BLUR_MAX];
+    int nhit = 0, over = 0;
+    external_glass_walk(ui.root, area, hit, &nhit, &over);
+    if (!nhit && !over) return 0;
+    if (over || axia_glass_pacing_request(clk())) {
+        glass_flush_wait();
+        for (int i = 0; i < nhit; i++) glass_refresh_now(hit[i]);
+        if (over) glass_refresh_over = 1;
+        return 1;
+    }
+    for (int i = 0; i < nhit; i++) {
+        int seen = 0;
+        for (int k = 0; k < nglass_wait && !seen; k++)
+            seen = glass_wait[k].x0 == hit[i].x0 && glass_wait[k].y0 == hit[i].y0 && glass_wait[k].x1 == hit[i].x1 && glass_wait[k].y1 == hit[i].y1;
+        if (seen) continue;
+        if (nglass_wait < BLUR_MAX) glass_wait[nglass_wait++] = hit[i];
+        else { glass_flush_wait(); glass_refresh_now(hit[i]); }
+    }
+    return 1;
+}
+
+void paint_glass_tick(double now) {
+    if (nglass_wait && axia_glass_pacing_tick(now)) glass_flush_wait();
+}
+double paint_glass_timeout(double now) { return nglass_wait ? axia_glass_pacing_timeout(now) : -1; }
 
 static void blur_walk(Node *n, int *grew) {
     if (n->type == NODE_RAW || n->s.display_none) return;
