@@ -1856,3 +1856,29 @@ fn file_picker_names_and_context_menus_use_the_dialog_layer() {
     nodes(&tree, "fileTile", &mut tiles);
     assert!(tiles.iter().all(|v| v["tooltipLayer"] == "system"));
 }
+
+#[test]
+fn recent_walk_prunes_node_modules_without_losing_other_files() {
+    let h = Home::new();
+    h.file("doc.txt", "x");
+    for i in 0..50 {
+        h.file(&format!("proj/node_modules/pkg{i}/index.js"), "x");
+    }
+    h.file("proj/src/main.rs", "x");
+    let (all, _) = ops::walk(&h.path(""), 6, 60000, ops::DurationBudget::seconds(5), false);
+    let (pruned, complete) =
+        ops::walk_pruned(&h.path(""), 6, 60000, ops::DurationBudget::seconds(5), false, &["node_modules"]);
+    assert!(complete);
+    let names = |v: &[(std::path::PathBuf, std::fs::Metadata)]| {
+        let mut n: Vec<_> = v
+            .iter()
+            .filter(|(p, m)| m.is_file() && !p.components().any(|c| c.as_os_str() == "node_modules"))
+            .map(|(p, _)| p.clone())
+            .collect();
+        n.sort();
+        n
+    };
+    assert_eq!(names(&pruned), names(&all), "the same recent files");
+    assert!(pruned.len() + 100 <= all.len(), "{} vs {} entries walked", pruned.len(), all.len());
+    assert!(!pruned.iter().any(|(p, _)| p.components().any(|c| c.as_os_str() == "node_modules")));
+}

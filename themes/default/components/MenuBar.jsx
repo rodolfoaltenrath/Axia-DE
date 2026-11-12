@@ -50,8 +50,11 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
   const toggle = (name, ref) => { if (controlCenter) onControlCenter(); spotlight.close(); setOpen((o) => (o?.name === name ? null : { name, x: anchorX(ref) })); };
   const close = () => setOpen(null);
 
+  // Only the open menu is built (each one a getter): the bar renders on every change of focus, of the
+  // app's menus, of a setting and of the clock, and the logo menu walks the home folder for the recent
+  // files (up to 60 000 entries) and asks for the pending package updates.
   const menus = {
-    logo: { items: [
+    get logo() { return { items: [
       { label: tr('shell.menu.about'), onClick: () => wm.open('about') },
       '-',
       { label: tr('shell.menu.settings'), onClick: () => wm.open('settings') },
@@ -72,16 +75,16 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
         { label: tr('shell.menu.restart'), onClick: () => session.restart() },
         { label: tr('shell.menu.shutdown'), onClick: () => session.shutdown() },
       ] : []),
-    ] },
+    ] }; },
     // the app menu under the app's name (About, Settings…, Hide, Quit; sdk/appcontrol.js)
-    app: { items: app ? appMenuItems(focused) : [{ label: tr('shell.menu.about'), onClick: () => wm.open('about') }] },
+    get app() { return { items: app ? appMenuItems(focused) : [{ label: tr('shell.menu.about'), onClick: () => wm.open('about') }] }; },
     // Minimize, Zoom, Fill, Center, Move & Resize, Move to <display>, the open windows (sdk/windowmenu.js)
-    window: { items: windowMenuItems(app ? focused : null) },
-    help: { items: [
+    get window() { return { items: windowMenuItems(app ? focused : null) }; },
+    get help() { return { items: [
       ...(getApp('help') ? [{ label: tr('shell.help.open'), onClick: () => wm.open('help') }, { label: tr('shell.help.tour'), onClick: () => help.startTour() }, '-'] : []),
       { label: tr('shell.menu.about'), onClick: () => wm.open('about') },
       { label: tr('shell.help.theme'), disabled: true },
-    ] },
+    ] }; },
   };
   extra.forEach((m, i) => { menus[`app${i}`] = { items: m.items }; });
 

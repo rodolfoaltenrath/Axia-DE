@@ -494,6 +494,20 @@ pub fn walk(
     budget: DurationBudget,
     hidden: bool,
 ) -> (Vec<(PathBuf, fs::Metadata)>, bool) {
+    walk_pruned(root, depth, limit, budget, hidden, &[])
+}
+
+/// `walk` without going into the directories named in `prune` (nor listing them): the recent files
+/// skip `node_modules`, which used to be walked whole and thrown away after, spending the walk's
+/// limit and time budget on it.
+pub fn walk_pruned(
+    root: &Path,
+    depth: usize,
+    limit: usize,
+    budget: DurationBudget,
+    hidden: bool,
+    prune: &[&str],
+) -> (Vec<(PathBuf, fs::Metadata)>, bool) {
     let mut queue = vec![(root.to_owned(), 0)];
     let mut out = Vec::new();
     let mut complete = true;
@@ -514,7 +528,10 @@ pub fn walk(
                 match fs::read_dir(&path) {
                     Ok(entries) => {
                         for e in entries.flatten() {
-                            if hidden || !e.file_name().as_bytes().starts_with(b".") {
+                            let name = e.file_name();
+                            if (hidden || !name.as_bytes().starts_with(b"."))
+                                && !prune.iter().any(|p| name.as_bytes() == p.as_bytes())
+                            {
                                 queue.push((e.path(), d + 1));
                             }
                         }

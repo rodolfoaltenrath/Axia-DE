@@ -10,6 +10,7 @@ use std::fs::{self, File};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::{cell::RefCell, rc::Rc};
 
+use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -772,18 +773,23 @@ impl Session {
                         })
                         .collect()),
                     Location::Recent => {
-                        let (items, _) =
-                            ops::walk(&p.home, 6, 60000, ops::DurationBudget::seconds(2), false);
-                        let mut entries: Vec<_> = items
+                        let (mut items, _) = ops::walk_pruned(
+                            &p.home,
+                            6,
+                            60000,
+                            ops::DurationBudget::seconds(2),
+                            false,
+                            &["node_modules"],
+                        );
+                        // newest first by the walk's own lstat; entries (one more stat each) only
+                        // for the 300 shown, not for every file found
+                        items.retain(|(_, m)| m.is_file());
+                        items.sort_by_key(|(_, m)| std::cmp::Reverse(m.mtime()));
+                        let entries: Vec<_> = items
                             .into_iter()
-                            .filter(|(path, m)| {
-                                m.is_file()
-                                    && !path.components().any(|c| c.as_os_str() == "node_modules")
-                            })
                             .filter_map(|(path, _)| ops::entry(&path).ok())
+                            .take(300)
                             .collect();
-                        entries.sort_by_key(|e| std::cmp::Reverse(e.mtime));
-                        entries.truncate(300);
                         Ok(entries)
                     }
                     Location::Tag(color) => Ok(tags

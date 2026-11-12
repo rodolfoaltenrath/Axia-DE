@@ -334,18 +334,15 @@ pub unsafe extern "C" fn fs_recent(
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    let (mut items, _) = ops::walk(
+    let (mut items, _) = ops::walk_pruned(
         &policy::current().home,
         6,
         60000,
         ops::DurationBudget::seconds(3),
         false,
+        &["node_modules"],
     );
-    items.retain(|(p, m)| {
-        m.is_file()
-            && m.mtime() >= now - days.max(0) as i64 * 86400
-            && !p.components().any(|c| c.as_os_str() == "node_modules")
-    });
+    items.retain(|(_, m)| m.is_file() && m.mtime() >= now - days.max(0) as i64 * 86400);
     items.sort_by(|a, b| b.1.mtime().cmp(&a.1.mtime()));
     items.truncate(limit.clamp(1, 500) as usize);
     let n = items.len();
