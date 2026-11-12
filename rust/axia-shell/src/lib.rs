@@ -52,6 +52,7 @@ mod keygrab;
 mod wayland;
 mod x11;
 mod window_policy;
+mod canvas_shadow;
 mod text_edit;
 mod clipboard;
 mod runtime;
