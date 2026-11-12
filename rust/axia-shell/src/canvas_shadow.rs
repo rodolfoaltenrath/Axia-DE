@@ -48,7 +48,7 @@ thread_local! {
 
 // ---- the C geometry, operation for operation in f32 (canvas.c) ----
 
-fn rr_sdf(px: f32, py: f32, cx: f32, cy: f32, hw: f32, hh: f32, r: f32) -> f32 {
+pub(crate) fn rr_sdf(px: f32, py: f32, cx: f32, cy: f32, hw: f32, hh: f32, r: f32) -> f32 {
     let qx = (px - cx).abs() - (hw - r);
     let qy = (py - cy).abs() - (hh - r);
     let ox = if qx > 0. { qx } else { 0. };
@@ -57,7 +57,7 @@ fn rr_sdf(px: f32, py: f32, cx: f32, cy: f32, hw: f32, hh: f32, r: f32) -> f32 {
     (if ox != 0. || oy != 0. { (ox * ox + oy * oy).sqrt() } else { 0. }) + (if inn < 0. { inn } else { 0. }) - r
 }
 
-fn cov_of(d: f32) -> f32 {
+pub(crate) fn cov_of(d: f32) -> f32 {
     let c = 0.5 - d;
     if c <= 0. {
         0.
@@ -68,7 +68,7 @@ fn cov_of(d: f32) -> f32 {
     }
 }
 
-fn fix_radius(r: f32, w: f32, h: f32) -> f32 {
+pub(crate) fn fix_radius(r: f32, w: f32, h: f32) -> f32 {
     let m = (if w < h { w } else { h }) * 0.5;
     if r < 0. {
         0.
@@ -184,7 +184,7 @@ fn over_alpha(sa: u32, da: u32) -> u32 {
 }
 
 #[inline]
-fn put(p: &mut u32, argb: u32, a: u32) {
+pub(crate) fn put(p: &mut u32, argb: u32, a: u32) {
     if a >= 255 {
         *p = argb | 0xff00_0000;
     } else if a != 0 {

@@ -326,27 +326,8 @@ void canvas_rrect_gradient(Canvas *c, float x, float y, float w, float h, float 
         in_bands(c, y, h, gradient_band, &a);
         return;
     }
-    int x0, y0, x1, y1;
-    if (w <= 0 || h <= 0 || !bounds(c, x, y, w, h, &x0, &y0, &x1, &y1)) return;
-    r = fix_radius(r, w, h);
-    float cx = x + w * 0.5f, cy = y + h * 0.5f, hw = w * 0.5f, hh = h * 0.5f;
-    /* Same as CSS: 180deg = top to bottom. */
-    float rad = angle_deg * 3.14159265f / 180.0f, dx = sinf(rad), dy = -cosf(rad);
-    float len = fabsf(w * dx) + fabsf(h * dy);
-    if (len <= 0) len = 1;
-    for (int j = y0; j < y1; j++) {
-        uint32_t *row = c->px + (size_t)j * c->stride;
-        float py = j + 0.5f;
-        for (int i = x0; i < x1; i++) {
-            float px = i + 0.5f;
-            float cov = cov_of(rr_sdf(px, py, cx, cy, hw, hh, r));
-            if (cov <= 0) continue;
-            float t = 0.5f + ((px - cx) * dx + (py - cy) * dy) / len;
-            t = t < 0 ? 0 : t > 1 ? 1 : t;
-            uint32_t col = lerp_color(from, to, t);
-            put(&row[i], col, (uint32_t)((col >> 24) * cov * opacity + 0.5f));
-        }
-    }
+    /* rust/axia-shell/src/canvas_ops.rs: the same pixels, without the per-pixel color and position work */
+    axia_canvas_rrect_gradient(c->px, c->stride, c->clip.x0, c->clip.y0, c->clip.x1, c->clip.y1, x, y, w, h, r, from, to, angle_deg, opacity);
 }
 
 void canvas_rrect_stroke(Canvas *c, float x, float y, float w, float h, float r, float bw, uint32_t argb) {
