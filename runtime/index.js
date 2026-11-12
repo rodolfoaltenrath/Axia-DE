@@ -125,6 +125,53 @@ function attach(parent, child) {
   child.parent = parent.isContainer ? null : parent;
 }
 
+// ---- Developer render profile (settings.json "debugTiming": true, sdk/settings.js) ----
+// Every 10 s the session log gets the commits, the time React spent rendering and committing, and the
+// components that rendered most, with the time of the commits they were in (the bundle is minified:
+// short names come with the start of their code). Off, it costs one check per commit. The last render
+// pass before a commit starts at getRootHostContext and ends at resetAfterCommit; a component
+// rendered in it if its fiber has PerformedWork (bit 1), cleared once counted, as a subtree React
+// skipped keeps its old fibers (and flags) in the finished tree.
+const roots = [];
+const prof = { start: 0, commits: 0, ms: 0, by: new Map(), since: 0 };
+const profiling = () => globalThis.__lordTiming === true;
+function fiberName(f) {
+  const t = f.type;
+  if (!t || typeof t === 'string') return null;
+  const fn = typeof t === 'function' ? t : t.type || t.render;      // memo, forwardRef
+  if (typeof fn !== 'function') return t.displayName || null;
+  const name = t.displayName || fn.displayName || fn.name || '';
+  return name.length > 3 ? name : `${name || 'anonymous'}[${String(fn).replace(/\s+/g, ' ').slice(0, 48)}]`;
+}
+function profileCommit() {
+  const now = lord.now(), ms = prof.start ? now - prof.start : 0;
+  prof.start = 0;
+  prof.commits++;
+  prof.ms += ms;
+  for (const root of roots) {
+    const stack = [root.current?.alternate];
+    while (stack.length) {
+      const f = stack.pop();
+      if (!f || !((f.flags | f.subtreeFlags) & 1)) continue;
+      if (f.flags & 1) {
+        const name = fiberName(f);
+        if (name) { const e = prof.by.get(name) || [0, 0]; e[0]++; e[1] += ms; prof.by.set(name, e); }
+        f.flags &= ~1;
+      }
+      for (let c = f.child; c; c = c.sibling) stack.push(c);
+    }
+  }
+  if (!prof.since) prof.since = now;
+  if (now - prof.since >= 10000) {
+    const top = [...prof.by].sort((a, b) => b[1][0] - a[1][0]).slice(0, 12)
+      .map(([n, [count, t]]) => `${n} ${count}x ${t.toFixed(0)}ms`).join(', ');
+    console.log(`render profile: ${prof.commits} commits, ${prof.ms.toFixed(1)} ms in React over ${((now - prof.since) / 1000).toFixed(1)} s; most rendered: ${top}`);
+    prof.commits = 0; prof.ms = 0; prof.by.clear(); prof.since = now;
+  }
+}
+
+const ROOT_CONTEXT = {};
+
 // Priority of the update in progress (React 19 sets it and queries it here).
 let updatePriority = NoEventPriority;
 
@@ -174,11 +221,11 @@ const host = {
   hideTextInstance(inst) { lord.setText(inst.id, ''); },
   unhideTextInstance(inst, text) { lord.setText(inst.id, text); },
 
-  getRootHostContext: () => ({}),
+  getRootHostContext() { if (profiling()) prof.start = lord.now(); return ROOT_CONTEXT; },
   getChildHostContext: (ctx) => ctx,
   getPublicInstance: (inst) => inst,
   prepareForCommit: () => null,
-  resetAfterCommit() { layersCommitted(); for (const fn of commitWatchers) fn(); },
+  resetAfterCommit() { layersCommitted(); for (const fn of commitWatchers) fn(); if (profiling()) profileCommit(); },
   preparePortalMount() {},
   setCurrentUpdatePriority(p) { updatePriority = p; },
   getCurrentUpdatePriority: () => updatePriority,
@@ -277,6 +324,7 @@ export function render(element) {
   // React 19: uncaught errors, errors caught by a boundary, and recoverable ones, separately
   const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, 'lord',
     report('error'), report('capturado'), report('recuperable'), null);
+  roots.push(root);
   reconciler.updateContainer(element, root, null, null);
   return root;
 }
