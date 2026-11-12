@@ -20,6 +20,9 @@ pub fn now_ms() -> f64 {
     unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
     t.tv_sec as f64 * 1e3 + t.tv_nsec as f64 / 1e6
 }
+/// The facts a sync request carries (lent from `Host::facts`). `lang`: for strings the app picks
+/// itself (localized package manifests).
+const SYNC_FACTS: [&str; 7] = ["args", "settings", "services", "catalog", "windows", "registry", "lang"];
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     View,
@@ -319,20 +322,29 @@ impl Host {
             json!({"tree": self.app.request(&json!({"cmd":"icon","size":size,"args":self.facts["args"]}))})
         } else {
             let context = self.context();
-            let input = json!({
-                "cmd": "sync",
-                "args": self.facts["args"],
-                "settings": self.facts["settings"],
-                "services": self.facts["services"],
-                "catalog": self.facts["catalog"],
-                "windows": self.facts["windows"],
-                "registry": self.facts["registry"],
-                "windows": self.facts["windows"],
-                // For strings the app picks itself (localized package manifests).
-                "lang": self.facts["lang"],
-                "context": context,
-            });
-            self.app.request(&input)
+            // The facts are lent to the request, not copied: the catalog, the registry and the window
+            // list were cloned whole on every sync (every second for Monitor or Clock, every event),
+            // and given back after. A fact the shell didn't give stays absent (null to the app).
+            let mut input = Map::new();
+            input.insert("cmd".into(), json!("sync"));
+            if let Value::Object(facts) = &mut self.facts {
+                for k in SYNC_FACTS {
+                    if let Some(v) = facts.get_mut(k) {
+                        input.insert(k.into(), std::mem::take(v));
+                    }
+                }
+            }
+            input.insert("context".into(), context);
+            let mut input = Value::Object(input);
+            let reply = self.app.request(&input);
+            if let (Value::Object(facts), Value::Object(lent)) = (&mut self.facts, &mut input) {
+                for k in SYNC_FACTS {
+                    if let (Some(v), Some(slot)) = (lent.remove(k), facts.get_mut(k)) {
+                        *slot = v;
+                    }
+                }
+            }
+            reply
         };
         self.next_sync = self.refresh_ms().map(|ms| now + ms);
         self.queue(&reply);
