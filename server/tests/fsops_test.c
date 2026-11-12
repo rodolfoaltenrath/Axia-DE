@@ -126,7 +126,7 @@ int main(void) {
     CHECK(!fsops_rename(a, b, err, sizeof err));
     path(a, "box");
     path(b, "box2");
-    CHECK(fsops_rename(a, a, err, sizeof err) == -1);       /* it exists */
+    CHECK(!fsops_rename(a, a, err, sizeof err) && exists("box"));   /* the same name: nothing to do */
     CHECK(!fsops_rename(a, b, err, sizeof err));
     /* rename checks both sides itself, whatever its caller resolved, and never replaces a target */
     path(a, "box2/settings.json");
