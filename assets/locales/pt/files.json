@@ -318,5 +318,21 @@
   "rust.extensionBody": "Mudar a parte depois do ponto pode impedir que o arquivo abra no app correto.",
   "net.domain": "Domínio (se necessário)",
   "rust.networkBrowse": "Procurar na rede",
-  "rust.filename": "Nome do arquivo"
+  "rust.filename": "Nome do arquivo",
+  "transfer.title": "Transferências de arquivos",
+  "transfer.summary": "Transferências ({count} em andamento)",
+  "transfer.from": "De: {path}",
+  "transfer.to": "Para: {path}",
+  "transfer.size": "{done} de {total}",
+  "transfer.files": "Arquivos: {done} de {total}",
+  "transfer.speed": "Velocidade média: {speed}/s",
+  "transfer.scanning": "Calculando arquivos e tamanho…",
+  "transfer.copying": "Copiando arquivos",
+  "transfer.moving": "Movendo arquivos",
+  "transfer.syncing": "Finalizando a gravação…",
+  "transfer.cancelling": "Cancelando… aguardando o disco",
+  "transfer.cancelled": "Transferência cancelada",
+  "transfer.failed": "Não foi possível concluir",
+  "transfer.empty": "Nenhuma transferência em andamento.",
+  "transfer.hint": "Fechar esta janela mantém as transferências em andamento."
 }

@@ -647,5 +647,6 @@
   "files.networkFailed": "No se pudo conectar. Comprueba la dirección y la conexión de red.",
   "files.networkUnavailable": "Este servidor no proporcionó una carpeta. Comprueba que el soporte de carpetas de red de Fedora esté instalado.",
   "files.filenameEncoding": "Este nombre usa una codificación antigua. Cambia el nombre del archivo antes de abrirlo.",
-  "files.openFailed": "No se pudo abrir el archivo. Comprueba que haya una aplicación instalada para este tipo de archivo."
+  "files.openFailed": "No se pudo abrir el archivo. Comprueba que haya una aplicación instalada para este tipo de archivo.",
+  "fs.sourceChanged": "El origen cambió durante la transferencia. Se conservó el original; inténtalo de nuevo cuando deje de cambiar."
 }

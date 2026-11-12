@@ -318,5 +318,21 @@
   "rust.extensionBody": "Changing the part after the dot may prevent the file from opening in the right app.",
   "net.domain": "Domain (if needed)",
   "rust.networkBrowse": "Browse network",
-  "rust.filename": "File name"
+  "rust.filename": "File name",
+  "transfer.title": "File transfers",
+  "transfer.summary": "Transfers ({count} running)",
+  "transfer.from": "From: {path}",
+  "transfer.to": "To: {path}",
+  "transfer.size": "{done} of {total}",
+  "transfer.files": "Files: {done} of {total}",
+  "transfer.speed": "Average speed: {speed}/s",
+  "transfer.scanning": "Calculating files and size…",
+  "transfer.copying": "Copying files",
+  "transfer.moving": "Moving files",
+  "transfer.syncing": "Finishing writing to disk…",
+  "transfer.cancelling": "Cancelling… waiting for the disk",
+  "transfer.cancelled": "Transfer cancelled",
+  "transfer.failed": "Could not complete transfer",
+  "transfer.empty": "No transfers in progress.",
+  "transfer.hint": "Closing this window keeps transfers running."
 }

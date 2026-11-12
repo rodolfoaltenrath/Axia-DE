@@ -647,5 +647,6 @@
   "files.networkFailed": "Could not connect. Check the address and your network connection.",
   "files.networkUnavailable": "This server did not provide a folder. Check that Fedora network folder support is installed.",
   "files.filenameEncoding": "This name uses an older encoding. Rename the file before opening it.",
-  "files.openFailed": "Could not open this file. Check that an app for this file type is installed."
+  "files.openFailed": "Could not open this file. Check that an app for this file type is installed.",
+  "fs.sourceChanged": "The source changed during the transfer. The original was kept; try again after it stops changing."
 }

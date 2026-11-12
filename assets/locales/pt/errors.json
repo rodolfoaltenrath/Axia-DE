@@ -647,5 +647,6 @@
   "files.networkFailed": "Não foi possível conectar. Confira o endereço e a conexão de rede.",
   "files.networkUnavailable": "Esse servidor não disponibilizou uma pasta. Confira se o suporte a pastas de rede está instalado no Fedora.",
   "files.filenameEncoding": "Este nome usa uma codificação antiga. Renomeie o arquivo antes de abri-lo.",
-  "files.openFailed": "Não foi possível abrir o arquivo. Confira se há um aplicativo instalado para esse tipo de arquivo."
+  "files.openFailed": "Não foi possível abrir o arquivo. Confira se há um aplicativo instalado para esse tipo de arquivo.",
+  "fs.sourceChanged": "A origem foi alterada durante a transferência. O original foi mantido; tente novamente quando ele parar de mudar."
 }

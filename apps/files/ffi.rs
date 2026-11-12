@@ -5,7 +5,7 @@ use super::{
 };
 use serde_json::{json, Value};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, CStr, CString};
 use std::path::Path;
 
@@ -21,6 +21,9 @@ struct App {
     shared: Shared,
     sequence: u64,
     delivery: u64,
+    transfer_sent: HashMap<u64, Value>,
+    // A transfer window keeps its originating session alive after browsing closes.
+    orphaned: HashSet<u64>,
 }
 thread_local! {static APP:RefCell<App>=RefCell::new(App::default());}
 impl App {
@@ -111,12 +114,43 @@ impl App {
         let Some(mut session) = self.sessions.remove(&id) else {
             return json!({"error":"sys.badArgument"});
         };
+        if op == "transferClose" {
+            session.transfer_open = false;
+            self.transfer_sent.remove(&id);
+            if !self.orphaned.remove(&id) {
+                self.sessions.insert(id, session);
+            }
+            return Value::Null;
+        }
+        if op == "transferAttach" || op == "transferPoll" || op == "transferEvent" {
+            session.transfer_open = true;
+            if args["theme"].is_object() {
+                session.theme = crate::native_style::files_theme(&args["theme"]);
+            }
+            if op == "transferEvent" {
+                session.transfer_action(
+                    args["action"][0].as_str().unwrap_or(""),
+                    args["action"][1].as_i64().unwrap_or(0) as i32,
+                );
+            }
+            session.poll_transfers(&self.shared);
+            let reply = json!({"tree":session.transfers_view(),"appearance":session.theme,
+                "chrome":crate::native_style::frame(&session.theme),"title":{"key":"files.transfer.title"}});
+            let changed = op == "transferAttach" || self.transfer_sent.get(&id) != Some(&reply);
+            if changed {
+                self.transfer_sent.insert(id, reply.clone());
+            }
+            self.sessions.insert(id, session);
+            return if changed { reply } else { Value::Null };
+        }
         if op == "close" {
             session.flush_zoom(&self.shared);
             self.sent.remove(&id);
-            session
-                .generation
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            session.close_browser();
+            if session.transfer_open {
+                self.orphaned.insert(id);
+                self.sessions.insert(id, session);
+            }
             return Value::Null;
         }
         if op == "event" {
@@ -386,6 +420,53 @@ mod tests {
         let mut app = App::default();
         assert!(app.request(&json!({"op":"event","id":123}))["error"].is_string());
         assert!(app.sessions.is_empty());
+    }
+    #[test]
+    fn transfer_window_survives_its_browser_and_releases_the_session_on_close() {
+        let home = super::super::tests::Home::new();
+        let source = home.file("clip.mp4", "video data");
+        let mut app = App::default();
+        let first = app.request(&json!({"op":"create","args":{"path":home.path("")}}));
+        let id = first["id"].as_u64().unwrap();
+        app.shared.clipboard = vec![source];
+        let started = app.request(&json!({"op":"event","id":id,"action":["paste"]}));
+        assert!(started["effects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "transferWindow"));
+        let window = app.request(&json!({"op":"transferPoll","id":id}));
+        assert_eq!(window["title"]["key"], "files.transfer.title");
+        let (reply, prompt) = std::sync::mpsc::channel();
+        app.sessions.get_mut(&id).unwrap().auth = Some(reply);
+        app.request(&json!({"op":"close","id":id}));
+        assert_eq!(prompt.recv().unwrap()["cancel"], true);
+        assert!(app.sessions.contains_key(&id));
+        assert!(app.orphaned.contains(&id));
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            app.request(&json!({"op":"transferPoll","id":id}));
+            if app.sessions[&id]
+                .jobs()
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|j| j["done"] == true)
+            {
+                break;
+            }
+            assert!(std::time::Instant::now() < until);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(ops::jobs().is_empty());
+        app.request(&json!({"op":"transferPoll","id":id}));
+        let reattached = app.request(&json!({"op":"transferAttach","id":id}));
+        assert!(
+            reattached["tree"].is_object(),
+            "mounting always receives a full snapshot"
+        );
+        app.request(&json!({"op":"transferClose","id":id}));
+        assert!(app.sessions.is_empty() && app.transfer_sent.is_empty() && app.orphaned.is_empty());
     }
     #[test]
     fn icon_has_vector_geometry_without_emoji() {

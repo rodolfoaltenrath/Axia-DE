@@ -2,14 +2,14 @@
 // icons; Files retains its own shared browser/dialog renderer until its next stage.
 import { createElement as h } from 'react';
 import { useAppWindow } from './components.jsx';
-import { RustFiles, RustFileIcon } from './rustfiles.js';
+import { RustFiles, RustFileIcon, RustTransfers } from './rustfiles.js';
 import { registerPrivacySection } from './privacy.js';
 import { NativeView } from './nativeview.js';
 
 export function nativeApp(manifest) {
   if (manifest.nativeView === 'files') {
     return { ...manifest, system: true, native: true,
-      Component: function FilesHost() { const { args } = useAppWindow(); return h(RustFiles, { mode: manifest.mode, args }); },
+      Component: function FilesHost() { const { args } = useAppWindow(); return args?.transferOwner ? h(RustTransfers, { owner: args.transferOwner }) : h(RustFiles, { mode: manifest.mode, args }); },
       Icon: RustFileIcon };
   }
   if (manifest.nativeView !== 'rust') throw new Error('Unsupported compiled app view: ' + manifest.id);

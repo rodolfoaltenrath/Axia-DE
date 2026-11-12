@@ -129,6 +129,44 @@ pub fn icon(name: &str, size: f64) -> Value {
     }
     view(json!({"width":size,"height":size,"flexShrink":0}), children)
 }
+// Buffered writes can reach the byte total before fsync and publication finish.
+// Reserve 100% for a successfully completed operation, including zero-byte jobs.
+fn transfer_percent(job: &Value) -> u64 {
+    if job["done"] == true && job["failed"] != true && job["cancel"] != true {
+        return 100;
+    }
+    let total = job["total"].as_u64().unwrap_or(0);
+    let bytes = job["bytes"].as_u64().unwrap_or(0);
+    if total > 0 {
+        (bytes as u128 * 100 / total as u128).min(99) as u64
+    } else {
+        0
+    }
+}
+
+#[cfg(test)]
+mod transfer_tests {
+    use super::*;
+    #[test]
+    fn only_successfully_published_transfers_reach_one_hundred_percent() {
+        assert_eq!(transfer_percent(&json!({"bytes":50,"total":200})), 25);
+        assert_eq!(
+            transfer_percent(&json!({"bytes":200,"total":200,"phase":"syncing"})),
+            99
+        );
+        assert_eq!(transfer_percent(&json!({"bytes":250,"total":200})), 99);
+        assert_eq!(
+            transfer_percent(&json!({"bytes":200,"total":200,"done":true,"failed":true})),
+            99
+        );
+        assert_eq!(
+            transfer_percent(&json!({"bytes":200,"total":200,"done":true,"cancel":true})),
+            99
+        );
+        assert_eq!(transfer_percent(&json!({"total":0})), 0);
+        assert_eq!(transfer_percent(&json!({"total":0,"done":true})), 100);
+    }
+}
 fn entry_icon(s: &Session, e: &Entry, size: f64, thumb: bool) -> Value {
     if thumb && !e.dir && kind(&e.name) == "pdf" {
         if let Some(image) = s.pdf_thumbnails.get(e) {
@@ -856,6 +894,135 @@ impl Session {
             list
         }
     }
+    /// Separate Files-owned window, so browsing stays available during copies.
+    pub fn transfers_view(&self) -> Value {
+        let mut cards = Vec::new();
+        for job in self.jobs().as_array().into_iter().flatten() {
+            let done = job["done"] == true;
+            let failed = job["failed"] == true;
+            let cancelled = job["cancel"] == true;
+            let phase = job["phase"].as_str().unwrap_or("scanning");
+            let copied = job["bytes"].as_u64().unwrap_or(0);
+            let total = job["total"].as_u64().unwrap_or(0);
+            let percent = transfer_percent(job);
+            let status = if cancelled && !done {
+                "files.transfer.cancelling"
+            } else {
+                match phase {
+                    "scanning" => "files.transfer.scanning",
+                    "syncing" => "files.transfer.syncing",
+                    "complete" => "files.rust.completed",
+                    "cancelled" => "files.transfer.cancelled",
+                    "failed" => "files.transfer.failed",
+                    "moving" => "files.transfer.moving",
+                    _ if job["move"] == true => "files.transfer.moving",
+                    _ => "files.transfer.copying",
+                }
+            };
+            let accent = if failed && !cancelled {
+                "#e66161".into()
+            } else {
+                color(self, "accent", "#3584e4")
+            };
+            let text_style = json!({"fontSize":12,"color":dim(self),"whiteSpace":"nowrap","textOverflow":"ellipsis","overflow":"hidden","numberOfLines":1,"minWidth":0});
+            let mut content = vec![
+                view(
+                    json!({"flexDirection":"row","alignItems":"center","gap":12}),
+                    vec![
+                        label(
+                            tr(status),
+                            json!({"fontSize":14,"fontWeight":600,"color":txt(self),"flex":1}),
+                        ),
+                        label(
+                            if phase == "scanning" {
+                                json!("…")
+                            } else {
+                                json!(format!("{percent}%"))
+                            },
+                            json!({"fontSize":22,"fontWeight":600,"color":txt(self)}),
+                        ),
+                    ],
+                ),
+                label(
+                    json!({"key":"files.transfer.from","params":{"path":job["src"]}}),
+                    text_style.clone(),
+                ),
+                label(
+                    json!({"key":"files.transfer.to","params":{"path":job["dst"]}}),
+                    text_style.clone(),
+                ),
+                view(
+                    json!({"height":9,"borderRadius":5,"backgroundColor":color(self,"separator","#45454c"),"overflow":"hidden","flexShrink":0}),
+                    vec![view(
+                        json!({"width":format!("{percent}%"),"height":9,"borderRadius":5,"backgroundColor":accent}),
+                        vec![],
+                    )],
+                ),
+                label(
+                    json!({"key":"files.transfer.size","params":{"done":bytes(copied),"total":bytes(total)}}),
+                    text_style.clone(),
+                ),
+                label(
+                    json!({"key":"files.transfer.files","params":{"done":job["files"],"total":job["total_files"]}}),
+                    text_style.clone(),
+                ),
+            ];
+            if let Some(name) = job["current"].as_str().filter(|s| !s.is_empty()) {
+                content.push(label(json!(name), text_style.clone()));
+            }
+            if !done && phase != "scanning" {
+                let rate = job["bytes_per_second"].as_f64().unwrap_or(0.).max(0.) as u64;
+                content.push(label(
+                    json!({"key":"files.transfer.speed","params":{"speed":bytes(rate)}}),
+                    text_style,
+                ));
+            }
+            if failed && !cancelled {
+                content.push(label(
+                    json!({"error":job["error"]}),
+                    json!({"fontSize":12,"color":"#e66161"}),
+                ));
+            }
+            content.push(view(
+                json!({"flexDirection":"row","justifyContent":"flex-end"}),
+                vec![button(
+                    tr(if done {
+                        "files.rust.dismiss"
+                    } else {
+                        "shell.picker.cancel"
+                    }),
+                    json!([if done { "jobForget" } else { "jobCancel" }, job["id"]]),
+                    cancelled && !done,
+                )],
+            ));
+            let mut card = view(
+                json!({"padding":18,"gap":9,"borderRadius":10,"backgroundColor":color(self,"control","#303037"),"border":format!("1px solid {}",color(self,"separator","#45454c")),"flexShrink":0}),
+                content,
+            );
+            card["key"] = json!(format!("transfer-{}", job["id"]));
+            cards.push(card);
+        }
+        if cards.is_empty() {
+            cards.push(label(
+                tr("files.transfer.empty"),
+                json!({"fontSize":13,"color":dim(self),"padding":24}),
+            ));
+        }
+        view(
+            json!({"flex":1,"minHeight":0,"backgroundColor":color(self,"windowBg","#202025")}),
+            vec![
+                node(
+                    "scroll",
+                    json!({"flex":1,"minHeight":0}),
+                    vec![view(json!({"padding":14,"gap":12}), cards)],
+                ),
+                label(
+                    tr("files.transfer.hint"),
+                    json!({"fontSize":11,"color":dim(self),"paddingHorizontal":18,"paddingVertical":10,"flexShrink":0}),
+                ),
+            ],
+        )
+    }
     fn footer(&self) -> Value {
         let shown = self.filtered().len();
         let selected = self.tab().selected.len();
@@ -876,33 +1043,13 @@ impl Session {
                 json!({"fontSize":11,"color":dim(self)}),
             ));
         }
-        if let Some(jobs) = self.jobs().as_array() {
-            for job in jobs.iter().take(2) {
-                children.push(label(
-                    json!(format!(
-                        "{} / {}",
-                        bytes(job["bytes"].as_u64().unwrap_or(0)),
-                        bytes(job["total"].as_u64().unwrap_or(0))
-                    )),
-                    json!({"fontSize":11,"color":dim(self)}),
-                ));
-                children.push(button(
-                    tr(if job["done"] == true {
-                        "files.rust.dismiss"
-                    } else {
-                        "shell.picker.cancel"
-                    }),
-                    json!([
-                        if job["done"] == true {
-                            "jobForget"
-                        } else {
-                            "jobCancel"
-                        },
-                        job["id"]
-                    ]),
-                    false,
-                ));
-            }
+        if let Some(jobs) = self.jobs().as_array().filter(|jobs| !jobs.is_empty()) {
+            let active = jobs.iter().filter(|j| j["done"] == false).count();
+            children.push(button(
+                json!({"key":"files.transfer.summary","params":{"count":active}}),
+                action("showTransfers"),
+                false,
+            ));
         }
         view(
             json!({"height":27,"flexShrink":0,"paddingHorizontal":10,"flexDirection":"row","alignItems":"center","gap":10,"borderTop":format!("1px solid {}",color(self,"separator","#38383e"))}),
