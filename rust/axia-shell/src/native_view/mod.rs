@@ -6,9 +6,10 @@
 //! clipboard). The compositor delivers pointer events here before JS sees them
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
+pub mod icons;
 pub mod i18n;
-mod icons;
 mod shell_icons;
+pub mod paint;
 pub mod style;
 #[cfg(test)]
 mod tests;
@@ -22,36 +23,41 @@ use std::{
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
+    /// Resource roots supplied by the host, including user language packs.
+    fn resources(&mut self, _assets: &str, _home: Option<&str>) {}
+    /// An app may vary its refresh cadence with its current page and state.
+    fn refresh_ms(&self) -> Option<f64> { None }
     fn request(&mut self, input: &Value) -> Value;
     fn pixels(&self, _id: &str) -> Option<(usize, usize, &[u8])> {
+        None
+    }
+    /// Optional window-level keyboard input (e.g. Calculator). Fields keep
+    /// their existing editing path; None leaves the key with the shell.
+    fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
         None
     }
 }
 pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
+        crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
+        crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App)),
+        crate::native_apps::help::ID => Some(Box::new(crate::help::App::default())),
+        crate::native_apps::clock::ID => Some(Box::new(crate::clock_app::App::default())),
+        crate::native_apps::characters::ID => Some(Box::new(crate::characters::App::default())),
+        crate::native_apps::about::ID => Some(Box::new(crate::about::App::default())),
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
-        crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
-        crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App::default())),
+        crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
         "shell:dock-launcher" => Some(Box::new(shell_icons::Icon::Launcher)),
         "shell:dock-trash" => Some(Box::new(shell_icons::Icon::Trash)),
         _ => None,
     }
 }
-impl NativeApp for crate::calculator::App {
-    fn request(&mut self, input: &Value) -> Value {
-        Self::request(self, input)
-    }
-}
-impl NativeApp for crate::forcequit::App {
-    fn request(&mut self, input: &Value) -> Value {
-        Self::request(self, input)
-    }
-}
-impl NativeApp for crate::appabout::App {
-    fn request(&mut self, input: &Value) -> Value {
-        Self::request(self, input)
-    }
+/// The icon tree a native-view app draws for itself (another app can show it).
+pub fn icon_tree(id: &str, size: f64) -> Option<Value> {
+    let mut app = app(id)?;
+    let tree = app.request(&serde_json::json!({"cmd":"icon","size":size}));
+    (!tree.is_null()).then_some(tree)
 }
 #[derive(Default)]
 struct Registry {
@@ -165,10 +171,12 @@ pub unsafe extern "C" fn axia_view_paste(handle: u32, value: *const c_char) {
 pub extern "C" fn axia_view_text(handle: u32) -> *mut c_char {
     with_host(handle, |h| owned(h.text())).unwrap_or(std::ptr::null_mut())
 }
-/// Label lookup for accessibility/automation; IDs are valid only while mounted.
+/// A mounted caption's node, bounded to this view (0 if absent).
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_find_text(handle: u32, label: *const c_char) -> i32 {
-    with_host(handle, |h| h.find_text(text(label))).unwrap_or(0)
+    let label = text(label);
+    if label.len() > 65536 { return 0; }
+    with_host(handle, |h|h.find_text(label)).unwrap_or(0)
 }
 fn handles() -> Vec<u32> {
     with(|r| r.hosts.keys().copied().collect())

@@ -172,15 +172,19 @@ EOF
     if have node; then run "netmodel-test (sdk/netmodel.js)" node tests/netmodel_test.mjs
     else skip "netmodel-test" "node"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.js): GPU layers, CPU reasons, Compatibility
-    if have node; then run "sysinfo-model-test (apps/sysinfo/model.js)" node tests/sysinfo_model_test.mjs
-    else skip "sysinfo-model-test" "node"; fi
+    if have node && have cargo; then
+        run "app-model-test-adapter" cargo build --manifest-path ../rust/Cargo.toml --locked --offline --example app-model
+        run "sysinfo-model-test (Rust checks and apps/sysinfo/model.js)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_model_test.mjs
+        if [ -d ../node_modules/esbuild ]; then run "app-model-bridge-test" node tests/app_model_bridge_test.mjs
+        else skip "app-model-bridge-test" "node_modules/esbuild"; fi
+    else skip "sysinfo-model-test" "node and cargo"; fi
     # (0.8.6) LordBench's model (apps/sysinfo/perf.js): references, verdicts, comparisons
-    if have node; then run "sysinfo-perf-test (apps/sysinfo/perf.js)" node tests/sysinfo_perf_test.mjs
-    else skip "sysinfo-perf-test" "node"; fi
+    if have node && have cargo; then run "sysinfo-perf-test (Rust benchmark model)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_perf_test.mjs
+    else skip "sysinfo-perf-test" "node and cargo"; fi
     # (0.8.7) community hardware reports: the schema, Share on GitHub (apps/sysinfo/share.js), the workflow's
     # checks (tools/hwreport/lib.mjs), the catalogue and its snapshot, the Compatibility panel's community data
-    if have node; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node tests/hwreport_test.mjs
-    else skip "hwreport-test" "node"; fi
+    if have node && have cargo; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node --import ./tests/native_app_model_node.mjs tests/hwreport_test.mjs
+    else skip "hwreport-test" "node and cargo"; fi
     # (0.8.6) runtime/index.js's skip of unchanged styles sends the same lord.* calls as without it
     if have node && [ -d ../node_modules/esbuild ] && [ -d ../node_modules/react-reconciler ]; then
         run "runtime-props-test (runtime/index.js)" node tests/runtime_props_test.mjs

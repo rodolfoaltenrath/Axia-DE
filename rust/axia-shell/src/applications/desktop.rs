@@ -533,6 +533,14 @@ pub(super) fn list(lang: &[u8]) -> Vec<DesktopApp> {
         c.apps.clone()
     })
 }
+/// Reads the current list without copying it (each entry holds kilobytes of buffers).
+pub(super) fn with_list<T>(lang: &[u8], f: impl FnOnce(&[DesktopApp]) -> T) -> T {
+    CATALOG.with(|c| {
+        let mut c = c.borrow_mut();
+        refresh(&mut c, lang);
+        f(&c.apps)
+    })
+}
 pub(super) fn find(id: &[u8]) -> Option<DesktopApp> {
     if !id_valid(id) {
         return None;

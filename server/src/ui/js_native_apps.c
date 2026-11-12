@@ -1,4 +1,4 @@
-/* App-owned state and widget trees stay in Rust; this bridge owns only QuickJS handles. */
+/* Rust session app control and compiled-app metadata; QuickJS owns only handles. */
 #include "js_native_apps.h"
 #include <stdio.h>
 #include <string.h>

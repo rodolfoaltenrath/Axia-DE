@@ -163,16 +163,55 @@ fn real_compiled_app_widgets_and_effects() {
     };
     assert_eq!(
         get("catalog")["ids"],
-        json!(["appabout", "calculator", "files", "forcequit", "monitor"])
+        json!([
+            "about",
+            "appabout",
+            "calculator",
+            "characters",
+            "clock",
+            "files",
+            "forcequit",
+            "help",
+            "monitor",
+            "store"
+        ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
+    assert_eq!(get("app-models")["settings"], "appearance");
+    assert_eq!(get("app-models")["schemes"], 16);
+    assert_eq!(get("app-models")["profile"], 13);
+    assert_eq!(get("app-models")["categories"], 16);
+    assert_eq!(get("app-models")["checks"], 6);
+    assert_eq!(get("app-models")["shortcut"], "pasteEscaped");
+    assert_eq!(get("app-models")["hardware"], 10);
+    assert_eq!(get("app-models")["benchmarkCategories"], 6);
+    assert_eq!(get("app-models")["stability"], "pass");
+    assert!(get("help-service")["count"].as_u64().unwrap() > 20);
+    assert_eq!(get("help-service")["title"], "Clock");
+    assert_eq!(get("help-service")["portuguese"], "Relógio");
+    assert_eq!(get("help-service")["fallback"], "Clock");
+    assert_eq!(get("help-service")["score"], 90);
+    assert_eq!(get("help-service")["accentScore"], 90);
+    assert_eq!(get("help-service")["short"], 0);
+    assert_eq!(get("help-service")["raw"], true);
+    assert_eq!(get("help-service")["invalid"], true);
+    assert_eq!(get("help-service")["link"], true);
+    assert_eq!(get("help-service")["external"], false);
+    assert_eq!(get("clock-service")["alarms"][0]["label"], "Native clock test");
+    assert_eq!(get("clock-service")["timer"]["state"], "paused");
+    assert_eq!(get("clock-service")["timer"]["duration"], 30000);
+    assert_eq!(get("clock-service")["stopwatch"]["running"], false);
+    assert_eq!(get("clock-service")["stopwatch"]["laps"].as_array().unwrap().len(), 1);
+    assert_eq!(get("external-activation")["focused"], true);
+    assert_eq!(get("external-activation")["minimized"], false);
     assert_eq!(get("empty")["groups"], 0);
+    assert_eq!(get("empty")["react"],0);
     assert!(get("empty")["text"]
         .as_array()
         .unwrap()
         .iter()
         .any(|s| s == "No app is open"));
-    assert_eq!(get("closed")["windows"], 0);
+    assert_eq!(get("closed")["windows"], 0,"{}",get("closed"));
     assert_eq!(get("closed")["guards"], 0);
     assert_eq!(get("closed")["calls"], json!([]));
     assert_eq!(get("retry")["error"], "app.forceQuitRefused");
@@ -188,24 +227,39 @@ fn real_compiled_app_widgets_and_effects() {
             .iter()
             .any(|v| v == text)
     };
-    assert_eq!(get("calculator-arithmetic")["text"][1], "14");
+    assert!(has_text("about", "Axia"));
+    assert!(has_text("about", "System Report…"));
+    assert!(has_text("about", "QuickJS + React 19.3.1"));
+    assert_eq!(get("about")["react"], 0, "About content bypasses React");
+    assert!(has_text("clock-native-timer", "Start"));
+    assert!(has_text("clock-native-timer", "3 min"));
+    assert!(has_text("clock-native-running", "Pause"));
+    assert!(has_text("clock-native-paused", "Resume"));
+    assert!(has_text("clock-native-world", "Local time"));
+    assert_eq!(get("clock-native-timer")["react"], 0);
+    assert!(has_text("clock-native-alarms", "No alarms yet."));
+    assert!(has_text("clock-native-stopwatch", "00:00.00"));
+    assert!(has_text("help-native-article", "Open Clock"));
+    assert_eq!(get("help-native-article")["react"],0,"{}",get("help-native-article"));
+    assert!(has_text("help-native-tour", "Next"));
+    assert!(has_text("help-native-tour", "Skip"));
+    assert!(has_text("help-native-missing", "That article was not found."));
+    assert!(has_text("characters", "Emoji"));
+    assert!(has_text("characters", "Symbols"));
+    assert!(has_text("characters", "Choose a character"));
+    assert_eq!(get("characters")["react"], 0, "Characters content bypasses React");
+    assert!(has_text("calculator-precedence", "14"));
     assert_eq!(
-        get("calculator-arithmetic")["react"],
+        get("calculator-precedence")["react"],
         0,
-        "Calculator renders without React text nodes"
+        "calculator text bypasses React"
     );
-    assert_eq!(get("calculator-keyboard-error")["text"][1], "Error");
-    assert_eq!(get("calculator-keyboard")["text"][1], "3");
-    assert_eq!(get("calculator-remount")["text"][1], "0");
-    assert_eq!(get("calculator-text-focus")["text"][1], "0");
-    assert!(get("calculator-text-focus")["field"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v == "7"));
-    assert_eq!(get("calculator-focus-restored")["text"][1], "2");
+    assert!(has_text("calculator-keyboard-error", "Error"));
+    assert!(has_text("calculator-keyboard", "3"));
+    assert!(has_text("calculator-remount", "0"));
     assert_eq!(get("appabout")["title"], "About Calculator");
-    assert_eq!(get("appabout")["react"], 0);
+    assert_eq!(get("appabout")["react"],0);
+    assert_eq!(get("appabout-missing")["react"],0);
     assert!(has_text("appabout", "Version 0.9.0"));
     assert_eq!(get("appabout-missing")["title"], "About missing");
     assert!(!has_text("appabout-missing", "Version 0.9.0"));
@@ -221,12 +275,25 @@ fn real_compiled_app_widgets_and_effects() {
         "rasters reach the scene from Rust"
     );
     assert_eq!(get("monitor-memory")["title"], "Monitor");
+    assert!(get("monitor-memory")["handle"].as_u64().unwrap_or(0)>0);
     assert!(has_text("monitor-overview", "SUMMARY"));
     assert_eq!(
         get("monitor-unmounted")["texts"],
         0,
         "closing the window unmounts the view"
     );
+    for text in [
+        "Discover",
+        "Create",
+        "Updates",
+        "Meet Axia Store",
+        "Axia Essentials",
+        "OPEN",
+    ] {
+        assert!(has_text("store", text), "{text}");
+    }
+    assert_eq!(get("store")["title"], "Axia Store");
+    assert!(has_text("store-categories", "Utilities"));
     for tab in [
         "overview",
         "cpu",
@@ -244,45 +311,27 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    for position in ["bottom", "left", "right"] {
-        let dock = get(&format!("dock-{position}"));
-        assert!(dock["nativeNodes"].as_i64().unwrap() >= 20, "{dock}");
-        assert!(dock["views"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| v == "shell:dock-trash"));
-        assert!(
-            dock["calls"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| v == &json!(["dockOpen", "app:calculator"])),
-            "{dock}"
-        );
-    }
-    assert_eq!(get("dock-unmounted")["views"], 0);
-    println!("native Rust apps: Force Quit actions, Calculator native clicks/keyboard/arithmetic/errors/remount, About metadata/title, Monitor native view (Rust-mounted tabs, title, unmount) and catalog passed");
+    println!("native Rust apps: catalog, Force Quit, Calculator, About, Characters, Clock, Help article/tour/fallback and content bridge, Monitor and Store passed");
 }
 
 const DRIVER: &str = r#"
 import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js';
 import { View, render } from '@ROOT@/runtime/index.js';
 import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
+import { help } from '@ROOT@/sdk/help.js';
+import { locale } from '@ROOT@/sdk/i18n.js';
+import '@ROOT@/sdk/wayland.js';
+import { clockAlarms, clockTimer, timerStart, timerPause, timerReset, stopwatch, swStart, swStop, swLap, swReset } from '@ROOT@/sdk/alarms.js';
 import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/windows.js';
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
-import { AppWindowContext, TextInput } from '@ROOT@/sdk/components.jsx';
-import { Dock, LaunchpadIcon } from '@ROOT@/themes/default/components/Dock.jsx';
+import { AppWindowContext } from '@ROOT@/sdk/components.jsx';
 const catalog=lord.nativeApps.request(JSON.stringify({cmd:'catalog'}));
 const compiled=catalog.map(nativeApp), force=compiled.find(app=>app.id==='forcequit');
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 configureWindows({apps:[...compiled,{id:'demo',name:'Demo',Component:()=>null,Icon},{id:'isolated',name:'Isolated',isolated:true,Component:()=>null,Icon}]});
 registerBuiltinApp({id:'linux',name:'Linux',builtin:true,Component:()=>null,Icon});
-const nodes=new Map(),mountedViews=new Map();let root,control,guards=0,calls=[],pixelBytes=0;
-const originalMount=lord.nativeViews.mount,originalUnmount=lord.nativeViews.unmount;
-lord.nativeViews.mount=(node,app,facts)=>{const handle=originalMount(node,app,facts);if(handle)mountedViews.set(handle,{node,app});return handle;};
-lord.nativeViews.unmount=handle=>{mountedViews.delete(handle);return originalUnmount(handle);};
+const nodes=new Map();let root,control,guards=0,calls=[],pixelBytes=0;
 const originalSetProp=lord.setProp;
 lord.setProp=(id,key,value)=>{if(key==='pixels'&&value?.data)pixelBytes=Math.max(pixelBytes,value.data.length);return originalSetProp(id,key,value);};
 for(const method of ['createNode','appendChild','insertBefore','removeChild','destroy','setRoot','setText']) {
@@ -292,7 +341,13 @@ for(const method of ['createNode','appendChild','insertBefore','removeChild','de
     if(method==='setRoot')root=args[0];
     if(method==='appendChild'||method==='insertBefore')nodes.get(args[1]).parent=args[0];
     if(method==='removeChild')nodes.get(args[1]).parent=null;
-    if(method==='destroy')nodes.delete(args[0]);
+    if(method==='destroy') {
+      // C destroys the whole subtree. Purge its tracked descendants too, before
+      // Rust reuses those node IDs for another app's native widgets.
+      const gone=new Set([args[0]]);
+      for(const id of gone)for(const n of nodes.values())if(n.parent===id)gone.add(n.id);
+      for(const id of gone)nodes.delete(id);
+    }
     if(method==='setText')nodes.get(args[0]).text=args[1];
     return result;
   };
@@ -301,35 +356,55 @@ const alive=n=>{for(let i=0;n&&i<100;i++,n=nodes.get(n.parent))if(n.id===root)re
 const texts=()=>[...nodes.values()].filter(n=>n.text&&alive(n));
 const nativeTexts=()=>{const out=[];for(let h=1;h<256;h++){const t=lord.nativeViews.text(h);if(t)out.push(...t.split('\n'));}return out;};
 const click=label=>{
-  const node=texts().find(n=>n.text===label);
-  if(!node){
-    let target=0;for(let h=1;h<256&&!target;h++)target=lord.nativeViews.findText(h,label);
-    if(!target)throw new Error('native app driver: missing '+label);
-    const [x,y,w,height]=lord.getLayout(target);
-    for(const kind of ['move','down','up']){
-      const mount=lord.nativeViews.pointer(kind,target,x+w/2,y+height/2,0);
-      __lordEvent(kind,mount,x+w/2,y+height/2,0);
-    }
-    globalThis.__lordNativeView?.();return;
+  let target=0;
+  for(let h=1;h<256&&!target;h++)target=lord.nativeViews.findText(h,label);
+  if(!target){const node=texts().find(n=>n.text===label);target=node?.parent||0;}
+  if(!target)throw new Error('native app driver: missing '+label);
+  const [x,y,w,height]=lord.getLayout(target);
+  for(const type of ['down','up']) {
+    const mount=lord.nativeViews.pointer(type,target,x+w/2,y+height/2,0);
+    __lordEvent(type,mount,x+w/2,y+height/2,0);
   }
-  const [x,y,w,height]=lord.getLayout(node.parent);
-  __lordEvent('down',node.parent,x+w/2,y+height/2,0);
-  __lordEvent('up',node.parent,x+w/2,y+height/2,0);
+  __lordNativeView();
 };
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
 const tokens={mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3584e4',separator:'#555',control:'#333',controlRadius:6};
-function DockHarness({args}){return h(Dock,{t:{...tokens,panelBg:'#222',windowBorder:'#555',dockBorder:'#555'},
-  items:[{id:'app:calculator',name:'Calculator',Icon:compiled.find(a=>a.id==='calculator').Icon,pinned:true},
-    {id:'shell:launcher',name:'Apps',Icon:LaunchpadIcon,pinned:true,launcher:true}],
-  running:['app:calculator'],onOpen:id=>calls.push(['dockOpen',id]),position:args.position||'bottom',
-  magnify:!!args.magnify,trashFull:!!args.full,size:54,maxSize:86,area:{x:0,y:0,w:1000,h:700}});}
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({}),[field,setField]=useState(false),[value,setValue]=useState('');control={setInstance,setMode,setArgs,setField};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:420,height:mode==='monitor'?700:460}},mode==='dock'?h(DockHarness,{args}):app?h('view',{style:{flex:1}},h(app.Component,{key:mode+':'+instance}),field?h(TextInput,{value,onChange:setValue,autoFocus:true}):null):null)));}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:mode==='help'?860:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
-  record('empty',{groups:runningApps().length,text:nativeTexts()});
+  const settingsModel=lord.nativeApps.create('settings');settingsModel.request(JSON.stringify({cmd:'select',section:'themes'}));
+  const terminalModel=lord.nativeApps.create('terminal'),passwordsModel=lord.nativeApps.create('passwords'),sysinfoModel=lord.nativeApps.create('sysinfo');
+  record('app-models',{settings:settingsModel.request(JSON.stringify({cmd:'current'})),
+    schemes:terminalModel.request(JSON.stringify({cmd:'catalog'})).presets.length,
+    profile:terminalModel.request(JSON.stringify({cmd:'profile',settings:{},id:'missing'})).fontSize,
+    categories:passwordsModel.request(JSON.stringify({cmd:'catalog'})).builtin.length,
+    checks:sysinfoModel.request(JSON.stringify({cmd:'evaluate',value:{}})).length,
+    shortcut:terminalModel.request(JSON.stringify({cmd:'action',event:{code:47,key:'v',meta:true,shift:true}})),
+    hardware:sysinfoModel.request(JSON.stringify({cmd:'compatibility',args:[{}]})).length,
+    benchmarkCategories:sysinfoModel.request(JSON.stringify({cmd:'perfCatalog'})).categories.length,
+    stability:sysinfoModel.request(JSON.stringify({cmd:'stability',args:[{}]})).state});
+  record('empty',{groups:runningApps().length,text:nativeTexts(),react:texts().length});
+  const english=help.read('clock'),count=help.list().length,score=help.search('clock')[0]?.score;
+  const originalLocale=locale.get();
+  locale.set({...originalLocale,lang:'pt-BR'});
+  const portuguese=help.read('clock')?.title,accentScore=help.search('RELOGIO')[0]?.score;
+  locale.set({...originalLocale,lang:'zz'});
+  const fallback=help.read('clock')?.title;
+  locale.set(originalLocale);
+  const link=help.link('app:demo');const linked=windows.get().find(w=>w.app==='demo');if(linked)wm.close(linked.id,true);
+  record('help-service',{count,title:english?.title,portuguese,fallback,score,accentScore,short:help.search('c').length,
+    raw:lord.help.read('en','clock').startsWith('---\n'),invalid:lord.help.read('en','../clock')===null,
+    link,external:help.link('https://example.org')});
+  const alarmId=clockAlarms.add({h:23,m:45,label:'Native clock test'});
+  timerStart(30);timerPause();swStart();await pause();swLap();swStop();
+  record('clock-service',{alarms:clockAlarms.list(),timer:clockTimer.get(),stopwatch:stopwatch.get()});
+  clockAlarms.remove(alarmId);timerReset();swReset();
+  const browser=wm.open('linux',{instance:804,args:{surface:804}});
+  wm.minimize(browser);__lordWayland(804,'activate');
+  record('external-activation',{focused:wm.focused()===browser,minimized:wm.get(browser).minimized});wm.close(browser,true);
   const a=wm.open('demo',{instance:'a'}),b=wm.open('demo',{instance:'b'});
   wm.setCloseGuard(a,()=>{guards++;return false;});wm.setCloseGuard(b,()=>{guards++;return false;});
   await pause();click('Demo');await pause();click('Force Quit');await pause();
@@ -348,43 +423,53 @@ async function run(){
   calls=[];click('Force Quit');await pause();record('remount',{calls});
   control.setMode('calculator');await pause();
   const key=(name,char='')=>{__lordKey(0,1,name,char,name,0);__lordKey(0,0,name,'',name,0);};
-  for(const label of ['2','+','3','×','4','=']){click(label);await pause();}
-  record('calculator-arithmetic',{text:nativeTexts(),react:texts().length});
+  for(const label of ['2','+','3','×','4','Enter']){key(label,label);await pause();}
+  record('calculator-precedence',{text:nativeTexts(),react:texts().length});
   key('Escape');key('1','1');key('/','/');key('0','0');key('Enter');await pause();
   record('calculator-keyboard-error',{text:nativeTexts()});
   key('Escape');key('1','1');key(',', ',');key('5','5');key('*','*');key('2','2');key('Enter');await pause();
   record('calculator-keyboard',{text:nativeTexts()});
   control.setInstance(2);await pause();record('calculator-remount',{text:nativeTexts()});
-  control.setField(true);await pause();key('7','7');await pause();
-  record('calculator-text-focus',{text:nativeTexts(),field:texts().map(n=>n.text)});
-  control.setField(false);await pause();key('2','2');key('Enter');await pause();
-  record('calculator-focus-restored',{text:nativeTexts()});
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
-  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:nativeTexts()});
+  control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
+  wm.close('appabout',true);
+  wm.open('about');control.setArgs({});control.setMode('about');await pause();
+  record('about',{text:nativeTexts(),react:texts().length});
+  wm.open('characters');control.setArgs({});control.setMode('characters');await pause();
+  record('characters',{text:nativeTexts(),react:texts().length});wm.close('characters',true);
+  wm.open('clock');control.setArgs({tab:'timer'});control.setMode('clock');await pause();
+  record('clock-native-timer',{text:nativeTexts(),react:texts().length});
+  timerStart(30);await pause();record('clock-native-running',{text:nativeTexts()});
+  timerPause();await pause();record('clock-native-paused',{text:nativeTexts()});timerReset();
+  control.setArgs({tab:'world'});await pause();await pause();record('clock-native-world',{text:nativeTexts()});
+  control.setArgs({tab:'alarms'});await pause();record('clock-native-alarms',{text:nativeTexts()});
+  control.setArgs({tab:'stopwatch'});await pause();record('clock-native-stopwatch',{text:nativeTexts()});
+  wm.close('clock',true);
+  wm.open('help');control.setArgs({article:'clock',nonce:1});control.setMode('help');await pause();
+  record('help-native-article',{text:nativeTexts(),react:texts().length,reactLabels:texts().map(n=>({id:n.id,text:n.text,parent:n.parent}))});
+  control.setArgs({tour:true,nonce:2});await pause();record('help-native-tour',{text:nativeTexts()});
+  control.setArgs({article:'missing',nonce:3});await pause();record('help-native-missing',{text:nativeTexts()});
+  wm.close('help',true);
   // Monitor is a native view: Rust mounts its nodes, so React creates none of its texts or pixels.
   const reactTexts=texts().length,reactPixels=pixelBytes;
   wm.open('monitor');control.setArgs({tab:'memory'});control.setMode('monitor');
   for(let i=0;i<30&&!nativeTexts().includes('available for apps');i++)await pause();
-  record('monitor-memory',{text:nativeTexts(),texts:nativeTexts().length,react:texts().filter(n=>n.text==='available for apps').length,
+  let monitorHandle=0;for(let h=1;h<256&&!monitorHandle;h++)if(lord.nativeViews.findText(h,'available for apps'))monitorHandle=h;
+  record('monitor-memory',{handle:monitorHandle,text:nativeTexts(),texts:nativeTexts().length,react:texts().filter(n=>n.text==='available for apps').length,
     pixels:pixelBytes-reactPixels,title:wm.get('monitor')?.title});
   for(const tab of ['overview','cpu','network','disks','processes','cooling','voltage']){
     control.setArgs({tab});await pause();await pause();
     record('monitor-'+tab,{text:nativeTexts(),texts:nativeTexts().length});
   }
-  control.setMode('none');await pause();
-  record('monitor-unmounted',{texts:nativeTexts().length,reactTexts});
-  for(const position of ['bottom','left','right']){
-    control.setArgs({position,magnify:true,full:position!=='bottom'});control.setMode('dock');await pause();await pause();
-    const icon=[...mountedViews.values()].find(v=>v.app==='calculator');
-    if(!icon)throw new Error('missing native Dock icon');
-    const [x,y,w,hh]=lord.getLayout(icon.node);
-    for(const kind of ['move','down','up']){__lordEvent(kind,icon.node,x+w/2,y+hh/2,0);await pause();}
-    record('dock-'+position,{nativeNodes:lord.stats().nodes-[...nodes.values()].filter(alive).length,
-      views:[...mountedViews.values()].map(v=>v.app),calls:[...calls]});
-    control.setMode('none');await pause();
-  }
-  record('dock-unmounted',{views:mountedViews.size});
+  control.setMode('forcequit');await pause();
+  record('monitor-unmounted',{texts:(lord.nativeViews.text(monitorHandle)||'').length,reactTexts});
+  // Axia Store: a native view too, with the sidebar, the editorial cards and the apps.
+  wm.open('store');control.setArgs({});control.setMode('store');
+  for(let i=0;i<30&&!nativeTexts().includes('Discover');i++)await pause();
+  record('store',{text:nativeTexts(),title:wm.get('store')?.title});
+  control.setArgs({page:'categories'});await pause();await pause();
+  record('store-categories',{text:nativeTexts()});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

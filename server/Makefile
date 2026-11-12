@@ -6,8 +6,11 @@ RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
 CODEC_LIB := build/codecs/release/libaxia_codecs.a
 VAULT_CODEC_LIB := build/vault-codecs/release/libaxia_codecs.a
+# axia-maild's archive also carries the mail parsers (rust/axia-mail, docs/RUST-MAIL.md).
+MAIL_CODEC_LIB := build/mail-codecs/release/libaxia_codecs.a
 CRYPTO_INPUTS := ../rust/axia-crypto/Cargo.toml $(wildcard ../rust/axia-crypto/src/*.rs) ../rust/vendor/argon2-0.6.0/src/lib.rs
 CODEC_INPUTS := $(CRYPTO_INPUTS) ../rust/axia-codecs/Cargo.toml $(wildcard ../rust/axia-codecs/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock
+MAIL_CODEC_INPUTS := $(CODEC_INPUTS) ../rust/axia-mail/Cargo.toml $(wildcard ../rust/axia-mail/src/*.rs)
 CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
@@ -18,6 +21,7 @@ rust_sources = $(wildcard $(1)/*.rs) $(foreach d,$(wildcard $(1)/*/),$(call rust
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(call rust_sources,../rust/axia-shell/src) $(call rust_sources,../apps) ../rust/native_apps.rs ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 RUST_INPUTS += $(CODEC_INPUTS)
+RUST_INPUTS += ../assets/emoji.json
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.
@@ -46,7 +50,7 @@ WL_XML  := $(WLPROTO)/stable/xdg-shell/xdg-shell.xml $(WLPROTO)/unstable/xdg-dec
 WL_GEN  := build/gen/xdg-shell-protocol.h build/gen/xdg-decoration-unstable-v1-protocol.h
 WL_OBJ  := build/gen/xdg-shell-protocol.o build/gen/xdg-decoration-unstable-v1-protocol.o
 # dmabuf, presentation, viewporter and mouse for games (M7/GPU): they also work on the CPU path
-WL_MORE := stable/linux-dmabuf/linux-dmabuf-v1 stable/presentation-time/presentation-time stable/viewporter/viewporter \
+WL_MORE := staging/xdg-activation/xdg-activation-v1 stable/linux-dmabuf/linux-dmabuf-v1 stable/presentation-time/presentation-time stable/viewporter/viewporter \
            unstable/relative-pointer/relative-pointer-unstable-v1 unstable/pointer-constraints/pointer-constraints-unstable-v1 \
            staging/cursor-shape/cursor-shape-v1 unstable/tablet/tablet-unstable-v2 \
            staging/fractional-scale/fractional-scale-v1 unstable/xdg-output/xdg-output-unstable-v1 \
@@ -127,10 +131,15 @@ SRC += src/platform/seat.c src/platform/power.c src/ui/js_files.c src/ui/js_laun
 HDR += $(wildcard src/platform/*.h)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR += $(wildcard src/tp/*.h)
+build/obj/wl/wl.o build/wl-activation-test build/wl-fullscreen-test build/wl-input-region-test build/wl-preview-test: src/wl/wl_activation.c
 
 .PHONY: all clean test test-full test-platform test-rust drag-golden
 test-platform: build/apps-actions-test build/defaults-test build/settings-hw-test
-test test-platform: build/wl-fullscreen-test
+test test-platform: build/wl-fullscreen-test build/wl-activation-test
+
+build/wl-activation-test: tests/wl_activation_test.c src/wl/wl.c $(HDR) $(WL_GEN) build/gen/xdg-activation-v1-protocol.o
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< build/gen/xdg-activation-v1-protocol.o -lwayland-server -lm
+	./$@ || { rm -f $@; exit 1; }
 
 build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
@@ -138,6 +147,7 @@ build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 
 test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
 	./build/wl-fullscreen-test
+	./build/wl-activation-test
 	./build/ui-damage-test
 	./build/glass-damage-test
 	./build/brframe-test
@@ -761,6 +771,8 @@ $(CODEC_LIB): $(CODEC_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --target-dir $(abspath build/codecs) --release --locked --offline
 $(VAULT_CODEC_LIB): $(CODEC_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --no-default-features --features secure-memory --target-dir $(abspath build/vault-codecs) --release --locked --offline
+$(MAIL_CODEC_LIB): $(MAIL_CODEC_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-codecs --features mail --target-dir $(abspath build/mail-codecs) --release --locked --offline
 .PHONY: test-codecs
 test-codecs:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-codecs --target-dir $(abspath build/codecs) --locked --offline
@@ -777,6 +789,11 @@ test: test-codecs test-codecs-secure
 test-crypto:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-crypto --target-dir $(abspath build/crypto-tests) --locked --offline
 test: test-crypto
+
+.PHONY: test-mail-rust
+test-mail-rust:
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-mail --target-dir $(abspath build/mail-tests) --locked --offline
+test: test-mail-rust
 
 # Rust compatibility tests call the actual C format consumers against immutable
 # files produced by the previous crypto backend. Crypto itself is Rust only.

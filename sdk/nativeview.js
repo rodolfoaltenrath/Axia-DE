@@ -4,25 +4,31 @@
 // module only gives the view a mount node inside the window manager's frame, sends it the facts it
 // reads (settings, theme, services, catalog, focus) and runs the effects that belong to the shell:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
-import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { View, shellHasKeyboard, onShellKeyboard } from '@lordos/runtime';
+import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { View, screen, shellHasKeyboard, onShellKeyboard } from '@lordos/runtime';
 import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
 import { useWindows, wm, appCatalogSource } from './windows.js';
-import { useLauncherApps } from './apps.js';
-import { useSettings } from './settings.js';
+import { useLauncherApps, launchApp, appIconFacts } from './apps.js';
+import { refreshPackages } from './packages.js';
+import { useSettings, settings } from './settings.js';
 import { appName } from './i18n.js';
-import { appControlFacts } from './appcontrol.js';
+import { arm, clockState } from './alarms.js';
+import { useStore } from './store.js';
+import { appControlFacts, forceQuit } from './appcontrol.js';
 import { executeNativeEffect } from './nativeappmodel.js';
+const emptyClock = { get: () => null, subscribe: () => () => {} };
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
   comment: app.comment, description: app.description, genericName: app.genericName,
   iconPath: typeof app.icon === 'string' ? app.icon : '',
-  package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon });
+  package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
+  iconData: appIconFacts(app),
+  category: typeof app.category === 'string' ? app.category : undefined });
 
 const runners = new Map();          // handle → runs one effect
 globalThis.__lordNativeView = () => {
@@ -39,20 +45,50 @@ function runner(handle, manifest, winId) {
         if (effect.kind === 'title' && winId) wm.setTitle(winId, effect.title);
         else if (effect.kind === 'paste') lord.nativeViews.paste(handle, String(lord.clipboard.get() ?? ''));
         else if (effect.kind === 'copy') lord.clipboard.set(String(effect.text ?? ''));
+        else if (effect.kind === 'launchApp') launchApp(String(effect.app));
+        else if (effect.kind === 'refreshPackages') refreshPackages();
+        else if (effect.kind === 'clock') arm();
       } catch (e) { console.error('native view:', e); }
       return;
     }
-    const result = executeNativeEffect(effect, manifest);
+    let result = '';
+    try {
+      switch (effect.kind) {
+        case 'settings': settings.set(effect.patch); break;
+        case 'openApp': wm.open(effect.app, { args: effect.args || {} }); break;
+        case 'forceQuit':
+          if (manifest.id !== 'forcequit') throw new Error('app.invalidRequest');
+          result = forceQuit(effect.key);
+          break;
+        case 'nativeCall':
+          if (!manifest.calls?.[effect.service]?.includes(effect.method)) throw new Error('app.invalidRequest');
+          result = lord[effect.service][effect.method](...(effect.args || []));
+          break;
+        case 'nativeRead':
+          if (!manifest.reads?.[effect.service]?.includes(effect.method)) throw new Error('app.invalidRequest');
+          result = { method: effect.method, value: lord[effect.service][effect.method](...(effect.args || [])) };
+          break;
+        default: result = executeNativeEffect(effect, manifest);   // kill, closeSurface, closeWindow…
+      }
+    } catch (error) {
+      const code = error?.code || error?.message || 'app.invalidRequest';
+      result = effect.kind === 'nativeCall' || effect.kind === 'nativeRead' ? { error: code } : code;
+    }
     lord.nativeViews.result(handle, result);
   };
 }
 
-function services(manifest) {
+function services(manifest, previous = {}, sampled = {}) {
+  const now = Date.now();
   const value = {};
   for (const [service, methods] of Object.entries(manifest.services || {})) {
+    const interval = manifest.serviceIntervals?.[service] ?? 1000;
+    if (sampled[service] && (interval < 0 || now - sampled[service] < interval)) { value[service] = previous[service]; continue; }
+    sampled[service] = now;
     value[service] = {};
+    const source = service === '$root' ? lord : lord[service];
     for (const method of methods) {
-      try { value[service][method] = lord[service]?.[method]?.() ?? null; } catch (_) { value[service][method] = null; }
+      try { value[service][method] = source?.[method]?.() ?? null; } catch (_) { value[service][method] = null; }
     }
   }
   return value;
@@ -64,28 +100,31 @@ export function NativeView({ manifest, args, icon, style }) {
   const { lang } = useLocale();
   useWindows();
   const [preferences] = useSettings();
+  const clock = useStore(manifest.facts === 'clock' && !icon ? clockState : emptyClock);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
   const owner = useRef(null);
   owner.current = { focused: win.focused !== false, shell: !!manifest.shell };
   const ownsKeyboard = () => owner.current.focused && !textFieldActive()
     && (owner.current.shell || !shellHasKeyboard());
-  const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest) : {}));
+  const [sampled] = useState(() => ({}));
+  const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest, {}, sampled) : {}));
   useEffect(() => {
     if (!manifest.services || icon) return undefined;
-    const id = setInterval(() => setPolled(services(manifest)), 1000);
+    const id = setInterval(() => setPolled(previous => services(manifest, previous, sampled)), 1000);
     return () => clearInterval(id);
   }, [manifest, icon]);
-  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius } = theme;
+  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection } = theme;
   const facts = icon ? { icon, args: args || {} } : {
     args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: ownsKeyboard(), refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
-    services: polled,
+    services: { ...polled, ...(clock ? { $clock: clock } : {}) },
     ...(manifest.facts === 'windows' ? { windows: appControlFacts() } : {}),
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
-    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius },
-      scale: typeScale, decimal: formatNumber(1.5, 1)[1] },
+    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },
+      scale: typeScale, decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3),
+      ...(manifest.facts === 'system' ? { screen: { width: screen.width, height: screen.height }, reactVersion, version: lord.version } : {}) },
   };
   const json = JSON.stringify(facts);
   useLayoutEffect(() => {

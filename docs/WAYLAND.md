@@ -418,7 +418,7 @@ asynchronously, so axia-server never waits on Xwayland while Xwayland waits on t
   (updated as the theme moves it), so Xwayland routes the pointer right; the focused window is put
   on top of X's stack and a minimized one at the bottom (iconic). Focus uses `SetInputFocus` and
   `WM_TAKE_FOCUS` (ICCCM); an X app can't move the keyboard to another X app's window (that
-  `FocusIn` is reverted); `_NET_ACTIVE_WINDOW` from an app is ignored (no focus stealing).
+  `FocusIn` is reverted); `_NET_ACTIVE_WINDOW` requires a recent user input timestamp.
 - **Requests.** Close (`WM_DELETE_WINDOW`, else `KillClient`), maximize and fullscreen
   (`_NET_WM_STATE`, also set before mapping), minimize (`WM_CHANGE_STATE`), and moves and resizes
   asked by apps that draw their own frame (`_NET_WM_MOVERESIZE`) go to the theme like a Wayland
@@ -500,8 +500,8 @@ activated it after the fix. Firefox itself was not installed for this verificati
 - Already done (see `GPU.md`): `linux-dmabuf` v4, GPU composition (Mesa, optional), direct
   fullscreen scanout, `wp_presentation`, `wp_viewporter`, `relative-pointer`,
   `pointer-constraints`, real fullscreen (❖Esc exits) and app cursors (image or hidden).
-- Drag and drop, `text-input` (LordOS input methods inside Wayland apps), activation
-  (`xdg-activation`). (Fractional scale and several outputs: done, see `DISPLAYS.md`; primary
+- Drag and drop. (`text-input` is implemented through v3, and user-initiated
+  `xdg-activation` is implemented below.) (Fractional scale and several outputs: done, see `DISPLAYS.md`; primary
   selection and Xwayland: done in 0.8.3, above.)
 
 ## Clipboard to its owner and idle-inhibit (0.8.5)
@@ -513,3 +513,21 @@ activated it after the fix. Firefox itself was not installed for this verificati
 - **`zwp_idle_inhibit_manager_v1`**: a video player or a presentation creates an inhibitor on its surface;
   while that surface is mapped, `wl_idle_inhibited()` is true and `main.c` resets the idle timers (screen off,
   lock, sleep; Settings → Battery) on every loop.
+
+## Ativação de janelas por links externos
+
+O compositor principal anuncia `xdg_activation_v1`. Um cliente focado pode obter
+um token, repassá-lo ao app que abre o link e solicitar que a janela de destino
+venha para frente. O token dura 10 segundos e só pode ser usado uma vez;
+destruir o objeto do protocolo não o invalida. Tokens desconhecidos, vencidos ou
+pedidos por clientes sem foco não ativam janelas. A ativação antes do primeiro
+buffer fica pendente até o mapeamento da janela.
+
+O evento `activate` passa por `sdk/wayland.js` para `wm.focus`, que também restaura
+janelas minimizadas e seleciona seu desktop. No XWayland, `_NET_ACTIVE_WINDOW`
+aceita timestamps de interação recente em vez de descartar todos os pedidos.
+Aplicativos precisam repassar um token ou timestamp válido; pedidos sem esse
+contexto continuam sem alterar o foco.
+
+Validação sem sessão gráfica: `make -C server build/wl-activation-test`.
+O fluxo real de autenticação do navegador requer validação na sessão física.

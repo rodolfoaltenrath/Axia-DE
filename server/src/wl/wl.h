@@ -36,6 +36,7 @@ int  wl_send_paste(void);               /* synthetic Ctrl+V to the Linux app wit
 int  wl_has_key_focus(void);            /* does a Linux app have the keyboard? */
 
 /* From JS (lord.wayland) */
+int wl_activation_timestamp_valid(uint32_t timestamp); /* recent user input for X11 activation */
 void wl_set_focus(int id);              /* 0: no Wayland app has the keyboard */
 void wl_focus_terminal(int on);         /* the app with the keyboard is a terminal emulator: ❖C is Ctrl+Shift+C */
 void wl_close(int id);                  /* asks the app to close the window */
@@ -107,7 +108,7 @@ int         wl_clip_image_sensitive(void);
 int         wl_clip_use_image(const char *path);   /* only $XDG_RUNTIME_DIR/axia/clip-N.png */
 
 /* Events for JS: map, unmap, title, appid, geometry, move, resize, maximize, unmaximize,
- * minimize, fullscreen, unfullscreen. data is JSON. */
+ * minimize, activate, fullscreen, unfullscreen. data is JSON. */
 typedef void (*WlEventFn)(int id, const char *type, const char *json);
 void wl_events(WlEventFn fn);
 
