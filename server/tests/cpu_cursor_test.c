@@ -4,6 +4,12 @@
 #include "../src/main.c"
 #undef main
 
+/* glass_pacing.rs's cursor pacing (tested in Rust; this test doesn't link the Rust archive): every
+ * move at once, as before it, so the cursor path below is checked move by move */
+int axia_cursor_pacing_request(double now_ms, double hz) { (void)now_ms; (void)hz; return 1; }
+int axia_cursor_pacing_tick(double now_ms, double hz) { (void)now_ms; (void)hz; return 0; }
+double axia_cursor_pacing_timeout(double now_ms, double hz) { (void)now_ms; (void)hz; return -1; }
+
 static int checks, uploads, moves, texture_uploads, fail_upload, gpu_on;
 static int last_x, last_y, client_mode, recording;
 static unsigned client_gen = 1;

@@ -57,6 +57,7 @@
 #include "outputs.h"
 #include "flip_ffi.h"
 #include "stall_ffi.h"
+#include "glass_pacing_ffi.h"
 #include "apps.h"
 #include "ui/js_anim.h"
 #include "monitor_ffi.h"
@@ -375,8 +376,19 @@ static void hw_cursor_move(Server *s) {
         kms_cursor_move(&o->kms, x - s->cursor_hx, y - s->cursor_hy);
     }
 }
+/* The cursor plane's moves are paced (rust/axia-shell/src/glass_pacing.rs): the first after a pause at
+ * once, then at most two a frame of the display under the pointer, with the latest position. */
+static int cursor_held;
+static double cursor_clock(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
+static double cursor_hz(Server *s) {
+    int at = out_at_pointer(s);
+    return at >= 0 && at < OUT_MAX ? s->out[at].kms.mode.vrefresh : 60;
+}
 static void cursor_motion(Server *s) {
-    if (s->hw_cursor) hw_cursor_move(s);
+    if (s->hw_cursor) {
+        cursor_held = !axia_cursor_pacing_request(cursor_clock(), cursor_hz(s));
+        if (!cursor_held) hw_cursor_move(s);
+    }
     /* Capture viewers still need cursor position/image notifications in frames. */
     if (!s->hw_cursor || media_needs_cpu()) s->cursor_dirty = 1;
 }
@@ -2359,6 +2371,16 @@ int main(int argc, char **argv) {
         axia_view_tick(now_ms());
         double nvd = axia_view_timeout(now_ms());
         if (nvd >= 0 && (delay < 0 || nvd < delay)) delay = nvd;
+        /* the cursor plane's held move, once due (cursor_motion) */
+        if (cursor_held) {
+            if (axia_cursor_pacing_tick(now_ms(), cursor_hz(&s))) {
+                cursor_held = 0;
+                if (s.hw_cursor) hw_cursor_move(&s);
+            } else {
+                double cpd = axia_cursor_pacing_timeout(now_ms(), cursor_hz(&s));
+                if (cpd >= 0 && (delay < 0 || cpd < delay)) delay = cpd;
+            }
+        }
         /* glass over app windows: their frames refresh it at most 30 times a second (glass_pacing.rs) */
         paint_glass_tick(now_ms());
         double gpd = paint_glass_timeout(now_ms());
