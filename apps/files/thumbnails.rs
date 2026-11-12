@@ -119,7 +119,10 @@ pub fn get(entry: &super::operations::Entry) -> Option<String> {
                     let _ = fs::remove_file(&temp);
                     result?;
                 }
-                fs::rename(&temp, &out)?;
+                if let Err(error) = fs::rename(&temp, &out) {
+                    let _ = fs::remove_file(&temp);
+                    return Err(error.into());
+                }
                 // Disk budget: oldest entries first. This work is off the UI thread.
                 let mut files: Vec<_> = fs::read_dir(&root)?
                     .flatten()
@@ -136,8 +139,15 @@ pub fn get(entry: &super::operations::Entry) -> Option<String> {
                         if bytes <= 96 * 1024 * 1024 {
                             break;
                         }
-                        if f != out && fs::remove_file(f).is_ok() {
+                        if f != out && fs::remove_file(&f).is_ok() {
                             bytes = bytes.saturating_sub(size);
+                            // Do not keep returning a PNG evicted from disk.
+                            // The next visible request can recreate it lazily.
+                            cache()
+                                .lock()
+                                .unwrap()
+                                .ready
+                                .retain(|_, (_, path)| PathBuf::from(&*path) != f);
                         }
                     }
                 }

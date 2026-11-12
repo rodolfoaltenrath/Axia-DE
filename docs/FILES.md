@@ -50,7 +50,9 @@ does not repeatedly update the frame or trigger directory scans.
   permissions, bounded directory walks and freedesktop Trash. `compat.rs`
   retains `fsops.h`'s C ABI for existing desktop consumers such as
   backup. The previous `server/src/fsops.c` implementation was removed.
-- `thumbnails.rs` generates thumbnails lazily, outside the interface thread.
+- `thumbnails.rs` generates image thumbnails lazily, outside the interface thread.
+  `video_thumbnails.rs` schedules visible video posters through the confined media
+  helper and its disk cache, with at most two requests per window.
 - `udisks.rs` implements bounded, asynchronous mount/unmount/safe removal over
   the system UDisks2 D-Bus service, with polkit authorization. It unmounts all
   mounted partitions before powering off a removable drive, never forces a busy

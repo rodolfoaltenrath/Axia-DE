@@ -233,6 +233,7 @@ pub struct Session {
     reveal: Option<PathBuf>,
     thumbnail_revision: u64,
     pub pdf_thumbnails: super::pdf_thumbnails::Cache,
+    pub video_thumbnails: super::video_thumbnails::Cache,
     pub volume_busy: Option<String>,
     volume_paths: Vec<PathBuf>,
     pub side_width: f64,
@@ -549,6 +550,7 @@ impl Session {
             reveal: None,
             thumbnail_revision: 0,
             pdf_thumbnails: super::pdf_thumbnails::Cache::default(),
+            video_thumbnails: super::video_thumbnails::Cache::default(),
             volume_busy: None,
             volume_paths: Vec::new(),
             side_width: shared.preferences["sideWidth"]
@@ -1298,7 +1300,7 @@ impl Session {
         self.poll_transfers(shared);
         if self.dirty {
             self.clamp_scroll();
-            if self.tab().view == "icons" || self.tab().view == "gallery" {
+            {
                 let (cols, _, row) = self.entry_grid();
                 let start = (self.tab().offset / row).floor() as usize * cols;
                 let count = ((self.entry_area() / row).ceil() as usize + 2) * cols;
@@ -1310,7 +1312,10 @@ impl Session {
                     .take(count.min(128))
                     .map(|i| self.tab().entries[i].clone())
                     .collect();
-                self.pdf_thumbnails.queue(&entries, &mut self.effects);
+                if self.tab().view == "icons" || self.tab().view == "gallery" {
+                    self.pdf_thumbnails.queue(&entries, &mut self.effects);
+                }
+                self.video_thumbnails.queue(&entries, &mut self.effects);
             }
         }
     }
@@ -2682,6 +2687,10 @@ impl Session {
     }
     fn service(&mut self, event: &Value, shared: &Shared) -> Result<()> {
         let kind = event["kind"].as_str().unwrap_or("");
+        if kind == "videoThumbnail" {
+            self.video_thumbnails.complete(event);
+            return Ok(());
+        }
         if kind == "pdfThumbnail" {
             self.pdf_thumbnails.complete(event, &mut self.effects);
             return Ok(());

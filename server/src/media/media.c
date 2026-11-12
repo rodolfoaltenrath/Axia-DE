@@ -763,8 +763,11 @@ const char *media_thumb(const char *path, int size, char *out, size_t n) {
     if (!path || !*path) return NULL;
     if (path[0] == '/') snprintf(full, sizeof full, "%s", path); else snprintf(full, sizeof full, "%s/%s", media_home(), path);
     if (!realpath(full, real) || !fsops_allowed(real) || stat(real, &st) || !S_ISREG(st.st_mode)) return NULL;
-    char key[PATH_MAX + 64];
-    snprintf(key, sizeof key, "%s\n%lld\n%lld\n%d", real, (long long)st.st_mtime, (long long)st.st_size, size);
+    char key[PATH_MAX + 160];
+    /* Replaced or edited videos can have the same size and mtime second. */
+    snprintf(key, sizeof key, "%s\n%llu\n%llu\n%lld\n%ld\n%lld\n%d", real,
+             (unsigned long long)st.st_dev, (unsigned long long)st.st_ino,
+             (long long)st.st_mtime, st.st_mtim.tv_nsec, (long long)st.st_size, size);
     uint8_t h[32];
     sha256(key, strlen(key), h);
     char dir[PATH_MAX];
