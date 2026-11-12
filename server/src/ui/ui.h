@@ -373,5 +373,9 @@ uint64_t paint_preview_signature(Node *root);
 int paint_preview(Canvas *c, Node *root);
 void  paint_capture(Canvas *c, Node *root);
 int paint_external_glass_damage(Box area);
+/* main.c, every loop: the glass that app frames touched while it was held (glass_pacing.rs), once due;
+ * and how long until then (-1: nothing held). */
+void paint_glass_tick(double now);
+double paint_glass_timeout(double now);
 
 #endif
