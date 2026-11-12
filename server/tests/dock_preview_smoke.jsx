@@ -11,6 +11,12 @@ import { settings } from '../../sdk/settings.js';
 const color = (c) => lord.css(JSON.stringify({ color: c })).color;
 const check = (value, message) => { if (!value) throw new Error('dock preview smoke: ' + message); };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Waits until `ok()` holds, up to `ms` (a slow CI runner can hold the loop for hundreds of ms):
+// the states below are checked when they arrive, not after a fixed delay.
+async function until(ok, ms = 2000) {
+  for (const end = Date.now() + ms; !ok() && Date.now() < end;) await sleep(20);
+  return ok();
+}
 const theme = { ...DEFAULT_TOKENS, dockBg: 'rgba(32,34,48,0.55)', dockBorder: 'rgba(255,255,255,0.2)', blur: 24 };
 let captures = 0, calls = 0, lastSource = 0, switchHover, latest, source;
 let hoverStarted = 0, firstImageMs = null, pendingRequests = 0;
@@ -93,28 +99,28 @@ async function checkNativeDockAnimations() {
   settings.set({ reduceMotion: false });
   for (const position of ['bottom', 'left', 'right']) {
     changeDock({ position, mode: 'dark', autohide: true });
-    await sleep(260);
+    const beyond = (l) => position === 'bottom' ? l[1] >= 700 : position === 'left' ? l[0] + l[2] <= 0 : l[0] >= 1000;
+    const last = () => visibility[visibility.length - 1];
+    await until(() => last()?.[3] === false && beyond(lord.getLayout(last()[0])));
     const hidden = visibility[visibility.length - 1];
     check(hidden?.[3] === false, 'auto-hide starts hidden: ' + position);
     const node = hidden[0], layout = lord.getLayout(node);
-    check(position === 'bottom' ? layout[1] >= 700 : position === 'left' ? layout[0] + layout[2] <= 0 : layout[0] >= 1000,
-      'hidden Dock moves beyond its display edge: ' + position);
+    check(beyond(layout), 'hidden Dock moves beyond its display edge: ' + position);
     const [x, y] = position === 'bottom' ? [500, 699] : position === 'left' ? [0, 350] : [999, 350];
     __lordEvent('move', 0, x, y, 0);
-    await sleep(170);
-    check(visibility[visibility.length - 1]?.[3] === true, 'edge dwell shows Dock: ' + position);
+    check(await until(() => last()?.[3] === true), 'edge dwell shows Dock: ' + position);
     const renders = iconRenders;
-    await sleep(160);
+    const inside = (l) => position === 'bottom' ? l[1] < 700 : position === 'left' ? l[0] >= 0 : l[0] < 1000;
+    await until(() => inside(lord.getLayout(node)));
     check(iconRenders === renders, 'native reveal never renders the icon per frame');
     const shown = lord.getLayout(node);
     check(position === 'bottom' ? shown[1] < 700 : position === 'left' ? shown[0] >= 0 : shown[0] < 1000,
       'shown Dock returns to display: ' + position);
     __lordEvent('move', 0, 500, 100, 0);
-    await sleep(750);
-    check(visibility[visibility.length - 1]?.[3] === false, 'leaving hides after grace: ' + position);
+    check(await until(() => last()?.[3] === false, 3000), 'leaving hides after grace: ' + position);
   }
   settings.set({ reduceMotion: true });
-  await sleep(50);
+  await until(() => visibility[visibility.length - 1]?.[4] === true);
   check(visibility[visibility.length - 1]?.[4] === true, 'reduced motion applies visibility immediately');
   changeDock({ position: 'bottom', mode: 'dark', autohide: false });
   await sleep(80);
