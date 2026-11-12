@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <time.h>
 
@@ -97,7 +98,27 @@ int main(void) {
         }
         pixels += W * H;
     }
-    printf("shadow C/Rust: 600 random shadows, %ld pixels identical to the former C\n", pixels);
+    /* the dragged window's layer (ui/paint.c): px starts before the buffer, the canvas is wider than
+     * its stride and the clip is the layer's box in screen coordinates */
+    for (int k = 0; k < 200; k++) {
+        enum { LW = 360, LH = 260 };
+        int ox = 40 + (int)rnd(800), oy = 30 + (int)rnd(500);
+        for (int i = 0; i < LW * LH; i++) a[i] = i % 2 ? (rnd(0x7fffffff) | 0xff000000u) : 0;
+        memcpy(b, a, LW * LH * 4);
+        Canvas ca, cb;
+        canvas_init(&ca, a - ((ptrdiff_t)oy * LW + ox), ox + LW, oy + LH, LW);
+        canvas_init(&cb, b - ((ptrdiff_t)oy * LW + ox), ox + LW, oy + LH, LW);
+        Rect clip = { ox, oy, ox + LW, oy + LH };
+        canvas_set_clip(&ca, clip);
+        canvas_set_clip(&cb, clip);
+        float x = ox + (float)rnd(300) - 40, y = oy + (float)rnd(200) - 40, w = 20 + (float)rnd(300), h = 20 + (float)rnd(200);
+        float r = (float)rnd(20), blur = 1 + (float)rnd(30), dx = (float)rnd(9) - 4, dy = (float)rnd(13) - 2;
+        uint32_t argb = (uint32_t)(40 + rnd(200)) << 24;
+        old_shadow(&ca, x, y, w, h, r, dx, dy, blur, argb);
+        canvas_shadow(&cb, x, y, w, h, r, dx, dy, blur, argb);
+        if (memcmp(a, b, LW * LH * 4)) { fprintf(stderr, "layer case %d differs\n", k); return 1; }
+    }
+    printf("shadow C/Rust: 600 random shadows and 200 on offset drag layers, %ld pixels identical to the former C\n", pixels);
     /* a maximized window's shadow, the whole screen repainted (an app's frame under glass, a theme
      * animation): the former blend read every byte under the window */
     enum { SW = 1920, SH = 1080 };
