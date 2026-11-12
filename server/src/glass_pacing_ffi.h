@@ -5,4 +5,8 @@
 int axia_glass_pacing_request(double now_ms);   /* 1: refresh now; 0: kept for later */
 int axia_glass_pacing_tick(double now_ms);      /* 1: what was kept is due now */
 double axia_glass_pacing_timeout(double now_ms);/* ms until due, -1 if nothing is kept */
+/* The hardware cursor's moves, same rule at most two a frame (hz: the refresh under the pointer). */
+int axia_cursor_pacing_request(double now_ms, double hz);
+int axia_cursor_pacing_tick(double now_ms, double hz);
+double axia_cursor_pacing_timeout(double now_ms, double hz);
 #endif
