@@ -15,7 +15,7 @@ import { defaultOpenerId, nativeOf } from './defaults.js';
 import { clipboard } from './clipboard.js';
 import { archive } from './archive.js';
 import { DocImage, pdfThumb, fontSample, releaseImage } from './doc.js';
-import { media } from './media.js';
+import { media, thumbRev } from './media.js';
 import { lan } from './lan.js';
 import { useDisks, disks } from './disks.js';
 import { Menu } from './menu.jsx';
@@ -200,6 +200,19 @@ async function hostEffect(effect) {
         if (result.failure) throw new Error(errorText(result.failure));
         return { result: result.result, disks: disks.list() };
       }
+    }
+    case 'videoThumbnail': {
+      if (!media.available()) return { result: null };
+      // The confined worker signals completion. Avoid repeatedly stat'ing
+      // videos on slow USB/network mounts from the UI's polling timer.
+      return new Promise((resolve) => {
+        let timer = 0, off = null;
+        const finish = (path) => { clearTimeout(timer); off?.(); resolve({ result: path }); };
+        const check = () => { const path = media.thumb(effect.path, 320); if (path) finish(path); };
+        off = thumbRev.subscribe(check);
+        timer = setTimeout(() => finish(null), 15000);
+        check();
+      });
     }
     case 'pdfThumbnail': { const result = await pdfThumb(effect.path, { width: 128, height: 176 }); return { result: { id: result.image, w: result.w, h: result.h } }; }
     case 'networkScan': {

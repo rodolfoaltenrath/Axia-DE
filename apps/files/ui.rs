@@ -173,6 +173,24 @@ fn entry_icon(s: &Session, e: &Entry, size: f64, thumb: bool) -> Value {
             return json!({"type":"documentImage","image":image,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":3}});
         }
     }
+    if !e.dir && kind(&e.name) == "video" {
+        let poster = s.video_thumbnails.get(e).map(|path|
+            json!({"type":"image","src":path,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":4}})
+        ).unwrap_or_else(|| icon_ref("file", size));
+        return view(
+            json!({"width":size,"height":size,"flexShrink":0}),
+            vec![
+                poster,
+                view(
+                    json!({"position":"absolute","right":2,"bottom":2,"width":(size*0.36).clamp(10.,20.),"height":(size*0.30).clamp(9.,17.),"borderRadius":3,"backgroundColor":"rgba(0,0,0,0.75)","alignItems":"center","justifyContent":"center"}),
+                    vec![label(
+                        json!("▶"),
+                        json!({"fontSize":(size*0.18).clamp(7.,10.),"color":"#ffffff"}),
+                    )],
+                ),
+            ],
+        );
+    }
     if thumb && !e.dir && kind(&e.name) == "image" {
         if let Some(path) = thumbnails::get(e) {
             return json!({"type":"image","src":path,"style":{"width":size,"height":size,"objectFit":"contain","borderRadius":4}});

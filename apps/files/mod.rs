@@ -11,6 +11,7 @@ mod thumbnails;
 pub mod trash;
 mod udisks;
 mod ui;
+mod video_thumbnails;
 mod volumes;
 
 pub type Result<T> = std::result::Result<T, String>;
