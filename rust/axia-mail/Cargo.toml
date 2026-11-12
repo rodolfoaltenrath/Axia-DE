@@ -1,0 +1,12 @@
+[package]
+name = "axia-mail"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Bounded Rust parsers for axia-maild: MIME, charsets, WebDAV XML, mail HTML, iCalendar and vCard"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+libc = "0.2"

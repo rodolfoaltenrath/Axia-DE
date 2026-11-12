@@ -1,6 +1,15 @@
 //! Rust services embedded in the existing C compositor.
 //! Window-system objects and the React UI retain their existing interfaces.
 mod anim;
+mod clock;
+#[path = "../../../apps/help/mod.rs"]
+mod help;
+#[path = "../../../apps/clock/mod.rs"]
+mod clock_app;
+#[path = "../../../apps/characters/mod.rs"]
+mod characters;
+#[path = "../../../apps/about/mod.rs"]
+mod about;
 #[path = "../../../apps/files/mod.rs"]
 mod files;
 #[path = "../../../apps/forcequit/mod.rs"]
@@ -9,10 +18,20 @@ mod forcequit;
 mod calculator;
 #[path = "../../../apps/appabout/mod.rs"]
 mod appabout;
+#[path = "../../../apps/settings/model.rs"]
+mod settings_model;
+#[path = "../../../apps/terminal/model.rs"]
+mod terminal_model;
+#[path = "../../../apps/passwords/model.rs"]
+mod passwords_model;
+#[path = "../../../apps/sysinfo/model.rs"]
+mod sysinfo_model;
 mod native_apps_host;
 mod native_view;
 #[path = "../../../apps/monitor/mod.rs"]
 mod monitor;
+#[path = "../../../apps/store/mod.rs"]
+mod store;
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod flip_pacing;

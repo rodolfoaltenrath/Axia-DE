@@ -57,6 +57,10 @@ impl I18n {
         }
         self.cache.get(&key).and_then(Option::as_ref)
     }
+    /// Raw localized service data, using the same roots and cache as captions.
+    pub fn entry(&mut self, lang: &str, namespace: &str, key: &str) -> Option<Value> {
+        self.catalog(lang, namespace)?.get(key).cloned()
+    }
     fn lookup(&mut self, lang: &str, key: &str) -> Option<Value> {
         let (ns, id) = key.split_once('.')?;
         self.catalog(lang, ns)?.get(id).cloned()

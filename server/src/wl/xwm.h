@@ -48,7 +48,7 @@ int  wlx_attach(uint32_t res_id, XWin *w, const XWinInfo *info);
 void wlx_detach(int sid);                      /* the X window was unmapped or destroyed */
 void wlx_set_title(int sid, const char *title);
 void wlx_popup_moved(int sid, int x, int y);
-enum { XREQ_MOVE = 1, XREQ_RESIZE, XREQ_MAXIMIZE, XREQ_UNMAXIMIZE, XREQ_MINIMIZE, XREQ_FULLSCREEN, XREQ_UNFULLSCREEN };
+enum { XREQ_MOVE = 1, XREQ_RESIZE, XREQ_MAXIMIZE, XREQ_UNMAXIMIZE, XREQ_MINIMIZE, XREQ_FULLSCREEN, XREQ_UNFULLSCREEN, XREQ_ACTIVATE };
 void wlx_request(int sid, int what, int arg);
 void wlx_fullscreen_rect(int *x, int *y, int *w, int *h);  /* the display a fullscreen X window covers */
 /* Clipboard: what an X app copied becomes LordOS's (and every Wayland app's) selection. */

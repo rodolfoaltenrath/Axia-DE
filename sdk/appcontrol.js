@@ -14,7 +14,7 @@
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
 import { windows, wm, getApp, appMenus, onActiveDesktop, activeDesktop } from './windows.js';
 import { launcherIdOf, quitApp } from './dock.js';
-import { linuxAppFor, shortAppName, windowAppName } from './apps.js';
+import { linuxAppFor, shortAppName, windowAppName, windowIconFacts } from './apps.js';
 import { openFileWithApps } from './sysopen.js';
 import * as fs from './fs.js';
 import { nativeAppRequest, nativeAppEffects } from './nativeappmodel.js';
@@ -96,7 +96,7 @@ export function appControlFacts() {
     return { id: String(w.id), app: w.app, builtin: !!getApp(w.id)?.builtin,
       key: launcherIdOf(w), name: groupName(launcherIdOf(w), w), surface: w.args?.surface,
       iconApp: icon?.id, iconPath: typeof icon?.icon === 'string' ? icon.icon : '',
-      x11: !!w.args?.x11, isolated: !!w.args?.pkg };
+      x11: !!w.args?.x11, isolated: !!w.args?.pkg, iconData: windowIconFacts(w) };
   });
 }
 export function runningApps() {

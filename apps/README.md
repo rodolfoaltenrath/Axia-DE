@@ -1,16 +1,44 @@
 # Axia apps
 
-`apps/forcequit/`, `apps/files/`, `apps/calculator/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
+`apps/monitor/`, `apps/store/`, `apps/help/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
-`tests.rs` its behavior and `manifest.rs` its metadata. There are no app JSX or
+`tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
+their UI in `mod.rs`). There are no app JSX or
 JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. Files shares its Rust
+binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Monitor and Store
+mount their widgets and icons directly into the Rust scene through
+`native_view/`; their content and input do not pass through React. Calculator
+keeps its existing widget tree, colors, arithmetic and localized display, and
+has no polling timer. The shell still supplies the window frame and theme.
+About preserves the branding, status badges, hardware/server rows, regional
+formatting and System Report action. Its shared shell bridge supplies service
+facts, with the original 5 s system and 2 s server sampling periods; the app
+contains no React code. Emoji & Symbols owns its tabs, multilingual search,
+Unicode blocks, skin tones, recents and clipboard actions in Rust. The shared
+Unicode data in `assets/emoji.json` also supplies the shell picker. Clock mounts
+all four tabs in Rust and shares its Rust session engine with the menu bar and
+notifications, so alarms, the timer and stopwatch keep running with the window closed. Files shares its Rust
 service with the file dialogs; `sdk/rustfiles.js` transports those shared widgets
-and desktop effects. Process termination still passes through the compositor's
-Wayland credential checks.
+and desktop effects. About App and Force Quit now mount directly into the Rust scene too. The
+former keeps app metadata, provenance, versions and window titles; the latter
+keeps grouping, selection, disabled actions and errors. Native windows only send
+a group key for termination: the shared Rust controller rechecks current shell
+facts, then the compositor applies its Wayland credential checks. File and
+letter icon descriptors preserve package and Linux-window artwork. The generic
+React widget host for compiled apps has been removed; Files still uses its
+separate browser/dialog renderer.
+
+Help mounts its sidebar, search field, reading column, Markdown and six-step
+welcome tour directly in Rust. `apps/help/content.rs` owns the translated
+catalogs, English fallback, ranking, snippets and internal links; `markdown.rs`
+keeps the article formatting and clickable navigation. Its remaining app-icon
+artwork uses the shared Rust icon library too. `sdk/help.js` remains the shell's shared content API and
+window-effects adapter; the Help window does not use it or the React Markdown
+renderer. There are no Help JSX or JSON manifest sources.
 
 ## Remaining apps awaiting migration
 

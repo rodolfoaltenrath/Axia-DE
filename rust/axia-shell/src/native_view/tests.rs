@@ -187,10 +187,21 @@ fn node_with_text(root: i32, label: &str) -> i32 {
     0
 }
 fn children(node: i32) -> Vec<i32> {
-    // The scene has no child list API here: walk ids that name `node` as parent.
-    (1..4096)
-        .filter(|id| scene::exists(*id) && scene::parent(*id) == node)
-        .collect()
+    // Read the same borrowed sibling links as the renderer. Avoid scanning
+    // thousands of unused IDs for every text lookup (especially under Miri).
+    let mut out = Vec::new();
+    unsafe {
+        let parent = crate::runtime::node_get(node);
+        if parent.is_null() {
+            return out;
+        }
+        let mut child = (*parent).first;
+        while !child.is_null() {
+            out.push((*child).id);
+            child = (*child).next;
+        }
+    }
+    out
 }
 
 #[test]
@@ -316,221 +327,489 @@ fn icons_render_once_without_timers_or_input() {
 }
 
 #[test]
-fn custom_pointer_boundaries_and_actions_preserve_facts_and_coordinates() {
-    struct Panel(Rc<RefCell<Vec<Value>>>);
-    impl NativeApp for Panel {
-        fn request(&mut self, input: &Value) -> Value {
-            if input["cmd"] == "sync" {
-                return json!({"tree":{"kind":"view","events":{
-                    "onMouseEnter":["enter"],"onMouseLeave":["leave"],
-                    "onMouseDown":["down"],"onMouseUp":["up"],"onClick":["activate"]},
-                    "children":[{"kind":"text","label":"Inside"}]}});
-            }
-            self.0.borrow_mut().push(input.clone());
-            json!({})
-        }
-        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
-            None
-        }
-    }
+fn calculator_mounts_keys_and_pointer_feedback_directly_and_releases_its_nodes() {
+    let dir = locales();
+    std::fs::write(
+        dir.0.join("locales/en/calculator.json"),
+        r#"{"error":"Error"}"#,
+    )
+    .unwrap();
     let mount = scene::create(scene::VIEW);
-    let outside = scene::create(scene::VIEW);
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let mut host = Host::new(mount, Box::new(Panel(log.clone())), "", None);
-    host.facts(json!({"windows":[{"id":"editor"}]}));
-    let label = node_with_text(mount, "Inside");
-    let parent = scene::parent(label);
-    host.pointer("move", label, 12., 23., 0);
-    host.pointer("move", parent, 13., 24., 0);
-    host.pointer("down", label, 14., 25., 0);
-    host.pointer("up", label, 14., 25., 0);
-    host.pointer("move", outside, 0., 0., 0);
-    let records = log.borrow();
-    assert_eq!(
-        records
-            .iter()
-            .map(|v| v["cmd"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        ["enter", "down", "up", "activate", "leave"]
+    let mut host = Host::new(
+        mount,
+        super::app("calculator").unwrap(),
+        dir.0.to_str().unwrap(),
+        None,
     );
-    assert_eq!(records[1]["x"], 14.);
-    assert_eq!(records[1]["y"], 25.);
-    assert_eq!(records[1]["windows"][0]["id"], "editor");
-    drop(records);
-    drop(host);
-    scene::destroy(mount);
-    scene::destroy(outside);
-}
-
-#[test]
-fn native_app_keyboard_requires_focus_opt_in_and_explicit_consumption() {
-    struct Keyboard(Rc<RefCell<Vec<String>>>);
-    impl NativeApp for Keyboard {
-        fn request(&mut self, input: &Value) -> Value {
-            if input["cmd"] == "key" {
-                self.0
-                    .borrow_mut()
-                    .push(input["event"].as_str().unwrap().into());
-                return json!({"handled": input["event"] == "Enter"});
-            }
-            json!({})
-        }
-        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
-            None
-        }
+    host.facts(json!({"lang":"en","context":{"decimal":".","theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#3584e4"}}}));
+    let key = node_with_text(mount, "7");
+    assert_ne!(key, 0);
+    let button = scene::parent(key);
+    let opacity = || unsafe { (*crate::runtime::node_get(button)).s.opacity };
+    assert_eq!(opacity(), 1.);
+    host.pointer("move", key, 0., 0., 0);
+    assert_eq!(opacity(), 0.88);
+    host.pointer("down", key, 0., 0., 0);
+    assert_eq!(opacity(), 0.7);
+    host.pointer("up", key, 0., 0., 0);
+    assert_eq!(opacity(), 0.88);
+    assert!(texts(&host).lines().any(|t| t == "7"));
+    // The key's nodes survive updates, hover and result changes.
+    assert!(scene::exists(key));
+    assert_eq!(scene::parent(key), button);
+    for (name, chr) in [("+", "+"), ("3", "3"), ("Enter", "")] {
+        assert!(host.key(name, chr, 0));
     }
-    let mount = scene::create(scene::VIEW);
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let mut host = Host::new(mount, Box::new(Keyboard(log.clone())), "", None);
-    host.facts(json!({"focused":true}));
-    assert!(!host.key("Enter", "", 0));
-    host.facts(json!({"focused":true,"keyboard":true}));
-    assert!(host.key("Enter", "", 0));
-    assert!(!host.key("F12", "", 0));
-    for modifier in [2, 4, 16] {
-        assert!(!host.key("Enter", "", modifier));
-    }
+    assert!(texts(&host).lines().any(|t| t == "10"));
+    assert!(!host.key("1", "1", 2), "Ctrl shortcuts pass through");
+    assert!(!host.key("1", "1", 16), "Super shortcuts pass through");
+    assert!(!host.key("x", "x", 0));
+    host.pointer("down", key, 0., 0., 0);
     host.window_focus(false);
-    assert!(!host.key("Enter", "", 0));
-    assert_eq!(*log.borrow(), ["Enter", "F12"]);
-    drop(host);
-    scene::destroy(mount);
-}
-
-#[test]
-fn calculator_draws_and_handles_keyboard_and_pointer_without_react() {
-    let mount = scene::create(scene::VIEW);
-    let mut host = Host::new(mount, super::app("calculator").unwrap(), "", None);
-    host.facts(
-        json!({"focused":true,"keyboard":true,"context":{"decimal":",",
-        "theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#0a84ff"}}}),
-    );
-    assert!(host.key("1", "1", 0));
-    assert!(host.key("+", "+", 0));
-    let two = node_with_text(mount, "2");
-    assert_ne!(two, 0);
-    host.pointer("move", two, 10., 20., 0);
-    host.pointer("down", two, 10., 20., 0);
-    host.pointer("up", two, 10., 20., 0);
-    assert!(host.key("Enter", "", 0));
-    assert_ne!(node_with_text(mount, "3"), 0);
-    assert!(!host.key("F12", "", 0));
-    assert!(!host.key("c", "c", 2));
-    host.window_focus(false);
+    assert_eq!(opacity(), 1., "losing focus clears hover and pressure");
     assert!(!host.key("Escape", "", 0));
+    host.pointer("up", key, 0., 0., 0);
+    assert!(
+        texts(&host).lines().any(|t| t == "10"),
+        "focus loss cancels the pending click"
+    );
     host.window_focus(true);
-    assert!(host.key("Escape", "", 0));
-    assert!(host.key("1", "1", 0));
-    assert!(host.key(",", ",", 0));
-    assert!(host.key("5", "5", 0));
-    assert!(host.text().contains("1,5"));
+    host.key("Escape", "", 0);
+    let outside = scene::create(scene::VIEW);
+    host.pointer("down", key, 0., 0., 0);
+    host.pointer("move", outside, 0., 0., 0);
+    host.pointer("up", outside, 0., 0., 0);
+    assert_eq!(opacity(), 1.);
+    host.key("Enter", "", 0);
+    assert!(
+        texts(&host).contains("Error"),
+        "cancelled click left the expression empty"
+    );
+    host.key("Escape", "", 0);
+    for (name, chr) in [
+        ("1", "1"),
+        (",", ","),
+        ("5", "5"),
+        ("*", "*"),
+        ("2", "2"),
+        ("Enter", ""),
+    ] {
+        assert!(host.key(name, chr, 0));
+    }
+    assert!(texts(&host).lines().any(|t| t == "3"));
+    assert!(
+        host.deadline().is_none(),
+        "calculator does not poll or blink at idle"
+    );
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(outside);
+    scene::destroy(mount);
+}
+
+#[test]
+fn calculator_icons_and_unfocused_windows_never_take_arithmetic_keys() {
+    let a = scene::create(scene::VIEW);
+    let b = scene::create(scene::VIEW);
+    let icon = scene::create(scene::VIEW);
+    let mut first = Host::new(a, super::app("calculator").unwrap(), "", None);
+    let mut second = Host::new(b, super::app("calculator").unwrap(), "", None);
+    let mut picture = Host::new(icon, super::app("calculator").unwrap(), "", None);
+    first.facts(json!({"focused":true,"context":{"decimal":","}}));
+    second.facts(json!({"focused":false,"context":{"decimal":"."}}));
+    picture.facts(json!({"icon":32}));
+    assert!(!picture.key("1", "1", 0));
+    assert!(!second.key("1", "1", 0));
+    for key in ["1", ".", "5", "Enter"] {
+        assert!(first.key(key, key, 0));
+    }
+    assert!(texts(&first).contains("1,5"));
+    assert!(!texts(&second).contains("1.5"));
+    first.facts(json!({"focused":false,"context":{"decimal":","}}));
+    second.window_focus(true);
+    assert!(!first.key("Escape", "", 0));
+    assert!(second.key("9", "9", 0));
+    assert!(second.key("Enter", "", 0));
+    assert!(texts(&second).lines().any(|t| t == "9"));
+    assert!(texts(&first).contains("1,5"));
+    assert!(!children(icon).is_empty());
+    assert!(picture.deadline().is_none());
+    drop((first, second, picture));
+    for mount in [a, b, icon] {
+        assert!(children(mount).is_empty());
+        scene::destroy(mount);
+    }
+}
+
+struct CountedApp {
+    app: Box<dyn NativeApp>,
+    syncs: Rc<std::cell::Cell<usize>>,
+}
+impl NativeApp for CountedApp {
+    fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "sync" || input["cmd"] == "icon" {
+            self.syncs.set(self.syncs.get() + 1);
+        }
+        self.app.request(input)
+    }
+    fn pixels(&self, id: &str) -> Option<(usize, usize, &[u8])> {
+        self.app.pixels(id)
+    }
+    fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
+        self.app.key(key, chr, flags)
+    }
+}
+fn counted_calculator() -> (Host, i32, Rc<std::cell::Cell<usize>>) {
+    let mount = scene::create(scene::VIEW);
+    let syncs = Rc::new(std::cell::Cell::new(0));
+    let app = CountedApp {
+        app: super::app("calculator").unwrap(),
+        syncs: syncs.clone(),
+    };
+    let mut host = Host::new(mount, Box::new(app), "", None);
+    host.facts(json!({"focused":true,"context":{"theme":{"mode":"dark"}}}));
+    (host, mount, syncs)
+}
+
+#[test]
+fn calculator_keeps_the_primary_press_when_another_mouse_button_is_used() {
+    let (mut host, mount, syncs) = counted_calculator();
+    let seven = node_with_text(mount, "7");
+    let button = scene::parent(seven);
+    let opacity = || unsafe { (*crate::runtime::node_get(button)).s.opacity };
+    host.pointer("move", seven, 0., 0., 0);
+    host.pointer("down", seven, 0., 0., 0);
+    assert_eq!(opacity(), 0.7);
+    let before = syncs.get();
+    // A second button's release (or press) cannot end the held left click.
+    host.pointer("up", seven, 0., 0., 2);
+    host.pointer("down", seven, 0., 0., 2);
+    host.pointer("up", seven, 0., 0., 2);
+    assert_eq!(opacity(), 0.7);
+    assert_eq!(syncs.get(), before);
+    host.pointer("up", seven, 0., 0., 0);
+    host.key("Enter", "", 0);
+    assert_eq!(
+        texts(&host).lines().filter(|text| *text == "7").count(),
+        3,
+        "expression, result and key label all show 7"
+    );
+    assert!(!texts(&host).lines().any(|text| text == "77"));
     drop(host);
     assert!(children(mount).is_empty());
     scene::destroy(mount);
 }
 
 #[test]
-fn native_force_quit_uses_current_windows_and_clears_stale_selection() {
-    let mount = scene::create(scene::VIEW);
-    let mut host = Host::new(mount, super::app("forcequit").unwrap(), "", None);
-    let facts = json!({"windows":[{"id":"demo","key":"app:demo","app":"demo","name":"Demo"}],
-        "context":{"theme":{"mode":"dark","text":"#fff","accent":"#3584e4"}}});
-    host.facts(facts.clone());
-    let row = host.find_text("Demo");
-    assert_ne!(row, 0);
-    assert_eq!(host.find_text("missing"), 0);
-    host.pointer("down", row, 0., 0., 0);
-    host.pointer("up", row, 0., 0., 0);
-    let quit = host.find_text("forcequit.quit");
-    assert_ne!(quit, 0);
-    host.pointer("down", quit, 0., 0., 0);
-    host.pointer("up", quit, 0., 0., 0);
+fn calculator_reconciles_once_per_pointer_event_and_focus_fact_update() {
+    let (mut host, mount, syncs) = counted_calculator();
+    let seven = node_with_text(mount, "7");
+    let eight = node_with_text(mount, "8");
+    assert_eq!(syncs.get(), 1);
+    for (kind, node) in [
+        ("move", seven),
+        ("move", eight),
+        ("down", eight),
+        ("up", eight),
+    ] {
+        let before = syncs.get();
+        host.pointer(kind, node, 0., 0., 0);
+        assert_eq!(syncs.get(), before + 1, "one tree for {kind}");
+    }
+    host.pointer("move", seven, 0., 0., 0);
+    host.pointer("down", seven, 0., 0., 0);
+    let before = syncs.get();
+    host.facts(json!({"focused":false,"context":{"theme":{"mode":"dark"}}}));
     assert_eq!(
-        host.take().unwrap()[0],
-        json!({"kind":"closeWindow","id":"demo"})
+        syncs.get(),
+        before + 1,
+        "focus cleanup and new facts share a tree"
     );
-    host.result(json!(""));
-    host.facts(json!({"windows":[],"context":facts["context"]}));
-    let quit = host.find_text("forcequit.quit");
-    host.pointer("down", quit, 0., 0., 0);
-    host.pointer("up", quit, 0., 0., 0);
-    assert!(!host.pending());
+    let button = scene::parent(seven);
+    assert_eq!(unsafe { (*crate::runtime::node_get(button)).s.opacity }, 1.);
+    host.pointer("up", seven, 0., 0., 0);
+    assert_eq!(syncs.get(), before + 1, "cancelled click does not rebuild");
+    host.window_focus(true);
+    host.key("Enter", "", 0);
+    assert_eq!(
+        texts(&host).lines().filter(|text| *text == "8").count(),
+        3,
+        "expression, result and key label all show 8"
+    );
+    assert!(!texts(&host).lines().any(|text| text == "87"));
     drop(host);
     scene::destroy(mount);
 }
 
 #[test]
-fn a_native_text_field_has_priority_over_an_app_keyboard_and_blocks_fallthrough() {
-    struct Keys(Rc<RefCell<Vec<String>>>);
-    impl NativeApp for Keys {
-        fn request(&mut self, input: &Value) -> Value {
-            if input["cmd"] == "key" {
-                self.0
-                    .borrow_mut()
-                    .push(input["event"].as_str().unwrap().into());
-                json!({"handled":true})
-            } else {
-                json!({})
-            }
-        }
-    }
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let app_mount = scene::create(scene::VIEW);
-    let field_mount = scene::create(scene::VIEW);
-    let mut app = Host::new(app_mount, Box::new(Keys(log.clone())), "", None);
-    app.facts(json!({"focused":true,"keyboard":true}));
-    let mut field = Host::new(field_mount, Box::new(Demo::default()), "", None);
-    field.facts(json!({"focused":true}));
-    let input = field.find_text("Search");
-    field.pointer("down", input, 0., 0., 0);
-    super::with(|r| {
-        r.hosts.insert(10001, app);
-        r.hosts.insert(10002, field);
-    });
+fn calculator_icon_is_not_rebuilt_on_each_frame_after_layout() {
+    let mount = scene::create(scene::VIEW);
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let app = CountedApp {
+        app: super::app("calculator").unwrap(),
+        syncs: calls.clone(),
+    };
+    let mut host = Host::new(mount, Box::new(app), "", None);
+    host.facts(json!({"icon":32,"refreshMs":250}));
+    assert_eq!(calls.get(), 1);
     unsafe {
-        assert_eq!(super::axia_view_key(c"a".as_ptr(), c"a".as_ptr(), 0), 1);
-        assert_eq!(super::axia_view_key(c"F12".as_ptr(), c"".as_ptr(), 0), 0);
+        // The compositor lays out the shell's mount after the initial tree.
+        let node = crate::runtime::node_get(mount);
+        (*node).w = 32.;
+        (*node).h = 32.;
     }
-    assert!(
-        log.borrow().is_empty(),
-        "neither handled nor declined field keys reach the app"
+    for now in [0., 16., 32., 1000.] {
+        host.tick(now);
+    }
+    assert_eq!(
+        calls.get(),
+        1,
+        "an unchanged icon does not rebuild per frame"
     );
-    super::axia_view_unmount(10002);
-    unsafe {
-        assert_eq!(super::axia_view_key(c"Enter".as_ptr(), c"".as_ptr(), 0), 1);
-    }
-    assert_eq!(*log.borrow(), ["Enter"]);
-    super::axia_view_unmount(10001);
-    scene::destroy(field_mount);
-    scene::destroy(app_mount);
+    assert!(host.deadline().is_none());
+    host.facts(json!({"icon":48}));
+    assert_eq!(calls.get(), 2, "a new explicit icon size is rendered");
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
 }
 
 #[test]
-fn native_button_feedback_is_immediate_and_release_outside_cancels_the_click() {
+fn about_report_button_uses_native_input_and_small_control_metrics() {
+    let dir = locales();
+    std::fs::write(
+        dir.0.join("locales/en/about.json"),
+        r#"{"systemReport":"System Report…"}"#,
+    )
+    .unwrap();
     let mount = scene::create(scene::VIEW);
-    let outside = scene::create(scene::VIEW);
-    let mut host = Host::new(mount, Box::new(Demo::default()), "", None);
-    host.facts(json!({"context":{"theme":{"mode":"dark"}}}));
-    host.take();
-    let label = host.find_text("More");
+    let mut host = Host::new(
+        mount,
+        super::app("about").unwrap(),
+        dir.0.to_str().unwrap(),
+        None,
+    );
+    host.facts(json!({"context":{"theme":{"text":"#fff","control":"#333","controlRadiusSmall":4,"buttonBorder":true,"separator":"#555"}}}));
+    let label = node_with_text(mount, "System Report…");
+    assert_ne!(label, 0);
     let button = scene::parent(label);
-    let opacity = || unsafe { (*crate::runtime::node_get(button)).s.opacity };
-    host.pointer("move", label, 0., 0., 0);
-    assert!((opacity() - 0.85).abs() < 1e-6);
-    host.pointer("down", label, 0., 0., 0);
-    assert!((opacity() - 0.7).abs() < 1e-6);
-    host.pointer("move", outside, 0., 0., 0);
-    assert_eq!(opacity(), 1.);
-    host.pointer("up", outside, 0., 0., 0);
-    assert!(!host.pending());
-    assert!(host.text().contains("count 0"));
-    host.pointer("move", label, 0., 0., 0);
-    assert!((opacity() - 0.85).abs() < 1e-6);
+    assert_eq!(
+        unsafe { (*crate::runtime::node_get(button)).s.height.v },
+        22.
+    );
+    host.take();
+    host.pointer("down", button, 0., 0., 0);
+    host.pointer("up", button, 0., 0., 0);
+    assert!(host
+        .take()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|effect| effect == &json!({"kind":"openApp","app":"sysinfo"})));
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
+
+#[test]
+fn characters_selects_previews_and_copies_through_native_pointer_input() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(
+        mount,
+        super::app("characters").unwrap(),
+        &assets.to_string_lossy(),
+        None,
+    );
+    host.facts(json!({"lang":"en","settings":{"emojiRecent":["😺"],"emojiTone":0},"context":{"theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#0a84ff","controlRadius":7,"controlRadiusSmall":6}}}));
+    let cat = node_with_text(mount, "😺");
+    assert_ne!(cat, 0);
+    host.pointer("down", cat, 0., 0., 0);
+    host.pointer("up", cat, 0., 0., 0);
+    assert!(host.text().contains("U+1F63A"));
+    assert!(host
+        .take()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["kind"] == "settings"));
+    let copy = node_with_text(mount, "Copy");
+    assert_ne!(copy, 0);
+    host.pointer("down", copy, 0., 0., 0);
+    host.pointer("up", copy, 0., 0., 0);
+    assert!(host
+        .take()
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e == &json!({"host":true,"kind":"copy","text":"😺"})));
+    let search = node_with_text(mount, "Search emoji");
+    assert_ne!(search, 0);
+    host.pointer("down", search, 0., 0., 0);
+    host.pointer("up", search, 0., 0., 0);
+    assert!(host.key("x", "x", 0));
+    assert_ne!(node_with_text(mount, "x"), 0);
+    assert!(host.key("Escape", "", 0));
+    assert_eq!(node_with_text(mount, "x"), 0);
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
+
+#[test]
+fn clock_native_input_starts_pauses_and_saves_alarm_with_enter() {
+    crate::clock::with(|s| *s = Default::default());
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(
+        mount,
+        super::app("clock").unwrap(),
+        &assets.to_string_lossy(),
+        None,
+    );
+    let mut facts = json!({"lang":"en","args":{"tab":"timer"},"settings":{"clock":{"hour24":"24"}},"context":{"theme":{"mode":"dark","text":"#fff","textDim":"#aaa","accent":"#0a84ff","control":"#333","controlRadius":7,"controlRadiusSmall":6}}});
+    host.facts(facts.clone());
+    let preset = node_with_text(mount, "3 min");
+    assert_ne!(preset, 0);
+    host.pointer("down", preset, 0., 0., 0);
+    host.pointer("up", preset, 0., 0., 0);
+    assert_eq!(crate::clock::with(|s| s.timer["duration"].clone()), 180000);
+    assert!(host.text().contains("Pause"));
+    assert!(host.deadline().is_some());
+    let pause = node_with_text(mount, "Pause");
+    host.pointer("down", pause, 0., 0., 0);
+    host.pointer("up", pause, 0., 0., 0);
+    assert_eq!(crate::clock::with(|s| s.timer["state"].clone()), "paused");
+    assert!(host.deadline().is_none());
+    facts["args"] = json!({"tab":"alarms"});
+    host.facts(facts);
+    let add = node_with_text(mount, "+");
+    assert_ne!(add, 0);
+    host.pointer("down", add, 0., 0., 0);
+    host.pointer("up", add, 0., 0., 0);
+    let label = node_with_text(mount, "Label (optional)");
+    assert_ne!(label, 0);
     host.pointer("down", label, 0., 0., 0);
     host.pointer("up", label, 0., 0., 0);
-    assert!((opacity() - 0.85).abs() < 1e-6);
-    assert!(host.text().contains("count 1"));
+    assert!(host.key("N", "Native alarm", 0));
+    assert!(host.key("Enter", "", 0));
+    assert_eq!(
+        crate::clock::with(|s| s.config["alarms"][0]["label"].clone()),
+        "Native alarm"
+    );
+    drop(host);
+    assert!(children(mount).is_empty());
+    scene::destroy(mount);
+}
+
+#[test]
+fn hover_only_parent_keeps_hover_above_a_clickable_child() {
+    struct Hover {
+        log: Rc<RefCell<Vec<String>>>,
+    }
+    impl NativeApp for Hover {
+        fn request(&mut self, input: &Value) -> Value {
+            let cmd = input["cmd"].as_str().unwrap_or("");
+            if cmd == "sync" {
+                return json!({"tree":{"kind":"view","events":{"onMouseEnter":["enter",""],"onMouseLeave":["leave",""]},"children":[{"kind":"text","label":"Row"},{"kind":"view","events":{"onClick":["remove",""]},"children":[{"kind":"text","label":"Remove"}]}]}});
+            }
+            self.log.borrow_mut().push(cmd.into());
+            Value::Null
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(vec![]));
+    let mut host = Host::new(mount, Box::new(Hover { log: log.clone() }), "", None);
+    host.facts(json!({"context":{}}));
+    host.pointer("move", node_with_text(mount, "Row"), 0., 0., 0);
+    host.pointer("move", node_with_text(mount, "Remove"), 0., 0., 0);
+    assert_eq!(*log.borrow(), vec!["enter"]);
+    let remove = node_with_text(mount, "Remove");
+    host.pointer("down", remove, 0., 0., 0);
+    host.pointer("up", remove, 0., 0., 0);
+    assert!(log.borrow().contains(&"remove".into()));
     drop(host);
     scene::destroy(mount);
-    scene::destroy(outside);
+}
+
+#[test]
+fn help_native_search_enter_escape_tour_and_open_app_use_scene_input() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, super::app("help").unwrap(), assets.to_str().unwrap(), None);
+    let mut facts = json!({"lang":"en","focused":true,"args":{"article":"welcome"},"width":860,
+        "registry":[{"id":"help","name":"Help","icon":true},{"id":"clock","name":"Clock","icon":true}],
+        "context":{"theme":{"text":"#fff","textDim":"#aaa","accent":"#3584e4","control":"#333","sidebarBg":"#222","separator":"#444","controlRadius":6,"controlRadiusSmall":4}}});
+    host.facts(facts.clone());
+    let click = |host: &mut Host, label: &str| {
+        let node = node_with_text(mount, label);
+        assert_ne!(node, 0, "missing {label}");
+        host.pointer("down", node, 0., 0., 0);
+        host.pointer("up", node, 0., 0., 0);
+    };
+    let field = scene::parent(node_with_text(mount,"Search help"));
+    click(&mut host,"Search help");
+    assert!(host.key("c","clock",0));
+    assert!(host.key("Enter","",0));
+    assert!(host.text().contains("Open Clock"));
+    host.take();click(&mut host,"Open Clock");
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e| e["kind"]=="openApp"&&e["app"]=="clock"));
+    host.pointer("down",field,0.,0.,0);host.pointer("up",field,0.,0.,0);assert!(host.key("Escape","",0));
+    assert!(host.text().contains("Getting started"));
+    facts["args"]=json!({"tour":true,"nonce":1});host.facts(facts);
+    for _ in 0..5 { click(&mut host,"Next"); }
+    assert!(host.text().contains("Always at hand"));
+    host.take();click(&mut host,"Get started");
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["kind"]=="settings"&&e["patch"]["welcomeShown"]==true));
+    assert!(!host.text().contains("Get started"));
+    drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
+}
+
+#[test]
+fn force_quit_native_rows_disabled_button_and_error_result_use_scene_input() {
+    let assets=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount=scene::create(scene::VIEW);
+    let mut host=Host::new(mount,super::app("forcequit").unwrap(),assets.to_str().unwrap(),None);
+    let mut facts=json!({"lang":"en","focused":true,"windows":[
+        {"id":"notes#1","key":"notes","name":"Notes","iconData":{"kind":"app","id":"notes"}},
+        {"id":"notes#2","key":"notes","name":"Notes","iconData":{"kind":"app","id":"notes"}}],
+        "context":{"theme":{"text":"#fff","textDim":"#aaa","accent":"#3584e4","control":"#333","separator":"#444","controlRadius":6}}});
+    host.facts(facts.clone());
+    let click=|host:&mut Host,label:&str| {
+        let node=host.find_text(label);assert_ne!(node,0,"missing {label}");
+        host.pointer("down",node,0.,0.,0);host.pointer("up",node,0.,0.,0);
+    };
+    click(&mut host,"Force Quit");assert!(host.take().is_none());
+    assert!(host.text().contains("2 windows"));
+    click(&mut host,"Notes");click(&mut host,"Force Quit");
+    assert_eq!(host.take(),Some(json!([{"kind":"forceQuit","key":"notes"}])));
+    host.result(json!("app.forceQuitX11"));assert!(host.text().contains("X11"));
+    facts["windows"]=json!([]);host.facts(facts);
+    assert_eq!(host.find_text("Notes"),0);click(&mut host,"Force Quit");assert!(host.take().is_none());
+    assert_eq!(host.find_text(""),0);
+    drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
+}
+
+#[test]
+fn app_about_native_metadata_title_and_target_changes_do_not_retain_old_content() {
+    let assets=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount=scene::create(scene::VIEW);
+    let mut host=Host::new(mount,super::app("appabout").unwrap(),assets.to_str().unwrap(),None);
+    let mut facts=json!({"lang":"en","args":{"key":"calculator"},
+        "catalog":[{"id":"calculator","name":"Calculator","icon":true}],
+        "registry":[{"id":"calculator","version":"0.9.0","system":true}],
+        "context":{"theme":{"text":"#fff","textDim":"#aaa"}}});
+    host.facts(facts.clone());
+    assert_ne!(host.find_text("Calculator"),0);assert_ne!(host.find_text("Version 0.9.0"),0);
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["title"]=="About Calculator"));
+    facts["args"]=json!({"key":"missing"});host.facts(facts);
+    assert_eq!(host.find_text("Calculator"),0);assert_eq!(host.find_text("Version 0.9.0"),0);
+    assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["title"]=="About missing"));
+    drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
 }

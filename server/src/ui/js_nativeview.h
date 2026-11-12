@@ -5,6 +5,7 @@
 #include "quickjs.h"
 
 /* Rust (native_view/mod.rs). UI thread only. */
+char    *axia_clock_request(const char *input);
 void     axia_view_init(const char *assets, const char *home);
 unsigned axia_view_mount(int node, const char *app, const char *facts);
 void     axia_view_unmount(unsigned handle);

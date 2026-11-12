@@ -1,5 +1,5 @@
-// Compiled Rust apps: native scene views, or the Files compatibility host.
-// No React widget renderer is used for Calculator, Force Quit, About or Monitor.
+// Shared shell mounts for compiled Rust apps. Rust owns their widgets, input and
+// icons; Files retains its own shared browser/dialog renderer until its next stage.
 import { createElement as h } from 'react';
 import { useAppWindow } from './components.jsx';
 import { RustFiles, RustFileIcon } from './rustfiles.js';

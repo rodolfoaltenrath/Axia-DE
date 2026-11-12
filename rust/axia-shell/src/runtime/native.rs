@@ -198,3 +198,17 @@ pub fn gather_text(id: i32) -> String {
         })
     }
 }
+
+/// Use the engine's first-strong bidi rule, also used by lord.text.direction.
+#[cfg(not(test))]
+pub fn text_rtl(text: &str) -> bool {
+    extern "C" { fn text_direction(text: *const std::ffi::c_char) -> i32; }
+    let text = cstring(text);
+    unsafe { text_direction(text.as_ptr()) != 0 }
+}
+// Like image loading above, the C text engine is absent from scene unit tests.
+#[cfg(test)]
+pub fn text_rtl(text: &str) -> bool {
+    text.chars().take(256).find(|c| c.is_alphabetic()).is_some_and(|c|
+        matches!(c as u32,0x0590..=0x08ff|0xfb1d..=0xfdff|0xfe70..=0xfefc|0x10800..=0x10fff|0x1e800..=0x1eeff))
+}

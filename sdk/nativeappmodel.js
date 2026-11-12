@@ -1,6 +1,5 @@
 // Shared transport: Rust selects effects and folds results; existing host calls execute them.
 import { wm } from './windows.js';
-import { settings } from './settings.js';
 export const nativeAppRequest = (owner, value) => owner.request(JSON.stringify(value));
 // One executor for both native views and callers of the app-control service.
 export function executeNativeEffect(effect, manifest = {}) {

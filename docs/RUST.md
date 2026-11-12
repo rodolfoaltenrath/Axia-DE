@@ -611,18 +611,19 @@ suprime apenas as outras janelas do mesmo app isolado; uma falha permite tentar
 a próxima superfície. Janelas X11 recebem pedido de fechamento, nunca SIGKILL
 contra o XWayland. A primeira mensagem de erro é preservada.
 
-Cada janela do app possui um estado Rust independente, pertencente a um objeto
-QuickJS com finalizador. O adaptador conserva referências do renderizador e aplica
-os efeitos usando as APIs existentes; o compositor continua verificando usuário,
-cliente Wayland e PID antes de encerrar um processo. Nenhum PID vindo do app é
-aceito. `runningApps()` e `forceQuit()` também usam esse modelo Rust compartilhado.
+Cada janela do Force Quit possui um estado no host nativo Rust: conteúdo,
+ícones e entrada não passam pelo React. O clique envia somente a chave do grupo;
+`forceQuit()` obtém os fatos atuais da sessão antes de chamar o controlador Rust
+compartilhado com `runningApps()` e com os menus do shell. A FFI de controle
+continua pertencendo a um objeto QuickJS com finalizador. O compositor verifica
+usuário, cliente Wayland e PID antes de encerrar um processo; nenhum PID vindo
+do app é aceito.
 
 Files mantém seu serviço e sua interface Rust, agora fisicamente em `apps/files/`.
 Navegador e seletores continuam compartilhando o mesmo modelo. `sdk/rustfiles.js`
-e `sdk/rustwidgets.js` são adaptadores comuns, escritos sem sintaxe JSX, para os
-componentes já existentes da DE. O renderizador compartilhado ainda usa React;
-essa mudança elimina a implementação própria dos apps em JSX, não substitui o
-renderizador de toda a sessão.
+é seu adaptador comum para os componentes já existentes do Axia. Esse
+renderizador de navegador e diálogos ainda usa React; o antigo `WidgetHost` dos
+outros apps compilados foi removido de `sdk/nativeapps.js`.
 
 Os testes Rust verificam política de encerramento, falhas, seleção obsoleta,
 isolamento entre instâncias, metadados e ausência dos fontes legados. A integração
@@ -640,9 +641,9 @@ além dos testes existentes de navegação, seletores e operações de arquivos.
 ## Calculadora e Sobre o aplicativo
 
 `apps/calculator/` e `apps/appabout/` também são fontes Rust completas, com
-metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. A propriedade do
-estado e a FFI comum ficam em `rust/axia-shell/src/native_apps_host.rs`: cada
-objeto possui uma variante Rust tipada, liberada pelo finalizador QuickJS.
+metadados em `manifest.rs` e sem `index.jsx` ou manifesto JSON. Ambos pertencem
+ao host de visões nativas em Rust, incluindo seus nós, ícones e entrada. O Sobre
+não usa mais a FFI de objetos do antigo renderizador React.
 
 A Calculadora mantém expressão, resultado, erro, hover e pressionamento em
 Rust. O parser limita o tamanho e a profundidade e exige consumir toda a entrada.
@@ -655,15 +656,77 @@ LTR, atalhos e cores dos dois estilos são conservados.
 O Sobre recebe fatos serializáveis do catálogo e do registro. Rust escolhe nome,
 versão, descrição, origem, indicação de isolamento, ícone e título da janela.
 Dados de um alvo anterior não são conservados ao mudar para um app inexistente.
-O host comum resolve traduções, ícones e teclado/foco e aplica o título, sem
-wrappers específicos por app. As capacidades `facts` e `keyboard` vêm dos
-metadados Rust; a Calculadora não transporta o catálogo a cada tecla.
+O host comum resolve traduções e teclado/foco e aplica o título, sem wrappers
+específicos por app. `native_view/icons.rs` compartilha os desenhos dos apps; os
+ícones de pacotes e janelas Linux recebem descritores de arquivo ou de letra,
+sem transportar componentes React. Os fatos necessários vêm dos metadados Rust;
+a Calculadora trata teclas diretamente no host nativo, sem adaptador JS
+específico nem transporte do catálogo a cada tecla.
 
 Os testes unitários cobrem expressões malformadas, limites, valores grandes,
 precedência, teclado, estados independentes e as origens dos aplicativos. A
-integração real usa botões e teclado da Calculadora, provoca divisão por zero,
-reabre a janela e confere os títulos e versões do Sobre. Os quatro apps compilados
+integração real usa o teclado da Calculadora, provoca divisão por zero,
+reabre a janela e confirma que seus textos não passam pelo React. Os testes
+Rust do host também verificam cliques, hover, pressão, cancelamento, foco,
+instâncias e ícones. A integração confere os títulos e versões do Sobre. Os apps compilados
 são abertos nos temas padrão e clássico pelo teste headless.
+
+## Sobre o Axia
+
+`apps/about/` agora contém apenas Rust: `manifest.rs`, `mod.rs`, `ui.rs` e
+`tests.rs`. O host nativo monta o conteúdo e o ícone diretamente na cena.
+A árvore conserva o logotipo, a tipografia, os espaçamentos, os indicadores de
+assinatura, as linhas opcionais de gabinete/tempo de boot e o botão de relatório.
+O botão usa as dimensões pequenas do controle original, incluindo a borda do tema.
+
+O shell comum (`sdk/nativeview.js`) fornece fatos dos serviços existentes,
+sem definir o layout ou tratar o estado do app. `serviceIntervals` conserva os
+períodos de 5 segundos para sistema e 2 segundos para estatísticas do servidor;
+o contexto fornece resolução, versão do motor e separadores regionais. O relatório
+é um efeito `openApp` do host. A moldura da janela e o shell continuam em React;
+a migração deste app não significa que o compositor inteiro esteja em Rust.
+
+## Emoji e Símbolos
+
+`apps/characters/` contém apenas fontes Rust. O app monta abas, categorias,
+seletor de tons, busca, grade Unicode, prévia e ação de cópia no host nativo.
+A busca mantém a ordem Unicode, a preferência por início de palavra e a consulta
+simultânea aos termos em inglês, espanhol e português, ignorando acentos.
+Os nomes respeitam o idioma da interface e os pacotes de idioma do usuário.
+
+`assets/emoji.json` é a única lista de categorias e bases que aceitam tons de
+pele; o Rust a compila e `sdk/emojidata.js` a exporta para o seletor rápido do
+shell. `tools/gen-emoji.mjs` atualiza esse arquivo compartilhado. O seletor
+rápido continua no shell; o conteúdo do app não passa pelo React.
+Recentes e tom continuam nas preferências `emojiRecent` e `emojiTone` existentes.
+A cópia é um efeito do host para a área de transferência do sistema.
+
+## Serviço de alarmes, temporizador e cronômetro
+
+`rust/axia-shell/src/clock/` é o modelo de sessão do Relógio. Ele conserva os
+formatos de `settings.clock`, a soneca de 9 minutos, a janela de atraso de
+10 minutos, a duração para repetir o temporizador e as 200 voltas mais recentes.
+A recorrência usa o calendário local, incluindo mudanças de horário de verão;
+num horário ambíguo, escolhe a primeira ocorrência, como o `Date` anterior.
+
+`sdk/alarms.js` publica snapshots e apresenta sons, notificações e o item da
+barra. O próximo intervalo vem do Rust; o agendamento não depende de uma janela
+aberta. A FFI JSON fica em `js_nativeview.c` (`lord.clock.request`).
+
+## Relógio nativo
+
+`apps/clock/` contém apenas Rust: metadados, controlador, árvore de widgets e
+testes. As quatro abas, seleção e remoção de cidades, editor de alarmes,
+preferências de 12/24 horas, presets do temporizador e voltas do cronômetro são
+montados diretamente no host nativo. A leitura dos fusos conserva o serviço
+TZif existente do compositor, por efeitos `nativeRead` autorizados no manifesto.
+
+O host admite cadência variável por app: relógio mundial a cada segundo,
+alarmes a cada 30 segundos, temporizador em execução a cada 250 ms e cronômetro
+em execução a cada 47 ms. Temporizador pausado e cronômetro parado não mantêm
+um timer de desenho. Fechar a janela libera seus nós e preserva o serviço de
+sessão. O shell recebe apenas snapshots para o indicador e os efeitos de
+notificação/configuração. Enter nos campos e hover das linhas também são do host.
 
 ## Monitor application
 
@@ -714,6 +777,16 @@ Rust, incluindo seus ícones. O host React de widgets desses apps foi removido;
 os efeitos ainda passam pelo adaptador de serviços da sessão. Os ícones do
 lançador e da lixeira da Dock também usam visões Rust. A retirada do restante
 do shell é acompanhada em [NATIVE-SHELL.md](NATIVE-SHELL.md).
+das Configurações. Sobre o Axia, Calculadora e Monitor são montados diretamente em Rust.
+A Calculadora conserva a mesma árvore de widgets e o ícone; hover, pressão,
+cancelamento do clique, traduções e teclado são tratados pelo host nativo.
+Teclas só chegam à janela focada, nunca aos ícones; atalhos Ctrl/Alt/Super
+seguem para o shell, e a Calculadora não mantém timer quando ociosa.
+A Axia Store também é uma visão nativa ([STORE.md](STORE.md));
+`native_view/paint.rs` tem as formas com antialiasing que ela usa para ícones e
+artes. Force Quit e Sobre continuam no host React
+(`sdk/rustwidgets.js`): o Force Quit mostra ícones de apps, que são componentes
+do shell.
 
 ```sh
 cargo test --manifest-path rust/Cargo.toml --locked --offline --lib native_view
@@ -860,3 +933,11 @@ make -C server build/windows-bridge-host && (cd server && node tests/windows_bri
 
 Ainda precisa de validação na sessão física: temas, Dock, Overview, alternador,
 gestos e apps Linux sobre a lista nova.
+
+## Parsers do e-mail
+
+Os parsers do `axia-maild` que leem dados de fora (MIME e charsets, XML do
+WebDAV, o sanitizador de HTML, iCalendar e vCard) estão em `rust/axia-mail`,
+com a mesma ABI C de `server/src/mail/*.h`. Só o `axia-maild` liga essa
+variante do `axia-codecs` (feature `mail`). Detalhes, limites e validação em
+[RUST-MAIL.md](RUST-MAIL.md).

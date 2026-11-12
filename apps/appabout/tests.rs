@@ -33,8 +33,26 @@ fn empty_and_changing_targets_do_not_reuse_previous_data() {
 fn icons_and_untrusted_descriptions_are_widget_data_not_code() {
     let mut app = App;
     let data=app.request(&json!({"cmd":"sync","args":{"key":"one"},"catalog":[{"id":"one","icon":true,"comment":"<script>alert(1)</script>"}]}))["tree"].clone();
-    assert_eq!(data["children"][0]["kind"], "appIcon");
+    assert_eq!(data["children"][0]["kind"], "view");
     assert!(data.to_string().contains("<script>"));
     let icon = app.request(&json!({"cmd":"icon","size":-5}));
     assert_eq!(icon["style"]["width"], 1.);
+}
+
+#[test]
+fn file_and_compiled_icons_mount_directly_with_the_original_text_sizes() {
+    let mut app = App;
+    let tree=app.request(&json!({"cmd":"sync","args":{"key":"desktop:one.desktop"},
+        "catalog":[{"id":"desktop:one.desktop","name":"One","icon":true,"version":"1.2","kind":"linux","iconData":{"kind":"image","path":"/tmp/one.png","name":"One"}}]}))["tree"].clone();
+    assert_eq!(tree["children"][0]["kind"], "image");
+    assert_eq!(tree["children"][0]["src"], "/tmp/one.png");
+    assert_eq!(tree["children"][1]["style"]["fontSize"], 17);
+    assert_eq!(tree["children"][2]["style"]["fontSize"], 12);
+    assert_eq!(tree["children"][3]["style"]["fontSize"], 11);
+    let tree=app.request(&json!({"cmd":"sync","args":{"key":"calculator"},"registry":[{"id":"calculator","icon":true}]}))["tree"].clone();
+    assert_eq!(
+        tree["children"][0],
+        crate::native_view::icon_tree("calculator", 64.).unwrap()
+    );
+    assert!(!tree.to_string().contains("appIcon"));
 }

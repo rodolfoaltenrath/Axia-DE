@@ -1,7 +1,13 @@
 //! Codecs shared by the compositor and sandboxed helpers. C owns returned
 //! buffers and frees them with free(), or sm_free() in the vault build.
+#[cfg(all(feature = "secure-memory", feature = "mail"))]
+compile_error!("the mail parsers belong to axia-maild, never to the vault build");
 #[cfg(all(feature = "secure-memory", feature = "fonts"))]
 compile_error!("vault codecs require --no-default-features; never unify the protected allocator with compositor fonts");
+
+// Links the mail parsers' exported C symbols into axia-maild's static library.
+#[cfg(feature = "mail")]
+extern crate axia_mail;
 
 mod compression;
 #[cfg(feature = "secure-memory")]

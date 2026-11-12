@@ -21,6 +21,39 @@ unsafe fn bytes<'a>(p: *const c_char) -> &'a [u8] {
         CStr::from_ptr(p).to_bytes()
     }
 }
+/// An installed desktop app as other Rust modules see it (the Axia Store).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DesktopFacts {
+    /// The desktop id; the shell names the app `desktop:<id>`.
+    pub id: String,
+    /// `Categories=` as written (`;`-separated).
+    pub categories: String,
+    /// A PNG path, or empty.
+    pub icon: String,
+}
+/// The current catalog of installed desktop apps (UI thread). Only the three
+/// strings are copied out, not the catalog's fixed-size records.
+pub fn desktop_facts() -> Vec<DesktopFacts> {
+    let text = |s: &[c_char]| {
+        // SAFETY: the catalog's fixed buffers are NUL-terminated.
+        unsafe { CStr::from_ptr(s.as_ptr()) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    desktop::with_list(&desktop::language(), |apps| {
+        apps.iter()
+            .map(|a| DesktopFacts {
+                id: text(&a.id),
+                categories: text(&a.categories),
+                icon: text(&a.icon),
+            })
+            .collect()
+    })
+}
+/// Changes only when the desktop catalog was re-read with a different list.
+pub fn desktop_generation() -> u64 {
+    desktop::generation(&desktop::language())
+}
 unsafe fn path<'a>(p: *const c_char) -> &'a Path {
     Path::new(OsStr::from_bytes(bytes(p)))
 }
