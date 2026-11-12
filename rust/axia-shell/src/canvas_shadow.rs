@@ -202,23 +202,62 @@ pub(crate) fn put(p: &mut u32, argb: u32, a: u32) {
 /// came from `axia_shadow_mask` with no call to it since.
 #[allow(clippy::too_many_arguments)]
 unsafe fn blend(px: *mut u32, stride: i32, clip: [i32; 4], x: i32, y: i32, m: &ShadowMask, argb: u32) {
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("avx2") {
+        return blend_avx2(px, stride, clip, x, y, m, argb);
+    }
+    blend_rows(px, stride, clip, x, y, m, argb)
+}
+
+// The same rows compiled for AVX2 (integer arithmetic only: the same pixels), picked at run time.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn blend_avx2(px: *mut u32, stride: i32, clip: [i32; 4], x: i32, y: i32, m: &ShadowMask, argb: u32) {
+    blend_rows(px, stride, clip, x, y, m, argb)
+}
+
+#[inline(always)]
+unsafe fn blend_rows(px: *mut u32, stride: i32, clip: [i32; 4], x: i32, y: i32, m: &ShadowMask, argb: u32) {
     let ca = argb >> 24;
     let [cx0, cy0, cx1, cy1] = clip;
     let (j0, j1) = (y.max(cy0), (y + m.mh).min(cy1));
     for j in j0..j1 {
         let mj = (j - y) as usize;
         let s = std::slice::from_raw_parts(m.spans.add(mj * 4), 4);
-        let row = px.add(j as usize * stride as usize);
+        let row = px.offset(j as isize * stride as isize);
         let mrow = m.a.add(mj * m.mw as usize);
         for (a0, a1) in [(s[0], s[1]), (s[2], s[3])] {
             let (i0, i1) = ((x + a0).max(cx0), (x + a1).min(cx1));
-            for i in i0..i1 {
-                let v = *mrow.add((i - x) as usize) as u32;
-                if v != 0 {
-                    put(&mut *row.add(i as usize), argb, (v * ca + 127) / 255);
-                }
+            if i0 >= i1 {
+                continue;
             }
+            let n = (i1 - i0) as usize;
+            let dst = std::slice::from_raw_parts_mut(row.offset(i0 as isize), n);
+            let cov = std::slice::from_raw_parts(mrow.add((i0 - x) as usize), n);
+            blend_span(dst, cov, argb, ca);
         }
+    }
+}
+
+/// put() over a span, without branches so it vectorizes: a weight of 0 keeps the pixel (a zero
+/// byte of the mask gives 0, as the skip it replaces), 255 writes the opaque color, the rest blend.
+#[inline(always)]
+fn blend_span(dst: &mut [u32], cov: &[u8], argb: u32, ca: u32) {
+    let full = argb | 0xff00_0000;
+    for (p, &v) in dst.iter_mut().zip(cov) {
+        let a = (v as u32 * ca + 127) / 255;
+        let d = *p;
+        let ia = 255 - a.min(255);
+        let rb = (((argb & 0x00ff_00ff) * a + (d & 0x00ff_00ff) * ia) >> 8) & 0x00ff_00ff;
+        let g = (((argb & 0x0000_ff00) * a + (d & 0x0000_ff00) * ia) >> 8) & 0x0000_ff00;
+        let blended = over_alpha(a.min(255), d >> 24) << 24 | rb | g;
+        *p = if a >= 255 {
+            full
+        } else if a == 0 {
+            d
+        } else {
+            blended
+        };
     }
 }
 
