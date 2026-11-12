@@ -11,4 +11,6 @@ const AxiaShadowMask *axia_shadow_mask(int32_t w, int32_t h, int32_t r, int32_t 
  * while the mask is valid (the canvas' row bands). */
 void axia_shadow_blend(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, int32_t cx1, int32_t cy1,
                        int32_t x, int32_t y, const AxiaShadowMask *m, uint32_t argb);
+/* canvas_clear (rust/axia-shell/src/canvas_ops.rs): fills [x0, x1) × [y0, y1) with value. */
+void axia_canvas_fill(uint32_t *px, int32_t stride, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t value);
 #endif

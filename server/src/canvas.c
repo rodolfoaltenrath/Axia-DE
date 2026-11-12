@@ -221,10 +221,7 @@ void canvas_copy(Canvas *dst, const Canvas *src) {
 }
 
 void canvas_clear(Canvas *c, uint32_t rgb) {
-    for (int y = c->clip.y0; y < c->clip.y1; y++) {
-        uint32_t *row = c->px + (size_t)y * c->stride;
-        for (int x = c->clip.x0; x < c->clip.x1; x++) row[x] = rgb;
-    }
+    axia_canvas_fill(c->px, c->stride, c->clip.x0, c->clip.y0, c->clip.x1, c->clip.y1, rgb);
 }
 
 /* ---- parallel rows (axia-server sets canvas_parallel; tests and helpers stay serial) ----
