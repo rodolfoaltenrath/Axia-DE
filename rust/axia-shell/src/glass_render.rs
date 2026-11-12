@@ -71,9 +71,33 @@ unsafe fn phase(b: &Blur, n: i32, work: u64, run: Kernel, parallel: Option<Paral
         run(ctx, 0, n);
     }
 }
+// The kernels below are compiled twice. The x86-64 baseline (SSE2) has no 32-bit vector multiply,
+// so their loops ran one value at a time; with AVX2, detected at run time, the same loops vectorize.
+// Integer arithmetic, and float expressions Rust never fuses (no mul+add contraction): the same pixels.
+macro_rules! kernel {
+    ($name:ident, $body:ident, $avx2:ident) => {
+        #[cfg(target_arch = "x86_64")]
+        #[target_feature(enable = "avx2")]
+        unsafe fn $avx2(ctx: *mut c_void, a: i32, b: i32) {
+            $body(ctx, a, b)
+        }
+        unsafe extern "C" fn $name(ctx: *mut c_void, a: i32, b: i32) {
+            #[cfg(target_arch = "x86_64")]
+            if std::is_x86_feature_detected!("avx2") {
+                return $avx2(ctx, a, b);
+            }
+            $body(ctx, a, b)
+        }
+    };
+}
+kernel!(down, down_body, down_avx2);
+kernel!(rows, rows_body, rows_avx2);
+kernel!(cols, cols_body, cols_avx2);
+kernel!(up, up_body, up_avx2);
 // Kernels share an immutable job. Only disjoint rows/columns of raw pixel arrays
 // are written by different workers. No &mut Blur/Canvas aliases are constructed.
-unsafe extern "C" fn down(ctx: *mut c_void, j0: i32, j1: i32) {
+#[inline(always)]
+unsafe fn down_body(ctx: *mut c_void, j0: i32, j1: i32) {
     let b = &*ctx.cast::<Blur>();
     let f = b.f;
     let sw = b.sw;
@@ -94,34 +118,41 @@ unsafe extern "C" fn down(ctx: *mut c_void, j0: i32, j1: i32) {
     }
     let span = b.bx1 - b.bx0;
     let full = span / f;
+    // Slices: the compiler knows the row and the sums don't overlap and vectorizes the blocks.
+    let sums = std::slice::from_raw_parts_mut(acc, sw as usize * 2);
     for j in j0..j1 {
-        ptr::write_bytes(acc, 0, sw as usize * 2);
+        sums.fill(0);
         let rows = (b.by1 - (b.by0 + j * f)).min(f);
         for v in 0..rows {
-            let row =
-                b.c.px
-                    .offset(((b.by0 + j * f + v) * b.c.stride + b.bx0) as isize);
-            for i in 0..full {
+            let row = std::slice::from_raw_parts(
+                b.c.px.offset(((b.by0 + j * f + v) * b.c.stride + b.bx0) as isize),
+                span as usize,
+            );
+            let (whole, rest) = row.split_at((full * f) as usize);
+            for (block, sum) in whole.chunks_exact(f as usize).zip(sums.chunks_exact_mut(2)) {
                 let (mut rb, mut ag) = (0u32, 0u32);
-                for u in 0..f {
-                    let p = *row.offset((i * f + u) as isize);
+                for &p in block {
                     rb += p & 0x00ff00ff;
                     ag += (p >> 8) & 0x00ff00ff;
                 }
-                *acc.offset((i * 2) as isize) += rb;
-                *acc.offset((i * 2 + 1) as isize) += ag;
+                sum[0] += rb;
+                sum[1] += ag;
             }
-            for px in full * f..span {
-                let p = *row.offset(px as isize);
-                *acc.offset((full * 2) as isize) += p & 0x00ff00ff;
-                *acc.offset((full * 2 + 1) as isize) += (p >> 8) & 0x00ff00ff;
+            for &p in rest {
+                sums[(full * 2) as usize] += p & 0x00ff00ff;
+                sums[(full * 2 + 1) as usize] += (p >> 8) & 0x00ff00ff;
             }
         }
         for i in 0..sw {
             let n = ((b.bx1 - (b.bx0 + i * f)).min(f) * rows) as u32;
-            let rb = *acc.offset((i * 2) as isize);
-            let ag = *acc.offset((i * 2 + 1) as isize);
-            *b.buf.offset((j * sw + i) as isize) = if n > 0 {
+            let rb = sums[(i * 2) as usize];
+            let ag = sums[(i * 2 + 1) as usize];
+            *b.buf.offset((j * sw + i) as isize) = if n.is_power_of_two() {
+                // every whole block (f × f = 1, 4 or 16 pixels): an unsigned division by a power of
+                // two is exactly a shift, without the four divisions per pixel
+                let s = n.trailing_zeros();
+                (ag >> 16 >> s) << 24 | (rb >> 16 >> s) << 16 | ((ag & 0xffff) >> s) << 8 | (rb & 0xffff) >> s
+            } else if n > 0 {
                 ((ag >> 16) / n) << 24
                     | ((rb >> 16) / n) << 16
                     | ((ag & 0xffff) / n) << 8
@@ -135,7 +166,8 @@ unsafe extern "C" fn down(ctx: *mut c_void, j0: i32, j1: i32) {
 // Horizontal output goes straight to the second buffer. The original C path
 // copied each row, blurred in place, then copied the full intermediate again.
 // Separate read/write buffers remove both copies without changing any rounding.
-unsafe extern "C" fn rows(ctx: *mut c_void, j0: i32, j1: i32) {
+#[inline(always)]
+unsafe fn rows_body(ctx: *mut c_void, j0: i32, j1: i32) {
     let b = &*ctx.cast::<Blur>();
     let w = b.sw;
     let rad = b.rad;
@@ -164,7 +196,8 @@ unsafe extern "C" fn rows(ctx: *mut c_void, j0: i32, j1: i32) {
         }
     }
 }
-unsafe extern "C" fn cols(ctx: *mut c_void, i0: i32, i1: i32) {
+#[inline(always)]
+unsafe fn cols_body(ctx: *mut c_void, i0: i32, i1: i32) {
     let b = &*ctx.cast::<Blur>();
     let (w, h, rad) = (b.sw, b.sh, b.rad);
     ptr::write_bytes(b.sum.offset((i0 * 4) as isize), 0, ((i1 - i0) * 4) as usize);
@@ -245,7 +278,8 @@ fn coverage(b: &Blur, i: i32, j: i32) -> f32 {
         - b.r;
     (0.5 - distance).clamp(0.0, 1.0)
 }
-unsafe extern "C" fn up(ctx: *mut c_void, j0: i32, j1: i32) {
+#[inline(always)]
+unsafe fn up_body(ctx: *mut c_void, j0: i32, j1: i32) {
     let b = &*ctx.cast::<Blur>();
     let cw = b.cw;
     let hr = axia_glass_scratch(cw as usize * 9).cast::<i32>();
@@ -289,16 +323,21 @@ unsafe extern "C" fn up(ctx: *mut c_void, j0: i32, j1: i32) {
                     -1
                 };
                 k = if keep == 0 { 1 } else { 0 };
-                let br = b.buf.offset((ry * b.sw) as isize);
-                let hh = hrow[k as usize];
-                for i in 0..cw {
-                    let p0 = *br.offset(*b.cx0.offset(i as isize) as isize);
-                    let p1 = *br.offset(*b.cx1.offset(i as isize) as isize);
-                    for s in 0..4 {
+                // Slices, not raw pointers: the compiler then knows these don't overlap (the
+                // rows and vrow share one scratch buffer) and vectorizes. Same arithmetic.
+                let br = std::slice::from_raw_parts(b.buf.offset((ry * b.sw) as isize), b.sw as usize);
+                let hh = std::slice::from_raw_parts_mut(hrow[k as usize], cw as usize * 4);
+                let (c0, c1, fx) = (
+                    std::slice::from_raw_parts(b.cx0, cw as usize),
+                    std::slice::from_raw_parts(b.cx1, cw as usize),
+                    std::slice::from_raw_parts(b.cfx, cw as usize),
+                );
+                for (i, out) in hh.chunks_exact_mut(4).enumerate() {
+                    let (p0, p1, f) = (br[c0[i] as usize], br[c1[i] as usize], fx[i]);
+                    for (s, o) in out.iter_mut().enumerate() {
                         let a = ((p0 >> (s * 8)) & 255) as i32;
                         let d = ((p1 >> (s * 8)) & 255) as i32;
-                        *hh.offset((i * 4 + s) as isize) =
-                            a * 256 + (d - a) * *b.cfx.offset(i as isize);
+                        *o = a * 256 + (d - a) * f;
                     }
                 }
                 hidx[k as usize] = ry;
@@ -309,14 +348,22 @@ unsafe extern "C" fn up(ctx: *mut c_void, j0: i32, j1: i32) {
                 top = hrow[k as usize];
             }
         }
-        for k in 0..cw * 4 {
-            *vrow8.offset(k as isize) = (((*top.offset(k as isize) << 8)
-                + (*bot.offset(k as isize) - *top.offset(k as isize)) * fy)
-                >> 16) as u8;
+        {
+            let n = cw as usize * 4;
+            let (t, bo) = (std::slice::from_raw_parts(top, n), std::slice::from_raw_parts(bot, n));
+            let v = std::slice::from_raw_parts_mut(vrow8, n);
+            for ((v, &t), &bo) in v.iter_mut().zip(t).zip(bo) {
+                *v = (((t << 8) + (bo - t) * fy) >> 16) as u8;
+            }
         }
         let corner = (j as f32) < b.y + b.r || j as f32 + 1.0 > b.y + b.h - b.r;
         let m0 = if corner { b.x1 } else { b.in0 };
         let m1 = if corner { b.x1 } else { b.in1 };
+        // A corner row computed `coverage` (a square root) for every pixel. Where qx <= 0 and
+        // qx <= qy, the middle of the row, it depends on qy alone: one value for the whole span,
+        // taken from the first pixel there. Same expressions as `coverage`, so the same bits.
+        let qy = (j as f32 + 0.5 - b.cy).abs() - (b.hh - b.r);
+        let mut span: Option<f32> = None;
         let mut i = b.x0;
         while i < b.x1 {
             if i == m0 {
@@ -335,7 +382,16 @@ unsafe extern "C" fn up(ctx: *mut c_void, j0: i32, j1: i32) {
                 }
             }
             let a = if corner || (i as f32) < b.x + 1.0 || i as f32 + 1.0 > b.x + b.w - 1.0 {
-                let c = coverage(b, i, j);
+                let c = if corner {
+                    let qx = (i as f32 + 0.5 - b.cx).abs() - (b.hw - b.r);
+                    if qx <= 0.0 && qx <= qy {
+                        *span.get_or_insert_with(|| coverage(b, i, j))
+                    } else {
+                        coverage(b, i, j)
+                    }
+                } else {
+                    coverage(b, i, j)
+                };
                 if c <= 0.0 {
                     i += 1;
                     continue;
