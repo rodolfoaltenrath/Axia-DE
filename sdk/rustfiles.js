@@ -5,7 +5,7 @@ import { View, Text, Image, MediaView, mainBox, addListener, screen } from '@lor
 import { Button, TextInput, ScrollView, useAppWindow, useKeyboard, hasTextFocus } from './components.jsx';
 import { useTheme, ThemeScope } from './theme.js';
 import { Toolbar, ToolbarButton, ToolbarGroup } from './controls.jsx';
-import { t, locale, formatDate, formatTime } from './i18n.js';
+import { t, locale, formatDate, formatTime, useLocale } from './i18n.js';
 import { settings } from './settings.js';
 import { errorText } from './errors.js';
 import { wm, getApp } from './windows.js';
@@ -92,7 +92,7 @@ function expand(prev, node) {
 // Captions are resolved here, so anything that formats them differently must
 // render every node again even though Rust's description did not change.
 const FORMAT_SAMPLE = new Date(2001, 11, 31, 23, 59);
-const captionFormat = () => `${locale.get()}|${formatDate(FORMAT_SAMPLE)}|${formatTime(FORMAT_SAMPLE)}`;
+const captionFormat = () => { const { lang, region } = locale.get(); return `${lang}|${region}|${formatDate(FORMAT_SAMPLE)}|${formatTime(FORMAT_SAMPLE)}`; };
 
 function FilesContextMenu({ node, send }) {
   const root = useContext(FilesRootContext);
@@ -231,6 +231,7 @@ const appMetadata = (apps) => apps.map(({ id, name, desktopId, kind, mimeTypes }
   mimeTypes: Array.isArray(mimeTypes) ? mimeTypes : String(mimeTypes || '').split(';').filter(Boolean) }));
 
 export function RustFiles({ mode = 'browser', args = {}, title = '', start = '', filter = null, multiple = false, name = '', onPick, onClose }) {
+  useLocale(); // Captions must update even when the native poll has no changes.
   const theme = useTheme();
   const win = useAppWindow();
   const apps = useLauncherApps();
@@ -298,6 +299,13 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     return () => { live.current = false; clearTimeout(pace.current.timer); pace.current.poll = null; keys?.(); move(); up(); for (const id of resources.current.media) media.close(id); for (const id of resources.current.images) releaseImage(id); modalHandles.delete(handle); filesRequest({ op: 'close', id: handle }); };
   }, [handle]);
 
+  const format = captionFormat();
+  useEffect(() => {
+    if (shown.current.format === format) return;
+    const tree = JSON.parse(JSON.stringify(shown.current.tree));
+    shown.current = { ...shown.current, tree, format };
+    setSnapshot((previous) => ({ ...previous, tree }));
+  }, [format]);
   const menuLocale = locale.get();
   const windowTitle = caption(snapshot.title);
   const chromeKey = JSON.stringify(snapshot.chrome);
@@ -317,6 +325,15 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     for (const effect of effectQueue.current.splice(0)) {
       if (effect.kind === 'choose') { latest.current.onPick?.(multiple ? effect.paths : effect.paths[0]); continue; }
       if (effect.kind === 'cancel' || effect.kind === 'close') { if (mode === 'browser') wm.close(latest.current.win.id); else latest.current.onClose?.(); continue; }
+      if (effect.kind === 'transferWindow') {
+        const parent = latest.current.win;
+        const frame = parent?.id ? wm.get(parent.id) : null;
+        const child = wm.open('files', { instance: `transfers-${effect.owner}`,
+          frame: { x: (frame?.x ?? 40) + 80, y: (frame?.y ?? 40) + 60, w: 540, h: 460 },
+          args: { transferOwner: effect.owner, parent: parent?.id || null, dialog: true } });
+        if (!child) filesRequest({ op: 'transferClose', id: effect.owner });
+        continue;
+      }
       if (effect.kind === 'newWindow') { wm.open('files', { new: true, args: { path: effect.path } }); continue; }
       if (effect.kind === 'launchApp') { launchApp(effect.id); continue; }
       if (effect.kind === 'manageDisk') { wm.open('disks', { args: { disk: effect.disk } }); continue; }
@@ -355,4 +372,44 @@ export function RustFileDialog(props) {
 
 export function RustFileIcon({ size = 32 }) {
   return h(Widget, { node: iconTree('files', size), send: () => {} });
+}
+
+// The secondary window shares the originating Rust session. No second browser,
+// filesystem model, or copy worker is created. Its close button only hides it.
+export function RustTransfers({ owner }) {
+  const theme = useTheme(), win = useAppWindow();
+  const language = useLocale();
+  const appearance = useRef(theme);
+  appearance.current = theme;
+  const live = useRef(true), root = useRef(null);
+  const [snapshot, setSnapshot] = useState(() => filesRequest({ op: 'transferAttach', id: owner, theme: appearanceContext(theme) }));
+  const send = useRef((action) => {
+    if (!live.current) return;
+    const next = filesRequest({ op: 'transferEvent', id: owner, action });
+    if (next) setSnapshot(next);
+  }).current;
+  useEffect(() => {
+    live.current = true;
+    const timer = setInterval(() => {
+      if (!live.current) return;
+      try {
+        const next = filesRequest({ op: 'transferPoll', id: owner, theme: appearanceContext(appearance.current) });
+        if (next) setSnapshot(next);
+      } catch (e) { console.error('Files transfers:', e); wm.close(win.id); }
+    }, 200);
+    return () => {
+      live.current = false;
+      clearInterval(timer);
+      filesRequest({ op: 'transferClose', id: owner });
+    };
+  }, [owner]);
+  const tree = useMemo(() => snapshot?.tree ? JSON.parse(JSON.stringify(snapshot.tree)) : null, [snapshot?.tree, language.lang, language.region]);
+  const title = caption(snapshot?.title);
+  const chromeKey = JSON.stringify(snapshot?.chrome);
+  useEffect(() => {
+    if (win?.id) { wm.setTitle(win.id, title); wm.setArgs(win.id, { nativeChrome: snapshot?.chrome || null }); }
+  }, [title, chromeKey, win?.id]);
+  return h(ThemeScope, { value: snapshot?.appearance || theme },
+    h(FilesRootContext.Provider, { value: root },
+      h(View, { ref: root, style: { flex: 1, minHeight: 0 } }, h(Widget, { node: tree, send }))));
 }

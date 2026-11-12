@@ -503,12 +503,77 @@ fn a_large_selection_is_one_copy_job() {
     }
     let job = finish(ops::start_batch(items).unwrap());
     assert!(!job.failed, "{}", job.error);
+    assert_eq!((job.bytes, job.total, job.files, job.total_files), (96, 96, 24, 24));
+    assert_eq!(job.phase, "complete");
     for n in 0..24 {
         assert_eq!(
             fs::read_to_string(h.path(&format!("destination/file-{n}.txt"))).unwrap(),
             "data"
         );
     }
+}
+#[test]
+fn batch_totals_include_nested_hidden_and_empty_files_and_same_disk_moves() {
+    let h = Home::new();
+    let source = h.dir("source");
+    h.file("source/nested/clip.mp4", "1234567");
+    h.file("source/.hidden", "123");
+    h.file("source/empty", "");
+    h.dir("source/empty-folder");
+    symlink("nested/clip.mp4", source.join("link")).unwrap();
+    let extra = h.file("extra", "12");
+    let job = finish(
+        ops::start_batch(vec![
+            (source, h.path("copied"), false),
+            (extra, h.path("moved"), true),
+        ])
+        .unwrap(),
+    );
+    assert!(!job.failed, "{}", job.error);
+    assert_eq!(
+        (job.bytes, job.total, job.files, job.total_files),
+        (12, 12, 5, 5)
+    );
+    assert!(!h.path("extra").exists());
+    assert!(h.path("copied/link").is_symlink());
+    assert!(h.path("copied/empty-folder").is_dir());
+}
+
+#[test]
+fn completed_transfers_stay_visible_until_dismissed_without_holding_worker_slots() {
+    let h = Home::new();
+    h.file("source.txt", "contents");
+    let (mut s, mut shared) = h.session(json!({}));
+    select(&mut s, &mut shared, "source.txt");
+    event(&mut s, &mut shared, "duplicate", Value::Null);
+    assert!(s.transfer_open);
+    assert!(s
+        .effects
+        .iter()
+        .any(|effect| effect["kind"] == "transferWindow"));
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        s.poll_transfers(&shared);
+        if s.jobs()
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|job| job["done"] == true)
+        {
+            break;
+        }
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(ops::jobs().is_empty());
+    let id = s.jobs()[0]["id"].as_i64().unwrap() as i32;
+    s.poll_transfers(&shared);
+    assert_eq!(s.jobs()[0]["id"], id);
+    let tree = s.transfers_view().to_string();
+    assert!(tree.contains("100%") && tree.contains("files.transfer.files"));
+    s.transfer_action("jobForget", id);
+    s.poll_transfers(&shared);
+    assert!(s.jobs().as_array().unwrap().is_empty());
 }
 #[test]
 fn cancelling_a_copy_leaves_no_published_or_staging_file() {
@@ -1881,4 +1946,77 @@ fn recent_walk_prunes_node_modules_without_losing_other_files() {
     assert_eq!(names(&pruned), names(&all), "the same recent files");
     assert!(pruned.len() + 100 <= all.len(), "{} vs {} entries walked", pruned.len(), all.len());
     assert!(!pruned.iter().any(|(p, _)| p.components().any(|c| c.as_os_str() == "node_modules")));
+}
+
+#[test]
+fn navigation_drops_stale_rows_and_retains_the_newest_hundred_history_entries() {
+    let h = Home::new();
+    h.file("old.txt", "old folder");
+    let (mut s, mut shared) = h.session(json!({}));
+    for n in 0..105 {
+        let dir = h.dir(&format!("folder-{n}"));
+        event(&mut s, &mut shared, "navigate", json!(dir));
+        assert!(s.tab().entries.is_empty(), "rows from the previous folder must not be clickable");
+        ready(&mut s, &shared);
+    }
+    assert_eq!(s.tab().back.len(), 100);
+    assert_eq!(s.tab().back.first().unwrap(), &Location::Directory(h.path("folder-4")));
+    event(&mut s, &mut shared, "back", Value::Null);
+    assert_eq!(s.tab().location, Location::Directory(h.path("folder-103")));
+}
+
+#[test]
+fn finishing_a_transfer_refreshes_recursive_results_without_exiting_search() {
+    let h = Home::new();
+    h.file("clip.txt", "data");
+    let (mut s, mut shared) = h.session(json!({}));
+    select(&mut s, &mut shared, "clip.txt");
+    event(&mut s, &mut shared, "duplicate", Value::Null);
+    s.event(&json!({"action":["query"],"value":"clip"}), &mut shared);
+    event(&mut s, &mut shared, "search", Value::Null);
+    ready(&mut s, &shared);
+    let until = Instant::now() + Duration::from_secs(3);
+    while s.jobs().as_array().unwrap().iter().any(|j| j["done"] == false) {
+        s.poll(&json!({}), &shared);
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    ready(&mut s, &shared);
+    assert!(s.searching);
+    assert_eq!(s.tab().query, "clip");
+    assert!(s.tab().entries.iter().any(|e| e.name == "clip 2.txt"));
+}
+
+#[test]
+fn a_source_truncated_during_copy_is_not_published_as_a_success() {
+    let h = Home::new();
+    let source = h.file("source.bin", "");
+    let input = fs::File::options().write(true).open(&source).unwrap();
+    input.set_len(64 * 1024 * 1024).unwrap();
+    let target = h.path("target.bin");
+    let id = ops::start(&source, &target, false).unwrap();
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        let job = ops::jobs().into_iter().find(|j| j.id == id).unwrap();
+        assert!(!job.done, "test must alter the source while copying");
+        if job.bytes > 0 { break; }
+        assert!(Instant::now() < until);
+        std::thread::yield_now();
+    }
+    input.set_len(1).unwrap();
+    let result = finish(id);
+    assert!(result.failed);
+    assert_eq!(result.error, "fs.sourceChanged");
+    assert!(!target.exists());
+    assert_eq!(fs::metadata(source).unwrap().len(), 1);
+    assert!(!fs::read_dir(&h.root).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with(".axia-copy-")));
+}
+
+#[test]
+fn a_bounded_walk_does_not_queue_an_entire_large_directory() {
+    let h = Home::new();
+    for n in 0..100 { h.file(&format!("file-{n}"), ""); }
+    let (entries, complete) = ops::walk(&h.root, 64, 4, ops::DurationBudget::seconds(2), true);
+    assert!(entries.len() <= 4);
+    assert!(!complete);
 }

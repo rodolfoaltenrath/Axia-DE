@@ -189,14 +189,28 @@ entries. Full-size images are not decoded by the UI while scrolling.
 
 Each browser owns the results of its own copy/move jobs. Another window cannot
 consume those results or forget jobs owned by a C consumer such as backup.
-Closing a window lets copies finish and then reclaims their job records.
+Copies and moves open a separate Files window, grouped with the browser. Each
+transfer shows the current file, source/destination, bytes, file count, percentage,
+average speed and Cancel. The full selection is counted before copying starts;
+symlinks are counted without following them. Files that change during copying
+are rejected without deleting the original. Cancelled staging trees are cleaned
+even when copied subfolders have read-only permissions. While data is being flushed to disk,
+the window says it is finishing the write and stays below 100%. Completion is
+retained for dismissal while worker slots are released immediately.
+
+Closing the transfer window keeps copying; the browser footer reopens it.
+Closing the browser while its transfer window remains open preserves monitoring
+and cancellation. Once both windows close, unfinished copies are detached and
+their records are reclaimed after completion. Transfer windows use dialog metadata
+so session restore does not recreate a window with an expired owner handle.
 
 Copying writes a uniquely named staging entry and publishes it with
 `renameat2(RENAME_NOREPLACE)`. Failed/cancelled copies clean up their staging
 entry and preserve an existing destination. Recursive operations use open
 directory handles and do not follow symlink entries. Moves never strip a
 protected directory's contents by renaming an ancestor. Trash restore also
-refuses an existing destination.
+refuses an existing destination. Filesystems that reject atomic no-replace
+renames return an error rather than using a check-then-overwrite fallback.
 
 Preferences migrate from the legacy `files` settings into
 `~/.config/axia/files.json` on first use. Tags and comments keep their existing

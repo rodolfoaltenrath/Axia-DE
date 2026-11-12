@@ -16,6 +16,9 @@ mod volumes;
 pub type Result<T> = std::result::Result<T, String>;
 
 pub fn io_error(e: std::io::Error) -> String {
+    if e.raw_os_error() == Some(libc::ESTALE) {
+        return "fs.sourceChanged".into();
+    }
     let name = match e.raw_os_error().unwrap_or(libc::EIO) {
         libc::ENOENT => "ENOENT",
         libc::EACCES => "EACCES",
@@ -29,6 +32,7 @@ pub fn io_error(e: std::io::Error) -> String {
         libc::ELOOP => "ELOOP",
         libc::ECANCELED => "ECANCELED",
         libc::EXDEV => "EXDEV",
+        libc::EINVAL => "EINVAL",
         libc::ENAMETOOLONG => "ENAMETOOLONG",
         _ => "EIO",
     };

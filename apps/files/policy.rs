@@ -215,20 +215,10 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
     if rc >= 0 {
         return Ok(());
     }
-    let e = std::io::Error::last_os_error();
-    if e.raw_os_error() != Some(libc::EINVAL) {
-        return Err(e);
-    }
-    // a filesystem without RENAME_NOREPLACE (some FUSE ones, NTFS through ntfs-3g): the target is
-    // checked first, then a plain rename
-    let mut st: libc::stat = unsafe { std::mem::zeroed() };
-    if unsafe { libc::fstatat(b.as_raw_fd(), bn.as_ptr(), &mut st, libc::AT_SYMLINK_NOFOLLOW) } == 0 {
-        return Err(std::io::Error::from_raw_os_error(libc::EEXIST));
-    }
-    if unsafe { libc::renameat(a.as_raw_fd(), an.as_ptr(), b.as_raw_fd(), bn.as_ptr()) } < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
+    // There is no portable, atomic no-replace fallback for directories. A
+    // check followed by rename could overwrite a concurrently created target;
+    // link/unlink could remove a replaced source. Preserve both paths instead.
+    Err(std::io::Error::last_os_error())
 }
 
 #[cfg(test)]

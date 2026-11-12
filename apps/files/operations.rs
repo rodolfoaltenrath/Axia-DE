@@ -27,12 +27,17 @@ pub struct Job {
     pub bytes: u64,
     pub total: u64,
     pub files: u64,
+    pub total_files: u64,
+    pub phase: String,
+    pub current: String,
+    pub bytes_per_second: f64,
     pub error: String,
 }
 pub struct Task {
     pub progress: Mutex<Job>,
     pub cancelled: AtomicBool,
     detached: AtomicBool,
+    started: Instant,
 }
 fn tasks() -> &'static Mutex<Vec<Arc<Task>>> {
     static TASKS: OnceLock<Mutex<Vec<Arc<Task>>>> = OnceLock::new();
@@ -43,13 +48,21 @@ pub fn jobs() -> Vec<Job> {
         .lock()
         .unwrap()
         .iter()
-        .map(|t| t.progress.lock().unwrap().clone())
+        .map(|t| {
+            let mut job = t.progress.lock().unwrap().clone();
+            if !job.done {
+                job.bytes_per_second =
+                    job.bytes as f64 / t.started.elapsed().as_secs_f64().max(0.001);
+            }
+            job
+        })
         .collect()
 }
 pub fn cancel(id: i32) {
     for t in tasks().lock().unwrap().iter() {
         if t.progress.lock().unwrap().id == id {
             t.cancelled.store(true, Ordering::Relaxed);
+            t.progress.lock().unwrap().cancel = true;
         }
     }
 }
@@ -100,6 +113,26 @@ fn timestamps(file: &File, metadata: &fs::Metadata) {
     }
 }
 
+fn unchanged(before: &fs::Metadata, after: &fs::Metadata) -> bool {
+    (
+        before.dev(),
+        before.ino(),
+        before.len(),
+        before.mtime(),
+        before.mtime_nsec(),
+        before.ctime(),
+        before.ctime_nsec(),
+    ) == (
+        after.dev(),
+        after.ino(),
+        after.len(),
+        after.mtime(),
+        after.mtime_nsec(),
+        after.ctime(),
+        after.ctime_nsec(),
+    )
+}
+
 // Every recursive descent is relative to open directory handles and refuses
 // symlinks. Symlink entries are copied as links and never traversed.
 fn copy_at(
@@ -130,6 +163,11 @@ fn copy_at(
         return Err(std::io::Error::last_os_error());
     }
     let st = unsafe { st.assume_init() };
+    {
+        let mut job = task.progress.lock().unwrap();
+        job.current = sn.to_string_lossy().into();
+        job.phase = "copying".into();
+    }
     match st.st_mode & libc::S_IFMT {
         libc::S_IFLNK => {
             let mut bytes = vec![0u8; 4096];
@@ -187,9 +225,14 @@ fn copy_at(
                 output.write_all(&buf[..n])?;
                 task.progress.lock().unwrap().bytes += n as u64;
             }
+            if !unchanged(&meta, &input.metadata()?) {
+                return Err(std::io::Error::from_raw_os_error(libc::ESTALE));
+            }
             output.set_permissions(fs::Permissions::from_mode(meta.mode() & 0o777))?;
             timestamps(&output, &meta);
+            task.progress.lock().unwrap().phase = "syncing".into();
             output.sync_all()?;
+            interrupted(task)?;
             task.progress.lock().unwrap().files += 1;
         }
         libc::S_IFDIR => {
@@ -226,6 +269,7 @@ fn copy_at(
             let meta = input.metadata()?;
             output.set_permissions(fs::Permissions::from_mode(meta.mode() & 0o777))?;
             timestamps(&output, &meta);
+            output.sync_all()?;
         }
         _ => return Err(std::io::Error::from_raw_os_error(libc::ENOTSUP)),
     }
@@ -234,9 +278,28 @@ fn copy_at(
 
 pub fn remove_tree(path: &Path) -> std::io::Result<()> {
     let (parent, name) = policy::anchored(path)?;
-    remove_at(&parent, std::ffi::OsStr::from_bytes(name.as_bytes()), 0)
+    remove_at(
+        &parent,
+        std::ffi::OsStr::from_bytes(name.as_bytes()),
+        0,
+        false,
+    )
 }
-fn remove_at(parent: &File, name: &std::ffi::OsStr, depth: usize) -> std::io::Result<()> {
+fn discard_staging(path: &Path) -> std::io::Result<()> {
+    let (parent, name) = policy::anchored(path)?;
+    remove_at(
+        &parent,
+        std::ffi::OsStr::from_bytes(name.as_bytes()),
+        0,
+        true,
+    )
+}
+fn remove_at(
+    parent: &File,
+    name: &std::ffi::OsStr,
+    depth: usize,
+    staging: bool,
+) -> std::io::Result<()> {
     if depth > 64 {
         return Err(std::io::Error::from_raw_os_error(libc::ELOOP));
     }
@@ -262,8 +325,13 @@ fn remove_at(parent: &File, name: &std::ffi::OsStr, depth: usize) -> std::io::Re
             libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
             0,
         )?;
+        if staging {
+            // Copied directories may already have inherited read-only modes.
+            // Only our unpublished staging tree is made writable for cleanup.
+            dir.set_permissions(fs::Permissions::from_mode(st.st_mode | 0o700))?;
+        }
         for entry in fs::read_dir(fd_path(&dir))? {
-            remove_at(&dir, &entry?.file_name(), depth + 1)?;
+            remove_at(&dir, &entry?.file_name(), depth + 1, staging)?;
         }
     }
     if unsafe {
@@ -325,6 +393,8 @@ struct Prepared {
     dst: PathBuf,
     moving: bool,
     original: fs::Metadata,
+    bytes: u64,
+    files: u64,
 }
 fn prepare(src: &Path, dst: &Path, moving: bool) -> Result<Prepared> {
     let p = policy::current();
@@ -348,7 +418,58 @@ fn prepare(src: &Path, dst: &Path, moving: bool) -> Result<Prepared> {
         dst,
         moving,
         original,
+        bytes: 0,
+        files: 0,
     })
+}
+// Count the entire selection before publishing a denominator. Like copying,
+// descent is relative to directory handles and never follows symlink entries.
+fn measure_at(
+    parent: &File,
+    name: &std::ffi::OsStr,
+    task: &Task,
+    depth: usize,
+    visited: &mut usize,
+) -> std::io::Result<(u64, u64)> {
+    interrupted(task)?;
+    *visited += 1;
+    if depth > 64 || *visited > 1_000_000 {
+        return Err(std::io::Error::from_raw_os_error(libc::ELOOP));
+    }
+    let name_c = policy::c_name(name)?;
+    let mut st = std::mem::MaybeUninit::<libc::stat>::uninit();
+    if unsafe {
+        libc::fstatat(
+            parent.as_raw_fd(),
+            name_c.as_ptr(),
+            st.as_mut_ptr(),
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    } < 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    let st = unsafe { st.assume_init() };
+    match st.st_mode & libc::S_IFMT {
+        libc::S_IFREG => Ok((st.st_size.max(0) as u64, 1)),
+        libc::S_IFLNK => Ok((0, 1)),
+        libc::S_IFDIR => {
+            let dir = policy::open_at(
+                parent,
+                name,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+                0,
+            )?;
+            let (mut bytes, mut files) = (0, 0);
+            for entry in fs::read_dir(fd_path(&dir))? {
+                let (b, f) = measure_at(&dir, &entry?.file_name(), task, depth + 1, visited)?;
+                bytes += b;
+                files += f;
+            }
+            Ok((bytes, files))
+        }
+        _ => Err(std::io::Error::from_raw_os_error(libc::ENOTSUP)),
+    }
 }
 fn perform(item: Prepared, task: &Task, id: i32) -> std::io::Result<()> {
     let Prepared {
@@ -356,12 +477,21 @@ fn perform(item: Prepared, task: &Task, id: i32) -> std::io::Result<()> {
         dst,
         moving,
         original,
+        bytes,
+        files,
     } = item;
     interrupted(task)?;
+    {
+        let mut job = task.progress.lock().unwrap();
+        job.current = src.file_name().unwrap_or_default().to_string_lossy().into();
+        job.phase = if moving { "moving" } else { "copying" }.into();
+    }
     if moving {
         match policy::rename_noreplace(&src, &dst) {
             Ok(()) => {
-                task.progress.lock().unwrap().files += 1;
+                let mut job = task.progress.lock().unwrap();
+                job.files += files;
+                job.bytes += bytes;
                 return Ok(());
             }
             Err(e) if e.raw_os_error() == Some(libc::EXDEV) => (),
@@ -378,12 +508,6 @@ fn perform(item: Prepared, task: &Task, id: i32) -> std::io::Result<()> {
     ));
     let mut created = false;
     let result = (|| -> std::io::Result<()> {
-        task.progress.lock().unwrap().total +=
-            walk(&src, 64, 1_000_000, DurationBudget::seconds(5), true)
-                .0
-                .iter()
-                .map(|(_, m)| if m.is_file() { m.len() } else { 0 })
-                .sum::<u64>();
         let (a, an) = policy::anchored(&src)?;
         let (b, bn) = policy::anchored(&staging)?;
         copy_at(
@@ -397,9 +521,13 @@ fn perform(item: Prepared, task: &Task, id: i32) -> std::io::Result<()> {
         )?;
         interrupted(task)?;
         policy::rename_noreplace(&staging, &dst)?;
+        task.progress.lock().unwrap().phase = "syncing".into();
+        b.sync_all()?;
         if moving {
             let now = fs::symlink_metadata(&src)?;
-            if (now.dev(), now.ino()) != (original.dev(), original.ino()) {
+            if (now.dev(), now.ino()) != (original.dev(), original.ino())
+                || (original.is_file() && !unchanged(&original, &now))
+            {
                 return Err(std::io::Error::from_raw_os_error(libc::ESTALE));
             }
             remove_tree(&src)?;
@@ -407,7 +535,7 @@ fn perform(item: Prepared, task: &Task, id: i32) -> std::io::Result<()> {
         Ok(())
     })();
     if result.is_err() && created && fs::symlink_metadata(&staging).is_ok() {
-        let _ = remove_tree(&staging);
+        let _ = discard_staging(&staging);
     }
     result
 }
@@ -436,10 +564,12 @@ pub fn start_batch(items: Vec<(PathBuf, PathBuf, bool)>) -> Result<i32> {
             src: first.src.to_string_lossy().into(),
             dst: first.dst.to_string_lossy().into(),
             moving: first.moving,
+            phase: "scanning".into(),
             ..Job::default()
         }),
         cancelled: AtomicBool::new(false),
         detached: AtomicBool::new(false),
+        started: Instant::now(),
     });
     all.push(task.clone());
     drop(all);
@@ -447,6 +577,34 @@ pub fn start_batch(items: Vec<(PathBuf, PathBuf, bool)>) -> Result<i32> {
     let spawned = std::thread::Builder::new()
         .name("axia-files-copy".into())
         .spawn(move || {
+            let mut items = items;
+            let measured = (|| -> std::io::Result<()> {
+                let mut visited = 0;
+                let (mut bytes, mut files) = (0, 0);
+                for item in &mut items {
+                    let (parent, name) = policy::anchored(&item.src)?;
+                    (item.bytes, item.files) = measure_at(
+                        &parent,
+                        std::ffi::OsStr::from_bytes(name.as_bytes()),
+                        &worker,
+                        0,
+                        &mut visited,
+                    )?;
+                    bytes += item.bytes;
+                    files += item.files;
+                }
+                let mut job = worker.progress.lock().unwrap();
+                job.total = bytes;
+                job.total_files = files;
+                job.phase = "copying".into();
+                Ok(())
+            })();
+            if let Err(e) = measured {
+                let mut job = worker.progress.lock().unwrap();
+                job.failed = true;
+                job.error = io_error(e);
+                items.clear();
+            }
             for item in items {
                 if let Err(e) = perform(item, &worker, id) {
                     let cancelled = e.raw_os_error() == Some(libc::ECANCELED);
@@ -463,6 +621,15 @@ pub fn start_batch(items: Vec<(PathBuf, PathBuf, bool)>) -> Result<i32> {
             let mut j = worker.progress.lock().unwrap();
             j.cancel = worker.cancelled.load(Ordering::Relaxed);
             j.done = true;
+            j.phase = if j.cancel {
+                "cancelled"
+            } else if j.failed {
+                "failed"
+            } else {
+                "complete"
+            }
+            .into();
+            j.bytes_per_second = j.bytes as f64 / worker.started.elapsed().as_secs_f64().max(0.001);
             drop(j);
             if worker.detached.load(Ordering::Relaxed) {
                 forget(id);
@@ -528,6 +695,10 @@ pub fn walk_pruned(
                 match fs::read_dir(&path) {
                     Ok(entries) => {
                         for e in entries.flatten() {
+                            if out.len() + queue.len() + 1 >= limit || Instant::now() > budget.0 {
+                                complete = false;
+                                break;
+                            }
                             let name = e.file_name();
                             if (hidden || !name.as_bytes().starts_with(b"."))
                                 && !prune.iter().any(|p| name.as_bytes() == p.as_bytes())
@@ -664,4 +835,29 @@ pub fn free(path: &Path) -> std::io::Result<(u64, u64)> {
     }
     let s = unsafe { s.assume_init() };
     Ok((s.f_blocks * s.f_frsize, s.f_bavail * s.f_frsize))
+}
+
+#[cfg(test)]
+mod cleanup_tests {
+    use super::*;
+    #[test]
+    fn discarding_staging_cleans_readonly_subfolders_and_does_not_follow_links() {
+        let home = super::super::tests::Home::new();
+        let original = home.file("original/keep.txt", "keep");
+        let readonly = home.path("original");
+        fs::set_permissions(&readonly, fs::Permissions::from_mode(0o555)).unwrap();
+        home.file("staging/subfolder/copied.txt", "discard");
+        std::os::unix::fs::symlink(&readonly, home.path("staging/link")).unwrap();
+        fs::set_permissions(
+            home.path("staging/subfolder"),
+            fs::Permissions::from_mode(0o555),
+        )
+        .unwrap();
+        fs::set_permissions(home.path("staging"), fs::Permissions::from_mode(0o555)).unwrap();
+        discard_staging(&home.path("staging")).unwrap();
+        assert!(!home.path("staging").exists());
+        assert_eq!(fs::read_to_string(original).unwrap(), "keep");
+        assert_eq!(fs::metadata(&readonly).unwrap().mode() & 0o777, 0o555);
+        fs::set_permissions(readonly, fs::Permissions::from_mode(0o755)).unwrap();
+    }
 }

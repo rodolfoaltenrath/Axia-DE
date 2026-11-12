@@ -227,6 +227,8 @@ pub struct Session {
 
     last_jobs: Value,
     owned_jobs: HashSet<i32>,
+    completed_jobs: Vec<ops::Job>,
+    pub transfer_open: bool,
     /// renamed or created here: selected once the folder's next listing has it
     reveal: Option<PathBuf>,
     thumbnail_revision: u64,
@@ -542,6 +544,8 @@ impl Session {
 
             last_jobs: Value::Null,
             owned_jobs: HashSet::new(),
+            completed_jobs: Vec::new(),
+            transfer_open: false,
             reveal: None,
             thumbnail_revision: 0,
             pdf_thumbnails: super::pdf_thumbnails::Cache::default(),
@@ -737,8 +741,16 @@ impl Session {
                 .push(json!({"kind":"networkScan","generation":generation}));
         }
         let p = self.policy.clone();
-        let tags = shared.tags.clone();
-        let apps = shared.apps.clone();
+        let tags = if matches!(location, Location::Tag(_)) {
+            shared.tags.clone()
+        } else {
+            HashMap::new()
+        };
+        let apps = if location == Location::Apps {
+            shared.apps.clone()
+        } else {
+            Vec::new()
+        };
         let tx = self.tx.clone();
         let epoch = self.generation.clone();
         let picker = self.mode != Mode::Browser;
@@ -957,7 +969,9 @@ impl Session {
             if old != to {
                 let tab = self.tab_mut();
                 tab.back.push(old);
-                tab.back.truncate(100);
+                if tab.back.len() > 100 {
+                    tab.back.drain(..tab.back.len() - 100);
+                }
                 tab.forward.clear();
             }
         }
@@ -990,7 +1004,10 @@ impl Session {
         }
         let tab = self.tab_mut();
         tab.location = to;
+        tab.replace_entries(Vec::new());
         tab.selected.clear();
+        tab.cursor = None;
+        tab.anchor = 0;
         tab.offset = 0.;
         tab.query.clear();
         tab.archive.clear();
@@ -1173,7 +1190,10 @@ impl Session {
                         }
                         Err(e) => {
                             self.error = Some(e);
-                            self.tab_mut().entries.clear();
+                            let tab = self.tab_mut();
+                            tab.replace_entries(Vec::new());
+                            tab.selected.clear();
+                            tab.cursor = None;
                         }
                     }
                     self.select_revealed();
@@ -1275,47 +1295,7 @@ impl Session {
                 self.dirty = !quiet || self.error.is_some();
             }
         }
-        let current_jobs = if self.owned_jobs.is_empty() {
-            json!([])
-        } else {
-            json!(ops::jobs()
-                .into_iter()
-                .filter(|j| self.owned_jobs.contains(&j.id))
-                .collect::<Vec<_>>())
-        };
-        if current_jobs != self.last_jobs {
-            let was_active = self
-                .last_jobs
-                .as_array()
-                .is_some_and(|a| a.iter().any(|j| j["done"] == false));
-            for job in current_jobs.as_array().into_iter().flatten() {
-                if job["failed"] == true {
-                    let e = job["error"]
-                        .as_str()
-                        .unwrap_or("fs.copyStartFailed")
-                        .to_owned();
-                    if !self.job_errors.contains(&e) {
-                        self.job_errors.push(e);
-                    }
-                }
-            }
-            for job in current_jobs
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|j| j["done"] == true)
-            {
-                if let Some(id) = job["id"].as_i64() {
-                    ops::forget(id as i32);
-                    self.owned_jobs.remove(&(id as i32));
-                }
-            }
-            self.last_jobs = current_jobs;
-            self.dirty = true;
-            if was_active && !self.loading {
-                self.load(shared);
-            }
-        }
+        self.poll_transfers(shared);
         if self.dirty {
             self.clamp_scroll();
             if self.tab().view == "icons" || self.tab().view == "gallery" {
@@ -1333,6 +1313,89 @@ impl Session {
                 self.pdf_thumbnails.queue(&entries, &mut self.effects);
             }
         }
+    }
+    pub fn close_browser(&mut self) {
+        self.closed = true;
+        self.generation.fetch_add(1, Ordering::Relaxed);
+        self.close_dialog();
+        self.watch = None;
+        // Release queued network prompts too, so no invisible authentication
+        // worker waits while only a transfer window keeps this session alive.
+        let (tx, rx) = mpsc::channel();
+        self.tx = tx;
+        self.rx = rx;
+    }
+    pub fn poll_transfers(&mut self, shared: &Shared) {
+        let mut jobs: Vec<_> = if self.owned_jobs.is_empty() {
+            Vec::new()
+        } else {
+            ops::jobs()
+                .into_iter()
+                .filter(|j| self.owned_jobs.contains(&j.id))
+                .collect()
+        };
+        let mut finished = false;
+        for job in jobs.iter().filter(|j| j.done) {
+            if job.failed && !job.cancel && !self.job_errors.contains(&job.error) {
+                self.job_errors.push(job.error.clone());
+            }
+            self.completed_jobs.push(job.clone());
+            ops::forget(job.id);
+            self.owned_jobs.remove(&job.id);
+            finished = true;
+        }
+        if self.completed_jobs.len() > 8 {
+            self.completed_jobs.drain(..self.completed_jobs.len() - 8);
+        }
+        jobs.retain(|j| !j.done);
+        jobs.extend(self.completed_jobs.iter().cloned());
+        let current = json!(jobs);
+        if current != self.last_jobs {
+            // Only the secondary window paints byte/rate updates. The browser
+            // footer changes when the number of active or retained jobs changes.
+            let summary = |jobs: &Value| {
+                (
+                    jobs.as_array().map_or(0, Vec::len),
+                    jobs.as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|j| j["done"] == false)
+                        .count(),
+                )
+            };
+            self.dirty |= summary(&current) != summary(&self.last_jobs);
+            self.last_jobs = current;
+        }
+        if finished && !self.closed {
+            if self.searching {
+                if let Err(error) = self.run_search() {
+                    self.error = Some(error);
+                }
+            } else if !self.loading {
+                self.load(shared);
+            }
+        }
+    }
+    fn start_transfer(&mut self, items: Vec<(PathBuf, PathBuf, bool)>) -> Result<()> {
+        self.owned_jobs.insert(ops::start_batch(items)?);
+        self.show_transfers();
+        Ok(())
+    }
+    fn show_transfers(&mut self) {
+        self.transfer_open = true;
+        self.effects
+            .push(json!({"kind":"transferWindow","owner":self.id}));
+    }
+    pub fn transfer_action(&mut self, action: &str, id: i32) {
+        match action {
+            "jobCancel" if self.owned_jobs.contains(&id) => ops::cancel(id),
+            "jobForget" => {
+                self.completed_jobs.retain(|j| j.id != id);
+                self.job_errors.clear();
+            }
+            _ => (),
+        }
+        self.dirty = true;
     }
     pub fn jobs(&self) -> &Value {
         &self.last_jobs
@@ -1502,7 +1565,9 @@ impl Session {
     }
     /// What was just renamed or created, selected (with the cursor) once the listing has it.
     fn select_revealed(&mut self) {
-        let Some(want) = self.reveal.take() else { return };
+        let Some(want) = self.reveal.take() else {
+            return;
+        };
         let Some(i) = self.tab().entries.iter().position(|e| e.raw == want) else {
             return;
         };
@@ -1948,7 +2013,7 @@ impl Session {
                         items.push((from.clone(), dst, shared.cut));
                     }
                     if !items.is_empty() {
-                        self.owned_jobs.insert(ops::start_batch(items)?);
+                        self.start_transfer(items)?;
                     }
                     if shared.cut {
                         shared.clipboard.clear();
@@ -1962,7 +2027,7 @@ impl Session {
                         items.push((e.raw.clone(), free_name(parent, &e.name), false));
                     }
                     if !items.is_empty() {
-                        self.owned_jobs.insert(ops::start_batch(items)?);
+                        self.start_transfer(items)?;
                     }
                     self.context = None;
                 }
@@ -2142,7 +2207,7 @@ impl Session {
                                 }
                             }
                             if !items.is_empty() {
-                                self.owned_jobs.insert(ops::start_batch(items)?);
+                                self.start_transfer(items)?;
                             }
                         }
                         self.context = None;
@@ -2236,11 +2301,8 @@ impl Session {
                     ));
                 }
                 "closeContext" => self.context = None,
-                "jobCancel" => ops::cancel(index as i32),
-                "jobForget" => {
-                    ops::forget(index as i32);
-                    self.job_errors.clear();
-                }
+                "showTransfers" => self.show_transfers(),
+                "jobCancel" | "jobForget" => self.transfer_action(name, index as i32),
                 "preferences" => {
                     self.dialog = Some(Dialog::Preferences);
                     self.context = None;
