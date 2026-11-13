@@ -267,7 +267,8 @@ def main():
             log = (home / '.cache/axia/session.log').read_text()
             assert 'menu bar integration: passed' in log, log
             assert 'title bar integration: passed' in log, log
-            for error in ['menu bar smoke:', 'title bar:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
+            assert 'launcher integration: passed' in log, log
+            for error in ['menu bar smoke:', 'title bar:', 'native launcher:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
             # Real isolated app using the same Rust scheduler, driven by actual Wayland callbacks.
             # Mutate only this disposable install's calendar package and its code manifest.
