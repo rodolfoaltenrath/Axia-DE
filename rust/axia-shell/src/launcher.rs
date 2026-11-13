@@ -75,7 +75,11 @@ pub struct AxiaLauncher {
 }
 
 impl AxiaLauncher {
-    fn replace(&mut self, value: &Value) -> Result<Value, &'static str> {
+    #[cfg(test)]
+    pub(crate) fn menu_count(&self) -> usize {
+        self.menus.len()
+    }
+    pub(crate) fn replace(&mut self, value: &Value) -> Result<Value, &'static str> {
         let inputs = value.as_array().ok_or("invalid catalog")?;
         if inputs.len() > MAX_APPS {
             return Err("catalog limit exceeded");
@@ -290,7 +294,7 @@ impl AxiaLauncher {
         )
     }
 
-    fn request(&mut self, args: &Value) -> Result<Value, &'static str> {
+    pub(crate) fn request(&mut self, args: &Value) -> Result<Value, &'static str> {
         match args["op"].as_str().unwrap_or("") {
             "dock" => dock_model::request(args),
             "search" => self.search.request(args),
@@ -338,9 +342,23 @@ fn number(args: &Value, name: &str, default: f64, min: f64, max: f64) -> f64 {
         .clamp(min, max)
 }
 
+/// The launcher of the shell (the first one made): the native views of the shell read the same
+/// catalog and menu state as the JS bridge. Both run on the UI thread, never inside each other.
+static SHELL: std::sync::atomic::AtomicPtr<AxiaLauncher> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+/// A request to the shell's launcher, as `lord.launcher.request` makes it.
+pub(crate) fn shell_request(args: &Value) -> Result<Value, &'static str> {
+    // SAFETY: the pointer is the live handle that axia_launcher_new gave the registrar, cleared by
+    // axia_launcher_free before it is dropped.
+    let state = unsafe { SHELL.load(std::sync::atomic::Ordering::Acquire).as_mut() };
+    state.ok_or("no launcher")?.request(args)
+}
+
 #[no_mangle]
 pub extern "C" fn axia_launcher_new() -> *mut AxiaLauncher {
-    Box::into_raw(Box::new(AxiaLauncher::default()))
+    let state = Box::into_raw(Box::new(AxiaLauncher::default()));
+    let _ = SHELL.compare_exchange(std::ptr::null_mut(), state, std::sync::atomic::Ordering::AcqRel, std::sync::atomic::Ordering::Acquire);
+    state
 }
 
 /// Session-only capability, set by the C registrar, never by JSON requests.
@@ -367,6 +385,7 @@ pub unsafe extern "C" fn axia_launcher_enable_search(
 /// Null or a live handle from new(), freed exactly once on the UI thread.
 #[no_mangle]
 pub unsafe extern "C" fn axia_launcher_free(state: *mut AxiaLauncher) {
+    let _ = SHELL.compare_exchange(state, std::ptr::null_mut(), std::sync::atomic::Ordering::AcqRel, std::sync::atomic::Ordering::Acquire);
     if !state.is_null() {
         drop(Box::from_raw(state));
     }
