@@ -4,6 +4,7 @@ mod compat;
 mod external;
 mod ffi;
 mod model;
+mod native;
 pub mod operations;
 mod pdf_thumbnails;
 pub mod policy;
