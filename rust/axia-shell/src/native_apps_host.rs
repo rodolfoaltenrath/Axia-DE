@@ -4,12 +4,15 @@
 //! Quit controller also answers catalog and icon queries for application menus.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
+#[path = "../../../apps/pdf/model.rs"]
+mod pdf_model;
 pub enum NativeApp {
     Control(crate::forcequit::App),
     Settings(crate::settings_model::Model),
     Terminal,
     Passwords,
     Sysinfo,
+    Pdf(pdf_model::Model),
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
@@ -19,6 +22,7 @@ impl NativeApp {
             b"terminal" => Some(Self::Terminal),
             b"passwords" => Some(Self::Passwords),
             b"sysinfo" => Some(Self::Sysinfo),
+            b"pdf" => Some(Self::Pdf(Default::default())),
             _ => None,
         }
     }
@@ -37,6 +41,7 @@ impl NativeApp {
             Self::Terminal => crate::terminal_model::request(input),
             Self::Passwords => crate::passwords_model::request(input),
             Self::Sysinfo => crate::sysinfo_model::request(input),
+            Self::Pdf(model) => model.request(input),
         }
     }
 }
@@ -90,6 +95,56 @@ pub unsafe extern "C" fn axia_native_app_reply_free(reply: *mut c_char) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pdf_models_are_available_through_the_ffi_and_have_independent_lifetimes() {
+        unsafe {
+            let name = CString::new("pdf").unwrap();
+            let a = axia_native_app_new(name.as_ptr());
+            let b = axia_native_app_new(name.as_ptr());
+            assert!(!a.is_null() && !b.is_null());
+            let call = |app, value: Value| {
+                let text = CString::new(value.to_string()).unwrap();
+                let reply = axia_native_app_request(app, text.as_ptr());
+                assert!(!reply.is_null());
+                let value: Value =
+                    serde_json::from_slice(CStr::from_ptr(reply).to_bytes()).unwrap();
+                axia_native_app_reply_free(reply);
+                value
+            };
+            call(a, json!({"cmd":"cache","op":"invalidate","page":0}));
+            let key = json!({"cmd":"cache","op":"key","page":0,"width":48,"rot":0,"inv":false});
+            assert_eq!(call(a, key.clone())["value"], "0|64|0|0|1");
+            assert_eq!(call(b, key.clone())["value"], "0|64|0|0|0");
+            let ticket = call(a, json!({"cmd":"viewer","op":"findStart","query":"same"}));
+            call(b, json!({"cmd":"viewer","op":"reset"}));
+            assert_eq!(
+                call(
+                    a,
+                    json!({"cmd":"viewer","op":"findAppend","token":ticket["token"],"page":0,"rects":[[1,2,3,4]]})
+                )["go"]["page"],
+                0
+            );
+            call(a, json!({"cmd":"edit","op":"open","pages":2}));
+            call(b, json!({"cmd":"edit","op":"open","pages":2}));
+            let mutation = call(
+                a,
+                json!({"cmd":"edit","op":"annotate","annotation":{"page":0,"type":"highlight","rects":[[1,2,3,4]],"color":"#ffd60a"}}),
+            );
+            let finish = json!({"cmd":"edit","op":"complete","ticket":mutation["effect"]["ticket"],"ok":true});
+            assert!(call(b, finish.clone()).is_null());
+            assert_eq!(call(a, finish)["state"]["history"], json!([0]));
+            axia_native_app_free(a);
+            assert_eq!(call(b, key)["value"], "0|64|0|0|0");
+            assert_eq!(
+                call(
+                    b,
+                    json!({"cmd":"toView","point":[10,20],"size":[100,200],"rot":1,"scale":2})
+                ),
+                json!([360., 20.])
+            );
+            axia_native_app_free(b);
+        }
+    }
     fn numeric_values(value: &Value) -> Value {
         match value {
             Value::Number(n) => json!(n.as_f64().unwrap()),
