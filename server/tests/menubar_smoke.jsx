@@ -5,6 +5,7 @@ import { render, View } from '@lordos/runtime';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { settings } from '../../sdk/settings.js';
 import { MenuBar } from '../../themes/default/components/MenuBar.jsx';
+import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
 
 const dump = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(handle + ': ' + t.replace(/\n/g, ' | ')); } return out.join(' // '); };
 const check = (ok, message) => { if (!ok) throw new Error('menu bar smoke: ' + message + ' [' + dump() + ']'); };
@@ -23,12 +24,18 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
-let launchpad = 0;
+let launchpad = 0, maxes = 0, acts = [];
+const drags = [];
 function Harness() {
   useEffect(() => { setTimeout(() => run().catch((e) => { console.error(e); }), 150); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
     h(MenuBar, { t: theme, height: 28, focused: null, onLaunchpad: () => { launchpad++; }, onControlCenter: () => {}, controlCenter: false,
-      area: { x: 0, y: 0, w: 1000, h: 700 } }));
+      area: { x: 0, y: 0, w: 1000, h: 700 } }),
+    h(View, { style: { position: 'absolute', left: 100, top: 100, width: 400 } },
+      h(NativeTitleBar, { id: 'w1', title: 'Smoke window', focused: true, height: 40, chrome: null,
+        controls: [{ key: 'close', color: '#ff5f57', glyph: '×' }],
+        tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
+        onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })));
 }
 const lines = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(...t.split('\n')); } return out; };
 async function run() {
@@ -47,6 +54,13 @@ async function run() {
   globalThis.__lordNativeView();
   check(await until(() => lines().length === bar), 'Escape closes the menu');
   console.log('menu bar integration: passed');
+  // the title bar of a window: a press on it starts the window manager's drag, a double press zooms
+  press(find('Smoke window'));
+  check(await until(() => drags.length === 1), 'a press on the title bar asks to drag the window');
+  check(drags[0][0] > 100 && drags[0][1] >= 100, 'the pointer comes in screen coordinates');
+  press(find('Smoke window')); press(find('Smoke window'));
+  check(await until(() => maxes >= 1), 'a double press on the title bar zooms');
+  console.log('title bar integration: passed');
 }
 settings.set({ menuBarNativeView: true });
 render(h(Harness));
