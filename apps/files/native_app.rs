@@ -36,6 +36,7 @@ pub struct FilesView {
     title: Value,
     capture: bool,
     catalog: Value,
+    lang: String,
     resources: super::native_resources::Resources,
 }
 
@@ -155,10 +156,11 @@ impl FilesView {
             let args = &input["args"];
             json!({"op":"create","native":true,"mode":args["mode"].as_str().unwrap_or("browser"),"args":args,
                 "title":"","start":"","name":"","multiple":false,"filter":"","ignoreCase":false,
-                "preferences":input["settings"]["files"],"theme":theme,"apps":apps(input),"width":width,"height":height})
+                "preferences":input["settings"]["files"],"theme":theme,"apps":apps(input),"width":width,"height":height,
+                "locale":input["lang"].as_str().unwrap_or("en")})
         } else {
             json!({"op":"poll","native":true,"id":self.id,"width":width,"height":height,"theme":theme,
-                "locale":{"lang":input["lang"]}})
+                "locale":input["lang"].as_str().unwrap_or("en")})
         };
         let files = ffi::request(&request);
         if self.id == 0 {
@@ -234,12 +236,20 @@ impl NativeApp for FilesView {
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
                 let mut pending=Vec::new();
+                let lang=input["lang"].as_str().unwrap_or("en");
+                if lang!=self.lang {
+                    self.lang=lang.to_owned();
+                    self.fresh |= self.raw.is_object();
+                    // Captions in the scene are translated by the host, while
+                    // the window's menu labels were resolved by the shell.
+                    if self.menus.is_array() {pending.push(json!({"kind":"menus","value":self.menus}));}
+                }
                 if input["catalog"]!=self.catalog {
                     self.catalog=input["catalog"].clone();
                     if self.id!=0 {
                         let extra=Map::from_iter([("apps".into(),apps(input))]);
                         let changed=self.event(json!(["apps"]),&extra);
-                        pending=self.absorb(&changed);
+                        pending.extend(self.absorb(&changed));
                     }
                 }
                 let files = self.session(input, &theme);
@@ -438,25 +448,51 @@ mod tests {
         let mut host=Host::new(mount,Box::new(FilesView::default()),"",None);
         host.facts(facts(&home.path("Destination")));
         wait_for(&mut host,"Destination");
-        // Wait for the directory's writable status, which is obtained by the worker.
-        let mut token=0;
-        for _ in 0..300 {
-            host.tick(1e18);
-            let title=host.find_text("Destination");
-            token=unsafe {crate::runtime::node_file_drop(crate::runtime::node_get(title))};
-            if token!=0 {break;}
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        // The destination is only a drop target once the worker has verified it, and again after every
+        // reload (a job's result), under a new token: ask for it each time, as the compositor does.
+        let token_of=|host:&mut Host|{
+            for _ in 0..300 {
+                host.tick(1e18);
+                let title=host.find_text("Destination");
+                let token=unsafe {crate::runtime::node_file_drop(crate::runtime::node_get(title))};
+                if token!=0 {return token;}
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            0
+        };
+        let token=token_of(&mut host);
         assert_ne!(token,0);
         assert!(host.file_drop(token,&json!([home.path("source.txt")]),false));
         wait_for(&mut host,"source.txt");
         assert_eq!(std::fs::read_to_string(home.path("Destination/source.txt")).unwrap(),"copied bytes");
         assert!(home.path("source.txt").exists());
+        let token=token_of(&mut host);
+        assert_ne!(token,0,"the destination is a drop target again after the reload");
         assert!(host.file_drop(token,&json!([home.path("move.txt")]),true));
         wait_for(&mut host,"move.txt");
         assert_eq!(std::fs::read_to_string(home.path("Destination/move.txt")).unwrap(),"moved bytes");
         assert!(!home.path("move.txt").exists());
         drop(host);scene::destroy(mount);
+    }
+
+    #[test]
+    fn changing_language_invalidates_the_idle_native_tree_without_a_directory_rescan() {
+        let home=Home::new();home.file("report.txt","x");
+        let mut view=FilesView::default();
+        let mut input=facts(&home.path(""));input["cmd"]=json!("sync");
+        view.request(&input);
+        for _ in 0..300 {
+            view.request(&input);
+            if view.raw.to_string().contains("report.txt") {break;}
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(view.raw.to_string().contains("report.txt"));
+        assert_eq!(view.request(&input)["same"],true);
+        input["lang"]=json!("pt");
+        let reply=view.request(&input);
+        assert!(reply["tree"].is_object(),"a language change must repaint even when the directory is idle");
+        assert!(reply["effects"].as_array().unwrap().iter().any(|e|e["kind"]=="menus"),"window menu captions must be translated again");
+        assert_eq!(view.request(&input)["same"],true,"a stable language must not repaint on every poll");
     }
 
 }

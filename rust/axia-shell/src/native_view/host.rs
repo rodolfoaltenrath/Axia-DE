@@ -124,6 +124,12 @@ impl Mounted {
         self.props[slot] = next;
         self.raw[slot] = raw;
     }
+    /// Logical ownership includes portals, which are scene children of a shell
+    /// layer rather than of their owning widget.
+    fn contains(&self, node: i32) -> bool {
+        node != 0 && (self.node == node || self.parts.contains(&node)
+            || self.children.iter().any(|child| child.contains(node)))
+    }
     fn destroy(self) {
         // Children and parts are inside `node`, except the layered ones: they hang from a shell layer.
         fn layered(list: &[Mounted]) {
@@ -209,6 +215,7 @@ pub struct Host {
     pointer_info: Option<Map<String, Value>>,
     /// The view and time of the last left click, for `onDoubleClick`.
     last_click: (i32, f64),
+    double_press: i32,
     /// The app asked for the pointer (a drag in progress).
     capture: bool,
     caret: usize,
@@ -268,6 +275,7 @@ impl Host {
             drops: HashMap::new(),
             pointer_info: None,
             last_click: (0, 0.),
+            double_press: 0,
             capture: false,
             caret: 0,
             anchor: 0,
@@ -350,6 +358,8 @@ impl Host {
         self.window_focused = focused;
         let mut changed = false;
         if !focused {
+            self.double_press = 0;
+            self.last_click = (0, 0.);
             self.blur();
             let pressed = std::mem::take(&mut self.pressed);
             changed |= self.pointer_action(pressed, "onMouseUp");
@@ -512,10 +522,16 @@ impl Host {
             out.push(m);
         }
         for m in old.into_iter().flatten() {
-            if m.node == self.hover {
+            // Descendants disappear too. Clear IDs before destroying them: the
+            // scene may reuse those IDs for an unrelated widget in this sync.
+            if m.contains(self.field) { self.blur(); }
+            if m.contains(self.hover) {
                 self.hover = 0;
                 self.hide_tip();
             }
+            if m.contains(self.pressed) { self.pressed = 0; }
+            if m.contains(self.double_press) { self.double_press = 0; }
+            if m.contains(self.last_click.0) { self.last_click = (0, 0.); }
             m.destroy();
         }
         // Order the nodes like the specs, moving only those out of place.
@@ -1242,6 +1258,9 @@ impl Host {
                     self.focus(field);
                     return inside.then_some(self.mount);
                 }
+                self.double_press = if inside {
+                    self.ancestor_event(target, "onDoubleClick").map_or(0, |(node, _)| node)
+                } else { 0 };
                 let old = std::mem::take(&mut self.pressed);
                 if old != 0 {
                     self.restyle(old);
@@ -1312,18 +1331,21 @@ impl Host {
                         }
                     }
                 }
-                // a second click on the same view soon after: onDoubleClick (after its onClick, as in JS)
-                if inside {
-                    if let Some((node, action)) = self.ancestor_event(target, "onDoubleClick") {
-                        let now = now_ms();
-                        if self.last_click.0 == node && now - self.last_click.1 < 450. {
-                            self.last_click = (0, 0.);
-                            self.send(&action, Map::new());
-                            changed = true;
-                        } else {
-                            self.last_click = (node, now);
-                        }
+                // Only a complete press/release on this view counts as a click.
+                // A release after dragging in from elsewhere must never open a file.
+                let origin = std::mem::take(&mut self.double_press);
+                if let Some((node, action)) = inside.then(|| self.ancestor_event(target, "onDoubleClick")).flatten()
+                    .filter(|(node, _)| *node == origin) {
+                    let now = now_ms();
+                    if self.last_click.0 == node && now - self.last_click.1 < 450. {
+                        self.last_click = (0, 0.);
+                        self.send(&action, Map::new());
+                        changed = true;
+                    } else {
+                        self.last_click = (node, now);
                     }
+                } else {
+                    self.last_click = (0, 0.);
                 }
                 if changed {
                     self.sync();

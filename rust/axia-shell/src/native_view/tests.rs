@@ -1180,3 +1180,42 @@ fn compositor_preview_nodes_bind_sources_and_copy_documents_only_when_the_handle
     }
     drop(host);scene::destroy(mount);
 }
+
+#[test]
+fn removing_a_focused_subtree_releases_keyboard_ownership_and_the_blink_timer() {
+    for portal in [false,true] {
+        let mount=scene::create(scene::VIEW);let layer=scene::create(scene::VIEW);
+        let tree=Rc::new(RefCell::new(json!({"kind":"view","children":[{"kind":"view","key":"dialog","children":[{"kind":"view","layer":if portal {json!("modal")}else{Value::Null},"children":[{"kind":"input","value":"name","autoFocus":true}]}]}]})));
+        let mut host=Host::new(mount,Box::new(SurfaceProbe{tree:tree.clone(),log:Default::default()}),"",None);
+        host.facts(json!({"layers":{"modal":layer}}));
+        assert!(host.owns_text_input());assert!(host.deadline().is_some());
+        tree.borrow_mut()["children"]=json!([]);
+        host.facts(json!({"closed":true,"layers":{"modal":layer}}));
+        assert!(!host.owns_text_input());assert!(host.deadline().is_none());
+        assert!(!host.key("x","x",0),"the vanished field cannot swallow the next key");
+        drop(host);scene::destroy(mount);scene::destroy(layer);
+    }
+}
+
+#[test]
+fn double_click_requires_two_complete_clicks_on_the_same_destination() {
+    for with_click in [false,true] {
+        let mount=scene::create(scene::VIEW);let outside=scene::create(scene::VIEW);
+        let mut spec=json!({"kind":"view","events":{"onDoubleClick":["open"]},"children":[{"kind":"text","label":"File"}]});
+        if with_click {spec["events"]["onClick"]=json!(["select"]);}
+        let tree=Rc::new(RefCell::new(spec));let log=Rc::new(RefCell::new(Vec::new()));
+        let mut host=Host::new(mount,Box::new(SurfaceProbe{tree,log:log.clone()}),"",None);
+        host.facts(json!({}));let file=host.find_text("File");
+        let opened=||log.borrow().iter().filter(|event|event["cmd"]=="open").count();
+        for _ in 0..2 {host.pointer("down",outside,0.,0.,0);host.pointer("up",file,0.,0.,0);}
+        assert_eq!(opened(),0,"dragging into a file is not a double click");
+        for expected in [0,1] {
+            host.pointer("down",file,0.,0.,0);host.pointer("up",file,0.,0.,0);
+            assert_eq!(opened(),expected);
+        }
+        host.pointer("down",file,0.,0.,0);host.pointer("up",file,0.,0.,0);
+        host.pointer("up",file,0.,0.,0);
+        assert_eq!(opened(),1,"a stray release cannot complete the next double click");
+        drop(host);scene::destroy(mount);scene::destroy(outside);
+    }
+}
