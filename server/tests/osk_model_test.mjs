@@ -3,6 +3,7 @@
 //
 //   node tests/osk_model_test.mjs        (from server/; run_suites.sh runs it when node exists)
 import path from 'node:path';
+import './osk_model_node.mjs';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

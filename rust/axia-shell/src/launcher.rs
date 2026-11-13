@@ -2,6 +2,7 @@
 //! retains only rendering, callback objects and access to shared shell services.
 mod session;
 mod dock_model;
+mod osk_model;
 mod ui;
 mod unicode;
 use serde_json::{json, Value};
@@ -297,6 +298,7 @@ impl AxiaLauncher {
     pub(crate) fn request(&mut self, args: &Value) -> Result<Value, &'static str> {
         match args["op"].as_str().unwrap_or("") {
             "dock" => dock_model::request(args),
+            "osk" => osk_model::request(args),
             "search" => self.search.request(args),
             "sync" => self.sync(args),
             "catalog" => Ok(self.catalog()),
