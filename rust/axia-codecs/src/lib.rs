@@ -11,6 +11,7 @@ extern crate axia_mail;
 
 mod cbor;
 mod compression;
+mod qr;
 mod tzif;
 #[cfg(feature = "secure-memory")]
 mod secure;
