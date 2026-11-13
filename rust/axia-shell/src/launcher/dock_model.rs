@@ -37,6 +37,11 @@ fn parse(id: &Value) -> Option<(&str, &str)> {
     let (kind, key) = id.as_str()?.split_once(':')?;
     valid_key(kind, key).then_some((kind, key))
 }
+/// The (kind, key) of a typed dock id, for the session rules.
+#[allow(dead_code)] // the Dock's node example does not include the session model
+pub(super) fn parse_id(id: &Value) -> Option<(&str, &str)> {
+    parse(id)
+}
 
 fn dock_id(kind: &Value, key: &Value) -> Value {
     match (kind.as_str(), key.as_str()) {
