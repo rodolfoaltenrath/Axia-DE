@@ -68,6 +68,8 @@ struct Mounted {
     click: Option<Value>,
     /// The shell layer's node a `"layer"` view lives in (menus, popovers: above the windows); 0 in place.
     layer: i32,
+    /// A view with a `hoverStyle`: its style without it.
+    base: Value,
     offset: f64,
     children: Vec<Mounted>,
 }
@@ -86,6 +88,7 @@ impl Mounted {
             spec: Value::Null,
             click: None,
             layer: 0,
+            base: Value::Null,
             offset: 0.,
             children: Vec::new(),
         }
@@ -138,6 +141,21 @@ enum Target {
     Field,
     Scroll,
     Thumb(i32),
+}
+/// `style` (an object, or arrays of them) with the window's origin added to its left and top.
+fn offset_origin(style: Value, dx: f64, dy: f64) -> Value {
+    match style {
+        Value::Object(mut o) => {
+            for (key, d) in [("left", dx), ("top", dy)] {
+                if let Some(v) = o.get(key).and_then(Value::as_f64) {
+                    o.insert(key.into(), json!(v + d));
+                }
+            }
+            Value::Object(o)
+        }
+        Value::Array(list) => Value::Array(list.into_iter().map(|v| offset_origin(v, dx, dy)).collect()),
+        other => other,
+    }
 }
 pub struct Host {
     mount: i32,
@@ -456,7 +474,6 @@ impl Host {
         let style = spec["style"].clone();
         match m.kind {
             Kind::View => {
-                m.style(0, style);
                 // "layer": "popover" puts the view in that shell layer when the shell named its node
                 // (facts.layers); without one it stays where it is, an absolute view of the window.
                 m.layer = spec["layer"]
@@ -466,12 +483,29 @@ impl Host {
                 if m.layer != 0 && !scene::exists(m.layer) {
                     m.layer = 0;
                 }
-                // Views only need their event map after reconciliation. Avoid
+                // "anchor": "mount": left and top are the window's, not the screen's (a menu opened at
+                // a point of the view, in a layer that covers the screen).
+                let style = match (m.layer, spec["anchor"].as_str(), scene::frame(self.mount)) {
+                    (l, Some("mount"), Some((fx, fy, _, _))) if l != 0 => offset_origin(style, fx as f64, fy as f64),
+                    _ => style,
+                };
+                // "hoverStyle": merged over the style while the pointer is on the view.
+                let hover = spec.get("hoverStyle").filter(|h| h.is_object()).cloned();
+                m.base = if hover.is_some() { style.clone() } else { Value::Null };
+                m.style(0, match &hover {
+                    Some(h) if self.hover == m.node => json!([style, h]),
+                    _ => style,
+                });
+                // Views only need their event map (and hover style) after reconciliation. Avoid
                 // retaining another copy of the entire descendant tree.
-                m.spec = spec
-                    .get("events")
-                    .map(|events| json!({"events":events}))
-                    .unwrap_or(Value::Null);
+                let mut keep = Map::new();
+                if let Some(events) = spec.get("events") {
+                    keep.insert("events".into(), events.clone());
+                }
+                if let Some(h) = hover {
+                    keep.insert("hover".into(), h);
+                }
+                m.spec = if keep.is_empty() { Value::Null } else { Value::Object(keep) };
                 m.click = spec["events"]["onClick"]
                     .as_array()
                     .filter(|a| !a.is_empty())
@@ -650,6 +684,26 @@ impl Host {
         m.style(2, style);
     }
     /// `targets`: what each interactive node does; `buttons`: hover owners.
+    /// A press at `target`: the layered views it is outside of (a menu, a popover) get their
+    /// `onDismiss`. True if one was sent (the caller syncs).
+    fn dismiss(&mut self, target: i32) -> bool {
+        let mut actions = Vec::new();
+        for p in self.portals.clone() {
+            if scene::within(target, p) {
+                continue;
+            }
+            if let Some(m) = find(&mut self.root, p) {
+                let action = m.spec["events"]["onDismiss"].clone();
+                if action.is_array() {
+                    actions.push(action);
+                }
+            }
+        }
+        for action in &actions {
+            self.send(action, Map::new());
+        }
+        !actions.is_empty()
+    }
     /// Is `target` in this view: under its mount, or in one of its layered views.
     fn owns(&self, target: i32) -> bool {
         scene::within(target, self.mount) || self.portals.iter().any(|p| scene::within(target, *p))
@@ -673,9 +727,10 @@ impl Host {
                         if let Some(action) = &m.click {
                             t.insert(m.node, Target::Click(action.clone(), Value::Null));
                         }
-                        if ["onMouseEnter", "onMouseLeave", "onMouseDown", "onMouseUp"]
-                            .iter()
-                            .any(|event| m.spec["events"][*event].is_array())
+                        if m.spec["hover"].is_object()
+                            || ["onMouseEnter", "onMouseLeave", "onMouseDown", "onMouseUp"]
+                                .iter()
+                                .any(|event| m.spec["events"][*event].is_array())
                         {
                             b.insert(m.node, m.node);
                         }
@@ -737,6 +792,10 @@ impl Host {
             Kind::Button => host.button_style(m),
             Kind::Input => host.field_style(m),
             Kind::Scroll => host.thumb(m),
+            Kind::View if m.spec["hover"].is_object() => {
+                let shown = if host.hover == m.node { json!([m.base, m.spec["hover"]]) } else { m.base.clone() };
+                m.style(0, shown);
+            }
             _ => {}
         });
     }
@@ -867,6 +926,9 @@ impl Host {
                 self.set_hover(hover);
             }
             "down" => {
+                if !self.portals.is_empty() && self.dismiss(target) {
+                    self.sync();
+                }
                 if button != 0 {
                     let field = if inside {
                         self.target(target, |t| matches!(t, Target::Field))

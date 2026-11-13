@@ -858,3 +858,46 @@ fn a_layered_view_mounts_in_the_shell_layer_and_receives_pointer_events() {
     scene::destroy(mount);
     scene::destroy(mount2);
 }
+
+#[test]
+fn a_view_takes_its_hover_style_and_a_layer_is_dismissed_by_a_press_outside() {
+    struct Menu(Rc<RefCell<Vec<Value>>>);
+    impl NativeApp for Menu {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                return json!({"tree":{"kind":"view","children":[
+                    {"kind":"text","label":"Window"},
+                    {"kind":"view","layer":"popover","anchor":"mount","style":{"position":"absolute","left":10,"top":20},
+                     "events":{"onDismiss":["close"]},"children":[
+                        {"kind":"view","style":{"backgroundColor":"#00ff00"},"hoverStyle":{"backgroundColor":"#ff0000"},
+                         "events":{"onClick":["pick"]},"children":[{"kind":"text","label":"Item"}]}]}]}});
+            }
+            self.0.borrow_mut().push(input.clone());
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let bg = |n: i32| unsafe { (*crate::runtime::node_get(n)).s.bg };
+    let mount = scene::create(scene::VIEW);
+    let layer = scene::create(scene::VIEW);
+    let outside = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Menu(log.clone())), "", None);
+    host.facts(json!({"layers":{"popover":layer}}));
+    let row = scene::parent(node_with_text(layer, "Item"));
+    assert_eq!(bg(row), 0xff00_ff00, "at rest");
+    host.pointer("move", row, 1., 1., 0);
+    assert_eq!(bg(row), 0xffff_0000, "hovered");
+    host.pointer("move", outside, 1., 1., 0);
+    assert_eq!(bg(row), 0xff00_ff00, "and back");
+    host.pointer("down", row, 1., 1., 0);
+    assert!(!log.borrow().iter().any(|v| v["cmd"] == "close"), "a press inside the layer keeps it");
+    host.pointer("down", outside, 1., 1., 0);
+    assert!(log.borrow().iter().any(|v| v["cmd"] == "close"), "a press outside asks the app to close it");
+    drop(host);
+    scene::destroy(layer);
+    scene::destroy(mount);
+    scene::destroy(outside);
+}
