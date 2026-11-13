@@ -246,7 +246,7 @@ For Chinese and Japanese, which don't separate words, lines can break between ch
 honoring the UAX #14 rules that matter (no break before 、。」！ or after 「). Marks, joiners and
 variation selectors are never left alone at the start of a line.
 
-**Thai is broken by words**, like in GNOME: `server/src/ui/thbrk.c` reads libthai's dictionary
+**Thai is broken by words**, like in GNOME: `rust/axia-codecs/src/thbrk.rs` reads libthai's dictionary
 (`/usr/share/libthai/thbrk.tri`, package `libthai-data`, a libdatrie double-array trie) with its
 own reader and finds the segmentation with libthai's same "maximal matching" (the word path that
 reaches furthest with the fewest characters outside the dictionary and the fewest breaks, and the

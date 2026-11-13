@@ -27,7 +27,7 @@ apps (PDF Viewer, Editor, Notes, Photos…)
                     ├── ipp.c     our own IPP/1.1 encoder/decoder
                     ├── phttp.c   minimal HTTP/1.1 (CUPS unix socket, TCP to the LAN)
                     ├── cups.c    operations: printers, queue, print, cancel, add…
-                    ├── mdns.c    DNS-SD over mDNS (legacy unicast)
+                    ├── mdns.c    DNS-SD over mDNS (legacy unicast; packets: rust/axia-codecs/src/mdns.rs)
                     └── escl.c    eSCL scanners
 CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
 ```
@@ -87,7 +87,8 @@ CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
 
 ### Finding printers and scanners (mDNS)
 
-`server/src/print/mdns.c`, our own:
+`server/src/print/mdns.c` (the socket loop) and `rust/axia-codecs/src/mdns.rs` (reading the
+replies, building the queries), our own:
 
 - **It asks** for `_ipp._tcp`, `_ipps._tcp`, `_uscan._tcp` and `_uscans._tcp` at 224.0.0.251:5353
   **from any port** ("legacy unicast", RFC 6762 §6.7): no need to own 5353 or have avahi, and the

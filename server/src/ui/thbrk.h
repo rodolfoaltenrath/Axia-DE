@@ -1,4 +1,4 @@
-/* thbrk.h — Thai word breaking with the libthai-data dictionary (see thbrk.c). */
+/* thbrk.h — Thai word breaking with the libthai-data dictionary (rust/axia-codecs/src/thbrk.rs). */
 #ifndef LORD_THBRK_H
 #define LORD_THBRK_H
 

@@ -13,6 +13,13 @@ mod cbor;
 mod lpk;
 #[cfg(not(feature = "secure-memory"))]
 mod journal;
+// Thai word breaks (the shell's text layout) and the Files → Network / printer packet parsers.
+#[cfg(not(feature = "secure-memory"))]
+mod thbrk;
+#[cfg(not(feature = "secure-memory"))]
+mod lanparse;
+#[cfg(not(feature = "secure-memory"))]
+mod mdns;
 mod compression;
 mod qr;
 mod tzif;
