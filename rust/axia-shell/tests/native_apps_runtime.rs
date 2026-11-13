@@ -161,6 +161,8 @@ fn real_compiled_app_widgets_and_effects() {
             .find(|v| v["name"] == name)
             .unwrap_or_else(|| panic!("missing {name}: {log}"))
     };
+    assert_eq!(get("native-files-media")["result"],json!({"kind":"mediaPreview","generation":7,"result":991}));
+    assert_eq!(get("native-files-media")["args"],json!(["files","/preview.mp4",{"audio":1}]));
     assert_eq!(
         get("catalog")["ids"],
         json!([
@@ -318,6 +320,8 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js';
 import { View, render } from '@ROOT@/runtime/index.js';
 import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
+import { filesEffect } from '@ROOT@/sdk/nativefiles.js';
+import { media } from '@ROOT@/sdk/media.js';
 import { help } from '@ROOT@/sdk/help.js';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import '@ROOT@/sdk/wayland.js';
@@ -374,6 +378,19 @@ function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useSta
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
+  // The native preview must never allocate React player state/listeners:
+  // its Rust owner closes the low-level source without passing through that SDK.
+  const oldPlay=lord.media.play,oldTracked=media.play,oldResult=lord.nativeViews.result;
+  let previewArgs,previewResult;
+  try {
+    lord.media.play=(...args)=>{previewArgs=args;return 991;};
+    media.play=()=>{throw new Error('native preview entered React player tracking');};
+    lord.nativeViews.result=(handle,result)=>{previewResult=result;};
+    filesEffect({kind:'mediaPreview',generation:7,path:'/preview.mp4'},{handle:0});
+    await Promise.resolve();await Promise.resolve();await Promise.resolve();
+    record('native-files-media',{args:previewArgs,result:previewResult});
+  } finally {lord.media.play=oldPlay;media.play=oldTracked;lord.nativeViews.result=oldResult;}
+
   let rejected=false;try{lord.nativeApps.create('forcequit\0other');}catch(error){rejected=true;}record('invalid-id',{rejected});
   const settingsModel=lord.nativeApps.create('settings');settingsModel.request(JSON.stringify({cmd:'select',section:'themes'}));
   const terminalModel=lord.nativeApps.create('terminal'),passwordsModel=lord.nativeApps.create('passwords'),sysinfoModel=lord.nativeApps.create('sysinfo');

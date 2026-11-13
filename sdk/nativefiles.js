@@ -9,8 +9,6 @@ import { wm, getApp } from './windows.js';
 import { launchApp } from './apps.js';
 import { defaultOpenerId, nativeOf } from './defaults.js';
 import { clipboard } from './clipboard.js';
-import { media } from './media.js';
-import { releaseImage } from './doc.js';
 import { startFileDrag } from './filedrag.js';
 import { hostEffect } from './rustfiles.js';
 
@@ -52,11 +50,6 @@ export function filesEffect(effect, { handle, winId, node, act }) {
     case 'manageDisk': wm.open('disks', { args: { disk: effect.disk } }); return;
     case 'terminal': wm.open('terminal', { new: true, args: { cwd: effect.path } }); return;
     case 'clipboardText': clipboard.set(effect.text); return;
-    case 'closePreview': {
-      if (effect.media) media.close(effect.media);
-      if (effect.image?.id) releaseImage(effect.image.id);
-      return;
-    }
     case 'openPath': {
       const mime = lord.mime?.guess(effect.path) || 'application/octet-stream';
       const desktop = effect.app || defaultOpenerId(mime) || effect.fallback;
@@ -68,10 +61,13 @@ export function filesEffect(effect, { handle, winId, node, act }) {
     case 'openUri': lord.apps.launchUri(effect.app || '', effect.uri); return;
     default: {
       // the asynchronous ones (disks, archives, previews, thumbnails): their result goes back to the app
-      hostEffect(effect).then((done) => {
-        if (!done) return;
-        if (effect.kind === 'mediaPreview' && done.result) result({ ...done });
-        else result({ ...done });
+      // Native Files owns source lifetimes in Rust. Bypass the React player's
+      // state/listener tracking, which cannot observe Rust's direct release.
+      const work = effect.kind === 'mediaPreview'
+        ? Promise.resolve().then(() => ({ result: lord.media?.play('files', effect.path, { audio: 1 }) || null }))
+        : hostEffect(effect);
+      work.then((done) => {
+        if (done) result({ ...done });
       }).catch((error) => result({ error: error.message || String(error) }));
     }
   }

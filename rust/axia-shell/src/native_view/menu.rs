@@ -79,7 +79,7 @@ struct Placed {
     width: f64,
 }
 
-fn row(i: usize, item: &Value, active: bool, env: &Env) -> Value {
+fn row(i: usize, item: &Value, active: bool, hover:&str, env: &Env) -> Value {
     if is_sep(item) {
         return json!({"kind":"view","key":format!("item{i}"),"style":{"height":1,"marginVertical":4,"marginHorizontal":8,
             "backgroundColor":env.tok("separator","rgba(128,128,128,0.3)")}});
@@ -129,7 +129,7 @@ fn row(i: usize, item: &Value, active: bool, env: &Env) -> Value {
     if selectable(item) && !item["submenu"].is_array() && item["action"].is_array() {
         events.insert("onClick".into(), item["action"].clone());
     }
-    events.insert("onMouseEnter".into(), json!(["menuHover", i]));
+    events.insert("onMouseEnter".into(), json!([hover, i]));
     let mut view = json!({"kind":"view","key":format!("item{i}"),
         "style":{"height":ROW,"paddingHorizontal":10,"marginHorizontal":5,"flexDirection":"row","alignItems":"center",
             "borderRadius":env.tok("contextMenuItemRadius", "5"),"backgroundColor":if lit { accent.clone() } else { json!("transparent") }},
@@ -147,6 +147,7 @@ fn merge(into: &mut Value, from: Value) {
 }
 
 struct Opts<'a> {
+    hover:&'a str,
     layer: &'a str,
     min: f64,
     above: bool,
@@ -172,7 +173,7 @@ fn panel(items: &[Value], at: (f64, f64), active: i64, opts: &Opts, dismiss: Opt
     x = x.min(env.screen.0 - width - 4.).max(4.);
     y = y.min(env.screen.1 - height - 4.).max(4.);
     let scrolls = full > height;
-    let rows: Vec<Value> = items.iter().enumerate().map(|(i, it)| row(i, it, i as i64 == active, env)).collect();
+    let rows: Vec<Value> = items.iter().enumerate().map(|(i, it)| row(i, it, i as i64 == active, opts.hover, env)).collect();
     let mut style = json!({"position":"absolute","left":x,"top":y,"width":width,
         "borderRadius":env.tok("contextMenuRadius", "9"),
         "backgroundColor":env.first(&["panelBg", "popupBg"], if env.dark { "rgba(35,35,40,0.88)" } else { "rgba(248,248,250,0.90)" }),
@@ -197,6 +198,7 @@ fn panel(items: &[Value], at: (f64, f64), active: i64, opts: &Opts, dismiss: Opt
 pub fn expand(spec: &Value, env: &Env) -> Value {
     let items = spec["items"].as_array().cloned().unwrap_or_default();
     let opts = Opts {
+        hover:"menuHover",
         layer: spec["layer"].as_str().unwrap_or("popover"),
         min: spec["width"].as_f64().unwrap_or(220.),
         above: spec["above"] == true,
@@ -210,9 +212,13 @@ pub fn expand(spec: &Value, env: &Env) -> Value {
     if let Some(i) = spec["sub"].as_i64().filter(|i| *i >= 0) {
         if let Some(sub) = items.get(i as usize).and_then(|it| it["submenu"].as_array()) {
             let top: f64 = items.iter().take(i as usize).map(row_h).sum::<f64>() + 5.;
-            // beside its row, in the same layer (no side of its own: the language decides)
-            let sub_opts = Opts { side: None, above: false, centered: false, ..opts };
-            let (mut node, _) = panel(sub, (placed.x + placed.width - 4., placed.y + top - 5.), -1, &sub_opts, None, env);
+            let width=fit_width(sub,opts.min,env);
+            let left_room=placed.x+4.-width>=4.;
+            let right_room=placed.x+placed.width-4.+width<=env.screen.0-4.;
+            let left=if env.rtl {left_room || !right_room} else {!right_room && left_room};
+            let x=if left {placed.x+4.} else {placed.x+placed.width-4.};
+            let sub_opts = Opts { side: Some(if left {"left"} else {"right"}), hover:"menuSubHover", above: false, centered: false, ..opts };
+            let (mut node, _) = panel(sub, (x, placed.y + top - 5.), spec["subActive"].as_i64().unwrap_or(-1), &sub_opts, None, env);
             node["key"] = json!("sub");
             main["children"].as_array_mut().map(|c| c.push(node));
         }
@@ -315,7 +321,7 @@ mod tests {
         let theme = |_: &str| None;
         let measure = |t: &str, s: f64, w: f64| measure(t, s, w);
         let e = env(&caption, &theme, &measure);
-        let tree = expand(&menu(json!({"sub":4,"active":4,"events":{"onDismiss":["closeContext"]}})), &e);
+        let tree = expand(&menu(json!({"sub":4,"active":4,"subActive":0,"events":{"onDismiss":["closeContext"]}})), &e);
         let main = panel_of(&tree);
         assert_eq!(main["events"]["onDismiss"], json!(["closeContext"]));
         let kids = main["children"].as_array().unwrap();
@@ -327,6 +333,11 @@ mod tests {
         // 5 + rows above it (24 + 9 + 22 + 24 = 79) - 5, from the menu's top
         assert_eq!(sub["style"]["top"].as_f64().unwrap(), main["style"]["top"].as_f64().unwrap() + 79.);
         assert_eq!(sub["children"][0]["events"]["onClick"], json!(["with", "editor"]));
+        assert_eq!(sub["children"][0]["events"]["onMouseEnter"],json!(["menuSubHover",0]));
+        assert_eq!(sub["children"][0]["style"]["backgroundColor"],"#0a84ff");
+        let edge=expand(&menu(json!({"sub":4,"x":990,"absolute":true})),&e);
+        let parent=panel_of(&edge);let sub=parent["children"].as_array().unwrap().last().unwrap();
+        assert!(sub["style"]["left"].as_f64().unwrap()<parent["style"]["left"].as_f64().unwrap(),"submenu flips at the right edge");
         assert_eq!(kids[4]["style"]["backgroundColor"], "#0a84ff", "the keyboard's row is lit");
     }
 
