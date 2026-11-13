@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { createNativeAsync } from '../../runtime/native_async.js';
 import { fontServices } from '../../runtime/native_font_services.js';
+import { documentServices } from '../../runtime/native_doc_services.js';
+import { scanServices } from '../../runtime/native_scan_services.js';
+import { fileServices } from '../../runtime/native_fs_services.js';
 const pending = [], disposed = [], stopped = [], events = [];
 const bridge = createNativeAsync({
   wait: { run(args, owner) { return new Promise((resolve, reject) => pending.push({ resolve, reject, owner })); }, dispose(value) { disposed.push(value); } },
@@ -84,4 +87,35 @@ const closing = fontBridge.start(10, 'fonts.sample', []); await flush(); fontBri
 renders.shift()({ image: 104, w: 100, h: 20 }); await flush();
 assert.deepEqual(releasedImages, [101, 102, 103, 104], 'an image arriving after close is released exactly once');
 assert.deepEqual(fontBridge.take(10, [closing]), []);
+// Production providers forward SDK arguments and retain decoded previews in
+// the same owner lease used by the native scanner window.
+const scanCalls = [], imageDisposals = [];
+let finishImage;
+const record = name => (...args) => { scanCalls.push([name, args]); return null; };
+const scannerBridge = createNativeAsync({
+  ...scanServices({ discover:record('discover'), scanCaps:record('caps'), scan:record('scan'), open:record('print') }),
+  ...documentServices({ decodeImage:()=>new Promise(resolve=>{finishImage=resolve;}),
+    pdfThumb:record('pdfThumb'), convertImage:record('convert'), releaseImage:id=>imageDisposals.push(id) }),
+  ...fileServices({ stat:record('stat'), copy:record('copy'), jobs:record('jobs'), forgetJob:record('forgetJob') }),
+});
+const scanMethods=['scanner.discover','scanner.caps','scanner.scan','print.open','images.decode','images.pdfThumb','images.convert','images.release','fs.stat','fs.copy','fs.jobs','fs.forgetJob'];
+scannerBridge.open(20,scanMethods);
+const dev={addr:'192.168.1.2',port:80,rs:'eSCL'}, options={res:300,color:'Grayscale8',source:'Platen',x:0,y:0,w:2550,h:3508};
+for(const [method,args] of [
+  ['scanner.discover',[]],['scanner.caps',[dev]],['scanner.scan',[dev,options]],
+  ['print.open',[{title:'Scan.jpg',image:'/home/test/Scan.jpg'}]],
+  ['images.convert',['/tmp/scan.jpg','/home/test/Scan.pdf',{format:'pdf',native:true,dpi:300}]],
+  ['fs.copy',['/tmp/scan.jpg','/home/test/Scan.jpg']],['fs.jobs',[]],['fs.forgetJob',[42]],
+]) { const token=scannerBridge.start(20,method,args); await flush(); scannerBridge.take(20,[token]); }
+assert.deepEqual(scanCalls.find(([name])=>name==='scan'),['scan',[dev,options]]);
+assert.deepEqual(scanCalls.find(([name])=>name==='convert'),['convert',['/tmp/scan.jpg','/home/test/Scan.pdf',{format:'pdf',native:true,dpi:300}]]);
+assert.deepEqual(scanCalls.find(([name])=>name==='print'),['print',[{title:'Scan.jpg',image:'/home/test/Scan.jpg'}]]);
+const preview=scannerBridge.start(20,'images.decode',['/tmp/scan.jpg',{maxw:520,maxh:560}]); await flush();
+finishImage({image:201,w:520,h:560}); await flush(); scannerBridge.take(20,[preview]);
+assert.deepEqual(imageDisposals,[]);
+scannerBridge.close(20); assert.deepEqual(imageDisposals,[201]);
+scannerBridge.open(20,scanMethods);
+scannerBridge.start(20,'images.decode',['/tmp/late.jpg']); await flush(); scannerBridge.close(20);
+finishImage({image:202,w:520,h:560}); await flush();
+assert.deepEqual(imageDisposals,[201,202],'late scanner previews are released once');
 console.log('native-async-test: ownership, cancellation, errors, capabilities and event delivery passed');

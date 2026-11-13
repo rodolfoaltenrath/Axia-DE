@@ -36,6 +36,8 @@ mod store;
 mod logs_app;
 #[path = "../../../apps/fonts/mod.rs"]
 mod fonts_app;
+#[path = "../../../apps/scanner/mod.rs"]
+mod scanner_app;
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod flip_pacing;
