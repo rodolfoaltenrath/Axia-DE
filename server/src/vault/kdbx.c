@@ -247,10 +247,10 @@ static int read_kdf(const uint8_t *v, size_t n, Kdf *k) {
 
 /* ---- fast AES-KDF ----
  * keepassxc-cli creates KDBX 3.1 databases with AES-KDF calibrated to 1 s with AES-NI: about
- * 30 million rounds (60 million blocks). The bytewise AES in vcrypto.c takes a minute on
+ * 30 million rounds (60 million blocks). The bytewise AES in vcrypto.rs takes a minute on
  * that, so here is a dedicated path for encryption only: AES-NI on x86-64 if the CPU has it
  * (checked at run time) and otherwise T-tables (like the classic "fast" AES, ~10 times the bytewise one).
- * The round keys come from aes_init (vcrypto.c). */
+ * The round keys come from aes_init (vcrypto.rs). */
 static uint32_t T0[256], T1[256], T2[256], T3[256];
 static uint8_t SBX[256];
 static int tables_ready;
@@ -341,7 +341,7 @@ static int aes_kdf(const uint8_t comp[32], const uint8_t seed[32], uint64_t roun
     return 0;
 }
 
-/* reference (vcrypto.c) to compare in tests */
+/* reference (vcrypto.rs) to compare in tests */
 int kdbx_aes_kdf_ref(const uint8_t comp[32], const uint8_t seed[32], uint64_t rounds, uint8_t out[32]) {
     Aes a;
     if (aes_init(&a, seed, 256)) return -1;

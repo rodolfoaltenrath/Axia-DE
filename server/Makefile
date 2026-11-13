@@ -801,7 +801,7 @@ test: test-mail-rust
 
 # Rust compatibility tests call the actual C format consumers against immutable
 # files produced by the previous crypto backend. Crypto itself is Rust only.
-CRYPTO_FORMAT_SRC := src/vault/vfile.c src/vault/vcrypto.c src/pkg/crypto.c src/vault/smem.c src/backup/crypt.c
+CRYPTO_FORMAT_SRC := src/vault/vfile.c src/pkg/crypto.c src/vault/smem.c src/backup/crypt.c
 build/crypto-format-test.so: $(CRYPTO_FORMAT_SRC) src/crypto_ffi.h $(wildcard src/vault/*.h) src/backup/crypt.h $(CODEC_LIB)
 	@mkdir -p build
 	printf '%s\n' '{ global: vf_*; bkc_*; sm_free; local: *; };' > build/crypto-format-test.map

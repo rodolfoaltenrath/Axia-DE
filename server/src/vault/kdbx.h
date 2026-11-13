@@ -27,7 +27,7 @@ extern uint64_t kdbx_max_aes_rounds;
 extern uint64_t kdbx_max_argon_kib;
 
 /* AES-KDF (transforming the composite key): AES-NI if the CPU has it, otherwise T-tables.
- * kdbx_aes_kdf_mode = 1 forces the tables; kdbx_aes_kdf_ref uses the bytewise AES from vcrypto.c
+ * kdbx_aes_kdf_mode = 1 forces the tables; kdbx_aes_kdf_ref uses the bytewise AES from vcrypto.rs
  * (to compare in tests). */
 extern int kdbx_aes_kdf_mode;
 int kdbx_aes_kdf(const uint8_t comp[32], const uint8_t seed[32], uint64_t rounds, uint8_t out[32]);

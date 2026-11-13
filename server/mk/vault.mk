@@ -1,10 +1,10 @@
 # Passwords and the system keyring. Rust cryptography is included in the secure
 # codecs archive, so each executable links only one Rust runtime/allocator.
-# Common vault primitives (AES, SHA-1, HMAC, HKDF, secrets arena, Rust codecs on the arena)
-VAULT_BASE := src/vault/smem.c src/vault/vcrypto.c src/pkg/crypto.c
-build/vcrypto-test: tests/vcrypto_test.c $(VAULT_BASE) src/vault/vcrypto.h src/vault/smem.h
+# Common vault primitives (AES, SHA-1, HMAC, HKDF are Rust: rust/axia-crypto/src/vcrypto.rs; secrets arena)
+VAULT_BASE := src/vault/smem.c src/pkg/crypto.c
+build/vcrypto-test: tests/vcrypto_test.c $(VAULT_BASE) src/vault/vcrypto.h src/vault/smem.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vcrypto_test.c $(VAULT_BASE) -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vcrypto_test.c $(VAULT_BASE) $(CODEC_LIB) -lpthread $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 test: build/vcrypto-test
 # Lists embedded in axia-vault (EFF words, common passwords): ../third_party/wordlists
@@ -13,7 +13,7 @@ build/obj/vault/lists.o: ../third_party/wordlists/eff_large_wordlist.txt ../thir
 	cp ../third_party/wordlists/eff_large_wordlist.txt build/gen/vault/words.txt
 	cp ../third_party/wordlists/10k-most-common.txt build/gen/vault/common.txt
 	cd build/gen/vault && $(LD) -r -b binary -z noexecstack -o ../../obj/vault/lists.o words.txt common.txt
-VAULT_CORE := src/vault/smem.c src/vault/vcrypto.c src/vault/vjson.c src/vault/vfile.c src/vault/vmodel.c src/vault/vgen.c \
+VAULT_CORE := src/vault/smem.c src/vault/vjson.c src/vault/vfile.c src/vault/vmodel.c src/vault/vgen.c \
               src/vault/totp.c src/vault/vwire.c src/pkg/crypto.c
 VAULT_HDR := $(wildcard src/vault/*.h) src/sec/sandbox.h
 # format, model, TOTP, generator, JSON and protocol (tests/vault_test.c)

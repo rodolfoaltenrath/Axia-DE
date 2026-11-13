@@ -280,7 +280,7 @@ static void test_kdbx(void) {
         free(k);
     }
 
-    /* AES-KDF: AES-NI and T-tables against the reference AES (vcrypto.c) */
+    /* AES-KDF: AES-NI and T-tables against the reference AES (vcrypto.rs) */
     {
         uint8_t c[32], sd[32], r1[32], r2[32], r3[32];
         for (int i = 0; i < 32; i++) { c[i] = (uint8_t)(i * 7 + 1); sd[i] = (uint8_t)(255 - i * 3); }

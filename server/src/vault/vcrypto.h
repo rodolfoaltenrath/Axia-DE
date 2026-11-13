@@ -1,10 +1,12 @@
-/* vcrypto.h — remaining C primitives required by foreign formats:
+/* vcrypto.h — primitives required by foreign formats; implemented in Rust
+ * (rust/axia-crypto/src/vcrypto.rs, part of the codecs archives) with this C ABI:
  *   - AES-128/256 (block, CBC): CTAP2 (PIN protocol 1), KDBX (AES-256-CBC and AES-KDF) and the
  *     "dh-ietf1024-sha256-aes128-cbc-pkcs7" encryption of Secret Service;
  *   - SHA-1 and HMAC-SHA1 (TOTP, RFC 6238/4226), HMAC-SHA256 (CTAP2, KDBX, TOTP-SHA256),
  *     HMAC-SHA512 (TOTP-SHA512) and HKDF-SHA256 (RFC 5869).
  * Native vault file encryption uses RustCrypto primitives (XChaCha20-Poly1305, Argon2id, BLAKE2b).
- * SHA-256/512 are those of server/src/pkg/crypto.c. */
+ * SHA-256/512 inside the HMACs are private to the Rust module; server/src/pkg/crypto.c keeps the
+ * exported ones. */
 #ifndef LORD_VAULT_VCRYPTO_H
 #define LORD_VAULT_VCRYPTO_H
 

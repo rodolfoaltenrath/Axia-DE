@@ -481,7 +481,7 @@ whose only verification is built in (fingerprint) are not implemented/tested.
 | `server/src/vault/smem.c` | the secret arena |
 | `server/src/vault/vjson.c`, `vwire.c` | in-arena JSON, the message protocol |
 | `server/src/vault/vgen.c`, `totp.c`, `qr.c`; `rust/axia-codecs` | generator/strength/HIBP, TOTP, QR, Rust codecs with the arena |
-| `server/src/vault/vcrypto.c` | AES, SHA-1, HMAC, HKDF |
+| `rust/axia-crypto/src/vcrypto.rs` | AES, SHA-1, HMAC, HKDF (C ABI of `vcrypto.h`) |
 | `server/src/vault/ctap2.c`, `cbor.c`, `p256.c`, `fidodev.c` | FIDO2 client, CBOR, P-256, device discovery |
 | `server/src/vault/dbus.c`, `secretsvc.c` | own D-Bus and the Secret Service |
 | `server/src/vault/vimport.c`, `kdbx.c`, `csvp.c`, `xmlmini.c` | importers |
