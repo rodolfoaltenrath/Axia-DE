@@ -1,4 +1,5 @@
 #include "clipboard_native.h"
+#include "dnd.h"
 /* wl.c — LordOS's own Wayland compositor: Linux apps (GTK, Qt, foot…) open as LordOS
  * windows. It only uses libwayland-server (it serializes the protocol; the dependency policy
  * allows it since M1) and the code wayland-scanner generates for xdg-shell and xdg-decoration.
@@ -15,7 +16,8 @@
  *
  * X11 apps go through Xwayland (xwayland.c starts it on demand, xwm.c is the X window manager):
  * its X windows are surfaces of one more client, with the toplevel or popup role given here
- * (wlx_attach). Not there yet: drag and drop, text-input (LordOS input methods inside Wayland apps). */
+ * (wlx_attach). X11/Wayland drag bridging is not implemented; native Wayland drag
+ * ownership, actions and asynchronous streams live in Rust wayland/dnd*.rs. */
 #include "wl.h"
 #include "keygrab.h"
 #include "../keylag.h"
@@ -65,7 +67,7 @@
 #include "../ui/ui.h"
 #include "../sec/broker.h"
 
-enum { R_NONE, R_TOPLEVEL, R_POPUP, R_SUB, R_CURSOR };
+enum { R_NONE, R_TOPLEVEL, R_POPUP, R_SUB, R_CURSOR, R_DRAG_ICON };
 
 /* An app's dmabuf buffer (zwp_linux_dmabuf_v1). Refcounted: 1 for the wl_buffer, 1 for the
  * surface showing it and 1 while it is on screen via direct scanout. */
@@ -241,6 +243,7 @@ static void fs_rect(float *x, float *y, float *w, float *h) {
 
 /* cursor of the app with the pointer: 0 LordOS arrow, 1 app image, 2 hidden */
 static Surf *cursor_surf;
+static Surf *drag_icon;
 static int cursor_mode;
 static unsigned cursor_gen;
 
@@ -296,6 +299,7 @@ static void emit(Surf *s, const char *type, const char *fmt, ...) {
 void wl_events(WlEventFn fn) {
     for (int i = 0; i < nev; i++) fn(evq[i].id, evq[i].type, evq[i].json);
     nev = 0;
+    dnd_events(fn);
 }
 
 /* ---- utilities ---- */
@@ -546,7 +550,7 @@ static void queue_release(Dmabuf *d) {
 static void take_buffer(Surf *s, struct wl_resource *buf) {
     Dmabuf *dm = dmabuf_of(buf), *old = s->dmabuf;
     s->dmabuf = NULL;
-    if (dm && s->role != R_CURSOR && dm_tex(dm)) {
+    if (dm && s->role != R_CURSOR && s->role != R_DRAG_ICON && dm_tex(dm)) {
         dm->refs++;
         s->dmabuf = dm;
         s->w = dm->d.width;
@@ -559,7 +563,7 @@ static void take_buffer(Surf *s, struct wl_resource *buf) {
         s->content = 1;
         s->tex_dirty = 1;
         wl_buffer_send_release(buf);
-    } else if (dm && !gpu_active() && s->role != R_CURSOR) {
+    } else if (dm && !gpu_active() && s->role != R_CURSOR && s->role != R_DRAG_ICON) {
         /* Off the GPU (the session left the monitor, or a recording) with a buffer the CPU
          * can't read (tiled, or a driver that doesn't map it): keep showing the last good frame
          * (px, read back from the GPU) and hold the buffer, so it is imported as soon as the GPU
@@ -675,10 +679,10 @@ static void srf_commit(struct wl_client *c, struct wl_resource *r) {
     wl_list_init(&s->p_frames);
     wl_list_insert_list(s->feedback.prev, &s->p_feedback);
     wl_list_init(&s->p_feedback);
-    if (s->role == R_CURSOR) {
+    if (s->role == R_CURSOR || s->role == R_DRAG_ICON) {
         s->cursor_hx = s->p_hx;
         s->cursor_hy = s->p_hy;
-        if (s == cursor_surf) cursor_gen++;
+        if (s == cursor_surf || s == drag_icon) cursor_gen++;
         return;
     }
     if (s->p_geom) {
@@ -748,6 +752,8 @@ static void surface_gone(struct wl_resource *r) {
     if (s->deco) wl_resource_set_user_data(s->deco, NULL);
     if (s->node) damage_node(s);
     if (fs_surf == s) { fs_surf = NULL; ui.dirty = 1; damage_add((Box){ 0, 0, ui.width, ui.height }); }
+    if (drag_icon == s) { drag_icon = NULL; cursor_gen++; }
+    dnd_surface_gone(s->res);
     if (cursor_surf == s) { cursor_surf = NULL; cursor_mode = 0; cursor_gen++; }
     if (constraint && constraint->surf == s) { constraint->surf = NULL; constraint->active = 0; }
     constraint_update();                /* s may have been the window with the keyboard */
@@ -1263,7 +1269,7 @@ void wl_keymap_changed(void) {
  * selection (terminal, text fields, an image from the history) is offered to the focused app. */
 
 #define MAX_MIMES 32
-typedef struct { struct wl_resource *res; char mimes[MAX_MIMES][64]; int nmimes; } Source;
+typedef struct { struct wl_resource *res; char mimes[MAX_MIMES][64]; int nmimes; DndSource *drag; } Source;
 static Source *selection;           /* source of the app owning the selection, or NULL (LordOS) */
 /* Bumped whenever the selection changes: an offer is only good for the selection it was made for,
  * and only while its client has the keyboard (an app can't keep an old offer to read later copies). */
@@ -1274,10 +1280,13 @@ static int text_mime(const char *m) { return axia_native_mime_rank(m) > 0; }
 static void src_offer(struct wl_client *c, struct wl_resource *r, const char *mime) {
     (void)c;
     Source *s = wl_resource_get_user_data(r);
-    if (s->nmimes < MAX_MIMES) snprintf(s->mimes[s->nmimes++], sizeof s->mimes[0], "%s", mime);
+    if (!dnd_source_used(s->drag) && strlen(mime)<sizeof s->mimes[0] && s->nmimes < MAX_MIMES) snprintf(s->mimes[s->nmimes++], sizeof s->mimes[0], "%s", mime);
 }
 static void src_destroy(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
-static void src_actions(struct wl_client *c, struct wl_resource *r, uint32_t a) { (void)c; (void)r; (void)a; }
+static void src_actions(struct wl_client *c, struct wl_resource *r, uint32_t a) {
+    (void)c; Source *s=wl_resource_get_user_data(r);
+    dnd_source_actions(r,&s->drag,a);
+}
 static const struct wl_data_source_interface source_impl = { .offer = src_offer, .destroy = src_destroy, .set_actions = src_actions };
 static void offer_to_focus(void);
 static void src_gone(struct wl_resource *r) {
@@ -1287,7 +1296,7 @@ static void src_gone(struct wl_resource *r) {
         axia_native_offer_advance();
         if (wl_clip_is_image() || term_clipboard()[0]) offer_to_focus(); /* Rust retains the completed copy after owner exit. */
     }
-    free(s);
+    dnd_source_free(s->drag); free(s);
 }
 
 /* Protocol registration stays in C. Rust owns descriptors, bounded buffers,
@@ -1458,12 +1467,27 @@ static void offer_to_focus(void) {
 
 static void dev_drag(struct wl_client *c, struct wl_resource *r, struct wl_resource *src, struct wl_resource *origin_,
                      struct wl_resource *icon, uint32_t serial) {
-    (void)c; (void)r; (void)origin_; (void)icon; (void)serial;
-    if (src) wl_data_source_send_cancelled(src);     /* drag and drop: not yet */
+    if (!origin_ || wl_resource_get_client(origin_)!=c || (src && wl_resource_get_client(src)!=c)) return;
+    Surf *origin_s=wl_resource_get_user_data(origin_);
+    if (!origin_s || !pointer_focus || pointer_focus->res!=origin_) return;
+    int pressed=dnd_press_button(c,origin_,serial,pointer_focus->res);
+    if (pressed<0 || dnd_active()) return;
+    Source *s=src ? wl_resource_get_user_data(src) : NULL;
+    if (s && s==selection) { wl_resource_post_error(src,WL_DATA_SOURCE_ERROR_INVALID_SOURCE,"source is a selection"); return; }
+    Surf *image=icon ? wl_resource_get_user_data(icon) : NULL;
+    if (image && image->role!=R_NONE && image->role!=R_DRAG_ICON) {
+        wl_resource_post_error(r,WL_DATA_DEVICE_ERROR_ROLE,"drag icon already has a role"); return;
+    }
+    const char *mimes[MAX_MIMES];
+    for (int i=0;s && i<s->nmimes;i++) mimes[i]=s->mimes[i];
+    if (!dnd_start_source(src,origin_,mimes,s ? s->nmimes : 0,s ? &s->drag : NULL,(uint32_t)pressed)) return;
+    drag_icon=image;
+    if (image) { image->role=R_DRAG_ICON; cursor_gen++; }
 }
 static void dev_set_selection(struct wl_client *c, struct wl_resource *r, struct wl_resource *src, uint32_t serial) {
     (void)c; (void)r; (void)serial;
     Source *s = src ? wl_resource_get_user_data(src) : NULL;
+    if (s && dnd_source_is_drag(s->drag)) { wl_resource_post_error(src,WL_DATA_SOURCE_ERROR_INVALID_SOURCE,"source cannot be used for selection"); return; }
     if (selection && selection != s) wl_data_source_send_cancelled(selection->res);
     selection = s;
     axia_native_invalidate(false);
@@ -2730,13 +2754,24 @@ static void dismiss_popups(void) {
     for (int i = npopups - 1; i >= 0; i--) if (popups[i]->popup) xdg_popup_send_popup_done(popups[i]->popup);
 }
 
+int wl_drag_files(const char *paths,int origin_node,int internal_move) {
+    if (!dpy || !node_get(origin_node)) return 0;
+    if (!dnd_start_files(paths,origin_node,internal_move)) return 0;
+    return 1;
+}
+int wl_drag_active(void) { return dnd_active(); }
+void wl_drag_cancel(void) { dnd_cancel(); drag_icon=NULL; buttons_held=0; cursor_gen++; }
 int wl_pointer(float x, float y, Node *hit, int moved, int nbuttons, const int *down, const int *button, int wheel) {
     if (!dpy) return 0;
     last_x = x;
     last_y = y;
+    int dragging=dnd_active(), released=0;
+    for (int i=0;i<nbuttons;i++) {
+        released |= dnd_button((uint32_t)button[i],down[i]);
+    }
     Surf *target = NULL;
     float lx = 0, ly = 0;
-    if (buttons_held && pointer_focus) {        /* drag: stays on the same surface */
+    if (!dragging && buttons_held && pointer_focus) {        /* drag: stays on the same surface */
         float ox, oy;
         target = pointer_focus;
         if (origin(target, &ox, &oy)) { lx = x - ox; ly = y - oy; }
@@ -2753,6 +2788,15 @@ int wl_pointer(float x, float y, Node *hit, int moved, int nbuttons, const int *
             float ox, oy;
             if (s && origin(s, &ox, &oy)) target = surface_at(s, x - ox, y - oy, &lx, &ly);
         }
+    }
+    if (dragging) {
+        int token=0;
+        if (!target) token=(int)node_file_drop(hit);
+        int source_node=dnd_origin_node();
+        if (source_node && !node_get(source_node)) dnd_cancel();
+        else dnd_pointer(target ? target->res : NULL,token,lx,ly,moved,released,now_ms());
+        if (!dnd_active()) { drag_icon=NULL; cursor_gen++; buttons_held=0; }
+        return 3; /* input grab: no JS motion, clicks, menus or app pointer events */
     }
     for (int i = 0; i < nbuttons; i++)          /* click outside the menus: they close */
         if (down[i] && npopups && (!target || target->role != R_POPUP)) {
@@ -2771,6 +2815,9 @@ int wl_pointer(float x, float y, Node *hit, int moved, int nbuttons, const int *
             uint32_t b = button[i] == 0 ? BTN_LEFT : button[i] == 1 ? BTN_MIDDLE : BTN_RIGHT;
             uint32_t serial = wl_display_next_serial(dpy);
             activation_record(target->client, serial, t, down[i]);
+            if (down[i]) {
+                dnd_record_press(target->res,serial,(uint32_t)button[i]);
+            }
             wl_pointer_send_button(p, serial, t, b,
                                    down[i] ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
         }
@@ -2907,6 +2954,7 @@ static void send_remapped(int code, int press) {
 
 int wl_key(int code, int value, const KeyInfo *k) {
     if (!dpy) return 0;
+    if (dnd_key((uint32_t)code,value,k->alt)) { drag_icon=NULL; buttons_held=0; cursor_gen++; return 1; }
     unsigned char *was_grabbed = code >= 0 && code < KEY_SLOTS ? &grabbed[code] : NULL;
     unsigned char *was_remapped = code >= 0 && code < KEY_SLOTS ? &remapped[code] : NULL;
     unsigned mods = (k->shift ? KG_SHIFT : 0u) | (k->ctrl ? KG_CTRL : 0u) | (k->alt ? KG_ALT : 0u) | (k->meta ? KG_META : 0u);
@@ -3460,6 +3508,9 @@ void wl_pointer_confine(int *x, int *y) {
 void wl_set_pointer_scale(int pct) { if (pct != pointer_scale) { pointer_scale = pct; cursor_gen++; } }
 
 int wl_cursor(const uint32_t **px, int *w, int *h, int *hx, int *hy, unsigned *gen) {
+    if (dnd_active() && drag_icon && drag_icon->px && drag_icon->w<=256 && drag_icon->h<=256) {
+        *px=drag_icon->px; *w=drag_icon->w; *h=drag_icon->h; *hx=-8; *hy=-8; *gen=cursor_gen; return 1;
+    }
     *gen = cursor_gen;
     if (wl_pointer_locked()) return 2;
     if (cursor_mode == 1 && cursor_surf && cursor_surf->px) {
@@ -3678,6 +3729,7 @@ int wl_start(void) {
     wl_list_init(&pointers);
     wl_list_init(&keyboards);
     wl_list_init(&data_devices);
+    dnd_init(dpy,&data_devices);
     wl_list_init(&outputs);
     wl_display_init_shm(dpy);
     wl_global_create(dpy, &wl_compositor_interface, 6, NULL, bind_compositor);
@@ -3722,6 +3774,7 @@ int wl_start(void) {
 }
 
 void wl_stop(void) {
+    dnd_shutdown();
     axia_glass_set_backdrop(NULL);
     if (!dpy) return;
     while (clip_readers) reader_free(clip_readers);

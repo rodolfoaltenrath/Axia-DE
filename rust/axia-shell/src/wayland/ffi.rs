@@ -72,6 +72,12 @@ extern "C" {
         data: *mut c_void,
     ) -> *mut EventSource;
     pub fn wl_event_source_remove(source: *mut EventSource) -> c_int;
+    pub fn wl_event_loop_add_timer(
+        event_loop: *mut EventLoop,
+        callback: Option<unsafe extern "C" fn(*mut c_void) -> c_int>,
+        data: *mut c_void,
+    ) -> *mut EventSource;
+    pub fn wl_event_source_timer_update(source: *mut EventSource, milliseconds: c_int) -> c_int;
     pub fn wl_client_create(display: *mut Display, fd: c_int) -> *mut Client;
     pub fn wl_client_destroy(client: *mut Client);
     pub fn wl_client_add_destroy_listener(client: *mut Client, listener: *mut Listener);
@@ -79,6 +85,7 @@ extern "C" {
     pub static wl_seat_interface: Interface;
     pub static wl_pointer_interface: Interface;
     pub static wl_touch_interface: Interface;
+    pub static wl_data_offer_interface: Interface;
     pub fn wl_display_next_serial(display: *mut Display) -> u32;
     pub fn wl_resource_get_client(resource: *mut Resource) -> *mut Client;
     pub fn wl_resource_from_link(link: *mut List) -> *mut Resource;
@@ -104,6 +111,7 @@ extern "C" {
         destroy: Option<Destroy>,
     );
     pub fn wl_resource_get_version(resource: *mut Resource) -> c_int;
+    pub fn wl_resource_post_error(resource: *mut Resource, code: u32, message: *const c_char, ...);
     pub fn wl_resource_destroy(resource: *mut Resource);
     pub fn wl_resource_post_event(resource: *mut Resource, opcode: u32, ...);
     pub fn wl_client_post_no_memory(client: *mut Client);

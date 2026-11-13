@@ -24,6 +24,7 @@ export { OskPanel, OskIcon, OskStatus, oskLift } from './osk.jsx';
 export { trackpad, useTrackpads, hasTouchpad, registerGestureActions, lastSwipe, TRACKPAD_DEFAULTS, trackpadConfig, setTrackpad } from './trackpad.js';
 export { ime, useIme } from './ime.js';
 export { wayland } from './wayland.js';
+export { useFileDrop } from './filedrag.js';
 export { useLauncherApps, launchApp, refreshApps, isLinuxApp, linuxAppFor, shortAppName, windowAppName, LetterIcon, iconFromFile, APP_CATEGORIES, appCategory } from './apps.js';
 export { RustLauncher, launcherPlacement } from './rustlauncher.jsx';
 import { windowIcon as windowIconOf, linuxAppFor as linuxAppOf, launchApp as launchAppOf } from './apps.js';

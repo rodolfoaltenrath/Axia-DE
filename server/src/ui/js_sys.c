@@ -36,6 +36,7 @@
 #include "../app/app.h"
 #include "../ime.h"
 #include "../wl/wl.h"
+#include "../wl/dnd.h"
 #include "../wl/keygrab.h"
 #include "../wl/xwayland.h"
 #include "../keyboard.h"
@@ -1587,7 +1588,28 @@ static JSValue f_wl_fullscreen_window(JSContext *c, JSValueConst this_val, int a
     return JS_NewInt32(c, wl_fullscreen_window());
 }
 
+static JSValue f_wl_drag_files(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self;
+    int32_t origin=0;
+    if (argc<2 || !JS_IsString(argv[0]) || JS_ToInt32(c,&origin,argv[1])) return JS_FALSE;
+    size_t len=0; const char *paths=JS_ToCStringLen(c,&len,argv[0]);
+    if (!paths) return JS_EXCEPTION;
+    int ok=len<=1024*1024 && wl_drag_files(paths,origin,argc>2 && JS_ToBool(c,argv[2]));
+    JS_FreeCString(c,paths); return JS_NewBool(c,ok);
+}
+static JSValue f_wl_drop_target(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self;
+    int32_t id=0; uint32_t token=0;
+    if (argc<2 || JS_ToInt32(c,&id,argv[0]) || JS_ToUint32(c,&token,argv[1])) return JS_FALSE;
+    return JS_NewBool(c,node_set_file_drop(id,token));
+}
+static JSValue f_wl_cancel_drag(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self; (void)c; (void)argc; (void)argv; wl_drag_cancel(); return JS_UNDEFINED;
+}
 static const JSCFunctionListEntry wayland_funcs[] = {
+    JS_CFUNC_DEF("dragFiles", 3, f_wl_drag_files),
+    JS_CFUNC_DEF("dropTarget", 2, f_wl_drop_target),
+    JS_CFUNC_DEF("cancelDrag", 0, f_wl_cancel_drag),
     JS_CFUNC_DEF("grabKeys", 1, f_wl_grab_keys),
     JS_CFUNC_DEF("fullscreen", 0, f_wl_fullscreen),
     JS_CFUNC_DEF("fullscreenWindow", 0, f_wl_fullscreen_window),

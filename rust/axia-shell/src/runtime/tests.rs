@@ -537,6 +537,15 @@ fn host_ffi_handles_partial_snapshots_uninitialized_outputs_and_allocation_failu
         let raw = super::node_new(3);
         assert!(!root.is_null() && !raw.is_null());
         let original_ids = [(*root).id, (*raw).id];
+        super::node_append(root, raw);
+        assert_eq!(super::node_set_file_drop((*root).id, 37), 1);
+        assert_eq!(super::node_file_drop(raw), 37);
+        assert_eq!(super::node_set_file_drop((*raw).id, 42), 1);
+        assert_eq!(super::node_file_drop(raw), 42);
+        assert_eq!(super::node_set_file_drop((*raw).id, 0), 1);
+        assert_eq!(super::node_file_drop(raw), 37);
+        assert_eq!(super::node_set_file_drop(0, 1), 0);
+        super::node_set_file_drop((*root).id, 0);
         for id in original_ids {
             assert_ne!(
                 crate::anim::axia_anim_slide(id, 0., 1, false, ptr::null()),
@@ -860,6 +869,7 @@ fn native_views_match_c_layout() {
         "Node",
         id,
         kind,
+        file_drop,
         s,
         text,
         img,

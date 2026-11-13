@@ -502,10 +502,10 @@ static void dispatch_pointer(Server *s) {
     int shape = over == 2 ? CUR_DEFAULT : node_cursor(target);
     if (shape != s->shape || grabbing != grab_active() || (over != 0) != s->over_app) { s->shape = shape; s->cursor_dirty = 1; }
     s->over_app = over != 0;                /* el cursor de la app solo vale sobre sus superficies */
-    if (s->moved && !grabbing) js_pointer("move", id, x, y, 0);
+    if (s->moved && !grabbing && over != 3) js_pointer("move", id, x, y, 0);
     for (int i = 0; i < s->nbuttons; i++)          /* sobre un menú, solo los "up" (terminan arrastres) */
-        if (over != 2 || !s->buttons[i].down) js_pointer(s->buttons[i].down ? "down" : "up", id, x, y, s->buttons[i].button);
-    if (s->wheel && over != 2) js_pointer("wheel", id, x, y, s->wheel);
+        if (over != 3 && (over != 2 || !s->buttons[i].down)) js_pointer(s->buttons[i].down ? "down" : "up", id, x, y, s->buttons[i].button);
+    if (s->wheel && over != 2 && over != 3) js_pointer("wheel", id, x, y, s->wheel);
     if (dstat.held && s->moved) {
         if (!dstat.active) { dstat.active = 1; dstat.t0 = dstat.last = t0; }
         dstat.moves++;

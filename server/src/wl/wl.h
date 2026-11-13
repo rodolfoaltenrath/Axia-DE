@@ -23,11 +23,15 @@ int  wl_frame_unseen(unsigned time_ms);
 
 /* Input (main.c). hit = node under the pointer; down[i]/button[i] = buttons of this event
  * (0 left, 1 middle, 2 right). Returns 1 if the pointer is over a Wayland app and 2 if
- * it is over one of its popup menus (drawn on top of everything: the click is not the theme's). */
+ * it is over one of its popup menus (drawn on top of everything: the click is not the theme's).
+ * Returns 3 while a file drag owns the input: do not dispatch JS pointer events. */
 int  wl_pointer(float x, float y, struct Node *hit, int moved, int nbuttons, const int *down, const int *button, int wheel);
 /* While axia-server moves or resizes a window (ui/grab.c): no app receives the pointer
  * (they are sent leave) and only the button count is tracked. */
 void wl_pointer_grab(int nbuttons, const int *down);
+int wl_drag_files(const char *paths, int origin_node, int internal_move);
+int wl_drag_active(void);
+void wl_drag_cancel(void);
 /* 0: the key is the shell's; 1: it went to the focused app; 2: it went to the app as another key
  * (Lord Flow's ❖ → Ctrl): the shell is only told, so ❖ does not count as pressed alone. */
 int  wl_key(int code, int value, const KeyInfo *k);
