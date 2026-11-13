@@ -22,6 +22,7 @@ import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { appControlFacts, forceQuit } from './appcontrol.js';
 import { executeNativeEffect } from './nativeappmodel.js';
+import { disks } from './disks.js';
 // The nodes of the shell layers a native view may put its menus and popovers in ("layer": "popover").
 // Only when the shell has layers; otherwise the views stay in their window.
 const LAYER_NAMES = ['popover', 'modal', 'tooltip'];
@@ -35,6 +36,7 @@ const emptyClock = { get: () => null, subscribe: () => () => {} };
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
+  desktopId: app.desktopId, mimeTypes: app.mimeTypes,
   comment: app.comment, description: app.description, genericName: app.genericName,
   iconPath: typeof app.icon === 'string' ? app.icon : '',
   package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
@@ -149,11 +151,15 @@ export function NativeView({ manifest, args, icon, style }) {
     m.sent = json;
     if (!m.handle) return undefined;
     runners.set(m.handle, runner(m.handle, manifest, win.id, () => ref.current?.id || 0));
+    // Event bridge only: Rust owns volumes, mount policy and sidebar updates.
+    const sendDisks = () => lord.nativeViews.action(m.handle, { action: ['disks'], extra: { disks: disks.list() } });
+    const stopDisks = manifest.id === 'files' && !icon ? disks.watch(sendDisks) : null;
+    if (stopDisks) sendDisks();
     const syncFocus = () => { if (!icon) lord.nativeViews.focus(m.handle, ownsKeyboard()); };
     const stopText = onTextField(syncFocus), stopShell = onShellKeyboard(syncFocus);
     syncFocus();
     globalThis.__lordNativeView();
-    return () => { stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
+    return () => { stopDisks?.(); stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
   }, [manifest.id, icon]);
   useEffect(() => {
     const m = mounted.current;

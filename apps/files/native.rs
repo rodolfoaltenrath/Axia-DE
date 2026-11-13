@@ -14,7 +14,7 @@
 //! | tool, toolGroup      | the toolbar buttons of sdk/controls.jsx: hover, active, tooltip     |
 //! | toolbar              | the 44 px row with its hairline                                     |
 //! | contextMenu          | a `menu` node (native_view/menu.rs)                                 |
-//! | media, documentImage | a placeholder: these two still need the compositor's own nodes      |
+//! | media, documentImage | compositor media source and owned document image nodes              |
 //!
 //! Events already come in the host's form (`events: {onClick: [action]}`), and captions are left for
 //! the host to resolve, except dates, which it has no format for.
@@ -28,6 +28,7 @@ pub struct Env<'a> {
     pub lang: &'a str,
     /// The context menu's keyboard row and open submenu (-1: none), which the app keeps.
     pub menu: (i64, i64),
+    pub sub_active:i64,
 }
 
 impl Env<'_> {
@@ -88,6 +89,10 @@ pub fn convert(node: &Value, env: &Env) -> Value {
     };
     let mut out = Map::new();
     copy(obj, &mut out, &["key", "style", "events"]);
+    if let Some(path)=obj.get("dropPath").and_then(Value::as_str) {
+        out.insert("dropAction".into(),json!(["dropFiles",path]));
+        if path=="trash" { out.insert("nativeMoveOnly".into(),json!(true)); }
+    }
     match obj.get("type").and_then(Value::as_str).unwrap_or("view") {
         "icon" => {
             let size = obj.get("size").and_then(Value::as_f64).unwrap_or(16.);
@@ -151,21 +156,20 @@ pub fn convert(node: &Value, env: &Env) -> Value {
         "contextMenu" => {
             let mut menu = json!({"kind":"menu","key":"context-menu","x":obj["x"],"y":obj["y"],"items":obj["items"],
                 "active":env.menu.0,"sub":env.menu.1,
+                "subActive":env.sub_active,
                 "layer":obj.get("layer").cloned().unwrap_or(json!("popover")),"events":{"onDismiss":["closeContext"]}});
             if obj.get("absolute") == Some(&json!(true)) {
                 menu["absolute"] = json!(true);
             }
             return menu;
         }
-        "media" | "documentImage" => {
-            // The video surface and the document image are nodes the compositor owns (the React
-            // layer creates them); until the host can, the space they take is kept.
-            out.insert("kind".into(), json!("view"));
-            out.insert("children".into(), json!([{"kind":"text","label":"…","style":{"color":env.tok("textDim", "#999999")}}]));
-            if let Some(Value::Object(style)) = out.get_mut("style") {
-                style.insert("alignItems".into(), json!("center"));
-                style.insert("justifyContent".into(), json!("center"));
-            }
+        "media" => {
+            out.insert("kind".into(),json!("media"));
+            copy(obj,&mut out,&["media"]);
+        }
+        "documentImage" => {
+            out.insert("kind".into(),json!("documentImage"));
+            out.insert("image".into(),obj["image"]["id"].clone());
         }
         _ => {
             out.insert("kind".into(), json!("view"));
@@ -214,7 +218,7 @@ mod tests {
     use serde_json::json;
 
     fn env(theme: &Value) -> Env<'_> {
-        Env { theme, lang: "en", menu: (-1, -1) }
+        Env { theme, lang: "en", menu: (-1, -1), sub_active:-1 }
     }
     fn walk(v: &Value, f: &mut dyn FnMut(&Value)) {
         f(v);
@@ -275,12 +279,26 @@ mod tests {
     #[test]
     fn dates_are_written_for_the_language() {
         let theme = json!({});
-        let en = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "en", menu: (-1, -1) });
-        let pt = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "pt", menu: (-1, -1) });
+        let en = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "en", menu: (-1, -1), sub_active:-1 });
+        let pt = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "pt", menu: (-1, -1), sub_active:-1 });
         let (en, pt) = (en["label"].as_str().unwrap().to_owned(), pt["label"].as_str().unwrap().to_owned());
         assert!(en.ends_with("AM") || en.ends_with("PM"), "{en}");
         assert!(pt.contains('/') && pt.contains(':') && !pt.contains("AM"), "{pt}");
         // a caption that isn't a date stays for the host
         assert_eq!(convert(&json!({"type":"text","text":{"key":"files.name"}}), &env(&theme))["label"], json!({"key":"files.name"}));
     }
+    #[test]
+    fn compositor_previews_and_drop_destinations_survive_translation() {
+        let theme=json!({});let e=env(&theme);
+        let tree=convert(&json!({"type":"view","dropPath":"/home/test","children":[
+            {"type":"media","media":23},{"type":"documentImage","image":{"id":45,"w":2,"h":2}},
+            {"type":"view","dropPath":"trash"}]}),&e);
+        assert_eq!(tree["dropAction"],json!(["dropFiles","/home/test"]));
+        assert_eq!(tree["children"][0]["kind"],"media");
+        assert_eq!(tree["children"][0]["media"],23);
+        assert_eq!(tree["children"][1]["kind"],"documentImage");
+        assert_eq!(tree["children"][1]["image"],45);
+        assert_eq!(tree["children"][2]["nativeMoveOnly"],true);
+    }
+
 }

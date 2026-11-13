@@ -1584,10 +1584,16 @@ impl Session {
         if let Some(dialog) = self.dialog_view(shared) {
             all.push(dialog);
         }
-        view(
+        let mut root = view(
             json!({"flex":1,"backgroundColor":color(self,"windowBg","#202025"),"overflow":"hidden"}),
             all,
-        )
+        );
+        if self.mode==Mode::Browser && self.dialog.is_none() && self.can_write {
+            if let Some(path)=self.write_dir().and_then(|p|p.to_str().map(str::to_owned)) {
+                root["dropPath"]=json!(path);
+            }
+        }
+        root
     }
     pub fn menus(&self, shared: &Shared) -> Value {
         let selected = !self.tab().selected.is_empty();

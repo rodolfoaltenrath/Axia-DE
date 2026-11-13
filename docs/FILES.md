@@ -286,3 +286,30 @@ FileChooserNative client on 2026-11-03: the Rust image picker appeared, and GTK
 received the selected filename. Independent GIO clients also verified OpenFile,
 SaveFile, multiple selection, SaveFiles with distinct candidates and Request.Close.
 No test installed packages or replaced the running desktop session.
+
+## Native view rollout
+
+The experimental `filesNativeView` setting remains off by default. Browser
+windows can use `FilesView` in Rust; file choosers and transfer windows still
+use `RustFiles` until the owner validates the native browser in a real session.
+
+The native host binds video/audio previews to existing compositor media nodes.
+PDF/font previews and PDF thumbnails copy their document image once per changed
+handle, rather than per poll or frame. Rust owns returned handles, releases
+replaced/closed previews, and discards resource-bearing results received after
+unmounting. Media frames continue through the existing media renderer.
+
+Writable folders, directory tiles and mounted volumes accept completed URI
+file drops directly in Rust, using the existing transfer jobs. External drops
+copy; an explicit internal move may move files or send them to Trash. Each
+destination/action lifetime has its own token, so navigation, removal or closing
+a window cannot redirect a delayed drop. No pointer-motion callback or new
+polling worker is added for native drop receivers.
+
+Volume notifications reach the native session through the shell's existing disk
+watcher. Catalog changes refresh installed apps and their MIME/desktop metadata.
+Context submenus support arrows, Home/End, Enter/Space and Escape/Left, skipping
+disabled rows and separators; their pointer hover retains the parent submenu.
+Rust tests cover these paths, including actual copy/move jobs in private homes.
+Visual spacing, physical hotplug and application-to-application dragging still
+require validation in the owner's desktop session before enabling the default.
