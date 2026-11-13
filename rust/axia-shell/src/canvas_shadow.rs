@@ -183,15 +183,21 @@ fn over_alpha(sa: u32, da: u32) -> u32 {
     sa + (((da * (255 - sa) + 128) * 257) >> 16)
 }
 
+/// canvas.c's blend(): `src` over `dst` with weight a (0..255), alpha as "over" leaves it.
+#[inline]
+pub(crate) fn blend_px(dst: u32, src: u32, a: u32) -> u32 {
+    let ia = 255 - a;
+    let rb = (((src & 0x00ff_00ff) * a + (dst & 0x00ff_00ff) * ia) >> 8) & 0x00ff_00ff;
+    let g = (((src & 0x0000_ff00) * a + (dst & 0x0000_ff00) * ia) >> 8) & 0x0000_ff00;
+    over_alpha(a, dst >> 24) << 24 | rb | g
+}
+
 #[inline]
 pub(crate) fn put(p: &mut u32, argb: u32, a: u32) {
     if a >= 255 {
         *p = argb | 0xff00_0000;
     } else if a != 0 {
-        let (dst, ia) = (*p, 255 - a);
-        let rb = (((argb & 0x00ff_00ff) * a + (dst & 0x00ff_00ff) * ia) >> 8) & 0x00ff_00ff;
-        let g = (((argb & 0x0000_ff00) * a + (dst & 0x0000_ff00) * ia) >> 8) & 0x0000_ff00;
-        *p = over_alpha(a, dst >> 24) << 24 | rb | g;
+        *p = blend_px(*p, argb, a);
     }
 }
 

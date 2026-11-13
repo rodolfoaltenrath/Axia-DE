@@ -166,20 +166,6 @@ static inline float rr_sdf(float px, float py, float cx, float cy, float hw, flo
 
 static inline float cov_of(float d) { float c = 0.5f - d; return c <= 0 ? 0 : c >= 1 ? 1 : c; }
 
-/* The columns [s0, s1) of a rounded rectangle's row whose pixel centers lie between the corners
- * (|px - cx| - lim <= 0, lim = hw - r: the qx of rr_sdf): there rr_sdf doesn't depend on px when the
- * row is above or below the straight band. Empty (s0 = s1 = x1) if there are none. */
-static void mid_span(float cx, float lim, int x0, int x1, int *s0, int *s1) {
-    int a = (int)ceilf(cx - lim - 0.5f), b = (int)floorf(cx + lim - 0.5f) + 1;
-    if (a < x0) a = x0;
-    if (b > x1) b = x1;
-    /* the same float test as rr_sdf, so the span's edges agree exactly (pixels left out are only
-     * worked out per pixel, as before) */
-    while (a < b && fabsf(a + 0.5f - cx) - lim > 0) a++;
-    while (b > a && fabsf(b - 0.5f - cx) - lim > 0) b--;
-    if (a < b) { *s0 = a; *s1 = b; } else { *s0 = *s1 = x1; }
-}
-
 static float fix_radius(float r, float w, float h) {
     float m = (w < h ? w : h) * 0.5f;
     return r < 0 ? 0 : r > m ? m : r;
@@ -267,46 +253,8 @@ static void gradient_band(Canvas *c, const void *p) {
 
 void canvas_rrect(Canvas *c, float x, float y, float w, float h, float r, uint32_t argb) {
     if (banded(c, x, y, w, h)) { ShapeArgs a = { x, y, w, h, r, 0, 0, 0, argb, 0 }; in_bands(c, y, h, rrect_band, &a); return; }
-    uint32_t a = argb >> 24;
-    int x0, y0, x1, y1;
-    if (!a || w <= 0 || h <= 0 || !bounds(c, x, y, w, h, &x0, &y0, &x1, &y1)) return;
-    r = fix_radius(r, w, h);
-    float cx = x + w * 0.5f, cy = y + h * 0.5f, hw = w * 0.5f, hh = h * 0.5f;
-    int fx0 = (int)ceilf(x), fx1 = (int)floorf(x + w);   /* fully covered columns */
-    for (int j = y0; j < y1; j++) {
-        uint32_t *row = c->px + (size_t)j * c->stride;
-        if (j >= y + r && j + 1 <= y + h - r) {
-            /* Straight band: only the left/right edges are partial; the middle, in one run. */
-            int m0 = fx0 > x0 ? fx0 : x0, m1 = fx1 < x1 ? fx1 : x1;
-            if (m1 < m0) m1 = m0;
-            for (int i = x0; i < m0; i++) {
-                float cov = fminf(i + 1.0f, x + w) - fmaxf((float)i, x);
-                if (cov > 0) put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
-            }
-            if (a >= 255) { uint32_t v = argb | 0xff000000u; for (int i = m0; i < m1; i++) row[i] = v; }
-            else for (int i = m0; i < m1; i++) row[i] = blend(row[i], argb, a);
-            for (int i = m1; i < x1; i++) {
-                float cov = fminf(i + 1.0f, x + w) - fmaxf((float)i, x);
-                if (cov > 0) put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
-            }
-        } else {
-            float py = j + 0.5f;
-            /* between the corners the distance only depends on the row (once the row is outside the
-             * straight band): worked out once there, per pixel at the corners */
-            int s0 = x1, s1 = x1;
-            if (fabsf(py - cy) - (hh - r) > 0) mid_span(cx, hw - r, x0, x1, &s0, &s1);
-            for (int i = x0; i < x1; i++) {
-                if (i == s0) {
-                    float cov = cov_of(rr_sdf(i + 0.5f, py, cx, cy, hw, hh, r));
-                    if (cov > 0) { uint32_t k = (uint32_t)(a * cov + 0.5f); for (; i < s1; i++) put(&row[i], argb, k); }
-                    i = s1 - 1;
-                    continue;
-                }
-                float cov = cov_of(rr_sdf(i + 0.5f, py, cx, cy, hw, hh, r));
-                if (cov > 0) put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
-            }
-        }
-    }
+    /* rust/axia-shell/src/canvas_ops.rs: the same pixels, the middle band filled in vectorized runs */
+    axia_canvas_rrect(c->px, c->stride, c->clip.x0, c->clip.y0, c->clip.x1, c->clip.y1, x, y, w, h, r, argb);
 }
 
 static inline uint32_t lerp_color(uint32_t a, uint32_t b, float t) {
@@ -332,50 +280,8 @@ void canvas_rrect_gradient(Canvas *c, float x, float y, float w, float h, float 
 
 void canvas_rrect_stroke(Canvas *c, float x, float y, float w, float h, float r, float bw, uint32_t argb) {
     if (banded(c, x, y, w, h)) { ShapeArgs a = { x, y, w, h, r, bw, 0, 0, argb, 0 }; in_bands(c, y, h, stroke_band, &a); return; }
-    uint32_t a = argb >> 24;
-    int x0, y0, x1, y1;
-    if (!a || bw <= 0 || w <= 0 || h <= 0 || !bounds(c, x, y, w, h, &x0, &y0, &x1, &y1)) return;
-    r = fix_radius(r, w, h);
-    float ir = r - bw > 0 ? r - bw : 0;
-    float cx = x + w * 0.5f, cy = y + h * 0.5f, hw = w * 0.5f, hh = h * 0.5f;
-    float edge = (r > bw ? r : bw) + 1;
-    for (int j = y0; j < y1; j++) {
-        uint32_t *row = c->px + (size_t)j * c->stride;
-        float py = j + 0.5f;
-        int middle = py > y + edge && py < y + h - edge;
-        /* the span where both distances only depend on the row (rows outside both straight bands) */
-        int s0 = x1, s1 = x1;
-        if (!middle && fabsf(py - cy) - (hh - r) > 0 && fabsf(py - cy) - ((hh - bw) - ir) > 0) {
-            int a0, a1, b0, b1;
-            mid_span(cx, hw - r, x0, x1, &a0, &a1);
-            mid_span(cx, (hw - bw) - ir, x0, x1, &b0, &b1);
-            if (a0 < x1 && b0 < x1) {
-                s0 = a0 > b0 ? a0 : b0;
-                s1 = a1 < b1 ? a1 : b1;
-                if (s0 >= s1) s0 = s1 = x1;
-            }
-        }
-        for (int i = x0; i < x1; i++) {
-            float px = i + 0.5f;
-            if (middle && px > x + bw + 1 && px < x + w - bw - 1) {
-                /* skips the middle: up to the last pixel whose center is before the right
-                 * edge (never backwards: with fractional coordinates that was a loop) */
-                int last = (int)ceilf(x + w - bw - 1 - 0.5f) - 1;
-                if (last > i) i = last;
-                continue;
-            }
-            if (i == s0) {                  /* between the corners: one value for the whole span */
-                float cov = cov_of(rr_sdf(px, py, cx, cy, hw, hh, r)) - cov_of(rr_sdf(px, py, cx, cy, hw - bw, hh - bw, ir));
-                if (cov > 0) { uint32_t k = (uint32_t)(a * cov + 0.5f); for (; i < s1; i++) put(&row[i], argb, k); }
-                i = s1 - 1;
-                continue;
-            }
-            float outer = cov_of(rr_sdf(px, py, cx, cy, hw, hh, r));
-            float inner = cov_of(rr_sdf(px, py, cx, cy, hw - bw, hh - bw, ir));
-            float cov = outer - inner;
-            if (cov > 0) put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
-        }
-    }
+    /* rust/axia-shell/src/canvas_ops.rs: the same pixels, the middle band filled in vectorized runs */
+    axia_canvas_rrect_stroke(c->px, c->stride, c->clip.x0, c->clip.y0, c->clip.x1, c->clip.y1, x, y, w, h, r, bw, argb);
 }
 
 /* Shadows (rust/axia-shell/src/canvas_shadow.rs): the mask is cached by size in Rust, which also
