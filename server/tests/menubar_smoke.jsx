@@ -10,6 +10,7 @@ import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
 import { RustLauncher } from '../../sdk/rustlauncher.jsx';
 import { SpotlightPanel } from '../../sdk/rustsearch.jsx';
 import { spotlight } from '../../sdk/search.js';
+import { NotificationBanner, notify, notifications } from '../../sdk/index.js';
 
 const dump = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(handle + ': ' + t.replace(/\n/g, ' | ')); } return out.join(' // '); };
 const check = (ok, message) => { if (!ok) throw new Error('menu bar smoke: ' + message + ' [' + dump() + ']'); };
@@ -28,7 +29,7 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
-let launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
+let ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
 const opened = [];
 const drags = [];
 function Harness() {
@@ -43,7 +44,7 @@ function Harness() {
         controls: [{ key: 'close', color: '#ff5f57', glyph: '×' }],
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
         onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
-    h(SpotlightPanel),
+    h(SpotlightPanel), h(NotificationBanner),
     showLauncher && h(RustLauncher, { mode: 'flow', t: theme, area: { x: 0, y: 0, w: 1000, h: 700 }, onOpen: (id) => { opened.push(id); }, onClose: () => { closed++; } }));
 }
 const lines = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(...t.split('\n')); } return out; };
@@ -94,7 +95,14 @@ async function run() {
   globalThis.__lordNativeView();
   check(await until(() => !lines().some((l) => l.includes('Esc close'))), 'and Escape closes the panel');
   console.log('spotlight integration: passed');
+  // a notification banner: built by the shell, drawn by Rust; its action runs and dismisses it
+  notify({ title: 'Smoke banner', body: 'Banner body', sticky: true, sound: false, actions: [{ id: 'go', label: 'Do it', run: () => { ran++; } }] });
+  check(await until(() => find('Smoke banner') && find('Do it')), 'the banner shows its title and its action');
+  press(find('Do it'));
+  check(await until(() => ran === 1 && notifications.get().length === 0), 'its action runs and dismisses the banner');
+  check(await until(() => !find('Smoke banner')), 'and the banner goes away');
+  console.log('banner integration: passed');
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
-settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true });
+settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true });
 render(h(Harness));

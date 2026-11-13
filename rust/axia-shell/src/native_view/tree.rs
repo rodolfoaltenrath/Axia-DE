@@ -1,8 +1,8 @@
 //! A widget tree that the shell already has (Rust made it, JS carries it) drawn by the native
 //! host: `shell:tree`. The Spotlight panel is the first: its session lives in JS (search sources,
 //! polling), its tree comes from Rust, and React only drew it. Here the facts are
-//! `args = {"tree": <the tree>}`; what the user does goes back as
-//! `{"kind":"tree","action":[cmd, key],"extra":{…pointer, modifiers, value…}}` for the shell to
+//! `args = {"tree": <the tree>, "owner": <who gets the events>}`; what the user does goes back as
+//! `{"kind":"tree","owner","action":[cmd, key],"extra":{…pointer, modifiers, value…}}` for the shell to
 //! hand to the session. A search field passes the arrows, Enter and Tab on and closes on Escape.
 use super::NativeApp;
 use serde_json::{json, Map, Value};
@@ -13,6 +13,8 @@ const KEYS: [&str; 4] = ["ArrowDown", "ArrowUp", "Enter", "Tab"];
 #[derive(Default)]
 pub struct Tree {
     last: Value,
+    /// Who the shell gave the view to (several can be mounted): sent back with every effect.
+    owner: Value,
 }
 
 fn magnifier(size: f64, color: &Value) -> Value {
@@ -64,6 +66,7 @@ impl NativeApp for Tree {
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
+                self.owner = input["args"]["owner"].clone();
                 let tree = if input["args"]["tree"].is_object() { convert(&input["args"]["tree"]) } else { Value::Null };
                 if tree == self.last {
                     return json!({"same":true});
@@ -78,7 +81,7 @@ impl NativeApp for Tree {
                 extra.remove("cmd");
                 extra.remove("key");
                 let action = if input["key"].is_null() { json!([cmd]) } else { json!([cmd, input["key"]]) };
-                json!({"effects":[{"kind":"tree","action":action,"extra":extra}]})
+                json!({"effects":[{"kind":"tree","owner":self.owner,"action":action,"extra":extra}]})
             }
         }
     }
@@ -97,7 +100,7 @@ mod tests {
             {"kind":"providerIcon","source":"s","callback":"k","size":22}]})
     }
     fn sync(app: &mut Tree, tree: Value) -> Value {
-        app.request(&json!({"cmd":"sync","args":{"tree":tree}}))
+        app.request(&json!({"cmd":"sync","args":{"tree":tree,"owner":"spotlight"}}))
     }
 
     #[test]
@@ -132,8 +135,10 @@ mod tests {
     #[test]
     fn what_the_user_does_goes_back_to_the_session() {
         let mut app = Tree::default();
+        sync(&mut app, json!({"kind":"view"}));
         let reply = app.request(&json!({"cmd":"key","key":"ArrowDown","meta":true,"shift":false}));
         assert_eq!(reply["effects"][0]["kind"], "tree");
+        assert_eq!(reply["effects"][0]["owner"], "spotlight", "the effect says whose view it was");
         assert_eq!(reply["effects"][0]["action"], json!(["key", "ArrowDown"]));
         assert_eq!(reply["effects"][0]["extra"]["meta"], true);
         let typed = app.request(&json!({"cmd":"query","key":"hello"}));

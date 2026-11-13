@@ -90,11 +90,12 @@ export { restoreMode, setRestoreMode, restoreBrowsers, setRestoreBrowsers } from
 export { spotlight, spotlightOpen, calc as spotlightCalc, convert as spotlightConvert } from './search.js';
 export { registerSpotlightSource, searchEverything } from './search.js';
 // session notifications, menu bar status items, Clock (alarms) and Help (docs/SYSTEM.md)
-export { notify, dismissNotification, useNotifications, notifications, notifyHistory, clearNotifyHistory, NotificationBanner, setBannerPlacement } from './notify.js';
+export { notify, dismissNotification, useNotifications, notifications, notifyHistory, clearNotifyHistory, setBannerPlacement } from './notify.js';
+export { NotificationBanner } from './nativebanner.js';
 export { registerStatusItem, StatusItems, statusItems } from './statusitems.js';
 export { clockAlarms, clockTimer, timerStart, timerPause, timerResume, timerReset, timerLeft, stopwatch, swStart, swStop, swLap, swReset, swElapsed, nextAlarm, nextFire } from './alarms.js';
 export { help } from './help.js';
-import { NotificationBanner } from './notify.js';
+import { NotificationBanner } from './nativebanner.js';
 import { startAlarms } from './alarms.js';
 import { startDiskWatch } from './diskwatch.js';
 import { maybeStartTour } from './help.js';
