@@ -1,7 +1,7 @@
 /* night.h — Night Light math for Settings → Displays: color temperature → RGB gains, the gamma
  * ramp (KMS gamma LUT, or the software LUT when the card has none), sunrise/sunset and the
  * schedule blend. No location services: the coordinates come from the chosen time zone
- * (zone1970.tab), never from the network. Unit-tested in tests/night_test.c. */
+ * (zone1970.tab), never from the network. Implemented in rust/axia-codecs/src/night.rs. */
 #ifndef LORD_HW_NIGHT_H
 #define LORD_HW_NIGHT_H
 

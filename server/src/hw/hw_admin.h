@@ -32,7 +32,7 @@
  *                                      lines (the Store's suggestions, hwscan.c); read-only        anyone
  *   hw-memory-modules                  (no arguments) the memory modules from the SMBIOS tables
  *                                      (/sys/firmware/dmi/entries/17-<n>/raw, root only), parsed
- *                                      strictly in C (sysreport/smbios.c): one "LOG mem <size_mb>|
+ *                                      strictly (smbios.h, axia-codecs smbios.rs): one "LOG mem <size_mb>|
  *                                      <type>|<speed>|<configured>|<slot>|<bank>|<maker>" line per slot,
  *                                      never serials, asset tags or part numbers; read-only     anyone
  *   hw-serial-numbers                  (no arguments) this computer's serial numbers, for the Show button in System

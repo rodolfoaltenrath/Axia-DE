@@ -34,7 +34,7 @@ The LordOS disk utility, like GNOME Disks.
 | Piece | What it does |
 |---|---|
 | `server/src/disk/disk.c` | The list, without root, from three sources. **`/sys/block`:** size, removable, read-only, rotational, model. **The udev database** (`/run/udev/data/b<major>:<minor>`): file system, label, UUID, partition table and bus; udev already probed them, so the device is never opened. **`/proc/self/mountinfo`:** where each one is mounted. It also recognizes the system disk and watches for changes. |
-| `server/src/disk/smart.c` | ATA SMART and NVMe health log parsers: pure functions, no I/O |
+| `rust/axia-codecs/src/smart.rs` | ATA SMART and NVMe health log parsers: pure functions, no I/O |
 | `server/src/disk/disk_admin.c` | The helper's `disk-*` actions (root) |
 | `server/src/disk/smartctl_admin.c`, `smartctl.c` | The helper's `smart-*` actions (smartmontools, root) and their pure checks |
 | `sdk/smart.js`, `sdk/smartparse.js` | `smart.info/health/test/abort/install`, the summaries the Monitor shows, and smartctl's JSON turned into one model |
@@ -157,7 +157,7 @@ We chose to read it with our own code:
 | SATA / ATA (`sd*`, `hd*`) | `SG_IO` with **ATA PASS-THROUGH (16)** (`0x85`). Three commands: **SMART READ DATA** (`B0h/D0h`, PIO data-in, 1 sector); **READ THRESHOLDS** (`D1h`); **RETURN STATUS** (`DAh`, non-data, with `ck_cond`). The last one is read from the "ATA Status Return" descriptor (`09h`) of the sense data: LBA mid/high `4Fh/C2h` = good, `F4h/2Ch` = threshold exceeded |
 | NVMe (`nvme*`) | `NVME_IOCTL_ADMIN_CMD`: Get Log Page `02h` (SMART / Health Information), 512 bytes |
 
-The parsing (`smart.c`, tested in `tests/smart_test.c`):
+The parsing (`rust/axia-codecs/src/smart.rs`, tested in `tests/smart_test.c`):
 
 - **ATA:**
   - the 30 attributes of 12 bytes, with their 48-bit raw value and their threshold;

@@ -623,7 +623,7 @@ void hw_act_firmware_missing(const AdminReq *r, const char *arg, size_t len) {
     admin_ok("hw.firmwareChecked", NULL);
 }
 
-/* ---- System Information's memory modules (sysreport/smbios.c, docs/BENCHMARK.md) ---- */
+/* ---- System Information's memory modules (smbios.h, axia-codecs smbios.rs, docs/BENCHMARK.md) ---- */
 
 void hw_act_memory_modules(const AdminReq *r, const char *arg, size_t len) {
     (void)r; (void)arg;
