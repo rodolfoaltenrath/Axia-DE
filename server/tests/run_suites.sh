@@ -145,8 +145,8 @@ EOF
     run "fan-test" build/fan-test
     # the Dock's pinned-list model (sdk/dockmodel.js)
     # Files model tests are part of test-rust; the former JS suite was removed.
-    if have node; then run "osk-model-test (sdk/oskmodel.js)" node tests/osk_model_test.mjs
-    else skip "osk-model-test (sdk/oskmodel.js)" node; fi
+    if have node && have cargo; then run "osk-model-test (Rust model + sdk/oskmodel.js)" node tests/osk_model_test.mjs
+    else skip "osk-model-test (sdk/oskmodel.js)" "node and cargo"; fi
     if have node && have cargo; then run "dock-model-test (Rust policy + sdk/dockmodel.js)" node tests/dock_model_test.mjs
     else skip "dock-model-test" "node and cargo"; fi
     # Desktops: what shows and who has the keyboard (sdk/desktopmodel.js)
