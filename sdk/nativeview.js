@@ -115,8 +115,35 @@ function services(manifest, previous = {}, sampled = {}) {
   return value;
 }
 
-// args: the window's (or a Settings section's); icon: a dock/launcher icon of `icon` points.
-export function NativeView({ manifest, args, icon, style }) {
+// An app's icon (`icon` points): all the view needs is its size and its args. It subscribes to nothing
+// (the theme, the windows, the catalog and the settings are for a window's view), so a change of
+// window no longer renders every icon of the Dock and the launcher.
+function NativeIcon({ manifest, args, icon }) {
+  const ref = useRef(null), state = useRef({ handle: 0, sent: '' });
+  const json = JSON.stringify({ icon, args: args || {} });
+  useLayoutEffect(() => {
+    const m = state.current;
+    m.handle = ref.current ? lord.nativeViews.mount(ref.current.id, manifest.id, json) : 0;
+    m.sent = json;
+    if (!m.handle) return undefined;
+    runners.set(m.handle, runner(m.handle, manifest, 0, () => ref.current?.id || 0));
+    globalThis.__lordNativeView();
+    return () => { runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
+  }, [manifest.id, icon]);
+  useEffect(() => {
+    const m = state.current;
+    if (!m.handle || m.sent === json) return;
+    m.sent = json;
+    lord.nativeViews.facts(m.handle, json);
+    globalThis.__lordNativeView();
+  });
+  return h(View, { ref, style: { width: icon, height: icon } });
+}
+
+export function NativeView(props) { return props.icon ? h(NativeIcon, props) : h(NativeApp, props); }
+
+// args: the window's (or a Settings section's).
+function NativeApp({ manifest, args, icon, style }) {
   const theme = useTheme(), win = useAppWindow() || {}, catalog = useLauncherApps();
   const { lang } = useLocale();
   useWindows();
