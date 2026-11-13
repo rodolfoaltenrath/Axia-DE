@@ -3,6 +3,7 @@
 //
 //   node tests/dock_model_test.mjs        (from server/; run_suites.sh runs it when node exists)
 import path from 'node:path';
+import './dock_model_node.mjs';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -119,6 +120,35 @@ eq('actions drop malformed', cleanActions([
 ]), [{ id: 'good', label: 'x', args: {}, new: true }]);
 eq('actions not a list', cleanActions({ id: 'x' }), []);
 eq('actions max', cleanActions(Array.from({ length: 60 }, (_, i) => ({ id: `a${i}`, label: 'x' }))).length, 40);
+
+// The native boundary must preserve JS coercion, callback and identity contracts.
+eq('parse nonserializable input is still refused', parseDockId(1n), null);
+eq('normalize drops nonserializable IDs', normalizePinned([1n, 'app:files']), { list: ['app:files'], changed: true });
+eq('nonstring namespace refused', dockId({ toString: () => 'app' }, 'files'), null);
+let classified = [];
+eq('classification transported', normalizePinned(['files', 'app:settings', 'linux:x', '', null], id => { classified.push(id); return 'app'; }),
+  { list: ['app:files', 'app:settings'], changed: true });
+eq('only untyped nonempty IDs invoke classifier', classified, ['files']);
+let visited = [];
+eq('pin Files into a nonempty list', pinItem(['app:a', 'app:b'], 'app:files', 0, (id, i) => { visited.push([id, i]); return true; }),
+  ['app:files', 'app:a', 'app:b']);
+eq('visibility callback receives remaining-list indices', visited, [['app:a', 0], ['app:b', 1]]);
+visited = [];
+eq('moving Files is a lazy no-op', moveItem(F, 'app:files', Symbol('unused'), id => { visited.push(id); return true; }) === F, true);
+eq('no callback on locked movement', visited, []);
+eq('numeric string index', moveItem(L, 'app:d', '1'), ['app:a', 'app:d', 'app:b', 'app:c']);
+eq('boolean index', moveItem(L, 'app:d', false), ['app:d', 'app:a', 'app:b', 'app:c']);
+const actionLimits = [{ id: 'one', label: 'one' }, { id: 'two', label: 'two' }];
+eq('negative infinity action limit', cleanActions(actionLimits, -Infinity).length, 1);
+eq('NaN action limit', cleanActions(actionLimits, NaN).length, 2);
+const actionId = ['same'];
+const objectActions = cleanActions([{ id: actionId, label: 'first' }, { id: actionId, label: 'duplicate' }, { id: ['same'], label: 'distinct' }]);
+eq('object action IDs use strict reference equality', objectActions.length, 2);
+eq('original action ID object survives transport', objectActions[0].id === actionId, true);
+const numericArgs = cleanActions([{ id: 'numeric', label: 'numeric', args: { a: NaN, b: Infinity, c: -Infinity } }])[0].args;
+eq('accepted nonfinite action values survive transport', [Number.isNaN(numericArgs.a), numericArgs.b === Infinity, numericArgs.c === -Infinity], [true, true, true]);
+const protoArgs = cleanActions([{ id: 'proto', label: 'proto', args: Object.fromEntries([['__proto__', null], ['section', 'network']]) }])[0].args;
+eq('plain args preserves legacy prototype assignment', [Object.getPrototypeOf(protoArgs), Object.keys(protoArgs)], [null, ['section']]);
 
 console.log(bad ? `dock-model: ${bad} of ${n} failed` : `dock-model: ${n}/${n} ok`);
 process.exit(bad ? 1 : 0);

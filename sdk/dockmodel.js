@@ -1,152 +1,86 @@
-// dockmodel.js — the Dock's pinned list as plain data, with no runtime or React (so it can be
-// unit tested with node: server/tests/dock_model_test.mjs).
-//
-// A pinned item is a typed id, so the three kinds of app can never collide:
-//   "app:<id>"      a LordOS app bundled with the theme (apps/<id>), opened with wm.open
-//   "lpk:<id>"      an installed .lpk package, launched with lord.apps.launchPackage(id)
-//   "desktop:<id>"  a Linux app's .desktop entry, launched with lord.apps.launch(id)
-// Lists written before 0.8.1 hold untyped ids ("files", "store"); normalizePinned() migrates them.
-//
-// Positions passed to moveItem/pinItem count only the items the Dock shows (isShown): an
-// uninstalled app keeps its place in settings.json, hidden, and comes back if it is reinstalled.
-
-//   "shell:launcher" the theme's app launcher (the only "shell" item): it moves like an app
-export const DOCK_KINDS = ['app', 'lpk', 'desktop', 'shell'];
-export const LAUNCHER = 'shell:launcher';
-// The Dock's rules:
-//   - Files is always the first item: it can't be moved or removed;
-//   - the Trash is always the last one, drawn by the theme after a separator (not a pinned item);
-//   - Settings and the app launcher can't be removed (no «Remove from Dock»; dragging them out or
-//     onto the Trash puts them back) but move freely between Files and the Trash;
-//   - every other app is added, moved and removed freely.
-// "First" and "last" follow the Dock's reading order (the theme mirrors a bottom Dock in RTL).
-export const FIRST = 'app:files';
-export const LOCKED = [FIRST, LAUNCHER, 'app:settings'];
-
-// The same rules as the server: lpk_valid_id (server/src/lpk.c) and valid_id (server/src/apps.c).
-const APP_RE = /^[a-z][a-z0-9-]{0,39}$/;
-const LPK_RE = /^[a-z][a-z0-9-]{1,39}$/;
-const DESKTOP_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,61}$/;
-const validKey = {
-  app: (k) => APP_RE.test(k),
-  shell: (k) => k === 'launcher',
-  lpk: (k) => LPK_RE.test(k),
-  desktop: (k) => DESKTOP_RE.test(k) && !k.includes('..') && !k.startsWith('lpk-'),
+// Dock policy lives in rust/axia-shell/src/launcher/dock_model.rs.
+// This adapter carries callback results and preserves JS object/array identity.
+const request = (cmd, input = {}) => {
+  const reply = lord.launcher.request(JSON.stringify({ op: 'dock', cmd, ...input }));
+  if (reply?.error) throw new Error(`dock: ${reply.error}`);
+  return reply;
 };
-
-// "lpk:notes" → { kind: 'lpk', key: 'notes' }; null if it isn't a valid typed id.
-export function parseDockId(id) {
-  if (typeof id !== 'string') return null;
-  const i = id.indexOf(':');
-  if (i <= 0) return null;
-  const kind = id.slice(0, i), key = id.slice(i + 1);
-  return DOCK_KINDS.includes(kind) && validKey[kind](key) ? { kind, key } : null;
-}
-
-export const dockId = (kind, key) => (DOCK_KINDS.includes(kind) && typeof key === 'string' && validKey[kind](key) ? `${kind}:${key}` : null);
-export const isDockId = (id) => parseDockId(id) !== null;
-
-// One stored entry → a typed id, or null to drop it. classify(untypedId) says what an old untyped
-// id is now: 'app', 'lpk' or null (unknown: kept as a LordOS app id if it looks like one).
-export function toTypedId(id, classify = () => null) {
-  if (typeof id !== 'string' || !id) return null;
-  if (parseDockId(id)) return id;
-  if (id.includes(':')) return null;                    // "linux:…" (a window with no .desktop) or junk
-  const kind = classify(id) || 'app';
-  return dockId(kind, id);
-}
-
-// The stored list → { list, changed }: typed, valid and without repeats.
-export function normalizePinned(list, classify) {
-  if (!Array.isArray(list)) return { list: [], changed: list != null };
-  const out = [];
-  for (const raw of list) {
-    const id = toTypedId(raw, classify);
-    if (id && !out.includes(id)) out.push(id);
-  }
-  return { list: out, changed: out.length !== list.length || out.some((x, i) => x !== list[i]) };
-}
-
-// Files is always the first item: whatever an operation does, it goes back to the front.
-const filesFirst = (list) => {
-  const i = list.indexOf(FIRST);
-  return i <= 0 ? list : [FIRST, ...list.slice(0, i), ...list.slice(i + 1)];
+const constants = request('constants');
+export const DOCK_KINDS = constants.kinds;
+export const LAUNCHER = constants.launcher;
+export const FIRST = constants.first;
+export const LOCKED = constants.locked;
+export const parseDockId = id => {
+  // Preserve the public object's field order as well as its values.
+  const value = request('parse', { id: typeof id === 'string' ? id : null });
+  return value ? { kind: value.kind, key: value.key } : null;
 };
+export const dockId = (kind, key) => request('id', {
+  kind: typeof kind === 'string' ? kind : null, key: typeof key === 'string' ? key : null,
+});
+export const isDockId = id => parseDockId(id) !== null;
 
-// Inserts id before the shown item at position index (null, past the end or not a number: after the
-// last item). list must not contain id. Nothing lands before Files: index 0 becomes "right after it".
-function insertAt(list, id, index, isShown) {
-  const shown = list.filter(isShown);
-  let k = Number.isFinite(+index) && index !== null ? Math.max(0, Math.round(+index)) : shown.length;
-  if (shown[0] === FIRST) k = Math.max(1, k);
-  if (k >= shown.length) return [...list, id];
-  const at = list.indexOf(shown[k]);
-  return [...list.slice(0, at), id, ...list.slice(at)];
-}
-
-const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-
-// Moves a pinned item to position toIndex among the shown items (counted without it). Files never
-// moves.
-export function moveItem(list, id, toIndex, isShown = () => true) {
-  if (!list.includes(id) || id === FIRST) return list;
-  const next = filesFirst(insertAt(list.filter((x) => x !== id), id, toIndex, isShown));
-  return same(next, list) ? list : next;
-}
-
-// Pins id at position atIndex among the shown items (at the end without it); already pinned: moves.
-export function pinItem(list, id, atIndex, isShown = () => true) {
-  if (!isDockId(id)) return list;
-  if (list.includes(id)) return atIndex == null ? list : moveItem(list, id, atIndex, isShown);
-  return filesFirst(insertAt(list, id, atIndex, isShown));
-}
-
-export const isLocked = (id, locked = LOCKED) => locked.includes(id);
-// Can the item change place? Everything but Files (the Trash is not in the list at all).
-export const isMovable = (id) => id !== FIRST;
-export const unpinItem = (list, id, locked = LOCKED) => (list.includes(id) && !isLocked(id, locked) ? list.filter((x) => x !== id) : list);
-
-// Puts back every required item missing from list (an older settings file, or one edited by
-// hand), each after the item that comes before it in defaults; Files goes first.
-export function ensureItems(list, required = LOCKED, defaults = []) {
-  let out = list;
-  for (const id of required) {
-    if (out.includes(id) || !isDockId(id)) continue;
-    const d = defaults.indexOf(id);
-    let at = out.length;
-    if (d >= 0) {
-      at = 0;
-      for (let i = d - 1; i >= 0; i--) { const k = out.indexOf(defaults[i]); if (k >= 0) { at = k + 1; break; } }
-    }
-    out = [...out.slice(0, at), id, ...out.slice(at)];
-  }
-  return filesFirst(out);
-}
-
-// Quick actions at the top of an app's Dock menu: [{ id, label, args }], from its manifest
-// ("dockActions") or its module (registerDockActions). Anything malformed is left out.
-const ACTION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
-const plainArgs = (a) => {
-  if (a == null) return {};
-  if (typeof a !== 'object' || Array.isArray(a)) return null;
-  const out = {};
-  for (const [k, v] of Object.entries(a)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(k) || k === 'nonce') return null;
-    if (v === null || ['string', 'number', 'boolean'].includes(typeof v)) out[k] = v;
-    else return null;
-  }
-  return out;
+// Only callbacks run here. Already typed (or malformed namespaced) IDs never
+// invoke classify, matching the old API's callback contract.
+const classification = (id, classify) => {
+  const kind = typeof id === 'string' && id && !id.includes(':') ? classify(id) || 'app' : null;
+  return typeof kind === 'string' ? kind : null;
 };
+export const toTypedId = (id, classify = () => null) => request('typed', {
+  id: typeof id === 'string' ? id : null, kind: classification(id, classify),
+});
+export const normalizePinned = (list, classify = () => null) => {
+  const value = request('normalize', {
+    list: Array.isArray(list) ? list.map(id => typeof id === 'string' ? id : null) : list == null ? null : false,
+    kinds: Array.isArray(list) ? list.map(id => classification(id, classify)) : [],
+  });
+  return { list: value.list, changed: value.changed };
+};
+const keepIdentity = (list, next) => next.length === list.length && next.every((id, i) => id === list[i]) ? list : next;
+const indexValue = index => { const n = +index; return index !== null && Number.isFinite(n) ? n : null; };
+function place(cmd, list, id, index, isShown) {
+  // Early exits keep callbacks lazy; policy remains validated by the Rust call.
+  const exists = list.includes(id);
+  const movable = request('movable', { id: typeof id === 'string' ? id : null });
+  const valid = cmd !== 'pin' || isDockId(id);
+  const active = valid && (cmd === 'pin' ? !exists || movable && index != null : exists && movable);
+  if (!active) return list;
+  const remaining = active ? list.filter(x => x !== id) : [];
+  const shown = active ? remaining.filter(isShown) : [];
+  // Unary + is a JS coercion boundary (strings/bools/NaN); rounding is Rust's.
+  const value = active ? indexValue(index) : null;
+  return keepIdentity(list, request(cmd, { list, id, index: value, omitted: index == null, shown }));
+}
+export const moveItem = (list, id, index, isShown = () => true) => place('move', list, id, index, isShown);
+export const pinItem = (list, id, index, isShown = () => true) => place('pin', list, id, index, isShown);
+export const isLocked = (id, locked = LOCKED) => request('locked', { id, locked });
+export const isMovable = id => request('movable', { id: typeof id === 'string' ? id : null });
+export const unpinItem = (list, id, locked = LOCKED) => keepIdentity(list, request('unpin', { list, id, locked }));
+export const ensureItems = (list, required = LOCKED, defaults = []) => keepIdentity(list, request('ensure', { list, required, defaults }));
+
+// JSON drops undefined/functions and turns NaN/Infinity into null. Send explicit
+// invalid markers for unsupported values; retain accepted original values in JS.
+function actionArgs(value) {
+  if (value == null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.fromEntries(Object.entries(value).map(([key, v]) => [key,
+    v === null || ['string', 'number', 'boolean'].includes(typeof v) ? v : { invalid: true }]));
+}
 export function cleanActions(list, max = 40) {
   if (!Array.isArray(list)) return [];
-  const out = [];
-  for (const a of list) {
-    if (!a || typeof a !== 'object' || !ACTION_RE.test(String(a.id ?? '')) || out.some((x) => x.id === a.id)) continue;
-    const label = typeof a.label === 'string' ? a.label : '';
-    const args = plainArgs(a.args);
-    if (!label || !args) continue;
-    out.push({ id: a.id, label, args, new: !!a.new });
-    if (out.length >= max) break;
-  }
-  return out;
+  const identities = new Map();
+  const candidates = list.map((a, i) => {
+    if (!a || typeof a !== 'object') return {};
+    const id = a.id;
+    // Strict equality distinguishes object IDs; NaN never equals itself.
+    if (!identities.has(id) || Number.isNaN(id)) identities.set(id, i);
+    return { id: String(id ?? ''), identity: identities.get(id), label: typeof a.label === 'string' ? a.label : '', args: actionArgs(a.args) };
+  });
+  const numericMax = +max;
+  return request('actions', { candidates, max: numericMax === -Infinity ? -1 : Number.isFinite(numericMax) ? numericMax : null }).map(i => {
+    const a = list[i];
+    const args = {};
+    for (const [key, value] of Object.entries(a.args ?? {})) args[key] = value;
+    return { id: a.id, label: a.label, args, new: !!a.new };
+  });
 }
