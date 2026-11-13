@@ -2,10 +2,10 @@
 # speaks IMAP, SMTP, CalDAV and CardDAV; with lord-sessiond it is the only binary linking OpenSSL.
 # MIME and charsets, the WebDAV XML reader, the HTML sanitizer, iCalendar and vCard are Rust
 # (rust/axia-mail, docs/RUST-MAIL.md) behind the unchanged src/mail/*.h, linked through
-# $(MAIL_CODEC_LIB). The IMAP response parser stays C; the Rust side calls the C TZif reader.
+# $(MAIL_CODEC_LIB). The IMAP response parser stays C; the TZif reader is Rust too (axia-codecs/src/tzif.rs).
 MAIL_PARSE := src/mail/imapp.c
 MAIL_HDR := $(wildcard src/mail/*.h) src/doc/wire.h src/sec/json.h src/ui/tzif.h
-MAIL_TEST_SRC := tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c src/ui/tzif.c
+MAIL_TEST_SRC := tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c
 # parsers: IMAP, MIME, HTML sanitizer, iCalendar, vCard and XML, with a small fuzzer (tests/mail_test.c)
 test: build/mail-test
 build/mail-test: $(MAIL_TEST_SRC) $(MAIL_HDR) $(MAIL_CODEC_LIB)
@@ -50,7 +50,7 @@ mail-asan: build/mailnet-test-asan
 # binary that links OpenSSL; built when its headers are there (MAILNET).
 LMD_SRC := src/mail/maild.c src/mail/store.c src/mail/search.c src/mail/imap.c src/mail/imapio.c src/mail/smtp.c \
            src/mail/msgview.c src/mail/http.c src/mail/dav.c src/mail/pim.c src/mail/net.c src/mail/snpf.c $(MAIL_PARSE) \
-           src/doc/wire.c src/sec/json.c src/sec/sandbox.c src/sec/cgroup.c src/ui/tzif.c
+           src/doc/wire.c src/sec/json.c src/sec/sandbox.c src/sec/cgroup.c
 ifeq ($(MAILNET),1)
 all: build/axia-maild
 endif

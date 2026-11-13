@@ -1,4 +1,4 @@
-/* tzif_test.c — test of the time zone reader (src/ui/tzif.c).
+/* tzif_test.c — test of the time zone reader (rust/axia-codecs/src/tzif.rs, the C ABI of src/ui/tzif.h).
  *   1. POSIX rules at known instants (Europe, Australia, the US, zones without DST);
  *   2. a TZif v2 built here (transitions, footer) and every truncated prefix of it (no over-reads);
  *   3. if tzdata is installed (/usr/share/zoneinfo): compare against glibc (localtime_r with TZ)
