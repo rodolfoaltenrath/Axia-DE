@@ -227,6 +227,7 @@ pub struct Host {
     title: String,
     window_focused: bool,
     width: f32,
+    height: f32,
     next_sync: Option<f64>,
     hover: i32,
     pressed: i32,
@@ -285,6 +286,7 @@ impl Host {
             title: String::new(),
             window_focused: true,
             width: 0.,
+            height: 0.,
             next_sync: None,
             hover: 0,
             pressed: 0,
@@ -432,12 +434,13 @@ impl Host {
             .filter(|w| *w > 1.)
             .unwrap_or_else(|| self.facts["width"].as_f64().unwrap_or(1000.) as f32);
         self.width = width;
+        self.height = scene::frame(self.mount).map_or(0., |f| f.3);
         let mut context = self.facts["context"].clone();
         if !context.is_object() {
             context = json!({});
         }
         context["width"] = json!(width);
-        context["height"] = json!(scene::frame(self.mount).map_or(0., |f| f.3));
+        context["height"] = json!(self.height);
         context
     }
     /// Asks the app for its tree and reconciles it into the scene.
@@ -1525,9 +1528,10 @@ impl Host {
         if self.icon_mode().is_some() {
             return;
         }
-        // The window was resized: the app lays its tree out for the new width.
-        let width = scene::frame(self.mount).map_or(0., |f| f.2);
-        let resized = width > 1. && (width - self.width).abs() >= 1.;
+        // The window was resized: update either viewport dimension, even for idle apps.
+        let (width, height) = scene::frame(self.mount).map_or((0., 0.), |f| (f.2, f.3));
+        let resized = width > 1. && (width - self.width).abs() >= 1.
+            || height > 1. && (height - self.height).abs() >= 1.;
         if resized || self.next_sync.is_some_and(|t| now >= t) {
             self.sync();
         }

@@ -21,6 +21,8 @@ pub mod monitor;
 pub mod store;
 #[path = "../apps/logs/manifest.rs"]
 pub mod logs;
+#[path = "../apps/fonts/manifest.rs"]
+pub mod fonts;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -33,7 +35,8 @@ pub fn manifests() -> serde_json::Value {
         help::manifest(),
         monitor::manifest(),
         store::manifest(),
-        logs::manifest()
+        logs::manifest(),
+        fonts::manifest()
     ])
 }
 #[cfg(test)]

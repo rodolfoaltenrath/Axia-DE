@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Fonts, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -47,6 +47,14 @@ the SDK still performs journal reads, admin-helper access, inotify following and
 confined filesystem writes. Closing a window removes its subscriptions and
 rejects publication of late results. Large responses cross the native JSON
 boundary in bounded fragments. The Logs folder contains only Rust source.
+
+Fonts now owns its entire native window, icon, family/style collections, search,
+sample sizing, character blocks/chunks, glyph picking, metadata and install/remove
+sequencing in Rust. The document helper still renders samples and grids. Window
+leases retain those image handles until Rust releases them or the window closes;
+late or cancelled images are disposed once. Installation waits for the file job's
+success before reporting completion and rescanning. The app folder contains only
+Rust files; the former JSX, JSON manifest and JS block table were removed.
 
 ## Remaining apps awaiting migration
 

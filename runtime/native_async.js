@@ -6,7 +6,7 @@ export function createNativeAsync(methods) {
   return {
     open(id, allowed) {
       if (owners.has(id)) throw new Error('nativeAsync.duplicateWindow');
-      owners.set(id, { allowed: new Set(allowed), jobs: new Map(), events: [], cleanups: [] });
+      owners.set(id, { allowed: new Set(allowed), jobs: new Map(), events: [], cleanups: [], resources: new Map() });
     },
     close(id) {
       const owner = owners.get(id);
@@ -14,6 +14,8 @@ export function createNativeAsync(methods) {
       owners.delete(id);
       for (const stop of owner.cleanups) { try { stop(); } catch (error) { console.error('native async cleanup:', error); } }
       for (const job of owner.jobs.values()) if (job.ready) job.dispose?.(job.result);
+      for (const resource of owner.resources.values()) resource.dispose(resource.value);
+      owner.resources.clear();
       owner.jobs.clear(); owner.events.length = 0;
     },
     start(id, method, args = []) {
@@ -32,13 +34,24 @@ export function createNativeAsync(methods) {
         },
         cleanup(stop) { if (owners.get(id) === owner) owner.cleanups.push(stop); else stop(); },
         alive: () => owners.get(id) === owner,
+        retain(key, value, dispose) {
+          if (owners.get(id) !== owner) { dispose(value); return; }
+          const previous = owner.resources.get(key);
+          if (previous) previous.dispose(previous.value);
+          owner.resources.set(key, { value, dispose });
+        },
+        release(key) {
+          const resource = owner.resources.get(key);
+          if (resource) { owner.resources.delete(key); resource.dispose(resource.value); }
+        },
       };
+      job.dispose = spec.dispose ? result => spec.dispose(result, context) : undefined;
       Promise.resolve().then(() => {
         if (!context.alive() || owner.jobs.get(token) !== job) return undefined;
         job.started = true;
         return spec.run(args, context);
       }).then(result => {
-        if (!context.alive() || owner.jobs.get(token) !== job) { if (job.started) spec.dispose?.(result); return; }
+        if (!context.alive() || owner.jobs.get(token) !== job) { if (job.started) job.dispose?.(result); return; }
         job.ready = true; job.result = result ?? null;
       }, error => {
         if (!context.alive() || owner.jobs.get(token) !== job) return;

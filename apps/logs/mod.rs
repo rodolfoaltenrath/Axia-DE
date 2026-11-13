@@ -683,7 +683,7 @@ impl App {
                 self.i18n.group = input["context"]["group"].as_str().unwrap_or(",").into();
                 self.region = input["settings"]["region"].as_str().unwrap_or("").into();
                 if self.owner == 0 {
-                    self.owner = input["args"]["__nativeWindow"].as_i64().unwrap_or(0);
+                    self.owner = input["args"]["__nativeOwner"].as_i64().unwrap_or(0);
                     if self.owner > 0 {
                         self.enqueue(Kind::Sources, "logs.sources", json!([]), now);
                         self.enqueue(Kind::Files, "logs.files", json!([]), now);

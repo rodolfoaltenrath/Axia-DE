@@ -8,6 +8,8 @@ import { useAppWindow } from '../sdk/components.jsx';
 import { logs } from '../sdk/logs.js';
 import * as fs from '../sdk/fs.js';
 import { createNativeAsync } from './native_async.js';
+import { fontServices } from './native_font_services.js';
+import { fontInfo, fontSample, fontGrid, releaseImage } from '../sdk/doc.js';
 
 let followers = 0;
 const watches = new Map();
@@ -18,6 +20,7 @@ function stopWatch(id) {
   if (--followers === 0) logs.follow(false);
 }
 const methods = {
+  ...fontServices({ fs, fontInfo, fontSample, fontGrid, releaseImage, list: options => lord.fonts.list(options) }),
   'logs.sources': { run: () => logs.sources() },
   'logs.files': { run: () => logs.files() },
   'logs.query': { run: ([query]) => logs.query(query) },
@@ -36,6 +39,7 @@ const methods = {
   } },
 };
 const bridge = createNativeAsync(methods);
+let ownerSequence = 0;
 lord.nativeAsync = {
   start: (...args) => bridge.start(...args),
   take: (...args) => bridge.take(...args),
@@ -45,13 +49,16 @@ export function nativeApp(manifest) {
   const app = baseNativeApp(manifest);
   if (!manifest.asyncServices?.length) return app;
   return { ...app, Component: function NativeAsyncApp() {
-    const { id, args } = useAppWindow();
+    const { args } = useAppWindow();
+    // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
+    // each mounted window gets a fresh one even when the WM reuses its name.
+    const [owner] = useState(() => ++ownerSequence);
     const [ready, setReady] = useState(false);
     useLayoutEffect(() => {
-      bridge.open(id, manifest.asyncServices);
+      bridge.open(owner, manifest.asyncServices);
       setReady(true);
-      return () => bridge.close(id);
-    }, [id]);
-    return ready ? h(NativeView, { manifest, args: { ...args, __nativeWindow: id } }) : h(View, { style: { flex: 1 } });
+      return () => bridge.close(owner);
+    }, [owner]);
+    return ready ? h(NativeView, { manifest, args: { ...args, __nativeOwner: owner } }) : h(View, { style: { flex: 1 } });
   } };
 }

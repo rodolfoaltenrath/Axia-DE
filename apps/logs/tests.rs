@@ -7,7 +7,7 @@ fn app() -> App {
     a
 }
 fn facts() -> Value {
-    json!({"cmd":"sync","args":{"__nativeWindow":7},"lang":"en","context":{"width":1040,"height":640,"theme":{"text":"#ffffff","textDim":"#888888","accent":"#0088ff"}}})
+    json!({"cmd":"sync","args":{"__nativeOwner":7},"lang":"en","context":{"width":1040,"height":640,"theme":{"text":"#ffffff","textDim":"#888888","accent":"#0088ff"}}})
 }
 fn job(a: &App, kind: Kind, now: i64) -> Job {
     Job {
