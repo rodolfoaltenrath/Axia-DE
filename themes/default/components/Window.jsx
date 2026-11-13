@@ -3,7 +3,7 @@
 // borders on all 4 sides and 4 corners, <WindowShell>) is done by axia-server in C
 // (docs/WINDOWS.md), a maximized or snapped window coming loose at its own size as soon as it moves;
 // the JS drag below is only a fallback for when the C one can't start.
-import { View, Text, addListener, wm, AppHost, windowTitle, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance } from '@lordos/sdk';
+import { View, Text, addListener, wm, AppHost, windowTitle, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance, useSettings, NativeTitleBar } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';
 
@@ -20,6 +20,7 @@ export function Window({ win, app, t, focused, leaving = false }) {
   const drag = useRef(null);
   const [hover, setHover] = useState(false);
   const [hoverKey, setHoverKey] = useState(null);
+  const [prefs] = useSettings();       // "titleBarNativeView": true draws the title bar in Rust
   const shared = appAppearance(t);
   const plan = win.app === 'files' && win.args?.nativeChrome ? win.args.nativeChrome : shared.chrome;
   const chrome = plan?.schema === 1 && Array.isArray(plan.buttons) ? plan : null;
@@ -66,6 +67,13 @@ export function Window({ win, app, t, focused, leaving = false }) {
       boxShadow: focused ? chrome?.shadowFocused || '0 24px 56px rgba(0,0,0,0.55)' : chrome?.shadowInactive || '0 10px 28px rgba(0,0,0,0.32)',
       ...fxs,
     }}>
+      {prefs.titleBarNativeView === true ? (
+        <NativeTitleBar id={win.id} title={windowTitle(win)} focused={focused} height={chrome?.header?.height ?? TITLE_H} chrome={chrome}
+          controls={controls.map(({ key, color, glyph }) => ({ key, color, glyph }))}
+          tokens={{ titleBg: t.titleBg, text: t.text, textDim: t.textDim, lightOff: t.lightOff }}
+          onDrag={(x, y) => { if (!wm.beginMove(win.id)) drag.current = { dx: x - geo.x, dy: y - geo.y }; }}
+          onMax={() => wm.toggleMaximize(win.id)} onAct={(key) => controls.find((c) => c.key === key)?.act(win.id)} />
+      ) : (
       <View onMouseDown={(e) => { if (!wm.beginMove(win.id)) drag.current = { dx: e.x - geo.x, dy: e.y - geo.y }; }}
         onDoubleClick={() => wm.toggleMaximize(win.id)}
         style={chrome?.header || { height: TITLE_H, flexDirection: 'row', alignItems: 'center', paddingLeft: 14, backgroundColor: t.titleBg }}>
@@ -84,6 +92,7 @@ export function Window({ win, app, t, focused, leaving = false }) {
           ))}
         </View>
       </View>
+      )}
       <View style={{ height: 1, backgroundColor: app.transparent ? solidOver(t.separator, t.titleBg) : t.separator }} />
       <View style={{ flex: 1 }}><AppHost id={win.id} focused={focused} /></View>
     </WindowShell>

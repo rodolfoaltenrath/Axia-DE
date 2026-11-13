@@ -11,6 +11,7 @@ pub mod i18n;
 mod menu;
 mod menubar;
 mod shell_icons;
+mod titlebar;
 pub mod paint;
 pub mod style;
 #[cfg(test)]
@@ -67,6 +68,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
         crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
+        "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),
         "shell:menubar" => Some(Box::new(menubar::MenuBar::default())),
         "shell:dock-launcher" => Some(Box::new(shell_icons::Icon::Launcher)),
         "shell:dock-trash" => Some(Box::new(shell_icons::Icon::Trash)),

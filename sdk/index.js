@@ -18,6 +18,7 @@ export { AppSwitcher, openSwitcher, cycleAppWindows } from './appswitcher.jsx';
 export { dockGlass } from './glass.js';
 export { NativeView } from './nativeview.js';
 export { NATIVE_MENUBAR, barBridge } from './nativemenubar.js';
+export { NativeTitleBar } from './nativetitlebar.jsx';
 export { whenAnimDone, nativeAnim } from './anim.js';
 export { shortcutProfile } from './shortcutprofile.js';
 export { osk, oskState, startOsk } from './osk.js';

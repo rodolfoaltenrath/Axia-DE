@@ -45,6 +45,8 @@ export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, ve
   category: typeof app.category === 'string' ? app.category : undefined });
 
 const runners = new Map();          // handle → runs one effect
+// A shell component that runs the effects of its own view (the title bar): returns the way to stop.
+export function addRunner(handle, run) { runners.set(handle, run); return () => runners.delete(handle); }
 globalThis.__lordNativeView = () => {
   for (const [handle, run] of runners) {
     for (let list = lord.nativeViews.take(handle), n = 0; list && n < 64; list = lord.nativeViews.take(handle), n++)
