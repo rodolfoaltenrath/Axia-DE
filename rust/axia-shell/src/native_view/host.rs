@@ -200,6 +200,8 @@ pub struct Host {
     pointer_info: Option<Map<String, Value>>,
     /// The view and time of the last left click, for `onDoubleClick`.
     last_click: (i32, f64),
+    /// The app asked for the pointer (a drag in progress).
+    capture: bool,
     caret: usize,
     anchor: usize,
     caret_value: String,
@@ -255,6 +257,7 @@ impl Host {
             events: HashMap::new(),
             pointer_info: None,
             last_click: (0, 0.),
+            capture: false,
             caret: 0,
             anchor: 0,
             caret_value: String::new(),
@@ -355,6 +358,14 @@ impl Host {
         if !reply["effect"].is_null() {
             self.effects.push_back(reply["effect"].clone());
         }
+        for effect in reply["effects"].as_array().into_iter().flatten() {
+            self.effects.push_back(effect.clone());
+        }
+        // "capture": the app follows the pointer wherever it goes (a drag): pointerMove on each move and
+        // dragEnd when the button is released, as the React host did with global listeners.
+        if let Some(on) = reply["capture"].as_bool() {
+            self.capture = on;
+        }
         if !reply["title"].is_null() {
             let title = self.i18n.caption(&reply["title"]);
             if title != self.title {
@@ -397,6 +408,7 @@ impl Host {
             context = json!({});
         }
         context["width"] = json!(width);
+        context["height"] = json!(scene::frame(self.mount).map_or(0., |f| f.3));
         context
     }
     /// Asks the app for its tree and reconciles it into the scene.
@@ -1125,7 +1137,13 @@ impl Host {
     /// Some(mount) when the event is this view's: JS then sees it on the mount node.
     pub fn pointer(&mut self, kind: &str, target: i32, x: f32, y: f32, button: i32) -> Option<i32> {
         self.pointer_info = Some(self.pointer_data(x, y, button));
+        if self.capture && kind == "move" {
+            self.dispatch(&json!(["pointerMove"]), Map::new());
+        }
         let out = self.pointer_event(kind, target, x, y, button);
+        if self.capture && kind == "up" && button == 0 {
+            self.dispatch(&json!(["dragEnd"]), Map::new());
+        }
         self.pointer_info = None;
         out
     }

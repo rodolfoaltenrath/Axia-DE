@@ -57,7 +57,7 @@ impl App {
             return match Session::new(id, args, &mut self.shared) {
                 Ok(mut session) => {
                     session.poll(args, &self.shared);
-                    let reply = self.snapshot(&mut session);
+                    let reply = self.snapshot(&mut session, args["native"] == true);
                     self.sessions.insert(id, session);
                     reply
                 }
@@ -175,14 +175,15 @@ impl App {
         }
         session.poll(args, &self.shared);
         let reply = if session.dirty || !session.effects.is_empty() {
-            self.snapshot(&mut session)
+            self.snapshot(&mut session, args["native"] == true)
         } else {
             Value::Null
         };
         self.sessions.insert(id, session);
         reply
     }
-    fn snapshot(&mut self, s: &mut Session) -> Value {
+    /// `whole`: the tree as it is (a native view draws it), not as changes for the JS host.
+    fn snapshot(&mut self, s: &mut Session, whole: bool) -> Value {
         let tree = s.render(&self.shared);
         let state = json!({"menus":s.menus(&self.shared),"title":s.title_value(),"loading":s.visibly_loading(),"capture":s.drag.is_some(),"closed":s.closed,
             "appearance":s.theme,"chrome":crate::native_style::frame(&s.theme)});
@@ -196,7 +197,7 @@ impl App {
         reply["id"] = json!(s.id);
         reply["serial"] = json!(self.delivery);
         reply["effects"] = json!(std::mem::take(&mut s.effects));
-        reply["tree"] = delta(sent.map(|p| &p.tree), &tree);
+        reply["tree"] = if whole { tree.clone() } else { delta(sent.map(|p| &p.tree), &tree) };
         // Absent means unchanged; the host keeps the array it already has.
         for key in ["menus", "appearance", "chrome"] {
             if sent.is_some_and(|p| p.state[key] == state[key]) {
@@ -278,6 +279,11 @@ fn fs_json(args: &Value) -> Value {
         Ok(value) => json!({"value":value}),
         Err(e) => json!({"error":e}),
     }
+}
+
+/// A request from the native view (native.rs), in this thread's service, without the C string round trip.
+pub(super) fn request(args: &Value) -> Value {
+    APP.with(|app| app.borrow_mut().request(args))
 }
 
 // SAFETY: input is a NUL-terminated UTF-8 JSON string owned by C for this call.
