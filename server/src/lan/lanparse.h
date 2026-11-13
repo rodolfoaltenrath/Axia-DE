@@ -1,6 +1,7 @@
 /* lanparse.h — the wire formats of Files → Network, as pure functions over byte buffers: what
  * axia-lan sends and how it reads the answers. Everything read here comes from the network and is
- * untrusted (tests/lan_test.c, with a fuzz run under ASan/UBSan). */
+ * untrusted. Implemented in rust/axia-codecs/src/lanparse.rs (tests/lan_test.c drives it, with a fuzz
+ * run under ASan/UBSan on the C side). */
 #ifndef LORD_LAN_PARSE_H
 #define LORD_LAN_PARSE_H
 

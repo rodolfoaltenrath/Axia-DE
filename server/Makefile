@@ -84,7 +84,7 @@ APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_brok
 SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c src/users/homedirs.c src/wl/wl.c src/wl/xwm.c \
        src/ui/text.c \
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
-       src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
+       src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/textlayout.c \
        src/term/vt.c src/term/pty.c src/term/term.c src/term/term_paint.c src/term/hold.c \
        src/net/nl.c src/net/state.c \
        src/pkg/crypto.c src/ui/js_sec.c \
@@ -344,8 +344,8 @@ build/wasm-js-test: tests/wasm_js_test.c src/ui/js_wasm.c src/ui/js_wasm.h $(WAS
 build/wasm-test: tests/wasm_test.c $(WASM_SRC) src/wasm/wasm.h src/wasm/wasm_int.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/wasm_test.c $(WASM_SRC) -lm
-build/thbrk-test: tests/thbrk_test.c src/ui/thbrk.c src/ui/thbrk.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/thbrk_test.c src/ui/thbrk.c
+build/thbrk-test: tests/thbrk_test.c src/ui/thbrk.h $(CODEC_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/thbrk_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 # package signing: SHA-256 (NIST), Ed25519 (RFC 8032), JSON, contenido.json and catalog
 build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
@@ -495,7 +495,7 @@ test: test-rust
 # list and a window drag on one and two displays
 ENGINE_SRC := src/gpu/gcontend.c src/ui/text.c src/ui/textlayout.c \
               src/ui/paint.c src/ui/otf.c src/ui/fonts.c src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c \
-              src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/canvas.c
+              src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/canvas.c
 test: build/engine-test
 build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
@@ -715,9 +715,9 @@ build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c src/sec/n
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c -lpthread
 	./$@ || { rm -f $@; exit 1; }
-build/ipp-test: tests/ipp_test.c src/print/ipp.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(wildcard src/print/*.h)
+build/ipp-test: tests/ipp_test.c src/print/ipp.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(wildcard src/print/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ipp_test.c src/print/ipp.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ipp_test.c src/print/ipp.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # axia-doc end to end: malicious archives, PDF and the lockdown (needs build/axia-doc)
 build/doc-test: tests/doc_test.c src/doc/wire.c src/sec/json.c $(wildcard src/doc/*.h)
 	@mkdir -p build

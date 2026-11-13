@@ -80,16 +80,6 @@ void hmac_md5(const void *key, size_t klen, const void *data, size_t len, uint8_
     md5(b, 80, out);
 }
 
-void hmac_sha256(const void *key, size_t klen, const void *data, size_t len, uint8_t out[32]) {
-    uint8_t k[64] = { 0 }, pad[64], in[32];
-    memcpy(k, key, klen > 64 ? 64 : klen);
-    Sha256 s;
-    for (int i = 0; i < 64; i++) pad[i] = k[i] ^ 0x36;
-    sha256_init(&s); sha256_update(&s, pad, 64); sha256_update(&s, data, len); sha256_final(&s, in);
-    for (int i = 0; i < 64; i++) pad[i] = k[i] ^ 0x5c;
-    sha256_init(&s); sha256_update(&s, pad, 64); sha256_update(&s, in, 32); sha256_final(&s, out);
-}
-
 static void rc4(const uint8_t key[16], const uint8_t in[16], uint8_t out[16]) {
     uint8_t s[256];
     for (int i = 0; i < 256; i++) s[i] = (uint8_t)i;

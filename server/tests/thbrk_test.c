@@ -1,4 +1,4 @@
-/* thbrk_test.c — Thai word breaks (src/ui/thbrk.c, thbrk_text), one output line per
+/* thbrk_test.c — Thai word breaks (rust/axia-codecs/src/thbrk.rs, thbrk_text), one output line per
  * input line: "|" where a break is allowed. Compared with libthai in
  * tests/thbrk_compare.sh (only breaks between characters of the Thai block). */
 #include "ui/thbrk.h"

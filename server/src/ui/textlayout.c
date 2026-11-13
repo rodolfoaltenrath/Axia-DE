@@ -384,7 +384,7 @@ static int build(Layout *L, const char *s, int font, float size, float max_w, in
     }
 
     /* 3. possible breaks of scripts without spaces (SA): Thai by words with the
-     * libthai-data dictionary (thbrk.c); Khmer and Myanmar by syllable (each syllable is
+     * libthai-data dictionary (axia-codecs thbrk.rs); Khmer and Myanmar by syllable (each syllable is
      * a glyph cluster). bk: 0 = the common rule, 1 = allowed, 2 = not allowed. */
     bk = calloc((size_t)n + 1, 1);
     if (!bk) goto out;

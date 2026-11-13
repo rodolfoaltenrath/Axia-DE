@@ -9,7 +9,7 @@
 void md4(const void *data, size_t len, uint8_t out[16]);
 void md5(const void *data, size_t len, uint8_t out[16]);
 void hmac_md5(const void *key, size_t klen, const void *data, size_t len, uint8_t out[16]);
-void hmac_sha256(const void *key, size_t klen, const void *data, size_t len, uint8_t out[32]);
+void hmac_sha256(const void *key, size_t klen, const void *data, size_t len, uint8_t out[32]);   /* rust/axia-crypto vcrypto.rs */
 
 /* UTF-8 → UTF-16LE: bytes written, 0 if it doesn't fit or isn't valid. upper: as a Windows account name. */
 size_t text_utf16(const char *s, uint8_t *out, size_t cap, int upper);
