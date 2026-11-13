@@ -110,8 +110,8 @@ SRC += $(TP_SRC)
 # Passwords (src/vault/dbus.c, docs/PASSWORDS.md).
 WM_SRC := src/ui/js_wm.c src/ui/js_snap.c src/ui/js_winmodel.c src/ui/js_switcher.c src/ui/portal.c src/ui/portal_files.c src/vault/dbus.c
 SRC += $(WM_SRC)
-# Clock and Help (docs/SYSTEM.md): time zones with our own TZif reader, and the help articles
-CLOCK_SRC := src/ui/tzif.c src/ui/js_help.c
+# Clock and Help (docs/SYSTEM.md): the help articles (the time zones are Rust: axia-codecs/src/tzif.rs)
+CLOCK_SRC := src/ui/js_help.c
 SRC += $(CLOCK_SRC)
 # Logs (docs/SYSTEM.md): our own systemd journal reader, the logs-system action and lord.logs
 LOGS_SRC := src/logs/journal.c src/ui/js_logs.c
@@ -381,9 +381,9 @@ build/timer-order-test: tests/timer_order_test.c tests/timer_js_baseline.h src/u
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/timer_order_test.c src/ui/js_timers.c $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -lm -lpthread
 test: build/tzif-test
-build/tzif-test: tests/tzif_test.c src/ui/tzif.c src/ui/tzif.h
+build/tzif-test: tests/tzif_test.c src/ui/tzif.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/tzif_test.c src/ui/tzif.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/tzif_test.c $(CODEC_LIB) $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # journal reader (Logs): normal and compact synthetic files, LZ4 and XZ, broken and
 # truncated files; `build/journal-test dump <file>` dumps JSON to compare with journalctl
