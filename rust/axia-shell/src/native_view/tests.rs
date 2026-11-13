@@ -813,3 +813,48 @@ fn app_about_native_metadata_title_and_target_changes_do_not_retain_old_content(
     assert!(host.take().unwrap().as_array().unwrap().iter().any(|e|e["title"]=="About missing"));
     drop(host);assert!(children(mount).is_empty());scene::destroy(mount);
 }
+
+#[test]
+fn a_layered_view_mounts_in_the_shell_layer_and_receives_pointer_events() {
+    struct Pop(Rc<RefCell<Vec<Value>>>);
+    impl NativeApp for Pop {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                return json!({"tree":{"kind":"view","children":[
+                    {"kind":"text","label":"Window"},
+                    {"kind":"view","layer":"popover","style":{"position":"absolute"},"children":[
+                        {"kind":"view","events":{"onClick":["pick"]},"children":[{"kind":"text","label":"Item"}]}]}]}});
+            }
+            self.0.borrow_mut().push(input.clone());
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let layer = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Pop(log.clone())), "", None);
+    host.facts(json!({"layers":{"popover":layer}}));
+    let item = node_with_text(layer, "Item");
+    assert_ne!(item, 0, "the view is in the layer");
+    assert!(scene::within(item, layer) && !scene::within(item, mount));
+    host.pointer("move", item, 1., 1., 0);
+    host.pointer("down", item, 1., 1., 0);
+    host.pointer("up", item, 1., 1., 0);
+    assert!(log.borrow().iter().any(|v| v["cmd"] == "pick"), "a click in the layer reaches the app");
+    drop(host);
+    assert!(!scene::exists(item), "its layered nodes go with the view");
+    // without a layer named, the same view stays in the window
+    let mount2 = scene::create(scene::VIEW);
+    let mut inline = Host::new(mount2, Box::new(Pop(log.clone())), "", None);
+    inline.facts(json!({}));
+    let item2 = node_with_text(mount2, "Item");
+    assert_ne!(item2, 0);
+    assert!(scene::within(item2, mount2));
+    drop(inline);
+    scene::destroy(layer);
+    scene::destroy(mount);
+    scene::destroy(mount2);
+}

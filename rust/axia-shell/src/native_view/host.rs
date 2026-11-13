@@ -66,6 +66,8 @@ struct Mounted {
     spec: Value,
     /// A view's `onClick` action.
     click: Option<Value>,
+    /// The shell layer's node a `"layer"` view lives in (menus, popovers: above the windows); 0 in place.
+    layer: i32,
     offset: f64,
     children: Vec<Mounted>,
 }
@@ -83,6 +85,7 @@ impl Mounted {
             image: (String::new(), u64::MAX),
             spec: Value::Null,
             click: None,
+            layer: 0,
             offset: 0.,
             children: Vec::new(),
         }
@@ -103,7 +106,17 @@ impl Mounted {
         self.raw[slot] = raw;
     }
     fn destroy(self) {
-        // Children and parts are inside `node`.
+        // Children and parts are inside `node`, except the layered ones: they hang from a shell layer.
+        fn layered(list: &[Mounted]) {
+            for m in list {
+                if m.layer != 0 {
+                    scene::destroy(m.node);
+                } else {
+                    layered(&m.children);
+                }
+            }
+        }
+        layered(&self.children);
         scene::destroy(self.node);
     }
 }
@@ -135,6 +148,8 @@ pub struct Host {
     root: Vec<Mounted>,
     targets: HashMap<i32, Target>,
     buttons: HashMap<i32, i32>,
+    /// The nodes of the layered views (see `Mounted::layer`), for `owns`.
+    portals: Vec<i32>,
     effects: VecDeque<Value>,
     title: String,
     window_focused: bool,
@@ -157,7 +172,7 @@ impl Drop for Host {
         for m in self.root.drain(..) {
             // React may have destroyed the mount node (and these) first; the scene reuses
             // freed ids, so only nodes still under the mount are ours to destroy.
-            if scene::within(m.node, self.mount) && m.node != self.mount {
+            if m.layer != 0 || (scene::within(m.node, self.mount) && m.node != self.mount) {
                 m.destroy();
             }
         }
@@ -175,6 +190,7 @@ impl Host {
             root: Vec::new(),
             targets: HashMap::new(),
             buttons: HashMap::new(),
+            portals: Vec::new(),
             effects: VecDeque::new(),
             title: String::new(),
             window_focused: true,
@@ -395,6 +411,12 @@ impl Host {
         // Order the nodes like the specs, moving only those out of place.
         let mut next = 0;
         for m in out.iter().rev() {
+            if m.layer != 0 {
+                if scene::parent(m.node) != m.layer {
+                    scene::insert(m.layer, m.node, 0);
+                }
+                continue;
+            }
             if scene::parent(m.node) != parent || scene::next_sibling(m.node) != next {
                 scene::insert(parent, m.node, next);
             }
@@ -435,6 +457,15 @@ impl Host {
         match m.kind {
             Kind::View => {
                 m.style(0, style);
+                // "layer": "popover" puts the view in that shell layer when the shell named its node
+                // (facts.layers); without one it stays where it is, an absolute view of the window.
+                m.layer = spec["layer"]
+                    .as_str()
+                    .and_then(|name| self.facts["layers"][name].as_i64())
+                    .map_or(0, |n| n as i32);
+                if m.layer != 0 && !scene::exists(m.layer) {
+                    m.layer = 0;
+                }
                 // Views only need their event map after reconciliation. Avoid
                 // retaining another copy of the entire descendant tree.
                 m.spec = spec
@@ -619,7 +650,22 @@ impl Host {
         m.style(2, style);
     }
     /// `targets`: what each interactive node does; `buttons`: hover owners.
+    /// Is `target` in this view: under its mount, or in one of its layered views.
+    fn owns(&self, target: i32) -> bool {
+        scene::within(target, self.mount) || self.portals.iter().any(|p| scene::within(target, *p))
+    }
     fn index(&mut self) {
+        fn layered(list: &[Mounted], out: &mut Vec<i32>) {
+            for m in list {
+                if m.layer != 0 {
+                    out.push(m.node);
+                } else {
+                    layered(&m.children, out);
+                }
+            }
+        }
+        self.portals.clear();
+        layered(&self.root, &mut self.portals);
         fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>) {
             for m in list {
                 match m.kind {
@@ -796,7 +842,7 @@ impl Host {
     /// Some(mount) when the event is this view's: JS then sees it on the mount node.
     pub fn pointer(&mut self, kind: &str, target: i32, x: f32, y: f32, button: i32) -> Option<i32> {
         let _ = x;
-        let inside = scene::within(target, self.mount);
+        let inside = self.owns(target);
         if self.icon_mode().is_some() {
             return inside.then_some(self.mount);
         }
@@ -917,7 +963,7 @@ impl Host {
         _dx: f64,
         dy: f64,
     ) -> Option<i32> {
-        if !scene::within(target, self.mount) {
+        if !self.owns(target) {
             return None;
         }
         if kind == "scroll" && phase != "begin" && self.icon_mode().is_none() {

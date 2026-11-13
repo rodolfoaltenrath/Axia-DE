@@ -5,7 +5,8 @@
 // reads (settings, theme, services, catalog, focus) and runs the effects that belong to the shell:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
 import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { View, screen, shellHasKeyboard, onShellKeyboard } from '@lordos/runtime';
+import { View, screen, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
+import { LAYERS, shellLayers } from './layers.js';
 import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
@@ -20,6 +21,15 @@ import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { appControlFacts, forceQuit } from './appcontrol.js';
 import { executeNativeEffect } from './nativeappmodel.js';
+// The nodes of the shell layers a native view may put its menus and popovers in ("layer": "popover").
+// Only when the shell has layers; otherwise the views stay in their window.
+const LAYER_NAMES = ['popover', 'modal', 'tooltip'];
+function layerFacts() {
+  if (!shellLayers()) return undefined;
+  const out = {};
+  for (const name of LAYER_NAMES) { const id = layerContainer(LAYERS[name])?.id; if (id) out[name] = id; }
+  return out;
+}
 const emptyClock = { get: () => null, subscribe: () => () => {} };
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
@@ -115,7 +125,7 @@ export function NativeView({ manifest, args, icon, style }) {
   }, [manifest, icon]);
   const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection } = theme;
   const facts = icon ? { icon, args: args || {} } : {
-    args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: ownsKeyboard(), refreshMs: manifest.refreshMs || 0,
+    args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: ownsKeyboard(), layers: layerFacts(), refreshMs: manifest.refreshMs || 0,
     width: manifest.size?.[0] || 1000,
     settings: manifest.settings ? preferences : undefined,
     services: { ...polled, ...(clock ? { $clock: clock } : {}) },
