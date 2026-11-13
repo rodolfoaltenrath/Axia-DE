@@ -7,6 +7,7 @@
 import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { View, screen, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
 import { LAYERS, shellLayers } from './layers.js';
+import { filesEffect } from './nativefiles.js';
 import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
@@ -48,8 +49,11 @@ globalThis.__lordNativeView = () => {
   }
 };
 
-function runner(handle, manifest, winId) {
+function runner(handle, manifest, winId, node = () => 0) {
+  const act = (action, extra = {}) => lord.nativeViews.action(handle, { action, extra });
   return (effect) => {
+    // a Files window: its own effects (apps/files/native_app.rs), host ones too
+    if (manifest.id === 'files' && !effect.host) { try { filesEffect(effect, { handle, winId, node, act }); } catch (e) { console.error('native files:', e); } return; }
     if (effect.host) {                 // the host's own: no result goes back to the app
       try {
         if (effect.kind === 'title' && winId) wm.setTitle(winId, effect.title);
@@ -132,7 +136,9 @@ export function NativeView({ manifest, args, icon, style }) {
     ...(manifest.facts === 'windows' ? { windows: appControlFacts() } : {}),
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
-    context: { theme: { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },
+    // Files reads many more tokens than the other native apps: all of them (not the catalogs of wallpapers and accents)
+    context: { theme: manifest.fullTheme ? (({ wallpapers, accents, ...tokens }) => tokens)(theme)
+        : { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },
       scale: typeScale, decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3),
       ...(manifest.facts === 'system' ? { screen: { width: screen.width, height: screen.height }, reactVersion, version: lord.version } : {}) },
   };
@@ -142,7 +148,7 @@ export function NativeView({ manifest, args, icon, style }) {
     m.handle = ref.current ? lord.nativeViews.mount(ref.current.id, manifest.id, json) : 0;
     m.sent = json;
     if (!m.handle) return undefined;
-    runners.set(m.handle, runner(m.handle, manifest, win.id));
+    runners.set(m.handle, runner(m.handle, manifest, win.id, () => ref.current?.id || 0));
     const syncFocus = () => { if (!icon) lord.nativeViews.focus(m.handle, ownsKeyboard()); };
     const stopText = onTextField(syncFocus), stopShell = onShellKeyboard(syncFocus);
     syncFocus();

@@ -172,6 +172,12 @@ pub unsafe extern "C" fn axia_view_result(handle: u32, result: *const c_char) {
     let result = json(result);
     with_host(handle, |h| h.result(result));
 }
+/// An action for the view's app from the shell's glue: `{"action": [cmd, key], "extra": {…}}`.
+#[no_mangle]
+pub unsafe extern "C" fn axia_view_action(handle: u32, action: *const c_char) {
+    let action = json(action);
+    with_host(handle, |h| h.action(&action));
+}
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_paste(handle: u32, value: *const c_char) {
     let value = text(value).to_owned();

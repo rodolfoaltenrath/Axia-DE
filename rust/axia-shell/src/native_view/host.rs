@@ -375,6 +375,13 @@ impl Host {
             }
         }
     }
+    /// An action from the shell's glue (a window menu item, the end of a drag): `{action, extra}`.
+    pub fn action(&mut self, spec: &Value) {
+        if spec["action"][0].is_string() {
+            let extra = spec["extra"].as_object().cloned().unwrap_or_default();
+            self.dispatch(&spec["action"], extra);
+        }
+    }
     pub fn result(&mut self, result: Value) {
         let reply = self.app.request(&json!({"cmd":"next","result":result}));
         self.queue(&reply);

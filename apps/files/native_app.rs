@@ -212,7 +212,13 @@ impl NativeApp for FilesView {
                 }
                 json!({})
             }
-            "next" => json!({}),
+            // what the shell made of an effect (kind, generation and its result): a service event
+            "next" => {
+                let extra = input["result"].as_object().cloned().unwrap_or_default();
+                let files = self.event(json!(["service"]), &extra);
+                let effects = self.absorb(&files);
+                json!({"effects":effects})
+            }
             cmd => {
                 let mut extra = input.as_object().cloned().unwrap_or_default();
                 for k in ["cmd", "key"] {
