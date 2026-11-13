@@ -25,6 +25,8 @@ int      axia_view_key(const char *key, const char *chr, int flags);
 /* The modifiers held (shift 1, ctrl 2, alt 4, altgr 8, meta 16), after each key: the pointer events of a
  * native view carry them (Files' Ctrl+click and Shift+click). */
 void     axia_view_set_modifiers(int flags);
+/* An action for the view's app, from the shell's glue: {"action": [cmd, key], "extra": {…}}. */
+void     axia_view_action(unsigned handle, const char *json);
 void     axia_view_tick(double now);
 double   axia_view_timeout(double now);
 int      axia_view_pending(void);

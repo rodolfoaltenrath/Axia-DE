@@ -52,7 +52,8 @@ static JSValue f_json(JSContext *c, JSValueConst t, int argc, JSValueConst *argv
     JSValue keep;
     const char *json = arg_json(c, argv[1], &keep);
     if (json) {
-        if (magic) axia_view_result(arg_handle(c, argv[0]), json);
+        if (magic == 2) axia_view_action(arg_handle(c, argv[0]), json);
+        else if (magic) axia_view_result(arg_handle(c, argv[0]), json);
         else axia_view_facts(arg_handle(c, argv[0]), json);
         JS_FreeCString(c, json);
     }
@@ -135,6 +136,7 @@ static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("unmount", 1, f_unmount),
     JS_CFUNC_MAGIC_DEF("facts", 2, f_json, 0),
     JS_CFUNC_MAGIC_DEF("result", 2, f_json, 1),
+    JS_CFUNC_MAGIC_DEF("action", 2, f_json, 2),
     JS_CFUNC_DEF("focus", 2, f_focus),
     JS_CFUNC_DEF("take", 1, f_take),
     JS_CFUNC_DEF("paste", 2, f_paste),

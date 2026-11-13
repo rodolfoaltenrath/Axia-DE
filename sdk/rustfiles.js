@@ -192,7 +192,7 @@ function eventData(e, root) {
 
 // These are integrations with existing desktop services, selected by Rust.
 // All requests/results go back through the owning Rust window handle.
-async function hostEffect(effect) {
+export async function hostEffect(effect) {
   switch (effect.kind) {
     case 'diskMount':
     case 'diskRelease': {
