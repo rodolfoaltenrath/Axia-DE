@@ -16,6 +16,7 @@ import { clipboard } from './clipboard.js';
 import { archive } from './archive.js';
 import { DocImage, pdfThumb, fontSample, releaseImage } from './doc.js';
 import { media, thumbRev } from './media.js';
+import { startFileDrag, useFileDrop } from './filedrag.js';
 import { lan } from './lan.js';
 import { useDisks, disks } from './disks.js';
 import { Menu } from './menu.jsx';
@@ -121,6 +122,8 @@ function FilenameBubble({ node, tip, full }) {
 }
 function Filename({ node, props, children }) {
   const ref = useRef(null), timer = useRef(0);
+  useFileDrop(ref, props.onFileDrop, node.dropPath === 'trash');
+  const { onFileDrop, ...widgetProps } = props;
   const [tip, setTip] = useState(null);
   const full = caption(node.tooltip ?? node.text);
   const hide = () => { clearTimeout(timer.current); timer.current = 0; setTip(null); };
@@ -144,7 +147,7 @@ function Filename({ node, props, children }) {
     }, 550);
   };
   return h(Fragment, null,
-    h(node.type === 'fileTile' ? View : Text, { ...props, ref, onMouseEnter: enter, onMouseLeave: hide,
+    h(node.type === 'fileTile' ? View : Text, { ...widgetProps, ref, onMouseEnter: enter, onMouseLeave: hide,
       onMouseDown: (e) => { hide(); props.onMouseDown?.(e); }, onWheel: (e) => { hide(); props.onWheel?.(e); } },
       node.type === 'fileTile' ? children : caption(node.text)),
     tip ? h(FilenameBubble, { node, tip, full }) : null);
@@ -155,6 +158,7 @@ export const RustWidget = memo(function WidgetNode({ node, send }) {
   if (!node) return null;
   if (node.type === 'icon') return h(Widget, { node: iconTree(node.name, node.size), send });
   const props = { style: node.style };
+  if (node.dropPath) props.onFileDrop = (drop) => send(['dropFiles', node.dropPath], null, { paths: drop.paths, internalMove: drop.internalMove });
   for (const event of EVENT_NAMES) if (node.events?.[event]) props[event] = (e) => send(node.events[event], e);
   const children = (node.children || []).map((child, i) => h(Widget, { key: child.key || i, node: child, send }));
   switch (node.type) {
@@ -289,6 +293,7 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     if (!live.current || !action) return;
     accept(filesRequest({ op: 'event', id: handle, action, ...eventData(e, root), ...extra }));
   }).current;
+  useFileDrop(root, mode === 'browser' ? (drop) => send(['dropFiles'], null, { paths: drop.paths, internalMove: drop.internalMove }) : null);
   latest.current = { theme, send, onPick, onClose, win };
   useEffect(() => { send(['disks'], null, { disks: volumes }); }, [volumes]);
   const metadata = useMemo(() => JSON.stringify(appMetadata(apps)), [apps]);
@@ -338,6 +343,10 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     for (const effect of effectQueue.current.splice(0)) {
       if (effect.kind === 'choose') { latest.current.onPick?.(multiple ? effect.paths : effect.paths[0]); continue; }
       if (effect.kind === 'cancel' || effect.kind === 'close') { if (mode === 'browser') wm.close(latest.current.win.id); else latest.current.onClose?.(); continue; }
+      if (effect.kind === 'dragFiles') {
+        if (startFileDrag(effect.paths, root.current?.id, !effect.copy)) latest.current.send(['dragEnd']);
+        continue;
+      }
       if (effect.kind === 'transferWindow') {
         const parent = latest.current.win;
         const frame = parent?.id ? wm.get(parent.id) : null;

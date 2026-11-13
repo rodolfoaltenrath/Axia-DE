@@ -2180,13 +2180,63 @@ impl Session {
                         let dy =
                             event["y"].as_f64().unwrap_or(0.) - drag["y"].as_f64().unwrap_or(0.);
                         if dx * dx + dy * dy > 36. {
+                            let starting = drag["active"] != true;
                             drag["active"] = json!(true);
                             if let Some((_, _, active)) = &mut shared.dragging {
                                 *active = true;
                             }
                             drag["atX"] = event["x"].clone();
                             drag["atY"] = event["y"].clone();
+                            if starting {
+                                if let Some((_, paths, _)) = &shared.dragging {
+                                    if paths.iter().all(|path| path.to_str().is_some()) {
+                                        self.effects.push(json!({"kind":"dragFiles","paths":paths,"copy":event["alt"]==true}));
+                                    }
+                                }
+                            }
                         }
+                    }
+                }
+                "dropFiles" => {
+                    if self.mode != Mode::Browser {
+                        return Err("fs.outsideHome".into());
+                    }
+                    let paths = event["paths"]
+                        .as_array()
+                        .filter(|paths| !paths.is_empty() && paths.len() <= 4096)
+                        .ok_or("sys.badArgument")?;
+                    let sources: Vec<PathBuf> = paths
+                        .iter()
+                        .map(|path| {
+                            let source = PathBuf::from(path.as_str().ok_or("sys.badArgument")?);
+                            if !source.is_absolute() || source.file_name().is_none() {
+                                return Err("sys.badArgument");
+                            }
+                            Ok(source)
+                        })
+                        .collect::<std::result::Result<_, _>>()?;
+                    if arg == "trash" {
+                        // External drops negotiate COPY and must never delete their source.
+                        if event["internalMove"] != true {
+                            return Err("sys.badArgument".into());
+                        }
+                        self.mutate("trash", sources)?;
+                        return Ok(());
+                    }
+                    let destination = if let Some(path) = arg.as_str() {
+                        self.policy.read(Path::new(path))?
+                    } else {
+                        self.write_dir().ok_or("fs.outsideHome")?
+                    };
+                    let mut items = Vec::with_capacity(sources.len());
+                    for source in sources {
+                        let target = destination.join(source.file_name().ok_or("sys.badArgument")?);
+                        if source != target {
+                            items.push((source, target, event["internalMove"] == true));
+                        }
+                    }
+                    if !items.is_empty() {
+                        self.start_transfer(items)?;
                     }
                 }
                 "drop" => {

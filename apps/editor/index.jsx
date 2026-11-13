@@ -3,7 +3,7 @@
 // project file (❖T), our own syntax highlighting and input methods.
 // See docs/EDITOR.md.
 import {
-  View, Text, TextInput, Button, ScrollView, FilePicker, ToolbarButton, direction, useTheme, useLocale, useAppWindow, useKeyboard, wm, fs, formatBytes, addListener, hasTextFocus, print,
+  View, Text, TextInput, Button, ScrollView, FilePicker, ToolbarButton, direction, useTheme, useLocale, useAppWindow, useKeyboard, wm, fs, formatBytes, addListener, hasTextFocus, print, useFileDrop,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Doc, cursorAt, hasSel, selStart, selEnd } from './buffer.js';
@@ -204,6 +204,7 @@ export default function Editor() {
   const [msg, setMsg] = useState(null);
   const [lineQuery, setLineQuery] = useState('');
   const api = useRef(null);
+  const dropRoot = useRef(null);
   const tab = tabs.find((x) => x.id === activeId) || tabs[0];
   const doc = tab.doc;
   const lang = languageById(tab.langId);
@@ -233,6 +234,8 @@ export default function Editor() {
       if (!fromTree && !root && !tabs.some((x) => x.path)) setRoot(dirOf(relOf(abs)));
     } catch (e) { setMsg({ ok: false, text: `${baseName(abs)}: ${e.message}` }); setOverlay(null); }
   };
+
+  useFileDrop(dropRoot, ({ paths }) => { if (paths[0]) openPath(paths[0]); });
 
   const saveTo = (tb, abs) => {
     try {
@@ -384,7 +387,7 @@ export default function Editor() {
   const editorOverlay = !!overlay;
 
   return (
-    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: t.editorBg }}>
+    <View ref={dropRoot} style={{ flex: 1, flexDirection: 'row', backgroundColor: t.editorBg }}>
       {root !== null && (
         <View style={{ width: 220, backgroundColor: t.sidebarBg }}>
           <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: t.separator }} />
