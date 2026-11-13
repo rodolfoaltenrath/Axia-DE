@@ -14,7 +14,9 @@ mod compression;
 mod tzif;
 #[cfg(feature = "secure-memory")]
 mod secure;
-// The KDBX XML reader keeps its tree in the vault's secrets arena.
+// The KDBX XML reader and the CSV reader keep their data in the vault's secrets arena.
+#[cfg(feature = "secure-memory")]
+mod csvp;
 #[cfg(feature = "secure-memory")]
 mod xmlmini;
 

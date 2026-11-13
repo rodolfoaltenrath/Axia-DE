@@ -23,14 +23,14 @@ build/vault-test: tests/vault_test.c $(VAULT_CORE) $(VAULT_CODEC_LIB) build/obj/
 	./$@ || { rm -f $@; exit 1; }
 test: build/vault-test
 # axia-vault: the confined Passwords and keyring helper (src/vault/vault.c)
-LV_SRC := $(VAULT_CORE) src/vault/vault.c src/vault/keyring.c src/vault/vimport.c src/vault/csvp.c src/vault/kdbx.c \
+LV_SRC := $(VAULT_CORE) src/vault/vault.c src/vault/keyring.c src/vault/vimport.c src/vault/kdbx.c \
           src/vault/qr.c src/vault/ctap2.c src/vault/p256.c src/vault/secretsvc.c src/vault/dbus.c \
           src/sec/sandbox.c src/sec/cgroup.c
 build/axia-vault: $(LV_SRC) $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(VAULT_HDR)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LV_SRC) $(VAULT_CODEC_LIB) build/obj/vault/lists.o -lpthread -lm $(CODEC_NATIVE_LIBS)
 # (only when all its parts are there, so the tree always builds)
-LV_READY := $(and $(wildcard src/vault/secretsvc.c),$(wildcard src/vault/dbus.c),$(wildcard src/vault/vimport.c),$(wildcard src/vault/kdbx.c),$(wildcard src/vault/csvp.c))
+LV_READY := $(and $(wildcard src/vault/secretsvc.c),$(wildcard src/vault/dbus.c),$(wildcard src/vault/vimport.c),$(wildcard src/vault/kdbx.c))
 ifneq ($(LV_READY),)
 all: build/axia-vault
 endif
