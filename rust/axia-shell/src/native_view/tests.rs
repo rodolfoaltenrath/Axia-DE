@@ -1103,3 +1103,80 @@ fn pointer_actions_carry_position_and_modifiers_and_the_extra_events_reach_the_a
     drop(host);
     scene::destroy(mount);
 }
+
+struct SurfaceProbe {
+    tree: Rc<RefCell<Value>>,
+    log: Rc<RefCell<Vec<Value>>>,
+}
+impl NativeApp for SurfaceProbe {
+    fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "sync" { json!({"tree":*self.tree.borrow()}) }
+        else { self.log.borrow_mut().push(input.clone()); json!({}) }
+    }
+}
+
+#[test]
+fn native_drop_tokens_follow_destinations_and_reject_stale_or_external_trash_drops() {
+    let mount=scene::create(scene::VIEW);
+    let tree=Rc::new(RefCell::new(json!({"kind":"view","dropAction":["dropFiles","/first"],"children":[{"kind":"text","label":"target"}]})));
+    let log=Rc::new(RefCell::new(Vec::new()));
+    let mut host=Host::new(mount,Box::new(SurfaceProbe{tree:tree.clone(),log:log.clone()}),"",None);
+    host.facts(json!({}));
+    let text=host.find_text("target");
+    let token=unsafe {crate::runtime::node_file_drop(crate::runtime::node_get(text))};
+    assert_ne!(token & super::DROP_TOKEN_FLAG,0);
+    assert!(host.file_drop(token,&json!(["/source"]),false));
+    assert_eq!(log.borrow()[0]["cmd"],"dropFiles");
+    assert_eq!(log.borrow()[0]["key"],"/first");
+    assert_eq!(log.borrow()[0]["internalMove"],false);
+    assert_eq!(unsafe {crate::runtime::node_file_drop(crate::runtime::node_get(text))},token,"unchanged target reuses its token");
+    tree.borrow_mut()["dropAction"]=json!(["dropFiles","trash"]);
+    tree.borrow_mut()["nativeMoveOnly"]=json!(true);
+    host.facts(json!({"changed":true}));
+    let trash=unsafe {crate::runtime::node_file_drop(crate::runtime::node_get(text))};
+    assert_ne!(trash & 0x7fff_ffff,token);
+    assert!(!host.file_drop(token,&json!(["/source"]),true),"navigation invalidates in-flight data");
+    assert!(host.file_drop(trash & 0x7fff_ffff,&json!(["/source"]),false));
+    assert_eq!(log.borrow().len(),1,"an external source cannot trigger trash");
+    assert!(host.file_drop(trash & 0x7fff_ffff,&json!(["/source"]),true));
+    assert_eq!(log.borrow().len(),2);
+    assert_eq!(log.borrow()[1]["key"],"trash");
+    assert!(host.file_drop(trash & 0x7fff_ffff,&json!([42]),true));
+    assert_eq!(log.borrow().len(),2,"invalid paths do not reach the model");
+    tree.borrow_mut().as_object_mut().unwrap().remove("dropAction");
+    host.facts(json!({"changed":false}));
+    assert_eq!(unsafe {crate::runtime::node_file_drop(crate::runtime::node_get(text))},0);
+    assert!(!host.file_drop(trash & 0x7fff_ffff,&json!(["/source"]),true));
+    drop(host);scene::destroy(mount);
+}
+
+#[test]
+fn compositor_preview_nodes_bind_sources_and_copy_documents_only_when_the_handle_changes() {
+    let mount=scene::create(scene::VIEW);
+    scene::document_fixture(41,2,1,vec![0xffff0000,0xff00ff00]);
+    let tree=Rc::new(RefCell::new(json!({"kind":"view","children":[{"kind":"media","key":"video","media":23},{"kind":"documentImage","key":"pdf","image":41}]})));
+    let mut host=Host::new(mount,Box::new(SurfaceProbe{tree:tree.clone(),log:Default::default()}),"",None);
+    host.facts(json!({}));
+    let nodes=children(children(mount)[0]);
+    unsafe {
+        let video=crate::runtime::node_get(nodes[0]);let pdf=crate::runtime::node_get(nodes[1]);
+        assert_eq!((*video).kind,scene::MEDIA);assert_eq!((*video).term,23);
+        assert_eq!((*pdf).kind,scene::IMAGE);assert!(!(*pdf).img.is_null());
+        // Replacing the service's fixture cannot change a node with the same handle:
+        // a routine sync must not copy the pixels again.
+        scene::document_fixture(41,3,1,vec![0xff0000ff;3]);
+        let image=(*pdf).img;
+        host.facts(json!({"again":true}));
+        assert_eq!((*pdf).img,image);
+        assert_eq!(scene::image_dimensions(nodes[1]),(2,1));
+        scene::document_fixture(42,3,1,vec![0xff0000ff;3]);
+        tree.borrow_mut()["children"][1]["image"]=json!(42);
+        host.facts(json!({"newHandle":true}));
+        assert_eq!(scene::image_dimensions(nodes[1]),(3,1));
+        tree.borrow_mut()["children"][0]["media"]=json!(0);
+        tree.borrow_mut()["children"][1]["image"]=json!(0);
+        host.facts(json!({"again":false}));
+        assert_eq!((*video).term,0);assert!((*pdf).img.is_null());
+    }
+    drop(host);scene::destroy(mount);
+}

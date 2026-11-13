@@ -30,6 +30,8 @@ enum Kind {
     View,
     Text,
     Image,
+    Media,
+    DocumentImage,
     Raster,
     Icon,
     Button,
@@ -43,6 +45,8 @@ fn kind_of(v: &Value) -> Kind {
         Some("view") => Kind::View,
         Some("text") => Kind::Text,
         Some("image") => Kind::Image,
+        Some("media") => Kind::Media,
+        Some("documentImage") => Kind::DocumentImage,
         Some("raster") => Kind::Raster,
         Some("appIcon" | "windowIcon") => Kind::Icon,
         Some("button") => Kind::Button,
@@ -65,6 +69,8 @@ struct Mounted {
     /// A field's placeholder as shown.
     aux: Option<String>,
     image: (String, u64),
+    bound: i32,
+    drop: (u32, Value, bool),
     spec: Value,
     /// A view's `onClick` action.
     click: Option<Value>,
@@ -91,6 +97,8 @@ impl Mounted {
             label: String::new(),
             aux: None,
             image: (String::new(), u64::MAX),
+            bound: -1,
+            drop: (0,Value::Null,false),
             spec: Value::Null,
             click: None,
             layer: 0,
@@ -196,6 +204,7 @@ pub struct Host {
     /// they were set for: another value (the app's own change) puts the caret at its end.
     /// The events of the views (node → their `events`), for the ones that bubble up to an ancestor.
     events: HashMap<i32, Value>,
+    drops: HashMap<u32, (Value,bool)>,
     /// While a pointer event is handled: where, which button and the modifiers, sent with its actions.
     pointer_info: Option<Map<String, Value>>,
     /// The view and time of the last left click, for `onDoubleClick`.
@@ -222,6 +231,7 @@ pub struct Host {
 }
 impl Drop for Host {
     fn drop(&mut self) {
+        crate::wayland::dnd_protocol::cancel_native_origin(self.mount);
         let _ = self.app.request(&json!({"cmd":"close"}));
         if !scene::alive() {
             return;
@@ -255,6 +265,7 @@ impl Host {
             tip_due: None,
             tip_view: Vec::new(),
             events: HashMap::new(),
+            drops: HashMap::new(),
             pointer_info: None,
             last_click: (0, 0.),
             capture: false,
@@ -527,7 +538,8 @@ impl Host {
         let mut m = Mounted::new(kind, key);
         let node_kind = match kind {
             Kind::Text => scene::TEXT,
-            Kind::Image | Kind::Raster => scene::IMAGE,
+            Kind::Image | Kind::Raster | Kind::DocumentImage => scene::IMAGE,
+            Kind::Media => scene::MEDIA,
             _ => scene::VIEW,
         };
         m.node = scene::create(node_kind);
@@ -554,6 +566,13 @@ impl Host {
     }
     fn update(&mut self, m: &mut Mounted, spec: &Value) {
         let style = spec["style"].clone();
+        let drop=spec.get("dropAction").filter(|a|a.as_array().is_some_and(|a|!a.is_empty())).cloned().unwrap_or(Value::Null);
+        let native_only=spec["nativeMoveOnly"]==true;
+        if drop!=m.drop.1 || native_only!=m.drop.2 {
+            let token=if drop.is_null() { 0 } else { super::next_drop_token() };
+            m.drop=(token,drop,native_only);
+            unsafe { crate::runtime::node_set_file_drop(m.node,if token!=0 && native_only { token|0x8000_0000 } else { token }); }
+        }
         m.tip = match m.kind {
             Kind::View | Kind::Text if !spec["tooltip"].is_null() => Some(self.i18n.caption(&spec["tooltip"])).filter(|t| !t.is_empty()),
             _ => None,
@@ -640,6 +659,16 @@ impl Host {
                         scene::set_image_pixels(m.node, w, h, data);
                     }
                     m.image = (id, generation);
+                }
+            }
+            Kind::Media | Kind::DocumentImage => {
+                m.style(0,style);
+                let key=if m.kind==Kind::Media {"media"} else {"image"};
+                let handle=spec[key].as_i64().and_then(|id|i32::try_from(id).ok()).unwrap_or(0).max(0);
+                if handle!=m.bound {
+                    if m.kind==Kind::Media { scene::set_media_source(m.node,handle); }
+                    else { scene::set_document_image(m.node,handle); }
+                    m.bound=handle;
                 }
             }
             Kind::Icon => {
@@ -906,8 +935,9 @@ impl Host {
         }
         self.portals.clear();
         layered(&self.root, &mut self.portals);
-        fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>, ev: &mut HashMap<i32, Value>) {
+        fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>, ev: &mut HashMap<i32, Value>, drops: &mut HashMap<u32,(Value,bool)>) {
             for m in list {
+                if m.drop.0!=0 { drops.insert(m.drop.0,(m.drop.1.clone(),m.drop.2)); }
                 if m.kind == Kind::View && m.spec["events"].is_object() {
                     ev.insert(m.node, m.spec["events"].clone());
                 }
@@ -941,7 +971,7 @@ impl Host {
                     }
                     _ => {}
                 }
-                walk(&m.children, t, b, ev);
+                walk(&m.children, t, b, ev, drops);
             }
         }
         // Keep the buckets across reconciliations: Calculator has the same
@@ -949,7 +979,8 @@ impl Host {
         self.targets.clear();
         self.buttons.clear();
         self.events.clear();
-        walk(&self.root, &mut self.targets, &mut self.buttons, &mut self.events);
+        self.drops.clear();
+        walk(&self.root, &mut self.targets, &mut self.buttons, &mut self.events, &mut self.drops);
     }
 }
 /// Interaction: pointer, wheel, keys, the refresh timer and caret/scroll-bar timers.
@@ -1063,6 +1094,17 @@ impl Host {
     fn dispatch(&mut self, action: &Value, extra: Map<String, Value>) {
         self.send(action, extra);
         self.sync();
+    }
+    /// Completed URI data only. Tokens belong to the destination/action lifetime,
+    /// so navigation or closing a window invalidates a pending drop safely.
+    pub(crate) fn file_drop(&mut self, token:u32, paths:&Value, internal_move:bool)->bool {
+        let Some((action,native_only))=self.drops.get(&token).cloned() else { return false; };
+        if native_only && !internal_move {return true;}
+        let Some(paths)=paths.as_array().filter(|p| !p.is_empty() && p.len()<=4096 && p.iter().all(Value::is_string)) else { return true; };
+        let mut extra=Map::new();
+        extra.insert("paths".into(),Value::Array(paths.clone()));
+        extra.insert("internalMove".into(),json!(internal_move));
+        self.dispatch(&action,extra); true
     }
     fn send(&mut self, action: &Value, extra: Map<String, Value>) {
         let mut input = Map::new();

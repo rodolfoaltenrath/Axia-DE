@@ -17,10 +17,26 @@ mod tests;
 pub use host::Host;
 use serde_json::Value;
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::BTreeMap,
     ffi::{c_char, CStr, CString},
 };
+/// Separate namespace from the shell adapter's tokens. Tokens are never reused:
+/// a delayed URI result cannot be redirected to a recycled scene-node ID.
+pub(crate) const DROP_TOKEN_FLAG:u32=0x4000_0000;
+thread_local! { static NEXT_DROP:Cell<u32>=const { Cell::new(0) }; }
+fn next_drop_token()->u32 {
+    NEXT_DROP.with(|next| {
+        let Some(id)=next.get().checked_add(1).filter(|id| *id<DROP_TOKEN_FLAG) else { return 0; };
+        next.set(id); DROP_TOKEN_FLAG|id
+    })
+}
+pub(crate) fn deliver_file_drop(token:u32, paths:&Value, internal_move:bool)->bool {
+    for handle in handles() {
+        if with_host(handle,|host| host.file_drop(token,paths,internal_move))==Some(true) { return true; }
+    }
+    false
+}
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
@@ -169,8 +185,9 @@ pub unsafe extern "C" fn axia_view_free(p: *mut c_char) {
 /// The result of an app effect run by the shell; the app may answer with another.
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_result(handle: u32, result: *const c_char) {
-    let result = json(result);
-    with_host(handle, |h| h.result(result));
+    let mut result = Some(json(result));
+    with_host(handle, |h| h.result(result.take().unwrap()));
+    if let Some(result)=result {crate::files::discard_native_result(&result);}
 }
 /// An action for the view's app from the shell's glue: `{"action": [cmd, key], "extra": {…}}`.
 #[no_mangle]

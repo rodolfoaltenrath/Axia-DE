@@ -459,3 +459,22 @@ fn alt_can_change_native_move_to_copy_after_drag_has_started() {
         LOG.with(|log| assert_eq!(log.borrow().native.last().unwrap()["native"], false));
     }
 }
+
+#[test]
+fn completed_native_drops_and_stale_tokens_never_reenter_the_shell_adapter() {
+    LOG.with(|log| log.borrow_mut().native.clear());
+    STATE.with(|state| {
+        let mut state=state.borrow_mut();
+        state.queue((crate::native_view::DROP_TOKEN_FLAG|123) as i32,Some(CString::new(r#"["/native"]"#).unwrap()),false);
+        state.queue(12,Some(CString::new(r#"["/legacy"]"#).unwrap()),false);
+        state.queue(0,None,false);
+    });
+    unsafe {dnd_events(delivered);}
+    LOG.with(|log| {
+        let log=log.borrow();
+        assert_eq!(log.native.len(),2,"unmounted native targets must be discarded");
+        assert_eq!(log.native[0]["token"],12);
+        assert_eq!(log.native[0]["paths"],serde_json::json!(["/legacy"]));
+        assert!(log.native[1]["paths"].is_null(),"drag-end notification is unchanged");
+    });
+}

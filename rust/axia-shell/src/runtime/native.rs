@@ -6,6 +6,7 @@ use std::ffi::{CStr, CString};
 pub const VIEW: i32 = 0;
 pub const TEXT: i32 = 1;
 pub const IMAGE: i32 = 2;
+pub const MEDIA: i32 = 6;
 const RAW: i32 = 3;
 /// A converted style value (crate::css_style), as the renderer sends it to `lord.setStyle`.
 #[derive(Clone, Debug, PartialEq)]
@@ -175,6 +176,73 @@ pub fn set_image_pixels(id: i32, width: usize, height: usize, rgba: &[u8]) {
         }
         super::node_invalidate(n);
     }
+}
+/// Bind the existing source to its compositor node; frames stay in the media
+/// helper/renderer's path and never pass through the view adapter.
+pub fn set_media_source(id: i32, source: i32) -> bool {
+    let source=source.max(0);
+    unsafe {
+        let Some(node) = super::node_get(id).as_mut().filter(|n| n.kind == MEDIA) else { return false; };
+        if node.term == source { return true; }
+        #[cfg(not(test))]
+        {
+            extern "C" { fn js_media_node(node: *mut std::ffi::c_void, source: i32); }
+            js_media_node((node as *mut Node).cast(), source.max(0));
+        }
+        #[cfg(test)]
+        { node.term = source.max(0); }
+        super::node_invalidate(node);
+        true
+    }
+}
+/// A returned document handle is copied once when it changes. The scene owns
+/// its image independently; the service lock covers only this bounded copy.
+pub fn set_document_image(id: i32, handle: i32) -> bool {
+    unsafe {
+        let Some(node) = super::node_get(id).as_mut().filter(|n| n.kind == IMAGE) else { return false; };
+        if handle <= 0 {
+            super::image::image_release(node.img.cast()); node.img = std::ptr::null_mut();
+            super::node_invalidate(node); return true;
+        }
+        document_image(handle, |width,height,pixels| {
+            let image = super::image::image_argb(node.img.cast(),width,height,pixels);
+            if image.is_null() { return false; }
+            node.img = image.cast(); super::node_invalidate(node); true
+        })
+    }
+}
+#[cfg(not(test))]
+fn document_image(handle:i32, copy:impl FnOnce(i32,i32,*const u32)->bool)->bool {
+    extern "C" {
+        fn doc_image_lock(handle:i32,width:*mut i32,height:*mut i32)->*const u32;
+        fn doc_image_unlock();
+    }
+    struct Unlock;
+    impl Drop for Unlock { fn drop(&mut self) { unsafe { doc_image_unlock(); } } }
+    let (mut width,mut height)=(0,0);
+    let pixels=unsafe { doc_image_lock(handle,&mut width,&mut height) };
+    let _unlock=Unlock;
+    !pixels.is_null() && copy(width,height,pixels)
+}
+#[cfg(test)]
+thread_local! { static DOCUMENTS:std::cell::RefCell<std::collections::HashMap<i32,(i32,i32,Vec<u32>)>>=Default::default(); }
+#[cfg(test)]
+pub(crate) fn document_fixture(handle:i32,width:i32,height:i32,pixels:Vec<u32>) {
+    DOCUMENTS.with(|images| { images.borrow_mut().insert(handle,(width,height,pixels)); });
+}
+#[cfg(test)]
+pub(crate) fn image_dimensions(id:i32)->(i32,i32) {
+    let (mut w,mut h)=(0,0);
+    unsafe {
+        if let Some(node)=super::node_get(id).as_ref() {
+            super::image::image_size(node.img.cast(),&mut w,&mut h);
+        }
+    }
+    (w,h)
+}
+#[cfg(test)]
+fn document_image(handle:i32,copy:impl FnOnce(i32,i32,*const u32)->bool)->bool {
+    DOCUMENTS.with(|images| images.borrow().get(&handle).is_some_and(|(w,h,p)| copy(*w,*h,p.as_ptr())))
 }
 /// The strings in a subtree, one per line in tree order (tests and accessibility).
 /// Unlike `node_gather_text`, which joins one TEXT node's runs, this descends views.

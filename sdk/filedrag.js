@@ -22,7 +22,7 @@ export function useFileDrop(ref, onDrop, nativeMoveOnly = false) {
   useEffect(() => {
     const id = ref.current?.id;
     if (!onDrop || !id || !api()?.dropTarget) return;
-    const token = sequence = sequence % 0x7fffffff + 1;
+    const token = sequence = sequence % 0x3fffffff + 1;
     if (!api().dropTarget(id, nativeMoveOnly ? token | 0x80000000 : token)) return;
     targets.set(token, (data) => latest.current?.(data));
     return () => {
