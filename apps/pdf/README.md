@@ -1,6 +1,7 @@
 # PDF viewer migration
 
-The window and sidebar remain React. `geometry.rs` owns page/view transforms,
+The main window remains React. The sidebar's widgets and input mount through
+the native Rust host. `geometry.rs` owns page/view transforms,
 rotated sizes, continuous layout and visible-page ranges. `cache_model.rs` owns
 width quantization, render admission/deduplication, generations, progressive
 preview selection, byte accounting and LRU eviction. `model.rs` dispatches them
@@ -32,11 +33,21 @@ positions, scroll limits, page following and bookmark expansion. Thumbnail
 scrolling uses binary search and returns only visible frames; sizes are supplied
 once per page-size/rotation change. The model flattens visible bookmark rows and
 preserves descendant expansion choices when a parent collapses. Its JS adapter
-keeps helper I/O on the host, and the React sidebar ignores late outline replies
+keeps helper I/O on the host, and the sidebar adapter ignores late outline replies
 after a document change. Resizing clamps the thumbnail offset to the new extent.
 `cache.js` retains helper promises, callbacks and
-raster handles, and applies Rust's release effects. No image or JS value enters
-the Rust model. Models and their pending metadata are independent per owner.
+raster handles, and applies Rust's release effects. Image pixels, promises and
+JS object references stay on the host. Models and their pending metadata are
+independent per owner.
+
+`sidebar_ui.rs` builds the complete sidebar tree: themed tabs, thumbnail frames,
+page numbers, outline disclosure controls, titles and localized loading/empty
+states. `sidebar.jsx` now only mounts it with the existing `shell:tree` native
+view, transports events and performs helper/cache requests. Visible thumbnails
+borrow numeric image IDs through `documentImage`; the cache retains ownership.
+The native host owns outline scrolling, including its scrollbar. A new document
+gets a fresh root key, clearing native scroll and pointer state. No SDK or C
+changes are needed for this scene.
 
 The cache preserves the previous 32-pixel quantization, 48 MiB default budget,
 80% eviction target, exemption for the just-rendered image, stale previews until
@@ -50,6 +61,8 @@ Tests can run without recompiling the compositor:
 cargo test --manifest-path rust/Cargo.toml -p axia-shell --example pdf-model \
   --target-dir build/sdk-rust --locked --offline
 node server/tests/pdf_model_test.mjs
+cargo test --manifest-path rust/Cargo.toml -p axia-shell --lib \
+  native_view::tests::pdf_sidebar --target-dir build/sdk-rust --locked --offline
 ```
 
 The Node suite builds only its Rust test model if needed; `AXIA_PDF_MODEL_BIN`
@@ -64,12 +77,15 @@ They are reference artifacts; normal tests do not regenerate them. Additional
 Rust/JS tests exercise ABI registration, model isolation, host failure cleanup,
 entry identity, malformed requests and scalar-only scrolling.
 
-Validated on 2026-11-13: 1,140 Node adapter/reference checks and 39 Rust native-host
-tests passed. The PDF application bundled successfully in memory with the real
+Validated on 2026-11-13: 1,146 Node adapter/reference checks, 41 Rust model/ABI
+tests and two native scene/input tests passed. The scene tests mount the model's
+tree in the real host, exercise localized tabs, page clicks, wheel events and
+bookmark disclosures, and check document replacement and unmount cleanup.
+The PDF application bundled successfully in memory with the real
 SDK/runtime aliases. No compositor rebuild or graphical session test was run.
 
 The compositor must eventually be rebuilt to expose the `pdf` model. This stage
-does not migrate PDF decoding/rendering, the React window or
+does not migrate PDF decoding/rendering, the main React window or
 the full application to a native Rust view.
 
 Further frozen references in `pdf_viewer.json` (216 zoom/fit cases) and
@@ -85,7 +101,7 @@ Additional tests cover collapsed descendants, malformed updates preserving the
 last valid state, independent owners, resize clamping and 100,000-page documents.
 
 The remaining React code still owns presentation, text-drag gesture capture,
-app menus, dialogs and sidebar presentation; the host executes the Rust editor's helper
+app menus and dialogs; the host executes the Rust editor's helper
 effects and mirrors its ink/draft deltas. The complete PDF
 application is therefore not yet a native Rust view.
 

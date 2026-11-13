@@ -147,3 +147,69 @@ fn long_documents_only_return_visible_thumbnails() {
         99_999
     );
 }
+
+fn nodes_of_kind<'a>(node: &'a Value, kind: &str, found: &mut Vec<&'a Value>) {
+    if node["kind"] == kind {
+        found.push(node);
+    }
+    for child in node["children"].as_array().into_iter().flatten() {
+        nodes_of_kind(child, kind, found);
+    }
+}
+#[test]
+fn native_thumbnail_tree_only_borrows_valid_visible_image_handles() {
+    let mut m = Model::default();
+    configure(&mut m);
+    request(&mut m, "viewport", json!({"height":250,"page":0}));
+    let tree = request(
+        &mut m,
+        "tree",
+        json!({"images":{"0":27,"1":-1,"2":28},"invert":true,"theme":{"accent":"#30d158"}}),
+    );
+    let mut images = Vec::new();
+    nodes_of_kind(&tree, "documentImage", &mut images);
+    assert_eq!(images.len(), 1);
+    assert_eq!(images[0]["image"], 27);
+    assert_eq!(images[0]["style"]["width"], 116.);
+    assert_eq!(tree["children"][1]["events"]["onWheel"], json!(["scroll"]));
+    let row = &tree["children"][1]["children"][0];
+    assert_eq!(row["events"]["onClick"], json!(["page", 0]));
+    assert_eq!(row["children"][0]["style"]["borderColor"], "#30d158");
+    assert_eq!(
+        row["children"][0]["children"][0]["style"]["backgroundColor"],
+        "#1b1b1f"
+    );
+    let invalid = request(
+        &mut m,
+        "tree",
+        json!({"images":{"0":2147483648_u64,"1":"bad"}}),
+    );
+    let mut images = Vec::new();
+    nodes_of_kind(&invalid, "documentImage", &mut images);
+    assert!(images.is_empty());
+}
+#[test]
+fn native_outline_has_localized_status_and_a_native_scroll_container() {
+    let mut m = Model::default();
+    let loading = request(&mut m, "tree", json!({"side":"outline","loading":true}));
+    assert_eq!(
+        loading["children"][1]["children"][0]["label"]["key"],
+        "pdf.loading"
+    );
+    let empty = request(&mut m, "tree", json!({"side":"outline"}));
+    assert_eq!(
+        empty["children"][1]["children"][0]["label"]["key"],
+        "pdf.noOutline"
+    );
+    request(
+        &mut m,
+        "outline",
+        json!({"items":[{"title":"Large page number","page":i64::MAX}]}),
+    );
+    let tree = request(&mut m, "tree", json!({"side":"outline","document":17}));
+    assert_eq!(tree["key"], "pdf-sidebar:17");
+    assert_eq!(tree["children"][1]["kind"], "scroll");
+    let mut labels = Vec::new();
+    nodes_of_kind(&tree, "text", &mut labels);
+    assert!(labels.iter().any(|n| n["label"] == "9223372036854775808"));
+}

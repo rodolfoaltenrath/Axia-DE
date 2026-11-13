@@ -5,6 +5,7 @@ mod edit_model;
 mod geometry;
 mod navigation;
 mod sidebar_model;
+mod sidebar_ui;
 mod viewer_model;
 use serde_json::{json, Value};
 

@@ -94,6 +94,11 @@ impl Sidebar {
     }
     pub(super) fn request(&mut self, input: &Value) -> Result<Value, &'static str> {
         match input["op"].as_str().unwrap_or("") {
+            "tree" => Ok(if input["side"] == "outline" {
+                super::sidebar_ui::render(&Value::Null, &self.outline(), input)
+            } else {
+                super::sidebar_ui::render(&self.thumbnails(), &Value::Null, input)
+            }),
             "configure" => {
                 let sizes = input["sizes"]
                     .as_array()

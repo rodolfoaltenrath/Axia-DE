@@ -293,4 +293,16 @@ assert.throws(() => sidebar.outline([{ title: 'Broken', kids: true }]), /pdf.inv
 assert.equal(sidebar.pick('0.0'), 3, 'invalid outline updates preserve the prior document'); checks++;
 assert.deepEqual(sidebar.outline([]).rows, []); checks++;
 assert.throws(() => sidebar.pick('0.0'), /pdf.invalidSidebar/); checks++;
+sidebar.configure([[116, 200], [116, 200]], 0);
+sidebar.viewport(250, 0);
+const nativeTree = sidebar.tree({ document: sidebar.id, side: 'thumbs', images: { 0: 97 } });
+assert.equal(nativeTree.key, `pdf-sidebar:${sidebar.id}`); checks++;
+const thumbnail = nativeTree.children[1].children[0];
+assert.equal(thumbnail.children[0].children[0].children[0].image, 97, 'native thumbnails carry opaque image IDs'); checks++;
+assert.deepEqual(thumbnail.events.onClick, ['page', 0]); checks++;
+assert.ok(!Object.hasOwn(requests.at(-1), 'sizes'), 'native scene construction reuses retained layout'); checks++;
+sidebar.outline(bookmarks);
+const nativeOutline = sidebar.tree({ side: 'outline' });
+assert.equal(nativeOutline.children[1].kind, 'scroll', 'the native host owns bookmark scrolling'); checks++;
+assert.notEqual(sidebar.id, otherSidebar.id, 'separate documents reset native widget identity'); checks++;
 console.log(`pdf-model-test: ${checks} checks passed (frozen references + native adapters + helper lifecycle)`);
