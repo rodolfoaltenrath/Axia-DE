@@ -252,6 +252,8 @@ impl Drop for Output {
 struct Event {
     drop: bool,
     json: CString,
+    token:u32,
+    internal:bool,
 }
 #[derive(Clone, Copy, Default)]
 struct Press {
@@ -332,6 +334,12 @@ impl State {
             return;
         };
         let drop = paths.is_some();
+        if token as u32 & crate::native_view::DROP_TOKEN_FLAG!=0 {
+            if let Some(paths)=paths {
+                *slot=Some(Event {drop:true,json:paths,token:token as u32,internal});
+            }
+            return;
+        }
         let paths = paths
             .as_ref()
             .map_or("null", |p| p.to_str().unwrap_or("null"));
@@ -339,7 +347,7 @@ impl State {
             "{{\"token\":{token},\"native\":{internal},\"paths\":{paths}}}"
         ))
         .ok()
-        .map(|json| Event { drop, json });
+            .map(|json| Event { drop, json, token:token as u32, internal });
     }
     fn begin(&mut self) -> Option<u64> {
         if self.display.is_null()
@@ -960,6 +968,16 @@ pub unsafe extern "C" fn dnd_start_files(
         1
     })
 }
+/// Native view teardown may run after this thread's protocol state was destroyed.
+/// Cancel only the owning source, without invoking an extern-C entrypoint at exit.
+pub(crate) fn cancel_native_origin(node:i32) {
+    let _=STATE.try_with(|state| {
+        let Ok(mut state)=state.try_borrow_mut() else {return;};
+        if let Some(id)=state.active.filter(|id|state.session(*id).is_some_and(|s|s.origin_node==node)) {
+            unsafe {state.finish(id,false);}
+        }
+    });
+}
 #[no_mangle]
 pub extern "C" fn dnd_active() -> i32 {
     STATE.with(|s| i32::from(s.borrow().active.is_some()))
@@ -1034,6 +1052,12 @@ pub unsafe extern "C" fn dnd_events(callback: EventFn) {
         std::array::from_fn::<_, 16, _>(|i| state.events[i].take())
     });
     for e in events.into_iter().flatten() {
+        if e.drop && e.token & crate::native_view::DROP_TOKEN_FLAG!=0 {
+            if let Ok(paths)=serde_json::from_slice::<serde_json::Value>(e.json.to_bytes()) {
+                crate::native_view::deliver_file_drop(e.token,&paths,e.internal);
+            }
+            continue;
+        }
         callback(
             0,
             if e.drop { c"filedrop" } else { c"dragend" }.as_ptr(),

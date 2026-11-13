@@ -6,6 +6,7 @@ mod ffi;
 mod model;
 mod native;
 mod native_app;
+mod native_resources;
 pub mod operations;
 mod pdf_thumbnails;
 pub mod policy;
@@ -17,6 +18,7 @@ mod video_thumbnails;
 mod volumes;
 
 pub(crate) use native_app::FilesView;
+pub(crate) use native_resources::discard_result as discard_native_result;
 
 pub type Result<T> = std::result::Result<T, String>;
 
