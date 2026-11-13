@@ -14,6 +14,9 @@ import { print } from '../sdk/print.js';
 import { documentServices } from './native_doc_services.js';
 import { scanServices } from './native_scan_services.js';
 import { fileServices } from './native_fs_services.js';
+import { mediaServices } from './native_media_services.js';
+import { media, userDirs } from '../sdk/media.js';
+import { soundState } from '../sdk/sound.js';
 
 let followers = 0;
 const watches = new Map();
@@ -28,6 +31,7 @@ const methods = {
   ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),
   ...fileServices(fs),
   ...scanServices(print),
+  ...mediaServices({ media, userDirs, soundState, events: owner => bridge.events(owner) }),
   'logs.sources': { run: () => logs.sources() },
   'logs.files': { run: () => logs.files() },
   'logs.query': { run: ([query]) => logs.query(query) },

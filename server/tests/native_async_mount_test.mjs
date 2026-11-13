@@ -20,9 +20,11 @@ const stubs={
     return React.createElement('view');
   }`,
   'logs.js':`export const logs={sources:()=>({user:1,system:false}),files:()=>[],query:()=>[],system:()=>[],tail:()=>'',follow(){},onChange:()=>()=>{}};`,
-  'fs.js':['write','stat','mkdir','copy','jobs','forgetJob','trash'].map(name=>`export const ${name}=()=>null;`).join('\n'),
+  'fs.js':['write','stat','mkdir','copy','jobs','forgetJob','trash','list','rename'].map(name=>`export const ${name}=()=>null;`).join('\n'),
   'doc.js':['fontInfo','fontSample','fontGrid','releaseImage','decodeImage','convertImage','pdfThumb'].map(name=>`export const ${name}=()=>null;`).join('\n'),
   'print.js':`export const print={discover:()=>({scanners:[]}),scanCaps:()=>({}),scan:()=>({}),open:()=>null};`,
+  'media.js':`export const media={};export const userDirs=()=>({music:'/home/test/Music'});`,
+  'sound.js':`export const soundState={get:()=>({sources:[]}),subscribe:()=>()=>{}};`,
 };
 const result=await build({stdin:{resolveDir:root,contents:`
   import React from 'react'; import {render} from '@lordos/runtime';
@@ -36,7 +38,7 @@ const result=await build({stdin:{resolveDir:root,contents:`
   export async function windows(ids){await flush();update(ids);await flush();}
 `},bundle:true,write:false,format:'esm',platform:'node',define:{'process.env.NODE_ENV':'"production"'},alias:{'@lordos/runtime':path.join(root,'runtime/index.js')},plugins:[{
   name:'native-endpoints',setup(b){
-    b.onResolve({filter:/sdk\/(nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
+    b.onResolve({filter:/sdk\/(nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
   },
 }]});

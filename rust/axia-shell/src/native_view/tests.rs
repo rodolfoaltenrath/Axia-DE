@@ -71,6 +71,25 @@ fn styles_expand_shorthands_and_colors_like_style_js() {
     assert_eq!(d.len(), 2);
 }
 
+#[test]
+fn media_control_can_keep_its_cadence_in_an_unfocused_window() {
+    struct Timed(bool);
+    impl NativeApp for Timed {
+        fn refresh_ms(&self) -> Option<f64> { Some(50.) }
+        fn background_refresh_ms(&self) -> Option<f64> { self.0.then_some(100.) }
+        fn request(&mut self, _: &Value) -> Value { json!({"tree":{"kind":"view"}}) }
+    }
+    for active in [false,true] {
+        let mount=scene::create(scene::VIEW);
+        let mut host=Host::new(mount,Box::new(Timed(active)),"",None);
+        host.facts(json!({"focused":false}));
+        let remaining=host.deadline().unwrap()-super::host::now_ms();
+        if active { assert!(remaining<=100. && remaining>0.,"{remaining}"); }
+        else { assert!(remaining>1900.,"{remaining}"); }
+        drop(host);scene::destroy(mount);
+    }
+}
+
 struct Locales(std::path::PathBuf);
 impl Drop for Locales {
     fn drop(&mut self) {

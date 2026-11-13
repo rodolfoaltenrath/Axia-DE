@@ -25,6 +25,8 @@ pub mod logs;
 pub mod fonts;
 #[path = "../apps/scanner/manifest.rs"]
 pub mod scanner;
+#[path = "../apps/recorder/manifest.rs"]
+pub mod recorder;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -39,7 +41,8 @@ pub fn manifests() -> serde_json::Value {
         store::manifest(),
         logs::manifest(),
         fonts::manifest(),
-        scanner::manifest()
+        scanner::manifest(),
+        recorder::manifest()
     ])
 }
 #[cfg(test)]
