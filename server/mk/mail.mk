@@ -2,8 +2,8 @@
 # speaks IMAP, SMTP, CalDAV and CardDAV; with lord-sessiond it is the only binary linking OpenSSL.
 # MIME and charsets, the WebDAV XML reader, the HTML sanitizer, iCalendar and vCard are Rust
 # (rust/axia-mail, docs/RUST-MAIL.md) behind the unchanged src/mail/*.h, linked through
-# $(MAIL_CODEC_LIB). The IMAP response parser stays C; the TZif reader is Rust too (axia-codecs/src/tzif.rs).
-MAIL_PARSE := src/mail/imapp.c
+# $(MAIL_CODEC_LIB). The IMAP response parser (rust/axia-mail/src/imapp.rs) and the TZif reader (axia-codecs/src/tzif.rs) are Rust too.
+MAIL_PARSE :=
 MAIL_HDR := $(wildcard src/mail/*.h) src/doc/wire.h src/sec/json.h src/ui/tzif.h
 MAIL_TEST_SRC := tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c
 # parsers: IMAP, MIME, HTML sanitizer, iCalendar, vCard and XML, with a small fuzzer (tests/mail_test.c)
