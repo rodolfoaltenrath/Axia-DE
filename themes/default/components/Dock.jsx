@@ -12,7 +12,7 @@ import {
   NativeView, View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
   registerDockTarget, dockDragJustEnded, refreshTrash, Layer, nativeAnim, whenAnimDone,
 } from '@lordos/sdk';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 const GAP = 8, PAD = 9, MARGIN = 6;
 const REORDER_MS = 150;       // neighbours sliding aside while dragging
@@ -24,6 +24,12 @@ export const dockThickness = (size) => size + PAD * 2 + MARGIN + 4;
 
 const launcherIcon = Object.freeze({ id: 'shell:dock-launcher' });
 const trashIcon = Object.freeze({ id: 'shell:dock-trash' });
+// One icon of the bar. The Dock renders on every pointer move over it (magnification) and on every
+// hover change; memoized, an icon whose component and size didn't change isn't rendered again: with
+// magnification only the few icons near the pointer change size.
+const BarIcon = memo(function BarIcon({ Icon, size }) { return <Icon size={size} />; });
+const BarTrash = memo(function BarTrash({ size, full, dark }) { return <TrashIcon size={size} full={full} dark={dark} />; });
+
 export function LaunchpadIcon({ size }) {
   return <NativeView manifest={launcherIcon} icon={size || 32} />;
 }
@@ -331,14 +337,14 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
               opacity: isPressed(i) ? feedback.pressed.opacity : 1,
               backgroundColor: trashLit ? 'rgba(255,255,255,0.22)' : 'transparent' }}>
             {hoverPlate(i)}
-            <TrashIcon size={sizes[i]} full={trashFull} dark={t.mode === 'dark'} />
+            <BarTrash size={sizes[i]} full={trashFull} dark={t.mode === 'dark'} />
           </View>
         ) : (
           <View key={app.id} onClick={() => { if (!dockDragJustEnded()) onOpen(app.id); }} onContextMenu={() => onContext?.(app.id, anchor(i))}
             onMouseDown={(e) => { if (!e.button) { setPressed(app.id); beginDockDrag({ id: app.id, Icon: app.Icon, x: e.x, y: e.y, source: 'dock' }); } }}
             style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i], opacity: isPressed(i) ? feedback.pressed.opacity : 1 }}>
             {hoverPlate(i)}
-            <app.Icon size={sizes[i]} />
+            <BarIcon Icon={app.Icon} size={sizes[i]} />
             {running.includes(app.id) && (
               <View style={{ position: 'absolute', ...dot(sizes[i]), width: 4, height: 4, borderRadius: 2, backgroundColor: dotColor }} />
             )}
