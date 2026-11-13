@@ -60,7 +60,7 @@ When installing, axia-server rejects the package if it finds:
 - an invalid `manifest.json`, or a missing `app.js`.
 
 The package is written to a new folder and replaces the previous version with a `rename`: if
-something fails halfway, the installed version stays as it was. Code: `server/src/lpk.c`.
+something fails halfway, the installed version stays as it was. Code: `rust/axia-codecs/src/lpk.rs`.
 
 ## Creating an app
 

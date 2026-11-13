@@ -544,7 +544,7 @@ LordOS's log viewer.
 - A virtualized list (only the visible rows are drawn); at most 3000 entries per query and
   10,000 kept while following (older ones are dropped). The status bar shows counts and query time.
 
-### Our own journal reader (`server/src/logs/journal.c`)
+### Our own journal reader (`rust/axia-codecs/src/journal.rs`)
 
 No libsystemd and no `journalctl`. The files are read with `pread` and a small block cache, never
 `mmap`: journald can shrink or rewrite a file and `mmap` would turn that into `SIGBUS` inside

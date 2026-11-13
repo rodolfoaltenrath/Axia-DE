@@ -1,4 +1,4 @@
-/* journal_test.c — test for our own journal reader (src/logs/journal.c, Logs app).
+/* journal_test.c — test for our own journal reader (rust/axia-codecs/src/journal.rs, Logs app).
  *
  * Builds synthetic journal files with a small writer (normal and compact mode, repeated fields,
  * LZ4, XZ and flagged ZSTD), reads them back and compares; merges two files with filters; and
