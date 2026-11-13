@@ -10,6 +10,7 @@ import { LAYERS, shellLayers } from './layers.js';
 import { filesEffect } from './nativefiles.js';
 import { barEffect } from './nativemenubar.js';
 import { launcherBridge } from './nativelauncher.js';
+import { treeBridge } from './nativetree.js';
 import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
@@ -60,6 +61,11 @@ function runner(handle, manifest, winId, node = () => 0) {
   return (effect) => {
     // a Files window: its own effects (apps/files/native_app.rs), host ones too
     if (manifest.id === 'files' && !effect.host) { try { filesEffect(effect, { handle, winId, node, act }); } catch (e) { console.error('native files:', e); } return; }
+    // a tree the shell carries (the Spotlight panel): its events go back to whoever owns it
+    if (manifest.id === 'shell:tree' && !effect.host) {
+      try { treeBridge.perform?.(effect); } catch (e) { console.error('native tree:', e); }
+      return;
+    }
     // the launcher: its effects are run by rustlauncher.jsx (sdk/nativelauncher.js)
     if (manifest.id === 'shell:launcher' && !effect.host) {
       try { launcherBridge.perform?.(effect.effect, { handle, node, act }); } catch (e) { console.error('native launcher:', e); }

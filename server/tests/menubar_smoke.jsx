@@ -8,6 +8,8 @@ import { configureWindows } from '../../sdk/windows.js';
 import { MenuBar } from '../../themes/default/components/MenuBar.jsx';
 import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
 import { RustLauncher } from '../../sdk/rustlauncher.jsx';
+import { SpotlightPanel } from '../../sdk/rustsearch.jsx';
+import { spotlight } from '../../sdk/search.js';
 
 const dump = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(handle + ': ' + t.replace(/\n/g, ' | ')); } return out.join(' // '); };
 const check = (ok, message) => { if (!ok) throw new Error('menu bar smoke: ' + message + ' [' + dump() + ']'); };
@@ -41,6 +43,7 @@ function Harness() {
         controls: [{ key: 'close', color: '#ff5f57', glyph: '×' }],
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
         onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
+    h(SpotlightPanel),
     showLauncher && h(RustLauncher, { mode: 'flow', t: theme, area: { x: 0, y: 0, w: 1000, h: 700 }, onOpen: (id) => { opened.push(id); }, onClose: () => { closed++; } }));
 }
 const lines = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(...t.split('\n')); } return out; };
@@ -78,7 +81,20 @@ async function run() {
   press(find('Smoke App'));
   check(await until(() => opened.includes('smoke-app')), 'a click on an app opens it');
   console.log('launcher integration: passed');
+  // the Spotlight: the session is JS, its tree is drawn by Rust; the arrows reach it, Escape closes it
+  setLauncher(false);
+  await sleep(200);
+  spotlight.open();
+  await sleep(600);
+  check(!!find('Search apps, files, settings, math…'), 'the Spotlight shows its search field');
+  check(lord.nativeViews.key('ArrowDown', '', 0) === true, 'the field passes the arrows on');
+  for (const ch of ['2', '+', '2']) { check(lord.nativeViews.key(ch, ch, 0) === true, 'the field takes ' + ch); globalThis.__lordNativeView(); await sleep(100); }   // the shell drains the effects after each key
+  check(await until(() => lines().some((l) => l.includes('4'))), 'a typed sum comes back from the search as a result');
+  check(lord.nativeViews.key('Escape', '', 0) === true, 'the field takes Escape');
+  globalThis.__lordNativeView();
+  check(await until(() => !lines().some((l) => l.includes('Esc close'))), 'and Escape closes the panel');
+  console.log('spotlight integration: passed');
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
-settings.set({ menuBarNativeView: true, launcherNativeView: true });
+settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true });
 render(h(Harness));
