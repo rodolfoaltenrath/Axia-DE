@@ -1,4 +1,4 @@
-/* qr_test.c — our own QR codes (src/vault/qr.c):
+/* qr_test.c — our own QR codes (rust/axia-codecs/src/qr.rs, the C ABI of src/vault/qr.h):
  *   1. known answers: matrices generated with segno (tests/qr/qr_ref.h), with the mask
  *      chosen by the penalty score and, for large versions, with a fixed mask (hash);
  *   2. round trip: encode → draw (scale 2–8, inverted, rotated, noise, blur) → decode;
