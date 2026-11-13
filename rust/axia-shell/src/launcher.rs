@@ -7,6 +7,7 @@ mod session_model;
 mod smart_model;
 mod ui;
 mod unicode;
+pub(crate) fn normalize_nfc(text: &str) -> String { unicode::nfc(text) }
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::ffi::{c_char, CStr, CString};

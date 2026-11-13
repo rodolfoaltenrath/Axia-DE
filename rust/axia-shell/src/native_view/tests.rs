@@ -13,6 +13,26 @@ use std::{cell::RefCell, rc::Rc};
 mod pdf_sidebar;
 
 #[test]
+fn idle_native_views_receive_height_only_resizes_without_a_polling_timer(){
+    struct Size(Rc<RefCell<Vec<f64>>>);
+    impl NativeApp for Size {
+        fn request(&mut self,input:&Value)->Value{
+            if input["cmd"]!="sync" {return json!({});}
+            self.0.borrow_mut().push(input["context"]["height"].as_f64().unwrap());
+            json!({"tree":{"kind":"view","style":{"flex":1}}})
+        }
+    }
+    let sizes=Rc::new(RefCell::new(vec![]));let mount=scene::create(scene::VIEW);
+    unsafe{let n=crate::runtime::node_get(mount);(*n).w=640.;(*n).h=480.;}
+    let mut host=Host::new(mount,Box::new(Size(sizes.clone())),"",None);host.facts(json!({}));
+    assert!(host.deadline().is_none());
+    unsafe{(*crate::runtime::node_get(mount)).h=720.;}
+    host.tick(1000.);host.tick(2000.);
+    assert_eq!(*sizes.borrow(),vec![480.,720.]);
+    drop(host);scene::destroy(mount);
+}
+
+#[test]
 fn styles_expand_shorthands_and_colors_like_style_js() {
     assert_eq!(color(&json!("#0a84ff")), 0xff0a84ff);
     assert_eq!(color(&json!("#0000001f")), 0x1f000000);

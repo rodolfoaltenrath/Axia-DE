@@ -158,6 +158,30 @@ The arrows go to the next one; Space or Esc close it.
 
 ## Fonts (`apps/fonts`)
 
+The application now consists entirely of Rust sources: `mod.rs` owns its state
+and helper/file-job sequencing, `ui.rs` builds the native scene, `blocks.rs` carries
+the same Unicode blocks, and `manifest.rs` registers the compiled app. The window,
+icon, family/style collections, search, samples, size slider, character selection,
+metadata and install/remove controls no longer use app JSX.
+
+The shared `runtime/native_font_services.js` invokes the same confined SDK APIs.
+Image IDs belong to the window lease in `runtime/native_async.js`: Rust explicitly
+releases replaced bitmaps; closing the window releases delivered and pending
+images, and cancelled/late results cannot leak or replace another font. Metadata,
+samples and grids carry separate generations. Copy jobs must finish successfully
+before installation is reported; removal touches only user-owned font paths and
+trashes each collection file once even when it has multiple faces.
+
+The character grid adapts to the window width, and all supported Unicode blocks
+and sample rows can scroll. Native views now notify apps of height-only resizes,
+so an idle virtualized family list does not retain stale viewport limits.
+
+Validation: `cargo test --manifest-path rust/Cargo.toml -p axia-shell --lib fonts_app::`
+and `node server/tests/native_async_test.mjs`. Tests include a real native-host
+interaction flow and 180 frozen character-chunk scenarios from the previous JS at
+`feca2c61` (`rust/axia-shell/tests/fixtures/fonts_chars.json`). The compositor and
+actual helper graphics are reserved for the final desktop validation.
+
 - **Collections:** all, the user's, monospaced and color, with search by family.
 - **Sample** with whatever text you type and a size from 8 to 120 px, and the alphabet in four
   sizes. Each style of the family is chosen at the top.

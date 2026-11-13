@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createNativeAsync } from '../../runtime/native_async.js';
+import { fontServices } from '../../runtime/native_font_services.js';
 const pending = [], disposed = [], stopped = [], events = [];
 const bridge = createNativeAsync({
   wait: { run(args, owner) { return new Promise((resolve, reject) => pending.push({ resolve, reject, owner })); }, dispose(value) { disposed.push(value); } },
@@ -56,4 +57,31 @@ assert.deepEqual(bridge.take(3, [discarded]), []);
 for (let i = 0; i < 32; i++) bridge.start(3, 'wait');
 assert.throws(() => bridge.start(3, 'wait'), /tooManyRequests/);
 bridge.close(3); await flush();
+const renders = [], releasedImages = [];
+const fontBridge = createNativeAsync(fontServices({
+  fs: {}, list: () => [], fontInfo: () => ({}),
+  fontSample: () => new Promise(resolve => renders.push(resolve)),
+  fontGrid: () => new Promise(resolve => renders.push(resolve)),
+  releaseImage: id => releasedImages.push(id),
+}));
+const capabilities = ['fonts.sample', 'fonts.grid', 'fonts.release'];
+fontBridge.open(10, capabilities);
+const sample = fontBridge.start(10, 'fonts.sample', []); await flush();
+renders.shift()({ image: 101, w: 100, h: 20 }); await flush();
+assert.equal(fontBridge.take(10, [sample])[0].value.image, 101);
+assert.deepEqual(releasedImages, [], 'delivered images remain owned by their window');
+const release = fontBridge.start(10, 'fonts.release', [[101]]); await flush(); fontBridge.take(10, [release]);
+assert.deepEqual(releasedImages, [101]);
+const grid = fontBridge.start(10, 'fonts.grid', []); await flush();
+renders.shift()({ image: 102, w: 640, h: 40 }); await flush();
+fontBridge.take(10, [grid]); fontBridge.close(10);
+assert.deepEqual(releasedImages, [101, 102], 'closing disposes delivered images too');
+fontBridge.open(10, capabilities);
+const stale = fontBridge.start(10, 'fonts.sample', []); await flush();
+fontBridge.take(10, [], [stale]); renders.shift()({ image: 103, w: 100, h: 20 }); await flush();
+assert.deepEqual(releasedImages, [101, 102, 103], 'discarding a pending image releases it on arrival');
+const closing = fontBridge.start(10, 'fonts.sample', []); await flush(); fontBridge.close(10);
+renders.shift()({ image: 104, w: 100, h: 20 }); await flush();
+assert.deepEqual(releasedImages, [101, 102, 103, 104], 'an image arriving after close is released exactly once');
+assert.deepEqual(fontBridge.take(10, [closing]), []);
 console.log('native-async-test: ownership, cancellation, errors, capabilities and event delivery passed');
