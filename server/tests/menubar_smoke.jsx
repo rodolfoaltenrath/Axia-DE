@@ -1,11 +1,13 @@
 // Real QuickJS -> Rust menu bar view -> compositor, in a private headless session: the bar's
 // menus are a native view (menuBarNativeView), a click opens one and an item runs in JS.
-import { createElement as h, useEffect } from 'react';
+import { createElement as h, useEffect, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { settings } from '../../sdk/settings.js';
+import { configureWindows } from '../../sdk/windows.js';
 import { MenuBar } from '../../themes/default/components/MenuBar.jsx';
 import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
+import { RustLauncher } from '../../sdk/rustlauncher.jsx';
 
 const dump = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(handle + ': ' + t.replace(/\n/g, ' | ')); } return out.join(' // '); };
 const check = (ok, message) => { if (!ok) throw new Error('menu bar smoke: ' + message + ' [' + dump() + ']'); };
@@ -24,9 +26,12 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
-let launchpad = 0, maxes = 0, acts = [];
+let launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
+const opened = [];
 const drags = [];
 function Harness() {
+  const [launcher, setShow] = useState(false);
+  showLauncher = launcher; setLauncher = setShow;
   useEffect(() => { setTimeout(() => run().catch((e) => { console.error(e); }), 150); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
     h(MenuBar, { t: theme, height: 28, focused: null, onLaunchpad: () => { launchpad++; }, onControlCenter: () => {}, controlCenter: false,
@@ -35,7 +40,8 @@ function Harness() {
       h(NativeTitleBar, { id: 'w1', title: 'Smoke window', focused: true, height: 40, chrome: null,
         controls: [{ key: 'close', color: '#ff5f57', glyph: '×' }],
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
-        onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })));
+        onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
+    showLauncher && h(RustLauncher, { mode: 'flow', t: theme, area: { x: 0, y: 0, w: 1000, h: 700 }, onOpen: (id) => { opened.push(id); }, onClose: () => { closed++; } }));
 }
 const lines = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(...t.split('\n')); } return out; };
 async function run() {
@@ -61,6 +67,18 @@ async function run() {
   press(find('Smoke window')); press(find('Smoke window'));
   check(await until(() => maxes >= 1), 'a double press on the title bar zooms');
   console.log('title bar integration: passed');
+  // the launcher: the grid of apps drawn by Rust, opened and closed by the shell
+  setLauncher(true);
+  await sleep(600);
+  check(await until(() => find('Smoke App')), 'the launcher lists the apps');
+  check(find('Search') > 0, 'with its search field');
+  check(lord.nativeViews.key('Escape', '', 0) === true, 'the search field has the focus and takes Escape');
+  globalThis.__lordNativeView();
+  check(await until(() => closed >= 1), 'Escape closes the launcher');
+  press(find('Smoke App'));
+  check(await until(() => opened.includes('smoke-app')), 'a click on an app opens it');
+  console.log('launcher integration: passed');
 }
-settings.set({ menuBarNativeView: true });
+configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
+settings.set({ menuBarNativeView: true, launcherNativeView: true });
 render(h(Harness));

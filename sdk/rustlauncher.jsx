@@ -14,6 +14,8 @@ import { searchEverything } from './search.js';
 import { session } from './index.js';
 import { wm } from './windows.js';
 import { useSystemInfo } from './system.js';
+import { NativeView } from './nativeview.js';
+import { NATIVE_LAUNCHER, launcherBridge } from './nativelauncher.js';
 
 export const launcherPlacement = (position, alignment, display = mainDisplay()) =>
   launcherRequest({ op: 'placement', position, alignment, display, rtl: direction() === 'rtl' });
@@ -57,7 +59,7 @@ function Widget({ node, host }) {
   }
 }
 
-export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = launchApp, onClose, isOnBar = () => false, Menu = DefaultMenu }) {
+function ReactLauncher({ mode = 'flow', t: theme, area, box, onOpen = launchApp, onClose, isOnBar = () => false, Menu = DefaultMenu }) {
   useState(refreshApps);                // apps installed since the last look show up at once
   const apps = useLauncherApps();
   const [prefs] = useSettings();
@@ -120,4 +122,43 @@ export function RustLauncher({ mode = 'flow', t: theme, area, box, onOpen = laun
   }), []);
   useEffect(() => () => { live.current = false; searchLease.current?.close(); searchLease.current = null; launcherRequest({ op: 'close', id: id.current }); }, []);
   return h(Widget, { node: snapshot.tree, host: { send, root, live, id, results, popups, Menu, theme: themeRef } });
+}
+
+// "launcherNativeView": true in settings.json draws the grid of apps (flow mode) in Rust.
+function NativeLauncher({ area, box, onOpen = launchApp, onClose }) {
+  useState(refreshApps);                // apps installed since the last look show up at once
+  const apps = useLauncherApps();
+  useSettings();                        // the pins in the Dock live in the settings
+  const info = useSystemInfo(60000);
+  const latest = useRef(null);
+  latest.current = { onOpen, onClose };
+  const at = box ? { x: box.left, y: box.top, w: box.width, h: box.height } : area;
+  // what the Dock says of each app, for its menu: its id there, if it is pinned and if it can leave
+  const dockFacts = {};
+  for (const app of apps) dockFacts[app.id] = { id: dockIdOf(app), pinned: dock.isPinned(app), removable: dock.canRemove(app) };
+  launcherBridge.perform = (effect, { node, act }) => {
+    const app = launcherApp(effect.id);
+    switch (effect.type) {
+      case 'close': latest.current.onClose(); break;
+      case 'open': latest.current.onOpen(effect.id); break;
+      case 'drag': if (app) {
+        const [ox, oy] = lord.getLayout(node());
+        beginDockDrag({ id: dockIdOf(app), Icon: app.Icon, x: ox + effect.x, y: oy + effect.y, source: 'launcher', onStart: () => act(['dragStarted']) });
+      } break;
+      case 'dock': if (app) (effect.pin ? dock.pin(app) : dock.unpin(app)); break;
+      case 'settings': settings.set(effect.patch); break;
+      case 'userSettings': wm.open('settings', { args: { section: 'users' } }); break;
+      case 'session': ({ quit: session.quit, lock: session.lock, switchUser: session.switchUser,
+        restart: session.restart, shutdown: session.shutdown })[effect.action]?.(); break;
+    }
+  };
+  return h(NativeView, { manifest: NATIVE_LAUNCHER,
+    args: { mode: 'flow', info: { fullName: info.fullName, user: info.user }, session: { managed: session.managed(), canPower: session.canPower() }, dock: dockFacts },
+    style: { position: 'absolute', left: at?.x ?? 0, top: at?.y ?? 0, width: at?.w ?? 0, height: at?.h ?? 0 } });
+}
+
+export function RustLauncher(props) {
+  const [prefs] = useSettings();
+  const native = prefs.launcherNativeView === true && (props.mode || 'flow') === 'flow';
+  return h(native ? NativeLauncher : ReactLauncher, props);
 }
