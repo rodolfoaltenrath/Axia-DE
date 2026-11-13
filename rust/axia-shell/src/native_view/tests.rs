@@ -901,3 +901,50 @@ fn a_view_takes_its_hover_style_and_a_layer_is_dismissed_by_a_press_outside() {
     scene::destroy(mount);
     scene::destroy(outside);
 }
+
+#[test]
+fn a_menu_node_is_drawn_in_the_layer_acts_on_its_rows_and_is_dismissed() {
+    struct Pop(Rc<RefCell<Vec<Value>>>);
+    impl NativeApp for Pop {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                return json!({"tree":{"kind":"view","children":[
+                    {"kind":"text","label":"Window"},
+                    {"kind":"menu","x":10,"y":20,"events":{"onDismiss":["closeContext"]},
+                     "items":[{"label":"Open","action":["open"]},"-",{"label":"Trash","action":["trash"],"disabled":true}]}]}});
+            }
+            self.0.borrow_mut().push(input.clone());
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let bg = |n: i32| unsafe { (*crate::runtime::node_get(n)).s.bg };
+    let mount = scene::create(scene::VIEW);
+    let layer = scene::create(scene::VIEW);
+    let outside = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Pop(log.clone())), "", None);
+    host.facts(json!({"layers":{"popover":layer}}));
+    let open = node_with_text(layer, "Open");
+    assert_ne!(open, 0, "the menu's rows are in the layer");
+    let row = scene::parent(open);
+    host.pointer("move", row, 1., 1., 0);
+    assert_eq!(bg(row), 0xff0a_84ff, "an enabled row lights up with the accent");
+    host.pointer("down", row, 1., 1., 0);
+    host.pointer("up", row, 1., 1., 0);
+    assert!(log.borrow().iter().any(|v| v["cmd"] == "open"), "a click on a row runs its action");
+    assert!(log.borrow().iter().any(|v| v["cmd"] == "menuHover"), "and the app hears about the hover");
+    let trash = scene::parent(node_with_text(layer, "Trash"));
+    host.pointer("move", trash, 1., 1., 0);
+    host.pointer("down", trash, 1., 1., 0);
+    host.pointer("up", trash, 1., 1., 0);
+    assert!(!log.borrow().iter().any(|v| v["cmd"] == "trash"), "a disabled row does nothing");
+    host.pointer("down", outside, 1., 1., 0);
+    assert!(log.borrow().iter().any(|v| v["cmd"] == "closeContext"), "a press outside closes it");
+    drop(host);
+    scene::destroy(layer);
+    scene::destroy(mount);
+    scene::destroy(outside);
+}
