@@ -1255,3 +1255,24 @@ fn a_field_passes_its_listed_keys_to_the_app_and_edits_with_the_rest() {
     drop(host);
     scene::destroy(mount);
 }
+
+#[test]
+fn captions_format_numbers_sizes_parts_and_uppercase_like_the_spotlight() {
+    let dir = locales();
+    let mut i = I18n::new(dir.0.to_str().unwrap(), None);
+    i.decimal = ",".into();
+    i.group = ".".into();
+    assert_eq!(i.caption(&json!({"number":1234.5,"digits":2})), "1.234,5");
+    assert_eq!(i.caption(&json!({"number":4,"digits":3})), "4");
+    assert_eq!(i.caption(&json!({"number":-0.25,"digits":2})), "-0,25");
+    assert_eq!(i.caption(&json!({"number":-0.001,"digits":2})), "0", "a negative that rounds to zero has no sign");
+    assert_eq!(i.caption(&json!({"number":1234567,"digits":0})), "1.234.567");
+    assert_eq!(i.caption(&json!({"size":512})), "512 B");
+    assert_eq!(i.caption(&json!({"size":1536})), "1,5 KB");
+    assert_eq!(i.caption(&json!({"size":3.0*1048576.})), "3 MB");
+    assert_eq!(i.caption(&json!({"parts":["a",{"number":2,"digits":0}," b"]})), "a2 b");
+    assert_eq!(i.caption(&json!({"upper":"ab"})), "AB");
+    i.group = "".into();
+    i.decimal = ".".into();
+    assert_eq!(i.caption(&json!({"number":1234.5,"digits":1})), "1234.5");
+}

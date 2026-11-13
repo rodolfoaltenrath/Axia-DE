@@ -335,6 +335,7 @@ impl Host {
         }
         self.facts = facts;
         self.i18n.lang = self.facts["lang"].as_str().unwrap_or("en").to_owned();
+        self.i18n.group = self.facts["context"]["group"].as_str().unwrap_or(",").to_owned();
         self.i18n.decimal = self.facts["context"]["decimal"]
             .as_str()
             .unwrap_or(".")
