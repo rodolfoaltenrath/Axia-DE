@@ -7,7 +7,7 @@
  *
  * Replies with one LOG per entry (JSON from jentry_json, with the message cut so it fits in one
  * protocol line) and finally OK <count>. Reads the system*.journal* files with our own reader
- * (logs/journal.c): it runs neither journalctl nor any other program. The paths don't come from
+ * (rust/axia-codecs/src/journal.rs): it runs neither journalctl nor any other program. The paths don't come from
  * the user: they come from /etc/machine-id and journald's fixed names. */
 #include "logs_admin.h"
 #include "journal.h"

@@ -1,4 +1,4 @@
-/* lpk.h — LordOS native app packages (.lpk): read, install, list and remove (see lpk.c). */
+/* lpk.h — LordOS native app packages (.lpk): read, install, list and remove (Rust: rust/axia-codecs/src/lpk.rs). */
 #ifndef LORD_LPK_H
 #define LORD_LPK_H
 

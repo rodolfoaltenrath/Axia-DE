@@ -1,4 +1,4 @@
-/* journal.h — our own reader for systemd journal files (see journal.c and docs/SYSTEM.md,
+/* journal.h — our own reader for systemd journal files (Rust: rust/axia-codecs/src/journal.rs; docs/SYSTEM.md,
  * «Logs»). No libsystemd: files are read with pread and every offset is validated, so a
  * broken or truncated file can't bring axia-server down. */
 #ifndef LORD_LOGS_JOURNAL_H

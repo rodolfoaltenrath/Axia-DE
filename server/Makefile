@@ -81,7 +81,7 @@ MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/cap
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
-SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/lpk.c src/users/admin_rescue.c src/users/homedirs.c src/wl/wl.c src/wl/xwm.c \
+SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c src/users/homedirs.c src/wl/wl.c src/wl/xwm.c \
        src/ui/text.c \
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
@@ -114,7 +114,7 @@ SRC += $(WM_SRC)
 CLOCK_SRC := src/ui/js_help.c
 SRC += $(CLOCK_SRC)
 # Logs (docs/SYSTEM.md): our own systemd journal reader, the logs-system action and lord.logs
-LOGS_SRC := src/logs/journal.c src/ui/js_logs.c
+LOGS_SRC := src/ui/js_logs.c
 SRC += $(LOGS_SRC)
 HDR += $(wildcard src/logs/*.h)
 # Backups (docs/SYSTEM.md): hard-linked snapshots in a low-priority thread
@@ -347,12 +347,12 @@ build/wasm-test: tests/wasm_test.c $(WASM_SRC) src/wasm/wasm.h src/wasm/wasm_int
 build/thbrk-test: tests/thbrk_test.c src/ui/thbrk.c src/ui/thbrk.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/thbrk_test.c src/ui/thbrk.c
 # package signing: SHA-256 (NIST), Ed25519 (RFC 8032), JSON, contenido.json and catalog
-build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 build/sandbox-test: tests/sandbox_test.c src/sec/sandbox.c src/sec/cgroup.c src/sec/sandbox.h src/sec/cgroup.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -D_GNU_SOURCE -o $@ tests/sandbox_test.c src/sec/sandbox.c src/sec/cgroup.c -lpthread
-build/sign-test: tests/sign_test.c src/sec/json.c src/sec/sign.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h) src/lpk.h src/pkg/crypto.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_SIGN_TEST -o $@ tests/sign_test.c src/sec/json.c src/sec/sign.c src/lpk.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+build/sign-test: tests/sign_test.c src/sec/json.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h) src/lpk.h src/pkg/crypto.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_SIGN_TEST -o $@ tests/sign_test.c src/sec/json.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 # Verified system code: manifest parser, signature, per-file check, reading under the root (docs/SIGNING.md)
 test: build/codesig-test
 build/codesig-test: tests/codesig_test.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c src/sec/codesig.h src/sec/json.h src/pkg/crypto.h build/gen/codesig_build.h
@@ -388,9 +388,9 @@ build/tzif-test: tests/tzif_test.c src/ui/tzif.h $(CODEC_LIB)
 # journal reader (Logs): normal and compact synthetic files, LZ4 and XZ, broken and
 # truncated files; `build/journal-test dump <file>` dumps JSON to compare with journalctl
 test: build/journal-test
-build/journal-test: tests/journal_test.c src/logs/journal.c src/logs/journal.h $(CODEC_LIB)
+build/journal-test: tests/journal_test.c src/logs/journal.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c src/logs/journal.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # per-app firewall: rules (precedence, networks, JSON) and DNS names (broken packets, LRU)
 test: build/fw-rules-test build/dnsmap-test build/broker-restrict-test
