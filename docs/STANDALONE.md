@@ -41,7 +41,7 @@ Os recursos novos que exigem o helper administrativo do LordOS continuam indispo
 | Instalação | Suporta `PREFIX`, `LIBEXECDIR` e `DESTDIR`; instala apenas compositor, helpers de aplicativos, recursos e entrada de sessão. |
 | Helpers opcionais | Documentos: Poppler/libarchive; mídia: FFmpeg; RDP/VNC: FreeRDP 3. São detectados no build. Vault é compilado; Mail e o downloader dependem de OpenSSL. |
 
-SHA-256 e o leitor xz ainda ficam em `server/src/pkg/crypto.c` e `xz.c`, porque também são utilizados por assinaturas, cofre, journal e mapas. Esses arquivos são primitivas compartilhadas, não um backend de pacotes Debian. Movê-los para uma pasta comum pode ser uma refatoração posterior.
+SHA-256 e o leitor xz ainda ficam em `server/src/pkg/crypto.c` e `rust/axia-codecs/src/xz.rs`, porque também são utilizados por assinaturas, cofre, journal e mapas. Esses arquivos são primitivas compartilhadas, não um backend de pacotes Debian. Movê-los para uma pasta comum pode ser uma refatoração posterior.
 
 ## Remoção do legado Debian
 

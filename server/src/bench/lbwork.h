@@ -13,7 +13,7 @@ double lb_parallel(int n, void (*fn)(void *arg, int t), void *arg);
 
 double lb_sha256(int threads, double secs);     /* MB/s hashed, summed over the threads */
 double lb_matmul(int threads, double secs);     /* GFLOP/s, a 256×256 double matrix product per thread */
-/* the package engine's own xz decoder (pkg/xz.c) on a fixed compressed text (build/gen/lb_corpus.h):
+/* the package engine's own xz decoder (rust/axia-codecs/src/xz.rs) on a fixed compressed text (build/gen/lb_corpus.h):
  * MB/s of output, summed over the threads */
 double lb_xz(int threads, double secs);
 /* QuickJS running a fixed script (strings, JSON, sorting, objects, a regular expression), one runtime

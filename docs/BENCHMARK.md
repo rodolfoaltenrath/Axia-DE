@@ -247,7 +247,7 @@ development package.
   median with its spread (max − min), on one core and on all of them:
   - CPU: SHA-256 (`pkg/crypto.c`, with the CPU's SHA instructions when present); a 256×256
     double-precision matrix product; decompressing a fixed 2 MB text with the package engine's own xz
-    decoder (`pkg/xz.c`; the text is generated at build time by `bench/lbcorpus.c` and compressed with
+    decoder (`rust/axia-codecs/src/xz.rs`; the text is generated at build time by `bench/lbcorpus.c` and compressed with
     `xz -9`), instead of the deflate in the design above; QuickJS running a fixed script (strings, JSON,
     sorting, objects, a regular expression), one runtime per thread.
   - LordOS's own interface work (`bench/lbui.c`), with the engine's real code linked into `axia-bench`
