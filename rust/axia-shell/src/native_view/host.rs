@@ -142,6 +142,17 @@ enum Target {
     Scroll,
     Thumb(i32),
 }
+/// The texts under a hovered view (or not any more) with a `hoverStyle` take it (or leave it).
+fn lit_children(list: &mut [Mounted], lit: bool) {
+    for c in list {
+        if c.kind == Kind::Text && c.spec["hover"].is_object() {
+            let shown = if lit { json!([c.base, c.spec["hover"]]) } else { c.base.clone() };
+            c.style(0, shown);
+        } else if c.kind == Kind::View && c.layer == 0 && !c.spec["hover"].is_object() {
+            lit_children(&mut c.children, lit);
+        }
+    }
+}
 /// `style` (an object, or arrays of them) with the window's origin added to its left and top.
 fn offset_origin(style: Value, dx: f64, dy: f64) -> Value {
     match style {
@@ -168,6 +179,8 @@ pub struct Host {
     buttons: HashMap<i32, i32>,
     /// The nodes of the layered views (see `Mounted::layer`), for `owns`.
     portals: Vec<i32>,
+    /// While a view that is hovered is being updated: its texts with a `hoverStyle` take it.
+    lit: bool,
     effects: VecDeque<Value>,
     title: String,
     window_focused: bool,
@@ -209,6 +222,7 @@ impl Host {
             targets: HashMap::new(),
             buttons: HashMap::new(),
             portals: Vec::new(),
+            lit: false,
             effects: VecDeque::new(),
             title: String::new(),
             window_focused: true,
@@ -401,6 +415,14 @@ impl Host {
         let mut old: Vec<Option<Mounted>> = old.into_iter().map(Some).collect();
         let mut out = Vec::with_capacity(new.len());
         for (i, spec) in new.iter().enumerate() {
+            // a "menu" is drawn by views (native_view/menu.rs)
+            let expanded;
+            let spec = if spec["kind"] == "menu" {
+                expanded = self.expand_menu(spec);
+                &expanded
+            } else {
+                spec
+            };
             let kind = kind_of(spec);
             if kind == Kind::Empty {
                 continue;
@@ -515,10 +537,20 @@ impl Host {
                     .as_array()
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
+                let was = self.lit;
+                self.lit |= self.hover == m.node && m.spec["hover"].is_object();
                 m.children = self.reconcile(m.node, old, children);
+                self.lit = was;
             }
             Kind::Text => {
-                m.style(0, style);
+                // "hoverStyle": taken while the view it is in is hovered (a menu row's text turns white)
+                let hover = spec.get("hoverStyle").filter(|h| h.is_object()).cloned();
+                m.base = if hover.is_some() { style.clone() } else { Value::Null };
+                m.spec = hover.as_ref().map_or(Value::Null, |h| json!({"hover": h}));
+                m.style(0, match &hover {
+                    Some(h) if self.lit => json!([style, h]),
+                    _ => style,
+                });
                 let label = self.i18n.caption(&spec["label"]);
                 if label != m.label {
                     scene::set_label(m.node, &label);
@@ -684,19 +716,62 @@ impl Host {
         m.style(2, style);
     }
     /// `targets`: what each interactive node does; `buttons`: hover owners.
+    /// The captions of a menu's items (and their submenus') as text.
+    fn resolve_items(&mut self, items: &mut Value) {
+        let Some(list) = items.as_array_mut() else { return };
+        for item in list {
+            for key in ["label", "hint", "header"] {
+                if !item[key].is_null() {
+                    item[key] = Value::String(self.i18n.caption(&item[key]));
+                }
+            }
+            if item["submenu"].is_array() {
+                self.resolve_items(&mut item["submenu"]);
+            }
+        }
+    }
+    fn expand_menu(&mut self, spec: &Value) -> Value {
+        let mut spec = spec.clone();
+        self.resolve_items(&mut spec["items"]);
+        let origin = scene::frame(self.mount).map_or((0., 0.), |f| (f64::from(f.0), f64::from(f.1)));
+        // the layer covers the screen
+        let screen = self.facts["layers"]["popover"]
+            .as_i64()
+            .and_then(|n| scene::frame(n as i32))
+            .filter(|f| f.2 > 0. && f.3 > 0.)
+            .map_or((1920., 1080.), |f| (f64::from(f.2), f64::from(f.3)));
+        let caption = |v: &Value| v.as_str().unwrap_or("").to_owned();
+        let theme = |k: &str| Some(self.facts["context"]["theme"][k].clone()).filter(|v| !v.is_null());
+        let measure = |t: &str, size: f64, weight: f64| super::menu::measure(t, size, weight);
+        super::menu::expand(
+            &spec,
+            &super::menu::Env {
+                caption: &caption,
+                theme: &theme,
+                measure: &measure,
+                screen,
+                origin,
+                rtl: matches!(self.i18n.lang.as_str(), "ar" | "he" | "fa" | "ur"),
+                dark: self.dark(),
+            },
+        )
+    }
     /// A press at `target`: the layered views it is outside of (a menu, a popover) get their
     /// `onDismiss`. True if one was sent (the caller syncs).
     fn dismiss(&mut self, target: i32) -> bool {
         let mut actions = Vec::new();
+        // A layered view inside another (a menu's submenu) is part of it.
+        fn reaches(m: &Mounted, target: i32) -> bool {
+            scene::within(target, m.node) || m.children.iter().any(|c| reaches(c, target))
+        }
         for p in self.portals.clone() {
-            if scene::within(target, p) {
+            let Some(m) = find(&mut self.root, p) else { continue };
+            if reaches(m, target) {
                 continue;
             }
-            if let Some(m) = find(&mut self.root, p) {
-                let action = m.spec["events"]["onDismiss"].clone();
-                if action.is_array() {
-                    actions.push(action);
-                }
+            let action = m.spec["events"]["onDismiss"].clone();
+            if action.is_array() {
+                actions.push(action);
             }
         }
         for action in &actions {
@@ -713,9 +788,8 @@ impl Host {
             for m in list {
                 if m.layer != 0 {
                     out.push(m.node);
-                } else {
-                    layered(&m.children, out);
                 }
+                layered(&m.children, out);
             }
         }
         self.portals.clear();
@@ -793,8 +867,10 @@ impl Host {
             Kind::Input => host.field_style(m),
             Kind::Scroll => host.thumb(m),
             Kind::View if m.spec["hover"].is_object() => {
-                let shown = if host.hover == m.node { json!([m.base, m.spec["hover"]]) } else { m.base.clone() };
+                let lit = host.hover == m.node;
+                let shown = if lit { json!([m.base, m.spec["hover"]]) } else { m.base.clone() };
                 m.style(0, shown);
+                lit_children(&mut m.children, lit);
             }
             _ => {}
         });

@@ -8,6 +8,7 @@
 mod host;
 pub mod icons;
 pub mod i18n;
+mod menu;
 mod shell_icons;
 pub mod paint;
 pub mod style;
