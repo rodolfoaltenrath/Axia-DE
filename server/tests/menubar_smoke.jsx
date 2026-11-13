@@ -5,6 +5,8 @@ import { render, View } from '@lordos/runtime';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { settings } from '../../sdk/settings.js';
 import { configureWindows } from '../../sdk/windows.js';
+import { enableShellLayers } from '../../sdk/layers.js';
+import { Menu } from '../../sdk/menu.jsx';
 import { MenuBar } from '../../themes/default/components/MenuBar.jsx';
 import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
 import { RustLauncher } from '../../sdk/rustlauncher.jsx';
@@ -29,12 +31,15 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
+let menuRan = [], menuClosed = 0, showMenu = false, setMenuShown = () => {};
 let kbd = 0, ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
 const opened = [];
 const drags = [];
 function Harness() {
   const [launcher, setShow] = useState(false);
   showLauncher = launcher; setLauncher = setShow;
+  const [menuOn, setMenuOn] = useState(false);
+  showMenu = menuOn; setMenuShown = setMenuOn;
   useEffect(() => { setTimeout(() => run().catch((e) => { console.error(e); }), 150); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
     h(MenuBar, { t: theme, height: 28, focused: null, onLaunchpad: () => { launchpad++; }, onControlCenter: () => {}, controlCenter: false,
@@ -45,6 +50,10 @@ function Harness() {
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
         onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
     h(SpotlightPanel), h(NotificationBanner),
+    showMenu && h(Menu, { x: 300, y: 200, onClose: () => { menuClosed++; }, items: [
+      { label: 'Menu A', onClick: () => { menuRan.push('a'); } }, '-',
+      { label: 'Menu B', submenu: [{ label: 'Sub C', onClick: () => { menuRan.push('c'); } }] },
+      { label: 'Menu D', onClick: () => { menuRan.push('d'); } }] }),
     showLauncher && h(RustLauncher, { mode: 'flow', t: theme, area: { x: 0, y: 0, w: 1000, h: 700 }, onOpen: (id) => { opened.push(id); }, onClose: () => { closed++; } }));
 }
 const lines = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(...t.split('\n')); } return out; };
@@ -108,7 +117,21 @@ async function run() {
   check(await until(() => ran === 1 && notifications.get().length === 0), 'its action runs and dismisses the banner');
   check(await until(() => !find('Smoke banner')), 'and the banner goes away');
   console.log('banner integration: passed');
+  // the shared Menu: drawn by Rust in the popover layer, its callbacks run here
+  enableShellLayers();
+  setMenuShown(true);
+  check(await until(() => find('Menu A') && find('Menu D')), 'the menu shows its rows');
+  press(find('Menu A'));
+  check(await until(() => menuRan.join() === 'a' && menuClosed >= 1), 'a click runs the row and closes the menu');
+  setMenuShown(false); await sleep(100); menuClosed = 0; setMenuShown(true);
+  check(await until(() => find('Menu D')), 'it opens again');
+  for (let n = 0; n < 3; n++) check(lord.nativeViews.key('ArrowDown', '', 0) === true, 'the arrows move through the rows');   // A, B (the separator is skipped), D
+  globalThis.__lordNativeView(); await sleep(100);
+  check(lord.nativeViews.key('Enter', '', 0) === true, 'Enter takes the row');
+  globalThis.__lordNativeView();
+  check(await until(() => menuRan.join() === 'a,d'), 'and runs the third row');
+  console.log('menu integration: passed');
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
-settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true });
+settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true, menuNativeView: true });
 render(h(Harness));

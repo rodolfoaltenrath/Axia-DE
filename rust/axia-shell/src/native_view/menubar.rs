@@ -33,13 +33,13 @@ pub struct MenuBar {
     last: Value,
 }
 
-fn selectable(items: &[Value], i: i64) -> bool {
+pub(super) fn selectable(items: &[Value], i: i64) -> bool {
     usize::try_from(i)
         .ok()
         .and_then(|i| items.get(i))
         .is_some_and(|it| it.is_object() && it["header"].is_null() && it["disabled"] != true)
 }
-fn advance(items: &[Value], from: i64, dir: i64) -> Option<i64> {
+pub(super) fn advance(items: &[Value], from: i64, dir: i64) -> Option<i64> {
     let n = items.len() as i64;
     (1..=n).map(|s| (from + dir * s).rem_euclid(n)).find(|i| selectable(items, *i))
 }

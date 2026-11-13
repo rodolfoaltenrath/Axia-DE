@@ -1,7 +1,9 @@
 // Drop-down / context menu. Closes when clicking outside or with Escape. Keyboard: ↑/↓ move,
 // Home/End jump, Enter/Space choose, → opens a submenu and ← closes it. A menu taller than the
 // screen scrolls (wheel or touchpad), and the keyboard keeps the highlighted item in view.
-import { View, Text, addListener, useTheme, screen, direction, ScrollView, takeTextFocus, releaseTextFocus, focusToken, restoreFocus, Layer } from '@lordos/sdk';
+import { View, Text, addListener, useTheme, screen, direction, ScrollView, takeTextFocus, releaseTextFocus, focusToken, restoreFocus, Layer, useSettings } from '@lordos/sdk';
+import { NativeMenu } from './nativemenu.jsx';
+import { shellLayers } from './layers.js';
 import { useEffect, useRef, useState } from 'react';
 
 const ROW = 24, SEP_H = 9, HEAD_H = 22;
@@ -54,7 +56,7 @@ function fitWidth(items, min) {
 // keys: this menu has the keyboard (a submenu takes it while it is open; onBack gives it back).
 // Every menu is drawn in the shell's popover layer (sdk/layers.js), above the Dock, the menu bar and
 // the windows wherever it is rendered from; its submenus go in the same layer, beside it.
-export function Menu({ x, y, items, onClose, anchor, width: minWidth = 220, above = false, sub = false, nodeRef, side = null, centered = false, onBack, layer = 'popover' }) {
+function ReactMenu({ x, y, items, onClose, anchor, width: minWidth = 220, above = false, sub = false, nodeRef, side = null, centered = false, onBack, layer = 'popover' }) {
   const t = useTheme();
   const own = useRef(null);
   const ref = nodeRef || own;
@@ -140,9 +142,16 @@ export function Menu({ x, y, items, onClose, anchor, width: minWidth = 220, abov
         ? <ScrollView scrollRef={scrollRef} style={{ height }}><View style={{ paddingVertical: 5 }}>{rows}</View></ScrollView>
         : rows}
     </View>
-    {subMenu && <Menu sub nodeRef={subRef} x={subMenu.x} y={subMenu.y} items={subMenu.items} onClose={onClose} width={160}
+    {subMenu && <ReactMenu sub nodeRef={subRef} x={subMenu.x} y={subMenu.y} items={subMenu.items} onClose={onClose} width={160}
       onBack={subMenu.keys ? () => setSubMenu(null) : undefined} />}
     </>
   );
   return sub ? body : <Layer name={layer}>{body}</Layer>;
+}
+
+// "menuNativeView": true in settings.json draws the menu in Rust (when the shell has layers).
+export function Menu(props) {
+  const [prefs] = useSettings();
+  const native = prefs.menuNativeView === true && !props.sub && shellLayers();
+  return native ? <NativeMenu {...props} /> : <ReactMenu {...props} />;
 }
