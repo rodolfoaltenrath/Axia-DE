@@ -171,6 +171,10 @@ EOF
     # (0.8.5) Monitor → Network's model (sdk/netmodel.js): search tokens, filters, the tree, sorting
     if have node; then run "netmodel-test (sdk/netmodel.js)" node tests/netmodel_test.mjs
     else skip "netmodel-test" "node"; fi
+    # PDF geometry and cache policy: production Rust models with their JS adapters.
+    if have node && have cargo && [ -d ../node_modules/esbuild ]; then
+        run "pdf-model-test (Rust geometry/cache + JS adapters)" node tests/pdf_model_test.mjs
+    else skip "pdf-model-test" "node, cargo and node_modules/esbuild"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.js): GPU layers, CPU reasons, Compatibility
     if have node && have cargo; then
         run "app-model-test-adapter" cargo build --manifest-path ../rust/Cargo.toml --locked --offline --example app-model

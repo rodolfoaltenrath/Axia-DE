@@ -9,7 +9,8 @@ import {
 } from '@lordos/sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PageCache } from './cache.js';
-import { shown, toPage, rectToView, layoutPages, visibleRange } from './geometry.js';
+import { shown, rectToView, layoutPages, viewport, navigate, frameFor, hitPoint } from './geometry.js';
+import { ViewerModel } from './viewer.js';
 import { Sidebar } from './sidebar.jsx';
 
 export function Icon({ size: s }) {
@@ -30,8 +31,6 @@ export function Icon({ size: s }) {
 }
 
 const GAP = 14;
-const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
-const PX_PER_PT = 96 / 72;                        // 100 % = real size on a 96 dpi screen
 const TOOL_COLORS = ['#ffd60a', '#30d158', '#64d2ff', '#ff6482', '#bf5af2'];
 const winStates = new Map();
 
@@ -89,6 +88,7 @@ function RecentRow({ e, first, onOpen, th }) {
 export default function PdfViewer() {
   const th = useTheme();
   const { id: wid, args } = useAppWindow();
+  const [controller] = useState(() => new ViewerModel());
   const saved = winStates.get(wid);
   const [path, setPath] = useState(() => saved?.path || argPath(args));
   const [doc, setDoc] = useState(null);
@@ -112,14 +112,33 @@ export default function PdfViewer() {
   const [goto, setGoto] = useState(null);              // text of the «go to page» field
   const [info, setInfo] = useState(() => new Map());   // page → { links, fields, notes }
   const [ink, setInk] = useState(null);                // { page, strokes: [[x,y…]] } in points
-  const [noteAt, setNoteAt] = useState(null);          // { page, x, y, text }
-  const [editField, setEditField] = useState(null);    // { page, f, r, value }
-  const [annotated, setAnnotated] = useState([]);      // pages with new annotations (for undo)
+  const [editState, setEditState] = useState(() => controller.edit('state').state);
+  const noteAt = editState.note, editField = editState.field, annotated = editState.history;
   const [msg, setMsg] = useState(null);
   const [view, setView] = useState({ w: 800, h: 600 });
   const area = useRef(null);
   const cache = useRef(null), thumbs = useRef(null);
   const drag = useRef(null);
+  const edit = (op, facts = {}) => controller.edit(op, facts, doc);
+  controller.onEdit = packet => {
+    setEditState(previous => JSON.stringify(previous) === JSON.stringify(packet.state) ? previous : packet.state);
+    if (packet.ink) setInk(previous => {
+      const delta = packet.ink;
+      if (delta.kind === 'replace') return delta.value;
+      if (!previous) return previous;
+      if (delta.kind === 'stroke') return { page: delta.page, strokes: [...previous.strokes, delta.point] };
+      if (delta.kind === 'point') return { ...previous, strokes: previous.strokes.slice(0, -1).concat([[...previous.strokes[previous.strokes.length - 1], ...delta.point]]) };
+      return previous;
+    });
+    if (packet.clearSelection) setSelection(null);
+    if (packet.invalidate) {
+      const p = packet.invalidate.page;
+      cache.current?.invalidate(p); thumbs.current?.invalidate(p);
+      if (packet.invalidate.refresh) refreshInfo(p);
+    }
+    if (packet.notice) setMsg(tr(packet.notice.key, { error: packet.notice.code ? tr(`docs.err.${packet.notice.code}`) : packet.notice.message }));
+    if (packet.saved) setMsg(tr('pdf.saved', { name: packet.saved }));
+  };
 
   useEffect(() => { winStates.set(wid, { path, zoom, mode, side, invert }); }, [path, zoom, mode, side, invert]);
   useEffect(() => () => { if (!wm.get(wid)) winStates.delete(wid); }, []);
@@ -130,11 +149,14 @@ export default function PdfViewer() {
   useEffect(() => {
     if (!path) return undefined;
     let alive = true, d = null;
-    setError(null); setDoc(null); setHits(null); setSelection(null); setInfo(new Map()); setAnnotated([]); setOffset(0); setPage(0);
+    controller.reset();
+    drag.current = null;
+    setError(null); setDoc(null); setHits(null); setSelection(null); setInfo(new Map()); setOffset(0); setPage(0);
     const t0 = Date.now();
     pdf.open(path, { quick: true, password }).then(async (x) => {
       if (!alive) { x.close(); return; }
       d = x;
+      controller.bind(x);
       cache.current = new PageCache(x, () => setRev((r) => r + 1));
       thumbs.current = new PageCache(x, () => setRev((r) => r + 1), 8 * 1024 * 1024);
       cache.current.openedAt = t0;
@@ -152,7 +174,7 @@ export default function PdfViewer() {
       else setError(e.code === 'invalid' ? tr('pdf.invalid') : tr('pdf.openError', { error: e.message }));
     });
     wm.setTitle(wid, fs.basename(path));
-    return () => { alive = false; cache.current?.close(); thumbs.current?.close(); d?.close(); };
+    return () => { alive = false; drag.current = null; controller.reset(); cache.current?.close(); thumbs.current?.close(); d?.close(); };
   }, [path, password]);
 
   const n = doc?.info.pages || 0;
@@ -172,40 +194,32 @@ export default function PdfViewer() {
     return () => clearInterval(id);
   }, [view.w, view.h, side]);
   const ref0 = shown(sizes[page] || [595, 842], rot);
-  const scale = zoom === 'width' ? Math.max(0.1, (view.w - 2 * GAP - 12) / ref0[0])
-    : zoom === 'page' ? Math.max(0.1, Math.min((view.w - 2 * GAP) / ref0[0], (view.h - 2 * GAP) / ref0[1]))
-      : zoom * PX_PER_PT;
-  const pct = Math.round((scale / PX_PER_PT) * 100);
+  const { scale, pct } = controller.call('scale', { zoom, size: ref0, view });
   const lay = useMemo(() => layoutPages(sizes, rot, scale, GAP), [sizes, rot, scale]);
-  const maxOffset = mode === 'single' ? 0 : Math.max(0, lay.height - view.h);
-  const maxX = Math.max(0, lay.width + 2 * GAP - view.w);
+  const viewState = viewport(lay, { mode, page, offset, offsetX, view });
+  const { maxOffset, maxX, first, last } = viewState;
 
   // ---- what is visible ----
-  const [first, last] = mode === 'single' ? [page, page] : visibleRange(lay.tops, sizes, rot, scale, offset, offset + view.h);
   useEffect(() => {
     if (mode !== 'continuous' || !lay.tops.length) return;
     // the «current» page: the one in the center
-    const mid = offset + view.h / 3;
-    let p = first;
-    while (p < last && lay.tops[p + 1] <= mid) p++;
+    const p = viewState.currentPage;
     if (p !== page) setPage(p);
   }, [offset, first, last]);
   useEffect(() => {
     if (!doc || !cache.current) return undefined;
     const id = setTimeout(() => {
       const keep = new Set();
-      for (let p = first; p <= last; p++) {
-        keep.add(p);
-        cache.current.want(p, shown(sizes[p], rot)[0] * scale, rot, invert, 4);
+      for (const job of viewState.renders) {
+        keep.add(job.page);
+        cache.current.want(job.page, job.width, rot, invert, job.priority);
       }
-      // the neighbors, with lower priority
-      for (const p of [last + 1, first - 1, last + 2]) if (p >= 0 && p < n) { keep.add(p); cache.current.want(p, shown(sizes[p], rot)[0] * scale, rot, invert, 2); }
       cache.current.drop(keep);
       // links and fields of what is visible
       for (let p = first; p <= last; p++) {
         if (info.has(p)) continue;
         info.set(p, null);
-        doc.pageInfo(p).then((r) => setInfo((m) => new Map(m).set(p, r))).catch(() => {});
+        controller.pageInfo(doc, p, r => setInfo(m => new Map(m).set(p, r)));
       }
     }, zoomAnim.current ? 120 : 0);
     zoomAnim.current = false;
@@ -221,12 +235,10 @@ export default function PdfViewer() {
 
   // ---- navigation ----
   const goPage = (p, rect) => {
-    const q = Math.max(0, Math.min(n - 1, p));
-    setPage(q);
-    if (mode !== 'continuous') return;
-    // with a rectangle (a search result), keep it at a third of the height
-    const y = rect ? lay.tops[q] + rectToView(rect, sizes[q], rot, scale).top - view.h / 3 : lay.tops[q] - GAP;
-    setOffset(Math.max(0, Math.min(maxOffset, y)));
+    const next = navigate(lay, p, rect);
+    if (!next) return;
+    setPage(next.page);
+    if (next.offset != null) setOffset(next.offset);
   };
   const setZoomTo = (z) => {
     // keep in view what is at the top
@@ -238,86 +250,59 @@ export default function PdfViewer() {
   const goPageLater = useRef(null);
   useEffect(() => { if (goPageLater.current != null) { const p = goPageLater.current; goPageLater.current = null; goPage(p); } }, [scale]);
   const zoomStep = (d) => {
-    const cur = scale / PX_PER_PT;
-    const next = d > 0 ? ZOOMS.find((z) => z > cur + 0.01) || ZOOMS[ZOOMS.length - 1] : [...ZOOMS].reverse().find((z) => z < cur - 0.01) || ZOOMS[0];
-    setZoomTo(next);
+    setZoomTo(controller.call('zoom', { scale, step: d }));
   };
   const onWheel = (e) => {
-    if (e.ctrl || e.meta) { if (!e.precise || e.notches) zoomStep(e.deltaY < 0 ? 1 : -1); return; }
-    if (e.shift) { setOffsetX((x) => Math.max(0, Math.min(maxX, x + e.deltaY))); return; }
-    if (mode === 'single') {
-      const now = Date.now();
-      if (now - (wheelAt.current || 0) < 250) return;
-      wheelAt.current = now;
-      goPage(page + (e.deltaY > 0 ? 1 : -1));
-      return;
-    }
-    setOffset((o) => Math.max(0, Math.min(maxOffset, o + e.deltaY)));
+    const action = controller.wheel(e, mode === 'single');
+    if (!action) return;
+    if (action.kind === 'zoom') zoomStep(action.step);
+    else if (action.kind === 'page') goPage(page + action.delta);
+    else if (action.kind === 'horizontal') setOffsetX(x => controller.call('scroll', { value: x, delta: action.delta, max: maxX }));
+    else if (action.kind === 'vertical') setOffset(o => controller.call('scroll', { value: o, delta: action.delta, max: maxOffset }));
   };
-  const wheelAt = useRef(0);
 
   // ---- search ----
   const runFind = (q) => {
-    if (!doc || !q.trim()) { setHits(null); return; }
-    const acc = [];
-    setHits({ list: [], cur: 0, done: false, q });
-    doc.find(q.trim(), {}, (p, rects) => {
-      for (const r of rects) acc.push({ page: p, rect: r });
-      setHits((h) => (h && h.q === q ? { ...h, list: [...acc] } : h));
-      if (acc.length === rects.length) goPage(p, rects[0]);
-    }).then(() => setHits((h) => (h && h.q === q ? { ...h, list: [...acc], done: true } : h))).catch(() => {});
+    controller.find(doc, q, setHits, goPage);
   };
   const nextHit = (d) => {
-    if (!hits?.list.length) return;
-    const cur = (hits.cur + d + hits.list.length) % hits.list.length;
-    setHits({ ...hits, cur });
-    goPage(hits.list[cur].page, hits.list[cur].rect);
+    const result = controller.call('findNext', { delta: d });
+    if (!result) return;
+    setHits(result.hits);
+    goPage(result.go.page, result.go.rect);
   };
 
   // ---- coordinates: event → page and point ----
   const pageLeft = (p) => {
-    const w = shown(sizes[p], rot)[0] * scale;
-    return Math.max(GAP, (view.w - w) / 2) - offsetX;
+    return frameFor(lay, p)?.left || 0;
   };
-  const pageTop = (p) => (mode === 'single' ? Math.max(GAP, (view.h - shown(sizes[p], rot)[1] * scale) / 2) : lay.tops[p] - offset);
+  const pageTop = (p) => frameFor(lay, p)?.top || 0;
   const hitPage = (ev) => {
     if (!area.current) return null;
     const [ax, ay] = lord.getLayout(area.current.id);
-    const lx = ev.x - ax, ly = ev.y - ay;
-    for (let p = first; p <= last; p++) {
-      const [w, h] = shown(sizes[p], rot);
-      const l = pageLeft(p), tp = pageTop(p);
-      if (lx >= l && lx <= l + w * scale && ly >= tp && ly <= tp + h * scale) {
-        const [x, y] = toPage(lx - l, ly - tp, sizes[p], rot, scale);
-        return { page: p, x, y };
-      }
-    }
-    return null;
+    return hitPoint(lay, ev.x - ax, ev.y - ay);
   };
   const linkAt = (hp) => {
     const inf = info.get(hp.page);
     if (!inf) return null;
-    return inf.links.find((k) => hp.x >= k.r[0] && hp.x <= k.r[0] + k.r[2] && hp.y >= k.r[1] && hp.y <= k.r[1] + k.r[3]) || null;
+    return inf.links[controller.call('hitItem', { items: inf.links, x: hp.x, y: hp.y })] || null;
   };
   const fieldAt = (hp) => {
     const inf = info.get(hp.page);
     if (!inf) return null;
-    return inf.fields.find((k) => hp.x >= k.r[0] && hp.x <= k.r[0] + k.r[2] && hp.y >= k.r[1] && hp.y <= k.r[1] + k.r[3]) || null;
+    return inf.fields[controller.call('hitItem', { items: inf.fields, x: hp.x, y: hp.y })] || null;
   };
 
   // ---- mouse over the pages ----
   const select = (d, style) => {
-    if (!doc) return;
-    const req = ++selReq.current;
-    doc.select(d.page, d.x0, d.y0, d.x1, d.y1, style)   /* start and end, in drag order */
-      .then((r) => { if (req === selReq.current) setSelection({ page: d.page, rects: r.rects, text: r.text }); }).catch(() => {});
+    controller.select(doc, d, style, setSelection);
   };
-  const selReq = useRef(0);
+  const clearSelection = () => setSelection(controller.clearSelection());
   const onDown = (ev) => {
     if (ev.button === 2) return;
-    setEditField(null);
+    edit('fieldCancel');
     const hp = hitPage(ev);
-    if (!hp) { setSelection(null); return; }
+    if (!hp) { clearSelection(); return; }
     if (tool === 'select') {
       const f = fieldAt(hp);
       if (f && !f.f.ro) { onField(hp.page, f); return; }
@@ -328,14 +313,14 @@ export default function PdfViewer() {
         return;
       }
     }
-    if (tool === 'note') { setNoteAt({ page: hp.page, x: hp.x, y: hp.y, text: '' }); return; }
+    if (tool === 'note') { edit('noteOpen', { point: hp }); return; }
     if (tool === 'ink') {
       drag.current = { kind: 'ink', page: hp.page };
-      setInk((k) => (k && k.page === hp.page ? { ...k, strokes: [...k.strokes, [hp.x, hp.y]] } : { page: hp.page, strokes: [[hp.x, hp.y]] }));
+      edit('inkStart', { point: hp });
       return;
     }
     drag.current = { kind: 'text', page: hp.page, x0: hp.x, y0: hp.y, x1: hp.x, y1: hp.y, moved: false, at: Date.now() };
-    setSelection(null);
+    clearSelection();
   };
   useEffect(() => {
     const mv = addListener('pointermove', (ev) => {
@@ -344,14 +329,7 @@ export default function PdfViewer() {
       const hp = hitPage(ev);
       if (!hp || hp.page !== d.page) return;
       if (d.kind === 'ink') {
-        setInk((k) => {
-          if (!k) return k;
-          const s = k.strokes[k.strokes.length - 1];
-          const lx = s[s.length - 2], ly = s[s.length - 1];
-          if (Math.hypot(hp.x - lx, hp.y - ly) < 1.2 / (scale / PX_PER_PT)) return k;
-          const strokes = k.strokes.slice(0, -1).concat([[...s, hp.x, hp.y]]);
-          return { ...k, strokes };
-        });
+        edit('inkAppend', { point: hp, scale });
         return;
       }
       d.x1 = hp.x; d.y1 = hp.y; d.moved = true;
@@ -363,59 +341,22 @@ export default function PdfViewer() {
       drag.current = null;
       if (!d || d.kind !== 'text') return;
       if (!d.moved) { if (Date.now() - (lastClick.current || 0) < 400) select({ ...d, x1: d.x0 + 0.5, y1: d.y0 + 0.5 }, 1); lastClick.current = Date.now(); return; }
-      select(d, 0);
-      if (tool === 'highlight') hlPending.current = true;
+      controller.select(doc, d, 0, setSelection, tool === 'highlight' ? color : undefined);
     };
     const a = addListener('pointermove', () => {});
     const b = addListener('pointerup', up);
     return () => { mv(); a(); b(); };
-  }, [first, last, scale, rot, offset, offsetX, view.w, sizes, tool, doc]);
+  }, [first, last, scale, rot, offset, offsetX, view.w, sizes, tool, color, doc]);
   const lastClick = useRef(0);
-  const hlPending = useRef(false);
-  // highlight: when the drag selection arrives
-  useEffect(() => {
-    if (!hlPending.current || !selection || tool !== 'highlight') return;
-    hlPending.current = false;
-    if (!selection.rects.length) return;
-    addAnnot({ page: selection.page, type: 'highlight', rects: selection.rects, color });
-    selReq.current++;                       // a selection that arrives late is no longer shown
-    setSelection(null);
-  }, [selection]);
-
-  const addAnnot = (a) => {
-    doc.annot(a).then(() => {
-      cache.current.invalidate(a.page);
-      thumbs.current.invalidate(a.page);
-      setAnnotated((x) => [...x, a.page]);
-    }).catch((e) => setMsg(tr('pdf.annotError', { error: e.message })));
-  };
-  const finishInk = () => {
-    if (ink && ink.strokes.some((s) => s.length >= 2)) addAnnot({ page: ink.page, type: 'ink', strokes: ink.strokes, color, width: 2.2 });
-    setInk(null);
-  };
+  const finishInk = () => edit('inkFinish', { color });
   useEffect(() => { if (tool !== 'ink' && ink) finishInk(); }, [tool]);
-  const undo = () => {
-    if (!annotated.length) return;
-    const p = annotated[annotated.length - 1];
-    doc.undo(p).then(() => { cache.current.invalidate(p); thumbs.current.invalidate(p); setAnnotated((x) => x.slice(0, -1)); }).catch(() => {});
-  };
-
-  // forms
-  const onField = (p, fm) => {
-    const f = fm.f;
-    if (f.type === 'check' || f.type === 'radio') {
-      doc.setField(f.id, !f.value).then(() => { refreshInfo(p); cache.current.invalidate(p); setAnnotated((x) => [...x]); edited.current = true; }).catch(() => {});
-      return;
-    }
-    if (f.type === 'text' || f.type === 'choice') setEditField({ page: p, f, r: fm.r, value: f.type === 'text' ? f.value || '' : f.value });
-  };
-  const edited = useRef(false);
-  const refreshInfo = (p) => doc.pageInfo(p).then((r) => setInfo((m) => new Map(m).set(p, r))).catch(() => {});
-  const commitField = (value) => {
-    const e = editField;
-    setEditField(null);
-    if (!e) return;
-    doc.setField(e.f.id, value).then(() => { refreshInfo(e.page); cache.current.invalidate(e.page); thumbs.current.invalidate(e.page); edited.current = true; setRev((r) => r + 1); }).catch(() => {});
+  const undo = () => edit('undo');
+  const onField = (page, field) => edit('fieldOpen', { page, field });
+  const commitField = value => edit('fieldCommit', { value });
+  const refreshInfo = p => {
+    const current = doc;
+    if (!current || current !== controller.document) return Promise.resolve();
+    return controller.pageInfo(current, p, r => setInfo(m => new Map(m).set(p, r)));
   };
 
   // save a copy (never overwrites the original)
@@ -425,39 +366,45 @@ export default function PdfViewer() {
     let name = tr('pdf.copyName', { name: base });
     for (let i = 2; i < 200; i++) { try { fs.stat(`${dir}/${name}.pdf`); name = `${tr('pdf.copyName', { name: base })} ${i}`; } catch (e) { break; } }
     const out = `${dir}/${name}.pdf`;
-    doc.save(out).then(() => setMsg(tr('pdf.saved', { name: `${name}.pdf` }))).catch((e) => setMsg(tr('pdf.saveError', { error: e.message })));
+    edit('save', { path: out, name: `${name}.pdf` });
   };
   const doPrint = () => { if (doc) print.open({ title: fs.basename(path), doc }); };
   const copySel = () => { if (selection?.text) { clipboard.set(selection.text); setMsg(tr('pdf.copied')); } };
-  const rotate = (d) => setRot((r) => (r + d + 4) % 4);
+  const rotate = (d) => setRot(r => controller.call('rotate', { rot: r, delta: d }));
 
   // ---- keyboard ----
   useKeyboard((e) => {
-    if (goto != null || noteAt || editField) return;
-    const mod = e.meta || e.ctrl;
-    const b = (e.base || e.char || '').toLowerCase();
-    if (mod && b === 'f') { findRef.current = true; setRev((r) => r + 1); return; }
-    if (mod && b === 'c') { copySel(); return; }
-    if (mod && b === 'a' && doc) { const [w, h] = sizes[page]; select({ page, x0: 0, y0: 0, x1: w, y1: h }, 0); return; }
-    if (mod && b === 'p') { doPrint(); return; }
-    if (mod && b === 's') { saveCopy(); return; }
-    if (mod && b === 'z') { undo(); return; }
-    if (mod && b === 'r') { rotate(e.shift ? -1 : 1); return; }
-    if (mod && (b === '+' || b === '=')) { zoomStep(1); return; }
-    if (mod && b === '-') { zoomStep(-1); return; }
-    if (mod && b === '0') { setZoomTo(1); return; }
-    if (mod && b === '9') { setZoomTo('width'); return; }
-    if (mod && e.alt && b === 'g') { setGoto(''); return; }
-    if (mod && b === 'g') { nextHit(e.shift ? -1 : 1); return; }
-    if (e.key === 'Escape') { setSelection(null); setTool('select'); setHits(null); return; }
-    if (e.key === 'PageDown' || (e.key === ' ' && !e.shift)) { mode === 'single' ? goPage(page + 1) : setOffset((o) => Math.min(maxOffset, o + view.h * 0.9)); return; }
-    if (e.key === 'PageUp' || (e.key === ' ' && e.shift)) { mode === 'single' ? goPage(page - 1) : setOffset((o) => Math.max(0, o - view.h * 0.9)); return; }
-    if (e.key === 'ArrowDown') { mode === 'single' ? goPage(page + 1) : setOffset((o) => Math.min(maxOffset, o + 48)); return; }
-    if (e.key === 'ArrowUp') { mode === 'single' ? goPage(page - 1) : setOffset((o) => Math.max(0, o - 48)); return; }
-    if (e.key === 'ArrowRight') { goPage(page + 1); return; }
-    if (e.key === 'ArrowLeft') { goPage(page - 1); return; }
-    if (e.key === 'Home') { goPage(0); return; }
-    if (e.key === 'End') { goPage(n - 1); return; }
+    const action = controller.key(e, goto != null || !!noteAt || !!editField, !!doc);
+    switch (action) {
+      case 'find': findRef.current = true; setRev(r => r + 1); break;
+      case 'copy': copySel(); break;
+      case 'selectAll': { const [w, h] = sizes[page]; select({ page, x0: 0, y0: 0, x1: w, y1: h }, 0); break; }
+      case 'print': doPrint(); break;
+      case 'save': saveCopy(); break;
+      case 'undo': undo(); break;
+      case 'rotateLeft': rotate(-1); break;
+      case 'rotateRight': rotate(1); break;
+      case 'zoomIn': zoomStep(1); break;
+      case 'zoomOut': zoomStep(-1); break;
+      case 'zoomActual': setZoomTo(1); break;
+      case 'zoomWidth': setZoomTo('width'); break;
+      case 'goto': setGoto(''); break;
+      case 'previousHit': nextHit(-1); break;
+      case 'nextHit': nextHit(1); break;
+      case 'escape': clearSelection(); setTool('select'); controller.call('findStart', { query: '' }); setHits(null); break;
+      case 'pageDown': case 'down':
+        if (mode === 'single') goPage(page + 1);
+        else setOffset(value => controller.call('keyScroll', { action, value, max: maxOffset, height: view.h }));
+        break;
+      case 'pageUp': case 'up':
+        if (mode === 'single') goPage(page - 1);
+        else setOffset(value => controller.call('keyScroll', { action, value, max: maxOffset, height: view.h }));
+        break;
+      case 'nextPage': goPage(page + 1); break;
+      case 'previousPage': goPage(page - 1); break;
+      case 'firstPage': goPage(0); break;
+      case 'lastPage': goPage(n - 1); break;
+    }
   });
   const findRef = useRef(false);
 
@@ -500,14 +447,13 @@ export default function PdfViewer() {
   const dark = th.mode === 'dark';
   const pagesShown = [];
   if (doc) {
-    for (let p = first; p <= last; p++) {
-      const [w, h] = shown(sizes[p], rot);
-      const W = w * scale, H = h * scale;
+    for (const frame of viewState.frames) {
+      const { page: p, width: W, height: H } = frame;
       const e = cache.current?.get(p, W, rot, invert) || cache.current?.best(p, rot, invert, W);
       const inf = info.get(p);
       const pageHits = hits?.list.map((x, i) => ({ ...x, i })).filter((x) => x.page === p) || [];
       pagesShown.push(
-        <View key={p} style={{ position: 'absolute', left: pageLeft(p), top: pageTop(p), width: W, height: H, backgroundColor: invert ? '#1b1b1f' : '#ffffff',
+        <View key={p} style={{ position: 'absolute', left: frame.left, top: frame.top, width: W, height: H, backgroundColor: invert ? '#1b1b1f' : '#ffffff',
           boxShadow: '0 2px 10px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
           {e ? <DocImage image={e.image} style={{ position: 'absolute', left: 0, top: 0, width: W, height: H, objectFit: 'fill' }} /> : null}
           {/* search results */}
@@ -543,8 +489,8 @@ export default function PdfViewer() {
     if (editField.f.type === 'text') {
       fieldEditor = (
         <View style={{ position: 'absolute', left: l, top: tp, width: Math.max(60, v.width) }}>
-          <TextInput autoFocus value={editField.value} onChange={(x) => setEditField((f) => ({ ...f, value: x }))} onSubmit={() => commitField(editField.value)}
-            onCancel={() => setEditField(null)} size={Math.max(10, Math.min(18, v.height * 0.6))} style={{ height: Math.max(22, v.height) }} />
+          <TextInput autoFocus value={editField.value} onChange={value => edit('fieldChange', { value })} onSubmit={() => commitField()}
+            onCancel={() => edit('fieldCancel')} size={Math.max(10, Math.min(18, v.height * 0.6))} style={{ height: Math.max(22, v.height) }} />
         </View>
       );
     } else {
@@ -566,9 +512,9 @@ export default function PdfViewer() {
     noteEditor = (
       <View style={{ position: 'absolute', left: Math.min(view.w - 250, pageLeft(noteAt.page) + v.left), top: pageTop(noteAt.page) + v.top, width: 240, padding: 8, gap: 6, borderRadius: 8,
         backgroundColor: '#fff6b0', boxShadow: '0 8px 22px rgba(0,0,0,0.35)' }}>
-        <TextInput autoFocus value={noteAt.text} onChange={(x) => setNoteAt((nn) => ({ ...nn, text: x }))} placeholder={tr('pdf.notePlaceholder')}
-          onSubmit={() => { const a = noteAt; setNoteAt(null); if (a.text.trim()) addAnnot({ page: a.page, type: 'note', r: [a.x, a.y, 22, 22], text: a.text.trim(), color: '#ffd60a' }); }}
-          onCancel={() => setNoteAt(null)} style={{ height: 26 }} />
+        <TextInput autoFocus value={noteAt.text} onChange={value => edit('noteChange', { value })} placeholder={tr('pdf.notePlaceholder')}
+          onSubmit={() => edit('noteCommit')}
+          onCancel={() => edit('noteCancel')} style={{ height: 26 }} />
         <Text style={{ fontSize: 10, color: '#6b5d00' }}>{tr('pdf.noteHint')}</Text>
       </View>
     );
@@ -652,7 +598,7 @@ export default function PdfViewer() {
           {msg || (hits ? (hits.list.length ? tr('pdf.matches', { cur: hits.cur + 1, count: hits.list.length }) + (hits.done ? '' : '…') : hits.done ? tr('pdf.noMatches') : tr('pdf.searchingText'))
             : selection?.text ? tr('pdf.selected', { count: selection.text.length }) : tool === 'ink' ? tr('pdf.inkHint') : tool === 'note' ? tr('pdf.noteTool') : tool === 'highlight' ? tr('pdf.highlightHint') : doc?.info.title || '')}
         </Text>
-        {annotated.length || edited.current ? <Text style={{ fontSize: 11, color: '#ff9f0a' }}>{tr('pdf.unsaved')}</Text> : null}
+        {editState.dirty ? <Text style={{ fontSize: 11, color: '#ff9f0a' }}>{tr('pdf.unsaved')}</Text> : null}
         <Text style={{ fontSize: 11, color: th.textDim }}>{mode === 'single' ? tr('pdf.view.single') : tr('pdf.view.continuous')}</Text>
       </View>
     </View>

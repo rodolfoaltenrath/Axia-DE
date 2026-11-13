@@ -1,0 +1,96 @@
+# PDF viewer migration
+
+The window and sidebar remain React. `geometry.rs` owns page/view transforms,
+rotated sizes, continuous layout and visible-page ranges. `cache_model.rs` owns
+width quantization, render admission/deduplication, generations, progressive
+preview selection, byte accounting and LRU eviction. `model.rs` dispatches them
+through the existing native-app bridge as `pdf`.
+
+`navigation.rs` retains each layout's viewport and computes visible page frames,
+prefetch priorities, reading position, scroll limits, page jumps and hit testing.
+`viewer_model.rs` owns fit/zoom/rotation rules, keyboard dispatch, wheel throttling,
+search results and selection request generations. `viewer.js` carries helper
+requests and publishes accepted results; `index.jsx` applies the returned actions.
+Restarting an identical search, clearing selection, changing documents and closing
+the window invalidate older results. Empty search parts never navigate to a page.
+
+`edit_model.rs` owns ink/note/form drafts, sampling, annotation payload validation,
+dirty state and the per-document queue for annotations, field writes, undo and
+saving a copy. Only one mutation is sent to the helper at a time. Undo selects
+its page when it reaches the queue head; save waits for preceding edits. Failed
+requests retain the prior history and allow the queue to continue.
+
+The editor emits ink deltas rather than full stroke arrays on every move. Text
+and choice fields reuse pending/confirmed values until fresh page metadata arrives;
+rapid checkbox/radio actions alternate against the latest native intent. Metadata
+reads carry page revisions and document epochs, so an old read cannot replace
+new field state. Highlights consume only the final native selection ticket.
+
+`geometry.js` retains a native owner per layout in a WeakMap: normal scrolling
+sends only its two viewport limits. `sidebar_model.rs` retains thumbnail sizes,
+positions, scroll limits, page following and bookmark expansion. Thumbnail
+scrolling uses binary search and returns only visible frames; sizes are supplied
+once per page-size/rotation change. The model flattens visible bookmark rows and
+preserves descendant expansion choices when a parent collapses. Its JS adapter
+keeps helper I/O on the host, and the React sidebar ignores late outline replies
+after a document change. Resizing clamps the thumbnail offset to the new extent.
+`cache.js` retains helper promises, callbacks and
+raster handles, and applies Rust's release effects. No image or JS value enters
+the Rust model. Models and their pending metadata are independent per owner.
+
+The cache preserves the previous 32-pixel quantization, 48 MiB default budget,
+80% eviction target, exemption for the just-rendered image, stale previews until
+a replacement arrives and rejection of results after invalidation/close. Closing
+also prevents new render requests. Malformed image dimensions are rejected and
+the adapter releases their handles so a later request can retry.
+
+Tests can run without recompiling the compositor:
+
+```sh
+cargo test --manifest-path rust/Cargo.toml -p axia-shell --example pdf-model \
+  --target-dir build/sdk-rust --locked --offline
+node server/tests/pdf_model_test.mjs
+```
+
+The Node suite builds only its Rust test model if needed; `AXIA_PDF_MODEL_BIN`
+can select an already-built example. Its subprocess adapter replays each owner's
+history into the production source, retaining no alternative JS policy.
+
+`rust/axia-shell/tests/fixtures/pdf_geometry.json` freezes 312 results from the
+pre-migration JS at `eca7b122` (seed 1731). `pdf_cache_trace.json` freezes 13
+snapshots of the previous cache under `server/tests/pdf_cache_scenario.mjs`,
+including deduplication, LRU, cancellation, late results, invalidation and close.
+They are reference artifacts; normal tests do not regenerate them. Additional
+Rust/JS tests exercise ABI registration, model isolation, host failure cleanup,
+entry identity, malformed requests and scalar-only scrolling.
+
+Validated on 2026-11-13: 1,140 Node adapter/reference checks and 39 Rust native-host
+tests passed. The PDF application bundled successfully in memory with the real
+SDK/runtime aliases. No compositor rebuild or graphical session test was run.
+
+The compositor must eventually be rebuilt to expose the `pdf` model. This stage
+does not migrate PDF decoding/rendering, the React window or
+the full application to a native Rust view.
+
+Further frozen references in `pdf_viewer.json` (216 zoom/fit cases) and
+`pdf_navigation.json` (72 viewport/jump/hit scenarios, seed 5801) come from the
+original viewer policies at `eca7b122`. Normal pointer/scroll navigation sends
+scalar facts to the layout's owner, not all page sizes/positions. Thumbnail and
+page image lifetimes remain in the previously tested host cache.
+
+`pdf_sidebar.json` freezes 40 thumbnail scenarios (initial page following,
+manual scroll and a subsequent page jump), generated by executing the layout,
+follow and visibility statements from `eca7b122:apps/pdf/sidebar.jsx`, seed 7123.
+Additional tests cover collapsed descendants, malformed updates preserving the
+last valid state, independent owners, resize clamping and 100,000-page documents.
+
+The remaining React code still owns presentation, text-drag gesture capture,
+app menus, dialogs and sidebar presentation; the host executes the Rust editor's helper
+effects and mirrors its ink/draft deltas. The complete PDF
+application is therefore not yet a native Rust view.
+
+The host binds each viewer controller to the currently open helper object.
+Delayed events from an older React render cannot start another search/selection
+against a closed document. Rust request generations separately reject late
+replies, including repeated searches with exactly the same text. Failed viewport
+updates preserve the last valid frame state; nonfinite derived geometry is rejected.
