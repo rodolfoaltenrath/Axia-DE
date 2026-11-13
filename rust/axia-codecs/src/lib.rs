@@ -14,6 +14,9 @@ mod compression;
 mod tzif;
 #[cfg(feature = "secure-memory")]
 mod secure;
+// The KDBX XML reader keeps its tree in the vault's secrets arena.
+#[cfg(feature = "secure-memory")]
+mod xmlmini;
 
 use std::{ptr, slice};
 
