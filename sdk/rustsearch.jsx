@@ -9,6 +9,9 @@ import { useStore } from './store.js';
 import { useLauncherApps, launcherApp, refreshApps } from './apps.js';
 import { locale } from './i18n.js';
 import { createSearchSession, searchCaption, searchSourceIcon, spotlightOpen } from './search.js';
+import { useSettings } from './settings.js';
+import { NativeView } from './nativeview.js';
+import { NATIVE_TREE, treeBridge } from './nativetree.js';
 function Widget({ node, session }) {
   if (!node) return null;
   const props = { style: node.style };
@@ -35,4 +38,20 @@ function Panel() {
   useEffect(() => () => session.close(), []);
   return h(Widget, { node: snapshot.tree, session });
 }
-export function SpotlightPanel() { return useStore(spotlightOpen) ? h(Panel) : null; }
+// "spotlightNativeView": true in settings.json: the session is the same, the tree is drawn by Rust.
+function NativePanel() {
+  useState(refreshApps);
+  const theme = useTheme(), apps = useLauncherApps(), language = useStore(locale);
+  const context = { theme, glass: dockGlass(theme), area: mainBox() };
+  const [session] = useState(() => createSearchSession(true, context));
+  const snapshot = useStore(session.store);
+  useEffect(() => { session.context(context); }, [theme, language, apps, screen.width, screen.height]);
+  useEffect(() => () => { session.close(); treeBridge.perform = null; }, []);
+  treeBridge.perform = ({ action, extra }) => { session.event(action, action[0] === 'key' ? { reveal: !!extra?.meta } : {}); };
+  return h(NativeView, { manifest: NATIVE_TREE, args: { tree: snapshot.tree },
+    style: { position: 'absolute', left: 0, top: 0, width: screen.width, height: screen.height } });
+}
+export function SpotlightPanel() {
+  const [prefs] = useSettings();
+  return useStore(spotlightOpen) ? h(prefs.spotlightNativeView === true ? NativePanel : Panel) : null;
+}

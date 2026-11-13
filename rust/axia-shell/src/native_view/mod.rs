@@ -13,6 +13,7 @@ mod menu;
 mod menubar;
 mod shell_icons;
 mod titlebar;
+mod tree;
 pub mod paint;
 pub mod style;
 #[cfg(test)]
@@ -69,6 +70,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
         crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
+        "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),
         "shell:menubar" => Some(Box::new(menubar::MenuBar::default())),
