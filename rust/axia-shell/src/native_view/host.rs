@@ -58,9 +58,9 @@ struct Mounted {
     key: String,
     node: i32,
     /// Button label; scroll content and thumb; field text, caret and placeholder.
-    parts: [i32; 3],
-    raw: [Value; 4],
-    props: [Props; 4],
+    parts: [i32; 6],
+    raw: [Value; 7],
+    props: [Props; 7],
     label: String,
     /// A field's placeholder as shown.
     aux: Option<String>,
@@ -74,6 +74,8 @@ struct Mounted {
     base: Value,
     /// Its "tooltip" as text (a view or a text).
     tip: Option<String>,
+    /// A field's texts as shown: before the selection, the selection, after it.
+    parts_text: [String; 3],
     offset: f64,
     children: Vec<Mounted>,
 }
@@ -83,7 +85,7 @@ impl Mounted {
             kind,
             key,
             node: 0,
-            parts: [0; 3],
+            parts: [0; 6],
             raw: Default::default(),
             props: Default::default(),
             label: String::new(),
@@ -94,6 +96,7 @@ impl Mounted {
             layer: 0,
             base: Value::Null,
             tip: None,
+            parts_text: Default::default(),
             offset: 0.,
             children: Vec::new(),
         }
@@ -189,6 +192,13 @@ pub struct Host {
     /// When the bubble of the hovered view shows, and the bubble while it does.
     tip_due: Option<f64>,
     tip_view: Vec<Mounted>,
+    /// The focused field's caret and the other end of its selection (in characters), and the value
+    /// they were set for: another value (the app's own change) puts the caret at its end.
+    caret: usize,
+    anchor: usize,
+    caret_value: String,
+    /// A field that asked for the focus (autoFocus) when it was mounted.
+    pending_focus: Option<i32>,
     effects: VecDeque<Value>,
     title: String,
     window_focused: bool,
@@ -236,6 +246,10 @@ impl Host {
             lit: false,
             tip_due: None,
             tip_view: Vec::new(),
+            caret: 0,
+            anchor: 0,
+            caret_value: String::new(),
+            pending_focus: None,
             effects: VecDeque::new(),
             title: String::new(),
             window_focused: true,
@@ -416,6 +430,9 @@ impl Host {
         let tree = std::slice::from_ref(&reply["tree"]);
         self.root = self.reconcile(self.mount, old, tree);
         self.index();
+        if let Some(node) = self.pending_focus.take() {
+            self.focus(node);
+        }
     }
     fn key_of(v: &Value, i: usize) -> String {
         match &v["key"] {
@@ -492,7 +509,8 @@ impl Host {
         let parts: &[i32] = match kind {
             Kind::Button => &[scene::TEXT],
             Kind::Scroll => &[scene::VIEW, scene::VIEW],
-            Kind::Input => &[scene::TEXT, scene::VIEW, scene::TEXT],
+            // before the selection, a caret, the selection, a caret, after it, the placeholder
+            Kind::Input => &[scene::TEXT, scene::VIEW, scene::TEXT, scene::VIEW, scene::TEXT, scene::TEXT],
             _ => &[],
         };
         for (i, k) in parts.iter().enumerate() {
@@ -627,8 +645,12 @@ impl Host {
                 self.thumb(m);
             }
             Kind::Input => {
+                let first = m.aux.is_none();
                 m.spec = spec.clone();
                 self.field_style(m);
+                if first && spec["autoFocus"] == true {
+                    self.pending_focus = Some(m.node);
+                }
             }
             Kind::Empty => {}
         }
@@ -671,11 +693,23 @@ impl Host {
     fn field_style(&mut self, m: &mut Mounted) {
         let focused = self.field == m.node && m.node != 0;
         let value = self.i18n.caption(&m.spec["value"]);
-        let border = if focused {
-            self.theme("accent", "#0a84ff")
+        if focused && value != self.caret_value {
+            // another value than the one the caret is for (the app changed it): at its end
+            self.caret = value.chars().count();
+            self.anchor = self.caret;
+            self.caret_value = value.clone();
+        }
+        let chars: Vec<char> = value.chars().collect();
+        let n = chars.len();
+        let (caret, anchor) = if focused { (self.caret.min(n), self.anchor.min(n)) } else { (n, n) };
+        let (a, b) = (caret.min(anchor), caret.max(anchor));
+        let (before, sel, after): (String, String, String) = if focused {
+            (chars[..a].iter().collect(), chars[a..b].iter().collect(), chars[b..].iter().collect())
         } else {
-            self.theme("separator", "#555555")
+            (value.clone(), String::new(), String::new())
         };
+        let accent = self.theme("accent", "#0a84ff");
+        let border = if focused { accent.clone() } else { self.theme("separator", "#555555") };
         let base = json!({
             "height":28,"paddingHorizontal":10,"borderRadius":self.theme("controlRadius","6"),
             "flexDirection":"row","alignItems":"center","overflow":"hidden","cursor":"text",
@@ -683,33 +717,27 @@ impl Host {
             "borderWidth":1,"borderColor":border,
         });
         m.style(0, json!([base, m.spec["style"]]));
-        m.style(
-            1,
-            json!({"fontSize":13,"color":self.theme("text","#ffffff"),"whiteSpace":"nowrap",
-                "display": if value.is_empty() {"none"} else {"flex"}}),
-        );
-        let caret = if focused && self.caret_on {
-            self.theme("accent", "#0a84ff")
-        } else {
-            json!("transparent")
-        };
-        m.style(
-            2,
-            json!({"width":1.5,"height":16,"marginLeft":1,"backgroundColor":caret,
-                "display": if focused {"flex"} else {"none"}}),
-        );
-        m.style(
-            3,
-            json!({"fontSize":13,"color":self.theme("textDim","#999999"),"whiteSpace":"nowrap",
-                "display": if value.is_empty() {"flex"} else {"none"}}),
-        );
-        if value != m.label {
-            scene::set_label(m.parts[0], &value);
-            m.label = value;
+        let text = self.theme("text", "#ffffff");
+        let shown = |on: bool| if on { "flex" } else { "none" };
+        let plain = |on: bool| json!({"fontSize":13,"color":text,"whiteSpace":"nowrap","display":shown(on)});
+        let blink = if self.caret_on { accent.clone() } else { json!("transparent") };
+        let caret_node = |on: bool| json!({"width":1.5,"height":16,"marginLeft":1,"backgroundColor":blink,"display":shown(on)});
+        m.style(1, plain(!before.is_empty()));
+        m.style(2, caret_node(focused && caret == a));
+        m.style(3, json!({"fontSize":13,"color":"#ffffff","backgroundColor":accent,"whiteSpace":"nowrap","display":shown(!sel.is_empty())}));
+        m.style(4, caret_node(focused && b > a && caret == b));
+        m.style(5, plain(!after.is_empty()));
+        m.style(6, json!({"fontSize":13,"color":self.theme("textDim","#999999"),"whiteSpace":"nowrap","display":shown(value.is_empty())}));
+        for (slot, text) in [(0, before), (1, sel), (2, after)] {
+            if m.parts_text[slot] != text {
+                scene::set_label(m.parts[slot * 2], &text);
+                m.parts_text[slot] = text;
+            }
         }
+        m.label = value;
         let placeholder = self.i18n.caption(&m.spec["placeholder"]);
         if m.aux.as_deref() != Some(placeholder.as_str()) {
-            scene::set_label(m.parts[2], &placeholder);
+            scene::set_label(m.parts[5], &placeholder);
             m.aux = Some(placeholder);
         }
     }
@@ -974,6 +1002,20 @@ impl Host {
             return;
         }
         let old = std::mem::replace(&mut self.field, node);
+        if node != 0 {
+            // the caret at the end, or the selection the field asked for (select: [from, to], selectAll)
+            if let Some(m) = find(&mut self.root, node) {
+                let n = m.label.chars().count();
+                let (from, to) = match m.spec["select"].as_array() {
+                    Some(r) if r.len() == 2 => (r[0].as_u64().unwrap_or(0) as usize, r[1].as_u64().unwrap_or(0) as usize),
+                    _ if m.spec["selectAll"] == true => (0, n),
+                    _ => (n, n),
+                };
+                self.anchor = from.min(n);
+                self.caret = to.min(n);
+                self.caret_value = m.label.clone();
+            }
+        }
         self.caret_on = true;
         self.next_blink = (node != 0).then(|| now_ms() + CARET_BLINK);
         for n in [old, node] {
@@ -1187,6 +1229,13 @@ impl Host {
         self.next_blink = Some(now_ms() + CARET_BLINK);
         self.dispatch(&action, extra);
     }
+    /// A field's new text and where its caret and selection are after it.
+    fn edit_to(&mut self, text: String, caret: usize, anchor: usize) {
+        self.caret = caret;
+        self.anchor = anchor;
+        self.caret_value = text.clone();
+        self.edit(text);
+    }
     fn field_value(&mut self) -> Option<String> {
         let m = find(&mut self.root, self.field)?;
         Some(m.label.clone())
@@ -1213,50 +1262,64 @@ impl Host {
             self.field = 0;
             return false;
         };
-        if (ctrl || meta) && key.eq_ignore_ascii_case("v") {
+        let altgr = flags & 8 != 0;
+        let plain_alt = alt && !altgr;
+        let mut field = crate::text_edit::Field::new(&value, self.caret, self.anchor);
+        // Alt is for the shell's shortcuts (and word moves), not a typed character; AltGr types.
+        let out = field.key(
+            crate::text_edit::Key {
+                key,
+                chr: if plain_alt { "" } else { chr },
+                command: ctrl || meta,
+                alt: plain_alt,
+                shift: flags & 1 != 0,
+                base: key,
+            },
+            false,
+        );
+        if !out.handled {
+            return false;
+        }
+        if out.paste {
             self.effects.push_back(json!({"kind":"paste","host":true}));
             return true;
         }
-        match key {
-            "Backspace" => {
-                let mut v = value;
-                v.pop();
-                self.edit(v);
+        if let Some(text) = out.copy {
+            self.effects.push_back(json!({"kind":"copy","text":text,"host":true}));
+        }
+        if out.cancel {
+            let cancel = find(&mut self.root, self.field).map(|m| m.spec["cancel"].clone()).filter(Value::is_array);
+            self.blur();
+            if let Some(action) = cancel {
+                self.dispatch(&action, Map::new());
             }
-            "Escape" => {
-                let cancel = find(&mut self.root, self.field)
-                    .map(|m| m.spec["cancel"].clone())
-                    .filter(Value::is_array);
+        } else if out.submit {
+            let submit = find(&mut self.root, self.field).map(|m| m.spec["submit"].clone()).filter(Value::is_array);
+            if let Some(action) = submit {
                 self.blur();
-                if let Some(action) = cancel {
-                    self.dispatch(&action, Map::new());
-                }
+                self.dispatch(&action, Map::new());
             }
-            "Enter" => {
-                let submit = find(&mut self.root, self.field)
-                    .map(|m| m.spec["submit"].clone())
-                    .filter(Value::is_array);
-                if let Some(action) = submit {
-                    self.blur();
-                    self.dispatch(&action, Map::new());
-                }
+        } else if out.changed {
+            let text = field.value();
+            if text.chars().count() <= 2048 {
+                self.edit_to(text, field.caret, field.anchor);
             }
-            "Delete" | "ArrowLeft" | "ArrowRight" | "Home" | "End" => {}
-            _ if !chr.is_empty() && !ctrl && !meta && (!alt || flags & 8 != 0) => {
-                let mut v = value;
-                v.push_str(&chr.replace('\n', " "));
-                if v.chars().count() <= 2048 {
-                    self.edit(v);
-                }
-            }
-            _ => return false,
+        } else {
+            // only the caret or the selection moved
+            self.caret = field.caret;
+            self.anchor = field.anchor;
+            self.caret_on = true;
+            self.next_blink = Some(now_ms() + CARET_BLINK);
+            self.restyle(self.field);
         }
         true
     }
     pub fn paste(&mut self, text: &str) {
-        if let Some(mut value) = self.field_value() {
-            value.push_str(&text.replace(['\n', '\r'], " "));
-            self.edit(value.chars().take(2048).collect());
+        if let Some(value) = self.field_value() {
+            let mut field = crate::text_edit::Field::new(&value, self.caret, self.anchor);
+            if field.insert(text) && field.value().chars().count() <= 2048 {
+                self.edit_to(field.value(), field.caret, field.anchor);
+            }
         }
     }
     pub fn tick(&mut self, now: f64) {
