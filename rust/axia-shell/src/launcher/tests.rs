@@ -280,6 +280,30 @@ fn ffi_replies_own_their_memory_and_contexts_are_independent() {
 }
 
 #[test]
+fn dock_policy_is_reachable_through_the_production_ffi_without_a_catalog() {
+    unsafe {
+        let state = axia_launcher_new();
+        assert_eq!(
+            call(
+                state,
+                r#"{"op":"dock","cmd":"parse","id":"desktop:firefox"}"#
+            ),
+            json!({"kind":"desktop","key":"firefox"})
+        );
+        assert_eq!(
+            call(
+                state,
+                r#"{"op":"dock","cmd":"pin","list":["app:files","app:last"],"id":"lpk:notes","index":0,"shown":["app:files","app:last"]}"#
+            ),
+            json!(["app:files", "lpk:notes", "app:last"])
+        );
+        assert!(call(state, r#"{"op":"dock","cmd":"unknown"}"#)["error"].is_string());
+        assert_eq!(call(state, r#"{"op":"catalog"}"#)["source"], json!([]));
+        axia_launcher_free(state);
+    }
+}
+
+#[test]
 #[ignore = "manual release-mode measurement; no timing threshold on CI hosts"]
 fn measure_large_catalog() {
     use std::time::Instant;

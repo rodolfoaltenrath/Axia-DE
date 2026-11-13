@@ -147,18 +147,18 @@ EOF
     # Files model tests are part of test-rust; the former JS suite was removed.
     if have node; then run "osk-model-test (sdk/oskmodel.js)" node tests/osk_model_test.mjs
     else skip "osk-model-test (sdk/oskmodel.js)" node; fi
-    if have node; then run "dock-model-test (sdk/dockmodel.js)" node tests/dock_model_test.mjs
-    else skip "dock-model-test" "node"; fi
+    if have node && have cargo; then run "dock-model-test (Rust policy + sdk/dockmodel.js)" node tests/dock_model_test.mjs
+    else skip "dock-model-test" "node and cargo"; fi
     # Desktops: what shows and who has the keyboard (sdk/desktopmodel.js)
-    if have node; then run "desktop-model-test (sdk/desktopmodel.js)" node tests/desktop_model_test.mjs
-    else skip "desktop-model-test" "node"; fi
+    if have node && have cargo; then run "desktop-model-test (sdk/desktopmodel.js)" node tests/desktop_model_test.mjs
+    else skip "desktop-model-test" "node and cargo"; fi
     # sdk/windows.js over the real bridge and the Rust window list, in QuickJS (needs esbuild)
     if have node && [ -d ../node_modules/esbuild ] && [ -x build/windows-bridge-host ]; then
         run "windows-bridge-test (sdk/windows.js, js_winmodel.c, winmodel/session.rs)" node tests/windows_bridge_test.mjs
     else skip "windows-bridge-test" "node, node_modules/esbuild"; fi
     # session restore's data rules (sdk/sessionmodel.js)
-    if have node; then run "session-model-test (sdk/sessionmodel.js)" node tests/session_model_test.mjs
-    else skip "session-model-test" "node"; fi
+    if have node && have cargo; then run "session-model-test (sdk/sessionmodel.js)" node tests/session_model_test.mjs
+    else skip "session-model-test" "node and cargo"; fi
     # smartctl's JSON → the Disks/Monitor SMART model (sdk/smartparse.js), with real smartctl output
     if have node; then run "smart-parse-test (sdk/smartparse.js)" node tests/smart_parse_test.mjs
     else skip "smart-parse-test" "node"; fi
