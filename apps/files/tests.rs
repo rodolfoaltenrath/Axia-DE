@@ -2085,3 +2085,20 @@ fn a_bounded_walk_does_not_queue_an_entire_large_directory() {
     assert!(entries.len() <= 4);
     assert!(!complete);
 }
+
+#[test]
+fn rendering_drop_metadata_uses_worker_facts_and_rejects_stale_destination_on_action() {
+    let home=Home::new();
+    fs::create_dir(home.path("Destination")).unwrap();
+    let (mut s,mut shared)=home.session(json!({"mode":"browser","args":{"path":home.path("Destination")}}));
+    assert!(s.can_write);
+    fs::rename(home.path("Destination"),home.path("Moved")).unwrap();
+    // Rendering still describes the cached listing; it cannot consult the now
+    // unavailable directory. Validation belongs to the eventual drop action.
+    assert_eq!(s.render(&shared)["dropPath"],json!(home.path("Destination")));
+    let source=home.file("source.txt","keep");
+    s.event(&json!({"action":["dropFiles",home.path("Destination")],"paths":[source],"internalMove":true}),&mut shared);
+    assert!(source.exists());assert!(s.error.is_some());
+    s.navigate(Location::Directory(home.path("Moved")),&shared,true);
+    assert!(s.render(&shared)["dropPath"].is_null(),"a new listing has not verified the destination yet");
+}

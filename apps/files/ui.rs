@@ -6,7 +6,7 @@ use super::{
     thumbnails,
 };
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::{collections::HashSet, path::Path};
 
 fn node(kind: &str, style: Value, children: Vec<Value>) -> Value {
     json!({"type":kind,"style":style,"children":children})
@@ -1588,8 +1588,11 @@ impl Session {
             json!({"flex":1,"backgroundColor":color(self,"windowBg","#202025"),"overflow":"hidden"}),
             all,
         );
-        if self.mode==Mode::Browser && self.dialog.is_none() && self.can_write {
-            if let Some(path)=self.write_dir().and_then(|p|p.to_str().map(str::to_owned)) {
+        if self.mode==Mode::Browser && self.dialog.is_none() && self.can_write && !self.visibly_loading() {
+            // The listing worker already checked writability. Rendering must not
+            // canonicalize/stat/access a path, especially a stalled network mount.
+            // The drop action revalidates the destination before starting a job.
+            if let Some(path)=self.tab().location.path().and_then(Path::to_str) {
                 root["dropPath"]=json!(path);
             }
         }
