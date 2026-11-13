@@ -3107,6 +3107,66 @@ static void bench(void) {
     }
 }
 
+
+/* ENGINE_BENCH=1: what one refresh of the glass over an app costs (a video behind the menu bar and the
+ * Dock repaints both, once per frame of the video). The damage is each panel's box and the margin its
+ * blur samples, as paint_external_glass_damage marks it; the buckets are paint.c's profile. */
+extern int paint_profile;
+static void bench_glass_refresh(void) {
+    enum { W = 1920, H = 1080, N = 300 };
+    ui_reset();
+    Node *root = view(NULL);
+    ui.root = root;
+    sn(root, "backgroundColor", 0xff101828);
+    for (int i = 0; i < 24; i++) box_in(root, (float)(i * 80), 0, 40, H, 0xff4060a0 + (uint32_t)i * 0x050301);   /* the video */
+    Node *bar = box_in(layer_node(root, 20, W, H), 0, 0, W, 28, 0x80202024);
+    sn(bar, "backdropBlur", 20);
+    text(bar, "Files   File   Edit   View   Go   Window   Help", 13);
+    Node *dock = box_in(layer_node(root, 10, W, H), 260, H - 78, 1400, 70, 0x90303034);
+    sn(dock, "backdropBlur", 20);
+    sn(dock, "borderRadius", 20);
+    for (int i = 0; i < 26; i++) {
+        Node *ic = box_in(dock, 12 + i * 52, 8, 44, 44, 0xff5080c0 + (uint32_t)i * 0x101010);
+        sn(ic, "borderRadius", 10);
+        sn(ic, "shadowBlur", 6);
+        sn(ic, "shadowColor", 0x66000000);
+    }
+    render(root, W, H);
+    Rect areas[2] = { { 0, 0, W, 28 + 41 + 1 }, { 260 - 41, H - 78 - 41, 260 + 1400 + 41, H } };
+    for (int pass = 0; pass < 2; pass++) {
+        const char *name = pass ? "Dock" : "menu bar";
+        Rect r = areas[pass == 0 ? 0 : 1];
+        paint_profile = pass;                         /* the second pass reports its buckets */
+        struct timespec a, b;
+        clock_gettime(CLOCK_MONOTONIC, &a);
+        for (int i = 0; i < N; i++) {
+            canvas_set_clip(&frame, r);
+            paint_root_clear(&frame, root, 0);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &b);
+        paint_profile = 0;
+        printf("glass refresh of the %s (%dx%d): %.3f ms\n", name, r.x1 - r.x0, r.y1 - r.y0,
+               ((b.tv_sec - a.tv_sec) * 1e3 + (b.tv_nsec - a.tv_nsec) / 1e6) / N);
+    }
+    /* the same without the blur: what the panels cost when the glass is not there */
+    sn(bar, "backdropBlur", 0);
+    sn(dock, "backdropBlur", 0);
+    render(root, W, H);
+    for (int pass = 0; pass < 2; pass++) {
+        Rect r = areas[pass];
+        struct timespec a, b;
+        clock_gettime(CLOCK_MONOTONIC, &a);
+        for (int i = 0; i < N; i++) {
+            canvas_set_clip(&frame, r);
+            paint_root_clear(&frame, root, 0);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &b);
+        printf("the %s repainted without its blur: %.3f ms\n", pass ? "Dock" : "menu bar",
+               ((b.tv_sec - a.tv_sec) * 1e3 + (b.tv_nsec - a.tv_nsec) / 1e6) / N);
+    }
+    canvas_set_clip(&frame, (Rect){ 0, 0, W, H });
+}
+
 int main(int argc, char **argv) {
     const char *dir = getenv("LORD_FONTS") ? getenv("LORD_FONTS") : "../assets/fonts";
     fonts_set_builtin_dir(dir);
@@ -3135,6 +3195,7 @@ int main(int argc, char **argv) {
     test_dock_preview_capture();
     test_transform_self_restyle();
     test_layers();
+    if (getenv("ENGINE_BENCH")) { bench_glass_refresh(); return 0; }
     test_backdrop_band();
     test_multi_damage();
     test_minimize_damage();
