@@ -7,99 +7,73 @@
 // Nothing else ever enters it: no Exec line, argv, environment, pid, title or Linux document path.
 // args exist only for LordOS apps, only the fields below, and never "nonce" (wm.open adds a new one).
 // The file can be edited by any program the user runs, so all of it is checked again when it is read.
-import { parseDockId } from './dockmodel.js';
-import { MAX_DESKTOPS } from './desktopmodel.js';
+// The rules are Rust (rust/axia-shell/src/launcher/session_model.rs, through the launcher bridge); this
+// adapter keeps the public API and resolves the callbacks (once, area) into plain data.
+const request = (cmd, input = {}) => {
+  const reply = lord.launcher.request(JSON.stringify({ op: 'session', cmd, ...input }));
+  if (reply?.error) throw new Error(`session: ${reply.error}`);
+  return reply;
+};
+const constants = request('constants');
 
-export const RESTORE_MODES = ['off', 'ask', 'always'];
-export const RESTORE_DEFAULT = 'always';
-export const MAX_WINDOWS = 12;      // a session never launches more than this
+export const RESTORE_MODES = constants.modes;
+export const RESTORE_DEFAULT = constants.default;
+export const MAX_WINDOWS = constants.max;      // a session never launches more than this
 
 // Never reopened: tools about another window, one-shot helpers and apps of the live system.
-export const NEVER = ['forcequit', 'appabout', 'installer', 'sysprobe', 'screenshots'];
+export const NEVER = constants.never;
 
-const text = (v) => typeof v === 'string' && v.length > 0 && v.length <= 80 && /^[A-Za-z0-9._:-]+$/.test(v);
-const path = (v) => typeof v === 'string' && v.length > 1 && v.length <= 1024 && /^[/~]/.test(v) && !v.includes('\0');
-// Per LordOS app, the args it reads as "what this window shows" and how each must look. An app or a
-// field that isn't here reopens without them: a Store install request, a Help tour or a Mail draft
-// is an action that already happened, not a state.
-const ARGS = {
-  settings: { section: text, page: text },
-  monitor: { tab: text, disk: text },
-  disks: { disk: text },
-  help: { article: text },
-  notes: { slug: text },
-  files: { path, place: text, view: text },
-  editor: { path },
-  pdf: { path },
-  photos: { path },
-  player: { path },
-  fonts: { path },
+// Objects come back with sorted keys; these rebuild them in the order the API always gave.
+const frame = (f) => f && { x: f.x, y: f.y, w: f.w, h: f.h };
+const entry = (e) => {
+  if (!e) return null;
+  const out = { id: e.id, f: frame(e.f) };
+  if (e.max) out.max = e.max;
+  if (e.min) out.min = e.min;
+  if (e.snap !== undefined) out.snap = e.snap;
+  if (e.desk !== undefined) out.desk = e.desk;
+  if (e.args) out.args = Object.fromEntries(e.args);
+  return out;
 };
 
+// Only JSON-able values can be saved, so anything else (functions, undefined) is not an arg at all.
+const plain = (v) => { try { return JSON.parse(JSON.stringify(v)) ?? null; } catch { return null; } };
+
 export function cleanArgs(app, args) {
-  const rules = ARGS[app];
-  if (!rules || !args || typeof args !== 'object') return null;
-  const out = {};
-  for (const [k, ok] of Object.entries(rules)) if (ok(args[k])) out[k] = args[k];
-  return Object.keys(out).length ? out : null;
+  const pairs = request('cleanArgs', { app: typeof app === 'string' ? app : '', args: plain(args) });
+  return pairs && Object.fromEntries(pairs);
 }
 
-const int = (v) => (Number.isFinite(v) ? Math.round(v) : null);
-export function cleanFrame(f) {
-  if (!f || typeof f !== 'object') return null;
-  const x = int(f.x), y = int(f.y), w = int(f.w), h = int(f.h);
-  if (x == null || y == null || w == null || h == null || w < 80 || h < 60 || w > 16384 || h > 16384) return null;
-  return { x, y, w, h };
-}
+export const cleanFrame = (f) => frame(request('cleanFrame', { f: plain(f) }));
 
 // One entry as read back from settings.json (null if anything is off). zones: the snap zones.
-export function cleanEntry(e, zones = []) {
-  if (!e || typeof e !== 'object' || typeof e.id !== 'string') return null;
-  const p = parseDockId(e.id);
-  const f = cleanFrame(e.f);
-  if (!p || p.kind === 'shell' || !f || NEVER.includes(p.key)) return null;
-  const out = { id: e.id, f };
-  if (e.max) out.max = 1;
-  if (e.min) out.min = 1;
-  if (zones.includes(e.snap)) out.snap = e.snap;
-  if (Number.isInteger(e.desk) && e.desk > 0 && e.desk < MAX_DESKTOPS) out.desk = e.desk;
-  const args = p.kind === 'app' ? cleanArgs(p.key, e.args) : null;
-  if (args) out.args = args;
-  return out;
-}
-export const cleanList = (list, zones) => (Array.isArray(list) ? list.map((e) => cleanEntry(e, zones)).filter(Boolean).slice(-MAX_WINDOWS) : []);
+export const cleanEntry = (e, zones = []) => entry(request('cleanEntry', { e: plain(e), zones: plain(zones) }));
+export const cleanList = (list, zones) => request('cleanList', { list: plain(list), zones: plain(zones) || [] }).map(entry);
 
 // What a new session does with what the last one left. An unclean end (power cut, crash) always
 // asks first, unless restore is off: the same apps may be why it fell.
-export function restoreDecision(mode, clean, count) {
-  if (!count || mode === 'off' || !RESTORE_MODES.includes(mode)) return 'none';
-  return !clean || mode === 'ask' ? 'ask' : 'run';
-}
+export const restoreDecision = (mode, clean, count) => request('restoreDecision', {
+  mode: typeof mode === 'string' ? mode : '', clean: !!clean, count: typeof count === 'number' ? count : (count ? 1 : 0),
+});
 
 // The launches of a saved list, in order (bottom window first). open: Map dock id → windows already
 // open (Open at Login, the Terminal's live sessions): that many entries are skipped, nothing doubles.
 // once(id): ids that bring back all their windows from a single launch (isolated apps, .lpk packages,
 // a browser reopening its own session); the frames of the others still go to the windows that show up.
 export function planRestore(list, open, once = () => false) {
-  const left = new Map(open), started = new Set(), steps = [];
-  for (const e of list) {
-    const n = left.get(e.id) || 0;
-    if (n > 0) { left.set(e.id, n - 1); continue; }
-    const again = started.has(e.id);
-    started.add(e.id);
-    steps.push({ entry: e, launch: !(again && once(e.id)) });
-  }
-  return steps;
+  const ids = list.map((e) => e.id);
+  const steps = request('planRestore', {
+    ids, open: [...open].map(([id, n]) => [id, n]), once: [...new Set(ids)].filter((id) => once(id)),
+  });
+  return steps.map((s) => ({ entry: list[s.index], launch: s.launch }));
 }
 
 // A saved frame on today's screens: kept on the display it was on, or centered on the main one when
 // that display is gone. displays: [{ x, y, w, h }], area(d): that display's work area; main: index.
 export function fitFrame(f, displays, area, main = 0) {
-  const on = (d) => f.x < d.x + d.w - 48 && f.x + f.w > d.x + 48 && f.y < d.y + d.h - 24 && f.y + 24 > d.y;
-  const d = displays.find(on);
-  const a = area(d || displays[main] || displays[0]);
-  const w = Math.min(f.w, a.w), h = Math.min(f.h, a.h);
-  if (!d) return { x: Math.round(a.x + (a.w - w) / 2), y: Math.round(a.y + (a.h - h) / 2), w, h };
-  // the same limits a window has when the screen changes (windows.js): partly off the edge stays so
-  return { x: Math.min(Math.max(f.x, a.x - w + 96), a.x + a.w - 96), y: Math.min(Math.max(f.y, a.y), a.y + a.h - Math.min(h, 48)), w, h };
+  const r = request('fitFrame', {
+    f: frame(f), displays, areas: displays.map((d) => area(d)), main,
+    fallbackArea: displays.length ? null : area(undefined),
+  });
+  return frame(r);
 }
