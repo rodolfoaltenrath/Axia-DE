@@ -9,6 +9,7 @@ compile_error!("vault codecs require --no-default-features; never unify the prot
 #[cfg(feature = "mail")]
 extern crate axia_mail;
 
+mod cbor;
 mod compression;
 mod tzif;
 #[cfg(feature = "secure-memory")]
