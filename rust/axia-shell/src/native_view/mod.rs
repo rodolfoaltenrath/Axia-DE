@@ -7,6 +7,7 @@
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
 pub(crate) mod async_jobs;
+pub(crate) mod date_format;
 pub mod icons;
 pub mod i18n;
 mod launcher;
@@ -73,6 +74,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
         crate::native_apps::logs::ID => Some(Box::new(crate::logs_app::App::default())),
         crate::native_apps::fonts::ID => Some(Box::new(crate::fonts_app::App::default())),
+        crate::native_apps::scanner::ID => Some(Box::new(crate::scanner_app::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),

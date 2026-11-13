@@ -9,7 +9,11 @@ import { logs } from '../sdk/logs.js';
 import * as fs from '../sdk/fs.js';
 import { createNativeAsync } from './native_async.js';
 import { fontServices } from './native_font_services.js';
-import { fontInfo, fontSample, fontGrid, releaseImage } from '../sdk/doc.js';
+import { fontInfo, fontSample, fontGrid, releaseImage, decodeImage, convertImage, pdfThumb } from '../sdk/doc.js';
+import { print } from '../sdk/print.js';
+import { documentServices } from './native_doc_services.js';
+import { scanServices } from './native_scan_services.js';
+import { fileServices } from './native_fs_services.js';
 
 let followers = 0;
 const watches = new Map();
@@ -20,7 +24,10 @@ function stopWatch(id) {
   if (--followers === 0) logs.follow(false);
 }
 const methods = {
-  ...fontServices({ fs, fontInfo, fontSample, fontGrid, releaseImage, list: options => lord.fonts.list(options) }),
+  ...fontServices({ fontInfo, fontSample, fontGrid, releaseImage, list: options => lord.fonts.list(options) }),
+  ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),
+  ...fileServices(fs),
+  ...scanServices(print),
   'logs.sources': { run: () => logs.sources() },
   'logs.files': { run: () => logs.files() },
   'logs.query': { run: ([query]) => logs.query(query) },
