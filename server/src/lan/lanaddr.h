@@ -1,5 +1,6 @@
 /* lanaddr.h — which addresses Files → Network may touch, and the arguments of the share-* actions.
- * Pure functions, the same on both sides of the admin helper (tests/lan_test.c). */
+ * Pure functions, the same on both sides of the admin helper (tests/lan_test.c); implemented in
+ * rust/axia-codecs/src/lanaddr.rs. */
 #ifndef LORD_LAN_ADDR_H
 #define LORD_LAN_ADDR_H
 

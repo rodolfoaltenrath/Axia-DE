@@ -91,7 +91,7 @@ SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c 
        $(SEC_SRC) $(APP_SRC) $(MON_SRC) $(MEDIA_SRC)
 # Documents and printing (M9): axia-doc helper sessions and our own IPP/mDNS/eSCL client
 # (src/doc, src/print; see docs/DOCUMENTS.md and docs/PRINTING.md). No Poppler or libarchive here.
-DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/print/ipp.c src/print/phttp.c src/print/mdns.c src/print/cups.c \
+DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/print/phttp.c src/print/mdns.c src/print/cups.c \
            src/print/escl.c src/print/print.c src/ui/js_print.c
 SRC += $(DOC_SRC)
 # Per-app firewall (src/fw, docs/FIREWALL.md): rules, decision and names learned from DNS
@@ -715,9 +715,9 @@ build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c src/sec/n
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c -lpthread
 	./$@ || { rm -f $@; exit 1; }
-build/ipp-test: tests/ipp_test.c src/print/ipp.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(wildcard src/print/*.h) $(CODEC_LIB)
+build/ipp-test: tests/ipp_test.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(wildcard src/print/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ipp_test.c src/print/ipp.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ipp_test.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # axia-doc end to end: malicious archives, PDF and the lockdown (needs build/axia-doc)
 build/doc-test: tests/doc_test.c src/doc/wire.c src/sec/json.c $(wildcard src/doc/*.h)
 	@mkdir -p build

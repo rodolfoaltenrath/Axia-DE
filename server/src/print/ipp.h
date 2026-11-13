@@ -1,4 +1,5 @@
-/* ipp.h — our own IPP/1.1 encoder and decoder (RFC 8010/8011), without libcups.
+/* ipp.h — our own IPP/1.1 encoder and decoder (RFC 8010/8011), without libcups; implemented in
+ * rust/axia-codecs/src/ipp.rs.
  *
  * Enough to talk to CUPS over its local socket (cups.c) and to read what it returns:
  * groups, multi-valued attributes, integers, enums, booleans, ranges, resolutions, texts

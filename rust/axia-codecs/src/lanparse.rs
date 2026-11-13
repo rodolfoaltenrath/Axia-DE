@@ -74,7 +74,7 @@ fn utf8_len(p: &[u8]) -> usize {
 
 /// lanaddr.c's lan_clean_text: leading/trailing spaces, control characters and
 /// invalid UTF-8 removed, cut to fit `cap` with its NUL.
-fn clean_text(inp: &[u8], cap: usize) -> Vec<u8> {
+pub(crate) fn clean_text(inp: &[u8], cap: usize) -> Vec<u8> {
     let mut out = Vec::new();
     let mut p = inp.iter().position(|&c| c != b' ').unwrap_or(inp.len());
     while p < inp.len() {
@@ -102,7 +102,7 @@ fn put_cstr(out: &mut [u8], s: &[u8]) {
 }
 
 /// Like snprintf(out, "%s", s): cut at the byte.
-fn copy_cstr(out: &mut [u8], s: &[u8]) {
+pub(crate) fn copy_cstr(out: &mut [u8], s: &[u8]) {
     if out.is_empty() {
         return;
     }
@@ -655,13 +655,13 @@ pub fn share_reply(b: &[u8], max: usize) -> Option<Vec<(Vec<u8>, Vec<u8>)>> {
 
 // ---- C ABI ----
 
-unsafe fn buf<'a>(p: *mut u8, cap: usize) -> &'a mut [u8] {
+pub(crate) unsafe fn buf<'a>(p: *mut u8, cap: usize) -> &'a mut [u8] {
     if p.is_null() || cap == 0 { &mut [] } else { slice::from_raw_parts_mut(p, cap) }
 }
 unsafe fn bytes<'a>(p: *const u8, len: usize) -> &'a [u8] {
     if p.is_null() || len == 0 { &[] } else { slice::from_raw_parts(p, len) }
 }
-unsafe fn cstr<'a>(p: *const c_char) -> &'a [u8] {
+pub(crate) unsafe fn cstr<'a>(p: *const c_char) -> &'a [u8] {
     if p.is_null() { b"" } else { CStr::from_ptr(p).to_bytes() }
 }
 unsafe fn body<'a>(m: *const SmbMsg) -> Option<(&'a SmbMsg, &'a [u8])> {

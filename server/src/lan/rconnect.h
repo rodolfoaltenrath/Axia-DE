@@ -13,7 +13,7 @@ char *rconnect_poll(void);
 void  rconnect_trust(const char *print, int yes);   /* the answer to "confirm", for the fingerprint that was shown */
 int   rconnect_unmount(const char *path);   /* 0 ok, a folder under that root only */
 
-/* pure, tests/lan_test.c */
+/* pure, tests/lan_test.c: rust/axia-codecs/src/rconnect.rs */
 int   rconnect_host_ok(const char *s);
 int   rconnect_user_ok(const char *s);
 int   rconnect_path_ok(const char *s);
