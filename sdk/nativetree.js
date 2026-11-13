@@ -4,5 +4,8 @@
 // name it passes in args.owner; sdk/nativeview.js hands each event to its owner.
 export const NATIVE_TREE = { id: 'shell:tree', shell: true, fullTheme: true };
 
+// The same with the catalog of apps, for trees that draw an app's icon.
+export const NATIVE_TREE_APPS = { ...NATIVE_TREE, facts: 'apps' };
+
 // owner name → perform({ action: [cmd, key], extra }): what the user did in the view.
 export const treeOwners = new Map();

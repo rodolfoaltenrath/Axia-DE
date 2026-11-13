@@ -7,6 +7,7 @@ import { settings } from '../../sdk/settings.js';
 import { configureWindows } from '../../sdk/windows.js';
 import { enableShellLayers } from '../../sdk/layers.js';
 import { Menu } from '../../sdk/menu.jsx';
+import { NativeDockTip, NativeDockGhost } from '../../sdk/nativedockparts.jsx';
 import { MenuBar } from '../../themes/default/components/MenuBar.jsx';
 import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
 import { RustLauncher } from '../../sdk/rustlauncher.jsx';
@@ -31,6 +32,7 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
+let dockParts = false, setDockParts = () => {};
 let menuRan = [], menuClosed = 0, showMenu = false, setMenuShown = () => {};
 let kbd = 0, ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
 const opened = [];
@@ -38,7 +40,8 @@ const drags = [];
 function Harness() {
   const [launcher, setShow] = useState(false);
   showLauncher = launcher; setLauncher = setShow;
-  const [menuOn, setMenuOn] = useState(false);
+  const [menuOn, setMenuOn] = useState(false), [partsOn, setPartsOn] = useState(false);
+  dockParts = partsOn; setDockParts = setPartsOn;
   showMenu = menuOn; setMenuShown = setMenuOn;
   useEffect(() => { setTimeout(() => run().catch((e) => { console.error(e); }), 150); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
@@ -50,6 +53,8 @@ function Harness() {
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
         onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
     h(SpotlightPanel), h(NotificationBanner),
+    dockParts && h(NativeDockTip, { t: theme, label: 'Smoke tip', style: { position: 'absolute', left: 400, top: 300 } }),
+    dockParts && h(NativeDockGhost, { t: theme, base: 54, removeLabel: 'Smoke remove cue', drag: { id: 'smoke-app', x: 600, y: 400, removing: true } }),
     showMenu && h(Menu, { x: 300, y: 200, onClose: () => { menuClosed++; }, items: [
       { label: 'Menu A', onClick: () => { menuRan.push('a'); } }, '-',
       { label: 'Menu B', submenu: [{ label: 'Sub C', onClick: () => { menuRan.push('c'); } }] },
@@ -131,6 +136,12 @@ async function run() {
   globalThis.__lordNativeView();
   check(await until(() => menuRan.join() === 'a,d'), 'and runs the third row');
   console.log('menu integration: passed');
+  // the Dock's tooltip and the ghost of a dragged icon with its removal cue
+  setDockParts(true);
+  check(await until(() => find('Smoke tip') && find('Smoke remove cue')), 'the Dock tooltip and the drag ghost show their texts');
+  setDockParts(false);
+  check(await until(() => !find('Smoke tip') && !find('Smoke remove cue')), 'and go away');
+  console.log('dock parts integration: passed');
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
 settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true, menuNativeView: true });
