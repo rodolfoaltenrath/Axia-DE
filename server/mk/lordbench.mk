@@ -40,7 +40,7 @@ build/gen/lb_fonts.h: build/lbcorpus $(LB_FONTS)
 	  ./build/lbcorpus embed lb_font_thai < src/bench/fonts/NotoSansThai-LB.ttf && \
 	  ./build/lbcorpus embed lb_font_cjk < src/bench/fonts/NotoSansCJKsc-LB.otf; } > $@.new && mv $@.new $@
 
-LB_SRC := src/bench/lbmain.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/bench.c src/pkg/crypto.c src/pkg/xz.c \
+LB_SRC := src/bench/lbmain.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/bench.c src/pkg/crypto.c \
           src/sec/sandbox.c src/sec/cgroup.c $(ENGINE_SRC)
 LB_GL_SRC := $(if $(filter 1,$(GPU)),src/bench/lbgpu.c src/bench/glscene.c)
 LB_GL_FLAGS := $(if $(filter 1,$(GPU)),-DLORD_GPU $(shell pkg-config --cflags gbm egl glesv2))
@@ -53,11 +53,11 @@ build/axia-bench: $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) build/gen/lb_corpus.h build/
 # self-test's included), the thermal guard on fake sysfs trees and the boot history
 test: build/lordbench-test
 build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/lbcond.c src/bench/lbrun.c src/bench/bench.c \
-                      src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/pkg/xz.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
+                      src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
                       build/gen/lb_fonts.h build/gen/lord_version.h $(wildcard src/bench/*.h) src/hw/rpifw.h $(ENGINE_SRC) $(HDR) $(RUST_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/lbcond.c \
-	    src/bench/lbrun.c src/bench/bench.c src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/pkg/xz.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
+	    src/bench/lbrun.c src/bench/bench.c src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
 	    $(ENGINE_SRC) $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # from a terminal, without a session: build/lordbench-cli quick|full [sustained_s] (needs build/axia-bench, and build/axia-media

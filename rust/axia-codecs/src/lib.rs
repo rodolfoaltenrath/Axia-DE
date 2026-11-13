@@ -13,6 +13,7 @@ mod cbor;
 mod compression;
 mod qr;
 mod tzif;
+mod xz;
 mod vgen;
 #[cfg(feature = "secure-memory")]
 mod secure;

@@ -1,4 +1,4 @@
-/* xz.h — in-memory decompression of .xz (LZMA2, our own) and .gz (bounded Rust codecs). */
+/* xz.h — in-memory decompression of .xz (LZMA2) and .gz, both Rust (rust/axia-codecs/src/xz.rs). */
 #ifndef LORD_PKG_XZ_H
 #define LORD_PKG_XZ_H
 

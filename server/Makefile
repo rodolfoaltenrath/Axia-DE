@@ -87,7 +87,7 @@ SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/lpk.c src/users/admin
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/thbrk.c src/ui/textlayout.c \
        src/term/vt.c src/term/pty.c src/term/term.c src/term/term_paint.c src/term/hold.c \
        src/net/nl.c src/net/state.c \
-       src/pkg/crypto.c src/pkg/xz.c src/ui/js_sec.c \
+       src/pkg/crypto.c src/ui/js_sec.c \
        $(SEC_SRC) $(APP_SRC) $(MON_SRC) $(MEDIA_SRC)
 # Documents and printing (M9): axia-doc helper sessions and our own IPP/mDNS/eSCL client
 # (src/doc, src/print; see docs/DOCUMENTS.md and docs/PRINTING.md). No Poppler or libarchive here.
@@ -388,9 +388,9 @@ build/tzif-test: tests/tzif_test.c src/ui/tzif.h $(CODEC_LIB)
 # journal reader (Logs): normal and compact synthetic files, LZ4 and XZ, broken and
 # truncated files; `build/journal-test dump <file>` dumps JSON to compare with journalctl
 test: build/journal-test
-build/journal-test: tests/journal_test.c src/logs/journal.c src/logs/journal.h src/pkg/xz.c $(CODEC_LIB)
+build/journal-test: tests/journal_test.c src/logs/journal.c src/logs/journal.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c src/logs/journal.c src/pkg/xz.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c src/logs/journal.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # per-app firewall: rules (precedence, networks, JSON) and DNS names (broken packets, LRU)
 test: build/fw-rules-test build/dnsmap-test build/broker-restrict-test
