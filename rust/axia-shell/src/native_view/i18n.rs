@@ -9,6 +9,8 @@ pub struct I18n {
     pub lang: String,
     /// The decimal separator of the region ("," or ".").
     pub decimal: String,
+    /// The digit group separator of the region (",", ".", a space, or none).
+    pub group: String,
     roots: Vec<PathBuf>,
     cache: HashMap<(String, String), Option<Map<String, Value>>>,
 }
@@ -32,6 +34,7 @@ impl I18n {
         Self {
             lang: FALLBACK.into(),
             decimal: ".".into(),
+            group: ",".into(),
             roots,
             cache: HashMap::new(),
         }
@@ -179,6 +182,26 @@ impl I18n {
         self.optional(&format!("errors.{code}"), &params)
             .unwrap_or_else(|| line.to_owned())
     }
+    /// A number with at most `digits` decimals, no trailing zeros, in the region's separators.
+    fn number(&self, value: f64, digits: usize) -> String {
+        let fixed = format!("{value:.digits$}");
+        let n: f64 = fixed.parse().unwrap_or(value);
+        if n.abs() >= 1e15 || (n != 0. && n.abs() < 1e-9) {
+            return format!("{value:.7e}");
+        }
+        let (whole, frac) = fixed.split_once('.').unwrap_or((&fixed, ""));
+        let (sign, whole) = whole.strip_prefix('-').map_or(("", whole), |w| ("-", w));
+        let mut grouped = String::new();
+        for (i, c) in whole.chars().enumerate() {
+            if i > 0 && (whole.len() - i) % 3 == 0 {
+                grouped.push_str(&self.group);
+            }
+            grouped.push(c);
+        }
+        let tail = frac.trim_end_matches('0');
+        let sign = if sign == "-" && n == 0. { "" } else { sign };
+        format!("{sign}{grouped}{}{tail}", if tail.is_empty() { "" } else { self.decimal.as_str() })
+    }
     /// `caption(value)` of rustwidgets.js: text, a number, `{key, params}` or `{error}`.
     pub fn caption(&mut self, value: &Value) -> String {
         match value {
@@ -191,6 +214,24 @@ impl I18n {
                     return match e {
                         Value::String(s) => self.error(s),
                         other => self.caption(other),
+                    };
+                }
+                // the Spotlight's captions (sdk/search.js searchCaption)
+                if let Some(parts) = o.get("parts").and_then(Value::as_array) {
+                    return parts.iter().map(|p| self.caption(p)).collect();
+                }
+                if let Some(upper) = o.get("upper") {
+                    return self.caption(upper).to_uppercase();
+                }
+                if let Some(n) = o.get("number").and_then(Value::as_f64) {
+                    return self.number(n, o.get("digits").and_then(Value::as_u64).unwrap_or(0).min(15) as usize);
+                }
+                if let Some(n) = o.get("size").and_then(Value::as_f64) {
+                    return match n {
+                        n if n < 1024. => format!("{n} B"),
+                        n if n < 1_048_576. => format!("{} KB", self.number(n / 1024., 1)),
+                        n if n < 1_073_741_824. => format!("{} MB", self.number(n / 1_048_576., 1)),
+                        n => format!("{} GB", self.number(n / 1_073_741_824., 1)),
                     };
                 }
                 let Some(key) = o.get("key").and_then(Value::as_str) else {
