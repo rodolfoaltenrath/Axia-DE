@@ -15,6 +15,7 @@
 //   node tests/smart_parse_test.mjs        (from server/; run_suites.sh runs it when node exists)
 import fs from 'node:fs';
 import path from 'node:path';
+import './smart_model_node.mjs';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

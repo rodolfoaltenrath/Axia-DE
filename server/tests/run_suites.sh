@@ -160,8 +160,8 @@ EOF
     if have node && have cargo; then run "session-model-test (sdk/sessionmodel.js)" node tests/session_model_test.mjs
     else skip "session-model-test" "node and cargo"; fi
     # smartctl's JSON → the Disks/Monitor SMART model (sdk/smartparse.js), with real smartctl output
-    if have node; then run "smart-parse-test (sdk/smartparse.js)" node tests/smart_parse_test.mjs
-    else skip "smart-parse-test" "node"; fi
+    if have node && have cargo; then run "smart-parse-test (Rust model + sdk/smartparse.js)" node tests/smart_parse_test.mjs
+    else skip "smart-parse-test" "node and cargo"; fi
     # the Store's "Suggested for your computer" rules (assets/store/suggestions.json)
     if have node; then run "suggest-engine-test (sdk/suggestengine.js)" node tests/suggest_engine_test.mjs
     else skip "suggest-engine-test" "node"; fi
