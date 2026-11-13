@@ -124,41 +124,63 @@ function ReactLauncher({ mode = 'flow', t: theme, area, box, onOpen = launchApp,
   return h(Widget, { node: snapshot.tree, host: { send, root, live, id, results, popups, Menu, theme: themeRef } });
 }
 
-// "launcherNativeView": true in settings.json draws the grid of apps (flow mode) in Rust.
-function NativeLauncher({ area, box, onOpen = launchApp, onClose }) {
+// "launcherNativeView": true in settings.json draws the launcher in Rust: the grid of apps (flow) and
+// the start menu (classic).
+function NativeLauncher({ mode = 'flow', area, box, onOpen = launchApp, onClose, isOnBar = () => false }) {
   useState(refreshApps);                // apps installed since the last look show up at once
   const apps = useLauncherApps();
   useSettings();                        // the pins in the Dock live in the settings
+  const language = useStore(locale);
+  const version = useStore(searchEverything.version());
   const info = useSystemInfo(60000);
-  const latest = useRef(null);
-  latest.current = { onOpen, onClose };
+  const latest = useRef(null), mount = useRef(null), act = useRef(null), lease = useRef(null), results = useRef(new Map());
+  latest.current = { onOpen, onClose, isOnBar };
   const at = box ? { x: box.left, y: box.top, w: box.width, h: box.height } : area;
+  const classic = mode === 'classic';
   // what the Dock says of each app, for its menu: its id there, if it is pinned and if it can leave
   const dockFacts = {};
   for (const app of apps) dockFacts[app.id] = { id: dockIdOf(app), pinned: dock.isPinned(app), removable: dock.canRemove(app) };
-  launcherBridge.perform = (effect, { node, act }) => {
+  launcherBridge.perform = (effect, ctx) => {
+    act.current = ctx.act;
+    const { node } = ctx;
     const app = launcherApp(effect.id);
     switch (effect.type) {
       case 'close': latest.current.onClose(); break;
       case 'open': latest.current.onOpen(effect.id); break;
       case 'drag': if (app) {
         const [ox, oy] = lord.getLayout(node());
-        beginDockDrag({ id: dockIdOf(app), Icon: app.Icon, x: ox + effect.x, y: oy + effect.y, source: 'launcher', onStart: () => act(['dragStarted']) });
+        beginDockDrag({ id: dockIdOf(app), Icon: app.Icon, x: ox + effect.x, y: oy + effect.y, source: 'launcher', onStart: () => ctx.act(['dragStarted']) });
       } break;
       case 'dock': if (app) (effect.pin ? dock.pin(app) : dock.unpin(app)); break;
       case 'settings': settings.set(effect.patch); break;
       case 'userSettings': wm.open('settings', { args: { section: 'users' } }); break;
       case 'session': ({ quit: session.quit, lock: session.lock, switchUser: session.switchUser,
         restart: session.restart, shutdown: session.shutdown })[effect.action]?.(); break;
+      case 'prepareSearch': lease.current = searchEverything.prepare(); break;
+      case 'runSearch': searchEverything.run(results.current.get(effect.key)); break;
+      case 'search': {
+        const sections = searchEverything.results(effect.query, lease.current);
+        results.current = new Map(sections.flatMap((section) => section.items.map((it) => [it.key, it])));
+        ctx.act(['results'], { query: effect.query, sections: sections.map((section) => ({ id: section.id,
+          title: tOptional(`shell.spotlight.section.${section.id}`) || section.id,
+          items: section.items.map((it) => ({ key: it.key, title: it.title, subtitle: it.subtitle, glyph: it.glyph,
+            hasIcon: !!it.Icon, hasImage: !!it.image, app: it.preview?.kind === 'app' ? it.preview.app.id : null })) })) });
+        break;
+      }
     }
   };
-  return h(NativeView, { manifest: NATIVE_LAUNCHER,
-    args: { mode: 'flow', info: { fullName: info.fullName, user: info.user }, session: { managed: session.managed(), canPower: session.canPower() }, dock: dockFacts },
+  useEffect(() => { if (classic) act.current?.(['searchRefresh']); }, [version, language, apps]);
+  useEffect(() => () => { lease.current?.close(); lease.current = null; }, []);
+  // the start menu closes on a press outside it (not on the bar that opened it)
+  useEffect(() => classic ? addListener('pointerdown', (e) => {
+    if (!contains(e.target, [mount.current]) && !latest.current.isOnBar(e.x, e.y)) latest.current.onClose();
+  }) : undefined, [classic]);
+  return h(NativeView, { manifest: NATIVE_LAUNCHER, mountRef: mount,
+    args: { mode: classic ? 'classic' : 'flow', info: { fullName: info.fullName, user: info.user }, session: { managed: session.managed(), canPower: session.canPower() }, dock: dockFacts },
     style: { position: 'absolute', left: at?.x ?? 0, top: at?.y ?? 0, width: at?.w ?? 0, height: at?.h ?? 0 } });
 }
 
 export function RustLauncher(props) {
   const [prefs] = useSettings();
-  const native = prefs.launcherNativeView === true && (props.mode || 'flow') === 'flow';
-  return h(native ? NativeLauncher : ReactLauncher, props);
+  return h(prefs.launcherNativeView === true ? NativeLauncher : ReactLauncher, props);
 }

@@ -155,7 +155,7 @@ function NativeIcon({ manifest, args, icon }) {
 export function NativeView(props) { return props.icon ? h(NativeIcon, props) : h(NativeApp, props); }
 
 // args: the window's (or a Settings section's).
-function NativeApp({ manifest, args, icon, style }) {
+function NativeApp({ manifest, args, icon, style, mountRef }) {
   const theme = useTheme(), win = useAppWindow() || {}, catalog = useLauncherApps();
   const { lang } = useLocale();
   useWindows();
@@ -163,6 +163,7 @@ function NativeApp({ manifest, args, icon, style }) {
   const clock = useStore(manifest.facts === 'clock' && !icon ? clockState : emptyClock);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
   const owner = useRef(null);
+  useLayoutEffect(() => { if (mountRef) mountRef.current = ref.current; });      // for a shell view that asks where it is
   // a shell view (the menu bar) is in no window: the context's default says unfocused
   owner.current = { focused: !!manifest.shell || win.focused !== false, shell: !!manifest.shell };
   const ownsKeyboard = () => owner.current.focused && !textFieldActive()

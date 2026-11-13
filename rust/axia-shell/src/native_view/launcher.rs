@@ -1,4 +1,4 @@
-//! The launcher (the grid of apps, "flow" mode) as a native view: `shell:launcher`, mounted by the
+//! The launcher (the grid of apps, "flow" mode, and the start menu, "classic") as a native view: `shell:launcher`, mounted by the
 //! shell over the display's work area in place of the React widget of sdk/rustlauncher.jsx. The
 //! state, the layout and the decisions are the launcher's own (rust/axia-shell/src/launcher): this
 //! only asks it for the tree and sends it the events, as `lord.launcher.request` does for React,
@@ -6,7 +6,7 @@
 //! the catalog), the search field is a native input, the scroll regions come whole (the rows the
 //! launcher plans for the first screens of pixels), a menu is a `"kind":"menu"` node.
 //!
-//! Facts: `args = {"mode":"flow","info":{"fullName","user"},"session":{"managed","canPower"},
+//! Facts: `args = {"mode":"flow"|"classic","info":{"fullName","user"},"session":{"managed","canPower"},
 //! "dock":{<app id>:{"id","pinned","removable"}}}` and the `settings` and `catalog` facts. Every
 //! effect of the launcher goes to the shell as `{"kind":"launcher","effect":{…}}` (close, open an
 //! app, start a drag to the Dock, pin, settings, session; sdk/nativelauncher.js runs them).
@@ -24,6 +24,7 @@ pub struct LauncherView {
     /// The launcher's handle for this menu (0 while it is not open).
     id: u64,
     context: Value,
+    classic: bool,
     /// The launcher's last widget tree and what the host was given for it.
     raw: Value,
     last: Value,
@@ -46,7 +47,7 @@ fn rtl(lang: &str) -> bool {
 
 impl LauncherView {
     pub fn with(call: Call) -> Self {
-        Self { call, id: 0, context: Value::Null, raw: Value::Null, last: Value::Null, pending: Vec::new(), results: HashMap::new(), dock: Value::Null }
+        Self { call, id: 0, context: Value::Null, classic: false, raw: Value::Null, last: Value::Null, pending: Vec::new(), results: HashMap::new(), dock: Value::Null }
     }
     fn context(input: &Value) -> Value {
         let mut theme = input["context"]["theme"].clone();
@@ -55,7 +56,9 @@ impl LauncherView {
             t.remove("accents");
         }
         json!({"theme":theme,
-            "area":{"x":0,"y":0,"w":input["context"]["width"],"h":input["context"]["height"]},
+            // the flow mode reads x, y, w and h; the classic one, left, top, width and height
+            "area":{"x":0,"y":0,"w":input["context"]["width"],"h":input["context"]["height"],
+                "left":0,"top":0,"width":input["context"]["width"],"height":input["context"]["height"]},
             "settings":{"startPinned":input["settings"]["startPinned"],"dockRecentApps":input["settings"]["dockRecentApps"]},
             "info":input["args"]["info"],"rtl":rtl(input["lang"].as_str().unwrap_or("")),"session":input["args"]["session"]})
     }
@@ -85,9 +88,18 @@ impl LauncherView {
         match node["kind"].as_str().unwrap_or("") {
             "icon" => json!({"kind":"appIcon","app":node["app"],"size":node["size"]}),
             "resultIcon" => self.result_icon(node),
-            "input" => json!({"kind":"input","key":node["key"],"style":node["style"],"value":node["value"],
-                "placeholder":node["placeholder"],"autoFocus":node["autoFocus"],
-                "change":["query"],"submit":["submit"],"cancel":["cancel",node["value"]]}),
+            "input" => {
+                let mut out = json!({"kind":"input","key":node["key"],"style":node["style"],"value":node["value"],
+                    "placeholder":node["placeholder"],"autoFocus":node["autoFocus"],
+                    // no "change": the host then sends ["query", text], what the launcher takes
+                    "submit":["submit"],"cancel":["cancel",node["value"]]});
+                // the start menu moves through its results with the arrows and runs one with Enter
+                if self.classic {
+                    out["keys"] = json!(["ArrowDown", "ArrowUp", "Enter"]);
+                    out["onKey"] = json!(["key"]);
+                }
+                out
+            }
             "scroll" => self.scroll(node),
             "menu" => {
                 let mut out = node.clone();
@@ -182,7 +194,8 @@ impl NativeApp for LauncherView {
                 let context = Self::context(input);
                 self.dock = input["args"]["dock"].clone();
                 if self.id == 0 {
-                    let reply = (self.call)(&json!({"op":"open","mode":"flow","context":context}));
+                    self.classic = input["args"]["mode"] == "classic";
+                    let reply = (self.call)(&json!({"op":"open","mode":if self.classic {"classic"} else {"flow"},"context":context}));
                     if let Ok(r) = &reply {
                         self.id = r["id"].as_u64().unwrap_or(0);
                     }
@@ -262,7 +275,7 @@ mod tests {
         let icon = find(tree, &|n| n["kind"] == "appIcon" && n["app"] == "calculator").expect("an app icon node");
         assert!(icon["size"].as_f64().unwrap() > 0.);
         let input = find(tree, &|n| n["kind"] == "input").expect("the search field");
-        assert_eq!(input["change"], json!(["query"]));
+        assert!(input["change"].is_null(), "the host's default is [\"query\", text]");
         assert_eq!(input["submit"], json!(["submit"]));
         assert_eq!(input["cancel"][0], "cancel");
         assert_eq!(v.request(&sync(1000.))["same"], true, "an unchanged context sends no tree");
@@ -332,5 +345,38 @@ mod tests {
         let menu = find(&tree, &|n| n["kind"] == "menu").expect("the power menu");
         assert_eq!(menu["layer"], "popover");
         assert_eq!(menu["events"]["onDismiss"], json!(["closePower"]));
+    }
+
+    fn classic_sync() -> Value {
+        let mut input = sync(400.);
+        input["args"]["mode"] = json!("classic");
+        input
+    }
+    #[test]
+    fn the_start_menu_opens_for_a_search_and_its_field_passes_the_arrows() {
+        let (mut v, _) = view();
+        let reply = v.request(&classic_sync());
+        assert!(reply["effects"].as_array().unwrap().iter().any(|e| e["effect"]["type"] == "prepareSearch"), "{reply}");
+        let input = find(&reply["tree"], &|n| n["kind"] == "input").expect("the search field");
+        assert_eq!(input["keys"], json!(["ArrowDown", "ArrowUp", "Enter"]));
+        assert_eq!(input["onKey"], json!(["key"]));
+        let flow = LauncherView::with(Box::new(|_| Err("unused")));
+        assert!(!flow.classic);
+    }
+    #[test]
+    fn typing_in_the_start_menu_asks_the_shell_to_search_and_its_results_come_back() {
+        let (mut v, _) = view();
+        v.request(&classic_sync());
+        let reply = v.request(&json!({"cmd":"query","key":"calc"}));
+        let search = reply["effects"].as_array().unwrap().iter().find(|e| e["effect"]["type"] == "search").expect("a search effect");
+        assert_eq!(search["effect"]["query"], "calc");
+        let sections = json!([{"id":"apps","title":"Apps","items":[{"key":"app:calculator","title":"Calculator","subtitle":"","glyph":"","hasIcon":true,"hasImage":false,"app":"calculator"}]}]);
+        v.request(&json!({"cmd":"results","query":"calc","sections":sections}));
+        let tree = v.request(&classic_sync())["tree"].clone();
+        let text = tree.to_string();
+        assert!(text.contains("Calculator"), "the result is listed");
+        assert!(find(&tree, &|n| n["kind"] == "appIcon" && n["app"] == "calculator" && n["size"].as_f64() == Some(28.)).is_some(), "with its icon: {text}");
+        let enter = v.request(&json!({"cmd":"key","key":"Enter"}));
+        assert!(enter["effects"].as_array().unwrap().iter().any(|e| e["effect"]["type"] == "runSearch"), "{enter}");
     }
 }
