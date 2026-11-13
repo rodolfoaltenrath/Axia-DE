@@ -41,6 +41,7 @@ pub trait NativeApp {
 pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
         crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
+        crate::native_apps::files::ID => Some(Box::new(crate::files::FilesView::default())),
         crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App)),
         crate::native_apps::help::ID => Some(Box::new(crate::help::App::default())),
         crate::native_apps::clock::ID => Some(Box::new(crate::clock_app::App::default())),

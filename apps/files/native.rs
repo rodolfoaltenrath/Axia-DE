@@ -26,6 +26,8 @@ pub struct Env<'a> {
     pub theme: &'a Value,
     /// The interface language (dates are written the way it does).
     pub lang: &'a str,
+    /// The context menu's keyboard row and open submenu (-1: none), which the app keeps.
+    pub menu: (i64, i64),
 }
 
 impl Env<'_> {
@@ -148,6 +150,7 @@ pub fn convert(node: &Value, env: &Env) -> Value {
         }
         "contextMenu" => {
             let mut menu = json!({"kind":"menu","key":"context-menu","x":obj["x"],"y":obj["y"],"items":obj["items"],
+                "active":env.menu.0,"sub":env.menu.1,
                 "layer":obj.get("layer").cloned().unwrap_or(json!("popover")),"events":{"onDismiss":["closeContext"]}});
             if obj.get("absolute") == Some(&json!(true)) {
                 menu["absolute"] = json!(true);
@@ -211,7 +214,7 @@ mod tests {
     use serde_json::json;
 
     fn env(theme: &Value) -> Env<'_> {
-        Env { theme, lang: "en" }
+        Env { theme, lang: "en", menu: (-1, -1) }
     }
     fn walk(v: &Value, f: &mut dyn FnMut(&Value)) {
         f(v);
@@ -272,8 +275,8 @@ mod tests {
     #[test]
     fn dates_are_written_for_the_language() {
         let theme = json!({});
-        let en = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "en" });
-        let pt = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "pt" });
+        let en = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "en", menu: (-1, -1) });
+        let pt = convert(&json!({"type":"text","text":{"format":"date","value":1_700_000_000}}), &Env { theme: &theme, lang: "pt", menu: (-1, -1) });
         let (en, pt) = (en["label"].as_str().unwrap().to_owned(), pt["label"].as_str().unwrap().to_owned());
         assert!(en.ends_with("AM") || en.ends_with("PM"), "{en}");
         assert!(pt.contains('/') && pt.contains(':') && !pt.contains("AM"), "{pt}");
