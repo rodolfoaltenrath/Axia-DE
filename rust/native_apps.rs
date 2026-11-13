@@ -19,6 +19,8 @@ pub mod help;
 pub mod monitor;
 #[path = "../apps/store/manifest.rs"]
 pub mod store;
+#[path = "../apps/logs/manifest.rs"]
+pub mod logs;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -30,7 +32,8 @@ pub fn manifests() -> serde_json::Value {
         forcequit::manifest(),
         help::manifest(),
         monitor::manifest(),
-        store::manifest()
+        store::manifest(),
+        logs::manifest()
     ])
 }
 #[cfg(test)]

@@ -70,6 +70,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
         crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
+        crate::native_apps::logs::ID => Some(Box::new(crate::logs_app::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),

@@ -62,7 +62,7 @@ All are in the closed table of `admin.c` (macro `DISK_ADMIN_ACTIONS` in `disk/di
 |---|---|---|
 | `disk-smart` | `disk` | Reads health. `LOG smart {…}` (summary), one `LOG attr {…}` per ATA attribute and `OK <ms>` |
 | `disk-mount` | `device` | Mounts at `/media/<user>/<label>` with `mount(2)`: `nosuid,nodev`, and on FAT, exFAT and NTFS (`ntfs3`) with the user's `uid=`/`gid=`. ISO 9660 and UDF are read-only. `OK <folder>` |
-| `share-mount` | `smb\|nfs`, private IPv4, share or export path, user, domain, password (one per line; the UI sends it with `{ quiet: true }`) | anyone. Mounts a network share at `/media/<user>/<share> on <address>` with the kernel's `cifs` or `nfs` client through `fsopen`/`fsconfig`/`fsmount`/`move_mount`, one call per option: `nosuid,nodev`, soft, short timeouts, SMB 2 or later. Everything is validated as root (`lan/lanaddr.c`); no names, no program, no shell. `OK <folder>` (`FILES.md`, "Network") |
+| `share-mount` | `smb\|nfs`, private IPv4, share or export path, user, domain, password (one per line; the UI sends it with `{ quiet: true }`) | anyone. Mounts a network share at `/media/<user>/<share> on <address>` with the kernel's `cifs` or `nfs` client through `fsopen`/`fsconfig`/`fsmount`/`move_mount`, one call per option: `nosuid,nodev`, soft, short timeouts, SMB 2 or later. Everything is validated as root (`rust/axia-codecs/src/lanaddr.rs`); no names, no program, no shell. `OK <folder>` (`FILES.md`, "Network") |
 | `share-unmount` | folder | anyone. Only `/media/<user>/<one folder>`, and only if `/proc/self/mountinfo` says the last mount there is `cifs`, `smb3`, `nfs` or `nfs4` |
 | `disk-unmount` | `device` or `disk` | Unmounts whatever is under `/media` or `/run/media` (`umount2`) and removes the empty folder |
 | `disk-eject` | `disk` | Unmounts everything, flushes caches (`BLKFLSBUF`) and sends `START STOP UNIT` (eject). Over USB it also powers the device off (`/sys/block/<d>/device/delete`), like "Power Off" in GNOME Disks |
@@ -523,7 +523,21 @@ the thread not competing with the compositor for CPU (wakeup p99 of 2 ms at most
 
 ## Logs (`apps/logs`)
 
-LordOS's log viewer.
+Axia's log viewer. The compiled application in `apps/logs/{mod,ui,manifest}.rs`
+mounts directly through the Rust native scene host; its JSX window and JSON
+manifest have been removed. Rust retains filters, selection, virtualized rows,
+scrollbar capture, query generations, live coalescing, details and export content.
+`runtime/nativeapps.js` supplies the window lease and invokes the same SDK journal,
+administration-helper and filesystem APIs described below. Journal I/O remains
+triggered by inotify: the native refresh timer only checks queued bridge events
+and completed jobs. Results use bounded JSON fragments, preserving large messages
+without exceeding the native host's input limit. Obsolete filter generations are
+discarded; closing a window removes its follow subscription and pending results.
+
+Validation: `cargo test --manifest-path rust/Cargo.toml -p axia-shell --lib logs_app::`
+and `node server/tests/native_async_test.mjs`. Twelve Rust tests include a real
+native-host interaction test and 64 frozen local-log parser scenarios from the
+previous JS at `b4e10ab1` (`rust/axia-shell/tests/fixtures/logs_parser.json`).
 
 - **Sources** (sidebar):
   - **My logs:** the user's own systemd journal (`user-<uid>.journal` and its archived files);

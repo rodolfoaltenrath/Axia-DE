@@ -39,7 +39,7 @@ const appsPlugin = {
       const list = ids.map((_, i) => (iso[i]
         ? `{ ...M${i}, system: true, isolated: true, Component: isolatedApp(M${i}.id, A${i}.default), Icon: A${i}.Icon }`
         : `{ ...M${i}, system: true, Component: A${i}.default, Icon: A${i}.Icon }`)).join(',\n  ');
-      const nativeHead = `import { nativeApp } from ${JSON.stringify(path.join(root, 'sdk', 'nativeapps.js'))};\n`;
+      const nativeHead = `import { nativeApp } from ${JSON.stringify(path.join(root, 'runtime', 'nativeapps.js'))};\n`;
       const compiled = nativeApps.map(app => `nativeApp(${JSON.stringify(app)})`).join(',\n  ');
       const head = iso.some(Boolean) ? `import { isolatedApp } from ${JSON.stringify(path.join(root, 'sdk', 'packages.js'))};\n` : '';
       return { contents: `${nativeHead}${head}${lines.join('\n')}\nexport const apps = [\n  ${list},\n  ${compiled}\n];\n`, resolveDir: root, loader: 'js' };

@@ -32,6 +32,8 @@ mod native_view;
 mod monitor;
 #[path = "../../../apps/store/mod.rs"]
 mod store;
+#[path = "../../../apps/logs/mod.rs"]
+mod logs_app;
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod flip_pacing;
