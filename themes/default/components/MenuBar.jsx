@@ -1,7 +1,7 @@
 // Top menu bar: L menu, active app, Window menu, keyboard layout,
 // Control Center and clock.
-import { View, Text, BackgroundApps, NetworkConnectionIcon, NetworkPopover, SearchGlyph, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems, NativeView, NATIVE_MENUBAR, barBridge } from '@lordos/sdk';
-import { useRef, useState } from 'react';
+import { View, Text, BackgroundApps, NetworkConnectionIcon, NetworkPopover, SearchGlyph, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems, NativeView, NATIVE_MENUBAR, barBridge, NATIVE_TREE, treeOwners } from '@lordos/sdk';
+import { useEffect, useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';
 
 // Date and time with the region's format (sdk/i18n.js),
@@ -134,6 +134,31 @@ function ClassicMenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
   );
 }
 
+// A bar item as a tree for the native host (shell:tree): the same box as BarItem.
+const barNode = (key, t, children, { active, action } = {}) => ({ kind: 'view', key,
+  style: { height: 22, paddingHorizontal: 9, borderRadius: 5, justifyContent: 'center', flexDirection: 'row', alignItems: 'center',
+    backgroundColor: active ? t.menuHover : 'transparent' },
+  hoverStyle: { backgroundColor: t.menuHover }, events: action ? { onClick: [action] } : undefined, children });
+const barLabel = (t, label) => ({ kind: 'text', label, style: { fontSize: 13, fontWeight: 500, color: t.menuText, whiteSpace: 'nowrap' } });
+const controlGlyph = (t) => {
+  const bar = (key, top, knob) => ({ kind: 'view', key, style: { position: 'absolute', left: 0, top, width: 16, height: 6, borderRadius: 3, border: `1.5px solid ${t.menuText}` },
+    children: [{ kind: 'view', key: 'k', style: { position: 'absolute', left: knob, top: 0.5, width: 2, height: 2, borderRadius: 1, backgroundColor: t.menuText } }] });
+  return { kind: 'view', key: 'cc', style: { width: 16, height: 14 }, children: [bar('a', 0, 9), bar('b', 8, 2)] };
+};
+// A group of items of the bar drawn by Rust: what a click does is `onAction(name)`.
+function NativeBarGroup({ owner, tree, onAction }) {
+  treeOwners.set(owner, ({ action }) => onAction(action[0]));
+  useEffect(() => () => treeOwners.delete(owner), [owner]);
+  return <NativeView manifest={NATIVE_TREE} args={{ tree, owner }} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }} />;
+}
+// The keyboard layout, the search and the control and clock items: no service of theirs is React
+function NativeBarTail({ t, controlCenter, onControlCenter, close }) {
+  const clock = useClock(format, 1000);
+  return <NativeBarGroup owner="bar-tail" onAction={() => { close(); spotlight.close(); onControlCenter(); }}
+    tree={{ kind: 'view', key: 'tail', style: { flexDirection: 'row', alignItems: 'center' }, children: [
+      barNode('cc', t, [controlGlyph(t)], { active: controlCenter, action: 'cc' }), barNode('clock', t, [barLabel(t, clock)])] }} />;
+}
+
 // The clock has its own component: a tick re-renders this, not the bar.
 function BarClock({ t }) {
   const clock = useClock(format, 1000);
@@ -165,16 +190,15 @@ function NativeMenuBar({ t, height, focused, onLaunchpad, onControlCenter, contr
         paddingHorizontal: 8, backgroundColor: t.menuBg, backdropFilter: `blur(${t.blur}px)`,
       }}>
         <NativeView manifest={NATIVE_MENUBAR} args={{ bar: { items, height } }} style={{ height }} />
-        <BarItem t={t} onClick={() => keyboard.next()}>
-          <Label t={t}>{keyboard.label(keyboard.active())}</Label>
-        </BarItem>
+        <NativeBarGroup owner="bar-keyboard" onAction={() => keyboard.next()}
+          tree={barNode('kb', t, [barLabel(t, keyboard.label(keyboard.active()))], { action: 'kb' })} />
         <StatusItems color={t.menuText} />
         <BackgroundApps color={t.menuText} onOpen={() => { close(); if (controlCenter) onControlCenter(); spotlight.close(); }} />
         <PrivacyIndicators />
-        <BarItem t={t} onClick={() => { close(); if (controlCenter) onControlCenter(); spotlight.toggle(); }}><SearchGlyph size={18} color={t.menuText} /></BarItem>
+        <NativeBarGroup owner="bar-search" onAction={() => { close(); if (controlCenter) onControlCenter(); spotlight.toggle(); }}
+          tree={barNode('search', t, [{ kind: 'searchGlyph', size: 18, color: t.menuText }], { action: 'search' })} />
         <BarItem t={t} active={network} anchorRef={networkRef} onClick={() => { if (controlCenter) onControlCenter(); spotlight.close(); setNetwork((o) => !o); }}><NetworkConnectionIcon color={t.menuText} /></BarItem>
-        <BarItem t={t} active={controlCenter} onClick={() => { close(); spotlight.close(); onControlCenter(); }}><ControlGlyph t={t} /></BarItem>
-        <BarClock t={t} />
+        <NativeBarTail t={t} controlCenter={controlCenter} onControlCenter={onControlCenter} close={close} />
       </View>
       {network && <NetworkPopover anchor={networkRef} onClose={close} area={area} />}
     </View>

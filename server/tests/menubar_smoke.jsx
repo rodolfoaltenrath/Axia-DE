@@ -10,7 +10,7 @@ import { NativeTitleBar } from '../../sdk/nativetitlebar.jsx';
 import { RustLauncher } from '../../sdk/rustlauncher.jsx';
 import { SpotlightPanel } from '../../sdk/rustsearch.jsx';
 import { spotlight } from '../../sdk/search.js';
-import { NotificationBanner, notify, notifications } from '../../sdk/index.js';
+import { NotificationBanner, notify, notifications, keyboard } from '../../sdk/index.js';
 
 const dump = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(handle + ': ' + t.replace(/\n/g, ' | ')); } return out.join(' // '); };
 const check = (ok, message) => { if (!ok) throw new Error('menu bar smoke: ' + message + ' [' + dump() + ']'); };
@@ -29,7 +29,7 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
-let ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
+let kbd = 0, ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
 const opened = [];
 const drags = [];
 function Harness() {
@@ -50,6 +50,12 @@ function Harness() {
 const lines = () => { const out = []; for (let handle = 1; handle < 256; handle++) { const t = lord.nativeViews.text(handle); if (t) out.push(...t.split('\n')); } return out; };
 async function run() {
   check(await until(() => find('Window') && find('Help')), 'the native bar shows Window and Help');
+  const layout = keyboard.label(keyboard.active());
+  check(await until(() => find(layout)), 'the keyboard layout is an item of the native bar');
+  const realNext = keyboard.next; keyboard.next = () => { kbd++; };
+  press(find(layout));
+  check(await until(() => kbd === 1), 'a click on the layout switches it');
+  keyboard.next = realNext;
   const bar = lines().length;
   const first = lord.getLayout(find('Window'));
   check(first[0] > 0 && first[2] > 20, 'items have a place in the bar');
