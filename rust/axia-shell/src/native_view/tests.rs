@@ -995,3 +995,60 @@ fn a_tooltip_shows_after_the_pointer_rests_and_goes_with_a_press_or_leaving() {
     scene::destroy(mount);
     scene::destroy(outside);
 }
+
+#[test]
+fn a_native_field_edits_at_the_caret_and_starts_with_the_selection_it_asks_for() {
+    struct Form(Rc<RefCell<String>>, Option<Value>);
+    impl NativeApp for Form {
+        fn request(&mut self, input: &Value) -> Value {
+            match input["cmd"].as_str().unwrap_or("") {
+                "sync" => {
+                    let mut field = json!({"kind":"input","value":self.0.borrow().clone(),"autoFocus":true,"submit":["ok"]});
+                    if let Some(sel) = &self.1 {
+                        field["select"] = sel.clone();
+                    }
+                    json!({"tree":{"kind":"view","children":[field]}})
+                }
+                "query" => {
+                    *self.0.borrow_mut() = input["key"].as_str().unwrap_or("").into();
+                    json!({})
+                }
+                _ => json!({}),
+            }
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let run = |initial: &'static str, select: Option<Value>, keys: &[(&str, &str, i32)]| -> String {
+        let value = Rc::new(RefCell::new(initial.to_owned()));
+        let mount = scene::create(scene::VIEW);
+        let mut host = Host::new(mount, Box::new(Form(value.clone(), select)), "", None);
+        host.facts(json!({}));
+        for (key, chr, flags) in keys {
+            assert!(host.key(key, chr, *flags), "{key} is the field's");
+        }
+        let out = value.borrow().clone();
+        drop(host);
+        scene::destroy(mount);
+        out
+    };
+    // the caret starts at the end: type, move left, type in the middle, Delete and Backspace
+    assert_eq!(run("abc", None, &[("d", "d", 0), ("ArrowLeft", "", 0), ("ArrowLeft", "", 0), ("x", "x", 0)]), "abxcd");
+    assert_eq!(run("abc", None, &[("Home", "", 0), ("Delete", "", 0)]), "bc");
+    assert_eq!(run("abc", None, &[("ArrowLeft", "", 0), ("Backspace", "", 0)]), "ac");
+    // a rename: the name without its extension selected, typing replaces only that
+    assert_eq!(run("report.final.pdf", Some(json!([0, 12])), &[("n", "n", 0), ("e", "e", 0)]), "ne.pdf");
+    // Ctrl+A selects it all; Shift+Home selects to the start
+    assert_eq!(run("abc", None, &[("a", "a", 2), ("z", "z", 0)]), "z");
+    assert_eq!(run("abc", None, &[("Home", "", 1), ("z", "z", 0)]), "z");
+    // the app's own shortcuts are not the field's
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, Box::new(Form(Rc::new(RefCell::new("a".into())), None)), "", None);
+    host.facts(json!({}));
+    assert!(!host.key("s", "s", 2), "Ctrl+S passes");
+    assert!(!host.key("f", "f", 4), "Alt+F passes");
+    assert!(!host.key("F5", "", 0), "so does a key it has no use for");
+    drop(host);
+    scene::destroy(mount);
+}
