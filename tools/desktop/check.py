@@ -272,6 +272,7 @@ def main():
             assert 'banner integration: passed' in log, log
             assert 'menu integration: passed' in log, log
             assert 'dock parts integration: passed' in log, log
+            assert 'classic launcher integration: passed' in log, log
             for error in ['menu bar smoke:', 'title bar:', 'native launcher:', 'native tree:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
             # Real isolated app using the same Rust scheduler, driven by actual Wayland callbacks.
