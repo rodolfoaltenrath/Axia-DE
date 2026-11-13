@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/`, `apps/help/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -40,7 +40,17 @@ artwork uses the shared Rust icon library too. `sdk/help.js` remains the shell's
 window-effects adapter; the Help window does not use it or the React Markdown
 renderer. There are no Help JSX or JSON manifest sources.
 
+Logs owns its entire window, filters, selection, virtual list, scrollbar,
+detail view, local-log parser, query generations and export content in Rust.
+`runtime/nativeapps.js` leases asynchronous SDK service jobs to each window;
+the SDK still performs journal reads, admin-helper access, inotify following and
+confined filesystem writes. Closing a window removes its subscriptions and
+rejects publication of late results. Large responses cross the native JSON
+boundary in bounded fragments. The Logs folder contains only Rust source.
+
 ## Remaining apps awaiting migration
+
+The complete remaining scope is tracked in `docs/NATIVE-APP-MIGRATION.md`.
 
 PDF's transforms, viewport navigation, zoom/input rules, search/selection lifecycle
 annotation/form drafts and mutation ordering, raster-cache policy, thumbnail

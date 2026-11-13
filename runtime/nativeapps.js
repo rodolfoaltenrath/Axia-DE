@@ -1,0 +1,57 @@
+// Common mount for compiled apps that use asynchronous SDK services. No app UI
+// is implemented here. Lease a window before mounting Rust; release it on close.
+import { createElement as h, useLayoutEffect, useState } from 'react';
+import { View } from '@lordos/runtime';
+import { nativeApp as baseNativeApp } from '../sdk/nativeapps.js';
+import { NativeView } from '../sdk/nativeview.js';
+import { useAppWindow } from '../sdk/components.jsx';
+import { logs } from '../sdk/logs.js';
+import * as fs from '../sdk/fs.js';
+import { createNativeAsync } from './native_async.js';
+
+let followers = 0;
+const watches = new Map();
+function stopWatch(id) {
+  const stop = watches.get(id);
+  if (!stop) return;
+  watches.delete(id); stop();
+  if (--followers === 0) logs.follow(false);
+}
+const methods = {
+  'logs.sources': { run: () => logs.sources() },
+  'logs.files': { run: () => logs.files() },
+  'logs.query': { run: ([query]) => logs.query(query) },
+  'logs.system': { run: ([query]) => logs.system(query) },
+  'logs.tail': { run: ([file, bytes]) => logs.tail(file, bytes) },
+  'logs.write': { run: ([path, text]) => fs.write(path, text) },
+  'logs.follow': { run([on], owner) {
+    if (!on) { stopWatch(owner.id); return null; }
+    if (watches.has(owner.id)) return null;
+    if (followers === 0) logs.follow(true);
+    const stop = logs.onChange((kind, name) => owner.emit({ kind, name }));
+    followers++;
+    watches.set(owner.id, stop);
+    owner.cleanup(() => stopWatch(owner.id));
+    return null;
+  } },
+};
+const bridge = createNativeAsync(methods);
+lord.nativeAsync = {
+  start: (...args) => bridge.start(...args),
+  take: (...args) => bridge.take(...args),
+  events: (...args) => bridge.events(...args),
+};
+export function nativeApp(manifest) {
+  const app = baseNativeApp(manifest);
+  if (!manifest.asyncServices?.length) return app;
+  return { ...app, Component: function NativeAsyncApp() {
+    const { id, args } = useAppWindow();
+    const [ready, setReady] = useState(false);
+    useLayoutEffect(() => {
+      bridge.open(id, manifest.asyncServices);
+      setReady(true);
+      return () => bridge.close(id);
+    }, [id]);
+    return ready ? h(NativeView, { manifest, args: { ...args, __nativeWindow: id } }) : h(View, { style: { flex: 1 } });
+  } };
+}
