@@ -1,5 +1,5 @@
 //! Mail format parsers for axia-maild, exported with the C ABI of the
-//! former `server/src/mail/{mime,xml,html,ical,vcard}.c`.
+//! former `server/src/mail/{mime,xml,html,ical,vcard,imapp}.c`.
 //!
 //! The headers in `server/src/mail/*.h` remain the contract: every exported
 //! struct is `#[repr(C)]` with the same fields, and every exported function
@@ -10,7 +10,7 @@
 //!
 //! Untrusted input never panics: indexing is checked and the C quirks that
 //! callers rely on (truncation sizes, C-string semantics) are preserved.
-//! Time zones are resolved by the C TZif reader (`server/src/ui/tzif.c`),
+//! Time zones are resolved by the TZif reader of axia-codecs (`tzif.rs`),
 //! which axia-maild links.
 
 mod c;
@@ -18,6 +18,7 @@ mod charset_tables;
 mod html;
 mod html_entities;
 mod ical;
+mod imapp;
 mod jbuf;
 mod mime;
 mod vcard;
