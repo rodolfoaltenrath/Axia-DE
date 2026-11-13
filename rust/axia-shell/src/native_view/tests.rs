@@ -1219,3 +1219,39 @@ fn double_click_requires_two_complete_clicks_on_the_same_destination() {
         drop(host);scene::destroy(mount);scene::destroy(outside);
     }
 }
+
+/// A search field that passes some keys to its app (a list of results moved with the arrows).
+#[derive(Default)]
+struct Keys {
+    log: Rc<RefCell<Vec<Value>>>,
+}
+impl NativeApp for Keys {
+    fn request(&mut self, input: &Value) -> Value {
+        self.log.borrow_mut().push(input.clone());
+        match input["cmd"].as_str().unwrap_or("") {
+            "sync" => json!({"tree":{"kind":"view","children":[
+                {"kind":"input","value":"","autoFocus":true,"keys":["ArrowDown","Enter"],"onKey":["key"]}]}}),
+            _ => json!({}),
+        }
+    }
+}
+
+#[test]
+fn a_field_passes_its_listed_keys_to_the_app_and_edits_with_the_rest() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, Box::new(Keys { log: log.clone() }), "/nonexistent", None);
+    host.facts(json!({"context":{"theme":{}}}));
+    assert!(host.key("ArrowDown", "", 0));
+    assert!(host.key("Enter", "", 1 | 16));
+    let calls: Vec<Value> = log.borrow().iter().filter(|c| c["cmd"] == "key").cloned().collect();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0]["key"], "ArrowDown");
+    assert_eq!(calls[0]["meta"], false);
+    assert_eq!(calls[1]["key"], "Enter");
+    assert_eq!((calls[1]["shift"].clone(), calls[1]["meta"].clone()), (json!(true), json!(true)));
+    assert!(host.key("a", "a", 0), "a letter still edits the field");
+    assert_eq!(log.borrow().iter().filter(|c| c["cmd"] == "key").count(), 2, "and is not passed on as a key");
+    drop(host);
+    scene::destroy(mount);
+}

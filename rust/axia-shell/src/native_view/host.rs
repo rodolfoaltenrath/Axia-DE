@@ -1413,6 +1413,18 @@ impl Host {
         self.caret_value = text.clone();
         self.edit(text);
     }
+    fn field_key(&mut self, key: &str, flags: i32) -> Option<(Value, Map<String, Value>)> {
+        let m = find(&mut self.root, self.field)?;
+        if !m.spec["keys"].as_array()?.iter().any(|k| k == key) {
+            return None;
+        }
+        let name = m.spec["onKey"].as_array()?.first()?.clone();
+        let mut extra = Map::new();
+        for (k, bit) in [("shift", 1), ("ctrl", 2), ("alt", 4), ("meta", 16)] {
+            extra.insert(k.into(), json!(flags & bit != 0));
+        }
+        Some((json!([name, key]), extra))
+    }
     fn field_value(&mut self) -> Option<String> {
         let m = find(&mut self.root, self.field)?;
         Some(m.label.clone())
@@ -1432,6 +1444,12 @@ impl Host {
             };
             self.queue(&reply);
             self.sync();
+            return true;
+        }
+        // "keys": ["ArrowDown", …] with "onKey": ["key"]: the keys a field passes on to the app
+        // (the arrows and Enter of a search that lists results) as `["key", name]` with the modifiers.
+        if let Some((action, extra)) = self.field_key(key, flags) {
+            self.dispatch(&action, extra);
             return true;
         }
         let (ctrl, alt, meta) = (flags & 2 != 0, flags & 4 != 0, flags & 16 != 0);
