@@ -723,6 +723,71 @@ fn left_button_drag_moves_the_file_to_the_target_folder() {
         "data"
     );
 }
+
+#[test]
+fn native_drag_transport_is_requested_once_after_the_threshold() {
+    let h = Home::new();
+    h.file("movie.mp4", "video");
+    let (mut s, mut shared) = h.session(json!({}));
+    s.effects.clear();
+    s.event(
+        &json!({"action":["dragStart",0],"button":0,"x":10,"y":10}),
+        &mut shared,
+    );
+    s.event(
+        &json!({"action":["pointerMove"],"x":12,"y":10}),
+        &mut shared,
+    );
+    assert!(!s.effects.iter().any(|e| e["kind"] == "dragFiles"));
+    for x in 20..120 {
+        s.event(
+            &json!({"action":["pointerMove"],"x":x,"y":10,"alt":true}),
+            &mut shared,
+        );
+    }
+    let effects: Vec<_> = s
+        .effects
+        .iter()
+        .filter(|e| e["kind"] == "dragFiles")
+        .collect();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0]["copy"], true);
+    assert_eq!(effects[0]["paths"], json!([h.path("movie.mp4")]));
+}
+
+#[test]
+fn dropped_external_files_copy_and_internal_files_can_move_with_transfer_progress() {
+    let h = Home::new();
+    let first = h.file("first.mp4", "video");
+    let second = h.file("second.mp4", "second");
+    let destination = h.dir("Target");
+    let (mut s, mut shared) = h.session(json!({}));
+    s.event(
+        &json!({"action":["dropFiles",destination],"paths":[first],"internalMove":false}),
+        &mut shared,
+    );
+    assert!(s.error.is_none(), "{:?}", s.error);
+    assert!(s.transfer_open);
+    let job = ops::jobs().into_iter().next().unwrap();
+    assert!(!finish(job.id).failed);
+    ops::forget(job.id);
+    assert!(first.exists());
+    assert_eq!(
+        fs::read_to_string(destination.join("first.mp4")).unwrap(),
+        "video"
+    );
+    s.event(
+        &json!({"action":["dropFiles",destination],"paths":[second],"internalMove":true}),
+        &mut shared,
+    );
+    let job = ops::jobs().into_iter().next().unwrap();
+    assert!(!finish(job.id).failed);
+    assert!(!second.exists());
+    assert_eq!(
+        fs::read_to_string(destination.join("second.mp4")).unwrap(),
+        "second"
+    );
+}
 #[test]
 fn middle_button_does_not_begin_a_file_drag() {
     let h = Home::new();

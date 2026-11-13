@@ -145,6 +145,9 @@ rows, remain inside the screen and are cleared on input, resizing or unmount.
 - Copy/cut/paste, duplication, rename, new folder and drag/drop. Drag normally
   moves; Alt copies. A destination that exists is never overwritten by a copy
   or move. Save dialogs separately ask before choosing an existing target.
+  [Cross-application pointer drags](FILE-DRAG.md) use Rust's Wayland controller:
+  external drops copy, native Files drops retain move/Alt-copy behavior, and
+  transfers use the same progress window. X11 XDND is separate work.
 - Trash/restore/permanent deletion, information/comments/color tags,
   bounded text/image previews, document/media previews and archive browsing,
   extraction and creation through the existing confined helpers.

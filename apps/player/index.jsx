@@ -5,7 +5,7 @@
 // in-stream subtitles, full screen, picture in picture) and what is published for Control Center
 // and the media keys (nowPlaying).
 import {
-  View, Text, Image, MediaView, ScrollView, SidebarItem, SectionTitle, Hairline, EmptyState, ToolbarButton, useTheme, useAppWindow, useKeyboard,
+  View, Text, Image, MediaView, ScrollView, SidebarItem, SectionTitle, Hairline, EmptyState, ToolbarButton, useTheme, useAppWindow, useKeyboard, useFileDrop,
   useStore, useWindowState, wm, typeScale, t as tr, errorText, media, usePlayer, nowPlaying, mediaFormatTime, useThumb, fs, addListener, direction,
 } from '@lordos/sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -197,6 +197,10 @@ export default function Player() {
   const [showVideo, setShowVideo] = useWindowState('showVideo', false);
   const [openFor, setOpenFor] = useWindowState('openFor', null);   // path of the open player
   const root = useRef(null);
+  useFileDrop(root, ({ paths }) => {
+    const mediaPaths = paths.filter((path) => isVideo(path) || isAudio(path));
+    if (mediaPaths.length) { setQueue(mediaPaths); setIndex(0); setShowVideo(isVideo(mediaPaths[0])); }
+  });
   const width = useBoxWidth(root, 960);
   const p = usePlayer(id);
   const current = queue[index] || null;

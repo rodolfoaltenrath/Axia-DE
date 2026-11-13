@@ -227,8 +227,10 @@ fn side_item(s: &Session, text: Value, command: Value, selected: bool, kind: &st
     n["events"] = json!({"onClick":command});
     if s.mode == Mode::Browser && command[0] == "navigate" {
         n["events"]["onMouseUp"] = json!(["drop", command[1]]);
+        n["dropPath"] = command[1].clone();
     } else if s.mode == Mode::Browser && command[0] == "place" && command[1] == "trash" {
         n["events"]["onMouseUp"] = json!(["drop", "trash"]);
+        n["dropPath"] = json!("trash");
     }
     n
 }
@@ -348,6 +350,7 @@ impl Session {
                 if self.mode == Mode::Browser {
                     if let Some(path) = &volume.path {
                         entry["events"]["onMouseUp"] = json!(["drop", path]);
+                        entry["dropPath"] = json!(path);
                     }
                 }
                 if volume.path.is_some() {
@@ -765,6 +768,9 @@ impl Session {
         cell["key"] = json!(format!("entry:{}", e.path));
         cell["type"] = json!("fileTile");
         cell["tooltip"] = json!(e.name);
+        if self.mode == Mode::Browser && e.dir && e.raw.is_absolute() && e.raw.to_str().is_some() {
+            cell["dropPath"] = json!(e.raw);
+        }
         cell["tooltipLayer"] = json!(if self.mode == Mode::Browser {
             "tooltip"
         } else {
