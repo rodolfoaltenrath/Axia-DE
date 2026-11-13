@@ -9,6 +9,9 @@ use crate::runtime::native::{self as scene, Prop};
 use serde_json::{json, Map, Value};
 use std::{cell::RefCell, rc::Rc};
 
+#[path = "../../../../apps/pdf/native_tests.rs"]
+mod pdf_sidebar;
+
 #[test]
 fn styles_expand_shorthands_and_colors_like_style_js() {
     assert_eq!(color(&json!("#0a84ff")), 0xff0a84ff);
