@@ -329,6 +329,7 @@ pub unsafe extern "C" fn axia_crypto_argon2(
 }
 
 // AES, SHA-1 and HMAC of the foreign formats (C ABI of server/src/vault/vcrypto.h).
-mod vcrypto;
+pub mod vcrypto;
+mod totp;
 #[cfg(test)]
 mod tests;

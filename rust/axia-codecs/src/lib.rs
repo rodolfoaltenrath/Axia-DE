@@ -13,6 +13,7 @@ mod cbor;
 mod compression;
 mod qr;
 mod tzif;
+mod vgen;
 #[cfg(feature = "secure-memory")]
 mod secure;
 // The KDBX XML reader and the CSV reader keep their data in the vault's secrets arena.

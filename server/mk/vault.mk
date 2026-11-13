@@ -13,8 +13,8 @@ build/obj/vault/lists.o: ../third_party/wordlists/eff_large_wordlist.txt ../thir
 	cp ../third_party/wordlists/eff_large_wordlist.txt build/gen/vault/words.txt
 	cp ../third_party/wordlists/10k-most-common.txt build/gen/vault/common.txt
 	cd build/gen/vault && $(LD) -r -b binary -z noexecstack -o ../../obj/vault/lists.o words.txt common.txt
-VAULT_CORE := src/vault/smem.c src/vault/vjson.c src/vault/vfile.c src/vault/vmodel.c src/vault/vgen.c \
-              src/vault/totp.c src/vault/vwire.c src/pkg/crypto.c
+VAULT_CORE := src/vault/smem.c src/vault/vjson.c src/vault/vfile.c src/vault/vmodel.c \
+              src/vault/vwire.c src/pkg/crypto.c
 VAULT_HDR := $(wildcard src/vault/*.h) src/sec/sandbox.h
 # format, model, TOTP, generator, JSON and protocol (tests/vault_test.c)
 build/vault-test: tests/vault_test.c $(VAULT_CORE) $(VAULT_CODEC_LIB) build/obj/vault/lists.o $(VAULT_HDR)
