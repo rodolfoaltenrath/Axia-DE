@@ -1,6 +1,6 @@
 // Top menu bar: L menu, active app, Window menu, keyboard layout,
 // Control Center and clock.
-import { View, Text, BackgroundApps, NetworkConnectionIcon, NetworkPopover, SearchGlyph, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems } from '@lordos/sdk';
+import { View, Text, BackgroundApps, NetworkConnectionIcon, NetworkPopover, SearchGlyph, useClock, wm, getApp, session, useAppMenus, t as tr, appName, formatDate, formatTime, keyboard, useSettings, direction, screen, windowAppName, AxiaGlyph, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems, NativeView, NATIVE_MENUBAR, barBridge } from '@lordos/sdk';
 import { useRef, useState } from 'react';
 import { Menu } from './Menu.jsx';
 
@@ -32,24 +32,8 @@ function ControlGlyph({ t }) {
   return <View style={{ width: 16, height: 14 }}>{bar(0, 9)}{bar(8, 2)}</View>;
 }
 
-// area: the display it is on (global coordinates; the main one, or each one with "menu bar on all displays")
-export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, controlCenter, area = { x: 0, y: 0, w: screen.width, h: screen.height } }) {
-  const clock = useClock(format, 1000);
-  useSettings();         // the active keyboard layout lives in the settings
-  const [open, setOpen] = useState(null);
-  const refs = { logo: useRef(null), app: useRef(null), window: useRef(null), help: useRef(null), network: useRef(null) };
-  const appRefs = useRef({});
-  const app = focused ? getApp(focused) : null;
-  const extra = useAppMenus(focused) || [];
-  // Menu position: below the item that opened it (from its right edge in Arabic/Hebrew).
-  const anchorX = (ref) => {
-    if (!ref?.current) return direction() === 'rtl' ? area.x + area.w - 6 : area.x + 6;
-    const [x, , w] = lord.getLayout(ref.current.id);
-    return direction() === 'rtl' ? x + w : x;
-  };
-  const toggle = (name, ref) => { if (controlCenter) onControlCenter(); spotlight.close(); setOpen((o) => (o?.name === name ? null : { name, x: anchorX(ref) })); };
-  const close = () => setOpen(null);
-
+// The bar's menus, each one a getter (see below), shared by the React bar and the native one.
+function barMenus({ app, focused, extra, onLaunchpad }) {
   // Only the open menu is built (each one a getter): the bar renders on every change of focus, of the
   // app's menus, of a setting and of the clock, and the logo menu walks the home folder for the recent
   // files (up to 60 000 entries) and asks for the pending package updates.
@@ -87,6 +71,28 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
     ] }; },
   };
   extra.forEach((m, i) => { menus[`app${i}`] = { items: m.items }; });
+  return menus;
+}
+
+// area: the display it is on (global coordinates; the main one, or each one with "menu bar on all displays")
+function ClassicMenuBar({ t, height, focused, onLaunchpad, onControlCenter, controlCenter, area = { x: 0, y: 0, w: screen.width, h: screen.height } }) {
+  const clock = useClock(format, 1000);
+  useSettings();         // the active keyboard layout lives in the settings
+  const [open, setOpen] = useState(null);
+  const refs = { logo: useRef(null), app: useRef(null), window: useRef(null), help: useRef(null), network: useRef(null) };
+  const appRefs = useRef({});
+  const app = focused ? getApp(focused) : null;
+  const extra = useAppMenus(focused) || [];
+  // Menu position: below the item that opened it (from its right edge in Arabic/Hebrew).
+  const anchorX = (ref) => {
+    if (!ref?.current) return direction() === 'rtl' ? area.x + area.w - 6 : area.x + 6;
+    const [x, , w] = lord.getLayout(ref.current.id);
+    return direction() === 'rtl' ? x + w : x;
+  };
+  const toggle = (name, ref) => { if (controlCenter) onControlCenter(); spotlight.close(); setOpen((o) => (o?.name === name ? null : { name, x: anchorX(ref) })); };
+  const close = () => setOpen(null);
+
+  const menus = barMenus({ app, focused, extra, onLaunchpad });
 
   const cur = open && menus[open.name];
   const anchor = open && (refs[open.name] || { current: appRefs.current[open.name] });
@@ -126,4 +132,58 @@ export function MenuBar({ t, height, focused, onLaunchpad, onControlCenter, cont
       {cur && <Menu x={open.x} y={area.y + height + 2} items={cur.items} onClose={close} anchor={anchor} width={260} />}
     </View>
   );
+}
+
+// The clock has its own component: a tick re-renders this, not the bar.
+function BarClock({ t }) {
+  const clock = useClock(format, 1000);
+  return <BarItem t={t}><Label t={t}>{clock}</Label></BarItem>;
+}
+
+// The menus on the left are a native view (sdk/nativemenubar.js, native_view/menubar.rs); the
+// items that other services drive stay React on the right.
+function NativeMenuBar({ t, height, focused, onLaunchpad, onControlCenter, controlCenter, area }) {
+  useSettings();         // the active keyboard layout lives in the settings
+  const [network, setNetwork] = useState(false);
+  const networkRef = useRef(null);
+  const app = focused ? getApp(focused) : null;
+  const extra = useAppMenus(focused) || [];
+  barBridge.menus = barMenus({ app, focused, extra, onLaunchpad });
+  barBridge.prepare = () => { if (controlCenter) onControlCenter(); spotlight.close(); setNetwork(false); };
+  const close = () => setNetwork(false);
+  const items = [
+    { id: 'logo', glyph: 'logo' },
+    { id: 'app', bold: true, label: app ? (app.builtin ? windowAppName(wm.get(focused)) : appName(app)) : 'Axia DE' },
+    ...extra.map((m, i) => ({ id: `app${i}`, label: m.label })),
+    { id: 'window', label: tr('shell.menu.window') },
+    { id: 'help', label: tr('shell.menu.help') },
+  ];
+  return (
+    <View style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0 }}>
+      <View style={{
+        position: 'absolute', left: area.x, top: area.y, width: area.w, height, flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 8, backgroundColor: t.menuBg, backdropFilter: `blur(${t.blur}px)`,
+      }}>
+        <NativeView manifest={NATIVE_MENUBAR} args={{ bar: { items, height } }} style={{ height }} />
+        <BarItem t={t} onClick={() => keyboard.next()}>
+          <Label t={t}>{keyboard.label(keyboard.active())}</Label>
+        </BarItem>
+        <StatusItems color={t.menuText} />
+        <BackgroundApps color={t.menuText} onOpen={() => { close(); if (controlCenter) onControlCenter(); spotlight.close(); }} />
+        <PrivacyIndicators />
+        <BarItem t={t} onClick={() => { close(); if (controlCenter) onControlCenter(); spotlight.toggle(); }}><SearchGlyph size={18} color={t.menuText} /></BarItem>
+        <BarItem t={t} active={network} anchorRef={networkRef} onClick={() => { if (controlCenter) onControlCenter(); spotlight.close(); setNetwork((o) => !o); }}><NetworkConnectionIcon color={t.menuText} /></BarItem>
+        <BarItem t={t} active={controlCenter} onClick={() => { close(); spotlight.close(); onControlCenter(); }}><ControlGlyph t={t} /></BarItem>
+        <BarClock t={t} />
+      </View>
+      {network && <NetworkPopover anchor={networkRef} onClose={close} area={area} />}
+    </View>
+  );
+}
+
+// "menuBarNativeView": true in settings.json draws the menus in Rust (off by default for now).
+export function MenuBar(props) {
+  const [prefs] = useSettings();
+  const Bar = prefs.menuBarNativeView === true ? NativeMenuBar : ClassicMenuBar;
+  return <Bar {...props} area={props.area || { x: 0, y: 0, w: screen.width, h: screen.height }} />;
 }
