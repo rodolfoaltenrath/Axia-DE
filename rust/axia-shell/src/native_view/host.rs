@@ -328,7 +328,8 @@ impl Host {
         Some(if self.window_focused {
             ms
         } else {
-            (ms * 2.).max(2000.)
+            self.app.background_refresh_ms().filter(|n| n.is_finite() && *n > 0.)
+                .map(|n| n.max(16.)).unwrap_or_else(|| (ms * 2.).max(2000.))
         })
     }
     pub fn facts(&mut self, facts: Value) {

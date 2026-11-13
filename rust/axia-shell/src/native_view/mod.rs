@@ -50,6 +50,8 @@ pub trait NativeApp {
     fn resources(&mut self, _assets: &str, _home: Option<&str>) {}
     /// An app may vary its refresh cadence with its current page and state.
     fn refresh_ms(&self) -> Option<f64> { None }
+    /// Active media may need timely control even when its window loses focus.
+    fn background_refresh_ms(&self) -> Option<f64> { None }
     fn request(&mut self, input: &Value) -> Value;
     fn pixels(&self, _id: &str) -> Option<(usize, usize, &[u8])> {
         None
@@ -75,6 +77,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::logs::ID => Some(Box::new(crate::logs_app::App::default())),
         crate::native_apps::fonts::ID => Some(Box::new(crate::fonts_app::App::default())),
         crate::native_apps::scanner::ID => Some(Box::new(crate::scanner_app::App::default())),
+        crate::native_apps::recorder::ID => Some(Box::new(crate::recorder_app::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),

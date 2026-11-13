@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Fonts, Scanner, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Fonts, Scanner, Recorder, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -63,6 +63,16 @@ filesystem jobs and the system print dialog. The shared window lease retains
 preview images and disposes late results. A direct save waits for the copy job
 to finish before announcing success; conversion keeps the settings captured
 when scanning started. The app folder contains only Rust source.
+
+Voice Recorder now owns its native window, recording/playback state, microphone
+selection, waveform raster, crop handles, rename and export policy in Rust.
+The SDK still requests microphone permission and talks to PipeWire/axia-media;
+the runtime transports raw events and retains sessions in the window lease.
+Closing or discarding a late start releases the microphone/player and listener.
+Rust also handles session completion, trimmed playback and delayed seek; active
+media can keep its control cadence after focus loss. The original waveform is
+covered by pixel fixtures, alongside a native-window export test and service
+lifecycle tests. The Recorder folder contains only Rust source.
 
 ## Remaining apps awaiting migration
 
