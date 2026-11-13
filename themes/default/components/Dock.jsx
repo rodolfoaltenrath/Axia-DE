@@ -10,7 +10,7 @@ import { dockGlass, useDockPreviews } from '@lordos/sdk';
 // this file only draws it and says where things are. The Trash is always the last item.
 import {
   NativeView, View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
-  registerDockTarget, dockDragJustEnded, refreshTrash, Layer, nativeAnim, whenAnimDone,
+  registerDockTarget, dockDragJustEnded, refreshTrash, Layer, nativeAnim, whenAnimDone, NativeDockTip, NativeDockGhost,
 } from '@lordos/sdk';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -167,7 +167,9 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const { dir } = useLocale();
   const drag = useStore(dockDrag);
   const poof = useStore(dockPoof);
-  const reduce = !!useStore(settings).reduceMotion;
+  const prefs = useStore(settings);
+  const reduce = !!prefs.reduceMotion;
+  const nativeParts = prefs.dockNativeView === true;      // the tooltip and the drag ghost drawn by Rust
   const dragging = !!drag;
   const own = drag?.source === 'dock' ? drag.id : null;
   // Rust owns ordering, magnification and geometry. Callable icon components
@@ -355,17 +357,20 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
       {preview.panel}
       {/* the name tooltip (not while the icon's menu is open: the menu takes that place) */}
       <Layer name="tooltip">
-        {showTip && position === 'bottom' && (
-          <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
-            alignItems: 'center', pointerEvents: 'none', direction: 'ltr' }}>{tip}</View>
-        )}
+        {showTip && position === 'bottom' && (nativeParts
+          ? <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
+            alignItems: 'center', pointerEvents: 'none', direction: 'ltr' }}><NativeDockTip t={t} label={label} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }} /></View>
+          : <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
+            alignItems: 'center', pointerEvents: 'none', direction: 'ltr' }}>{tip}</View>)}
         {showTip && vert && (
           <View style={{ position: 'absolute', top: start + iconC[hovered] - 13, pointerEvents: 'none', direction: 'ltr',
-            ...(position === 'left' ? { left: AX + MARGIN + PAD + sizes[hovered] + 14 } : { right: screen.width - AR + MARGIN + PAD + sizes[hovered] + 14 }) }}>{tip}</View>
+            ...(position === 'left' ? { left: AX + MARGIN + PAD + sizes[hovered] + 14 } : { right: screen.width - AR + MARGIN + PAD + sizes[hovered] + 14 }) }}>
+            {nativeParts ? <NativeDockTip t={t} label={label} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }} /> : tip}
+          </View>
         )}
       </Layer>
       <Layer name="drag">
-        {ghost}
+        {nativeParts && drag ? <NativeDockGhost t={t} drag={drag} base={BASE} removeLabel={tr('shell.dock.removeCue')} /> : ghost}
         <Poof poof={poof} size={BASE} reduce={reduce} />
       </Layer>
     </>

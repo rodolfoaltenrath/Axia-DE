@@ -19,6 +19,7 @@ export { dockGlass } from './glass.js';
 export { NativeView } from './nativeview.js';
 export { NATIVE_MENUBAR, barBridge } from './nativemenubar.js';
 export { NATIVE_TREE, treeOwners } from './nativetree.js';
+export { NativeDockTip, NativeDockGhost } from './nativedockparts.jsx';
 export { NativeTitleBar } from './nativetitlebar.jsx';
 export { whenAnimDone, nativeAnim } from './anim.js';
 export { shortcutProfile } from './shortcutprofile.js';
