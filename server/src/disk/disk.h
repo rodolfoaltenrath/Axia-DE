@@ -3,7 +3,7 @@
  * disk.c reads without root: /sys/block, the udev database (/run/udev/data/b<major>:<minor>) and
  * /proc/self/mountinfo. It is used by axia-server (lord.disks, js_disk.c) and by the admin helper
  * (disk_admin.c), which validates with these same functions on the root side.
- * smart.c holds the parsers (pure functions) for ATA SMART and the NVMe health log; the helper
+ * rust/axia-codecs/src/smart.rs holds the parsers (pure functions) for ATA SMART and the NVMe health log; the helper
  * reads them with SG_IO / NVME_IOCTL_ADMIN_CMD (action disk-smart). */
 #ifndef LORD_DISK_H
 #define LORD_DISK_H
@@ -50,7 +50,7 @@ int  disk_watch_fd(void);
 /* Reads what arrived; 1 if disks or mounts changed (JS must be told). */
 int  disk_watch_dispatch(void);
 
-/* ---- SMART (smart.c, pure functions: tests/smart_test.c) ---- */
+/* ---- SMART (axia-codecs smart.rs, pure functions: tests/smart_test.c) ---- */
 
 enum { SMART_UNKNOWN = 0, SMART_OK = 1, SMART_WARN = 2, SMART_FAIL = 3 };
 enum { SMART_ATA = 1, SMART_NVME = 2 };

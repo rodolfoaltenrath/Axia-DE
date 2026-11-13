@@ -26,6 +26,15 @@ mod lanaddr;
 mod rconnect;
 #[cfg(not(feature = "secure-memory"))]
 mod ipp;
+// Disks' SMART, System Information's SMBIOS and hwdata ids, and the Night Light math.
+#[cfg(not(feature = "secure-memory"))]
+mod smart;
+#[cfg(not(feature = "secure-memory"))]
+mod smbios;
+#[cfg(not(feature = "secure-memory"))]
+mod ids;
+#[cfg(not(feature = "secure-memory"))]
+mod night;
 mod compression;
 mod qr;
 mod tzif;

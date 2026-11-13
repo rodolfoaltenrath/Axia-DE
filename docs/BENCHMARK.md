@@ -1171,7 +1171,7 @@ the launcher. The app takes only that one value and starts no measurement. No ro
 
 ## Work plan for 0.8.5
 
-**Built (2026-10-26):** `server/src/sysreport/` (the collector, `ids.c` for `pci.ids`/`usb.ids`, the JSON
+**Built (2026-10-26):** `server/src/sysreport/` (the collector, `ids.h` (`rust/axia-codecs/src/ids.rs`) for `pci.ids`/`usb.ids`, the JSON
 and Markdown output), `axia-sysreport report [--json | --markdown]` in `/usr/bin` (package `lordos`,
 which recommends `pci.ids` and `usb.ids`), and `tests/sysreport_test.c`: five fake machines (AMD desktop,
 Intel laptop, Nvidia desktop, Raspberry Pi 5, VM) full of serials, UUIDs, MAC addresses, a host name, a
@@ -1203,7 +1203,7 @@ existing file), with **Show in Files**. Nothing is sent anywhere: publishing is 
 ![The Report tab](sysinfo-report.png)
 
 **Memory modules (2026-10-26):** Hardware → Memory → **Read modules** runs the read-only admin action
-`hw-memory-modules` (the SMBIOS type 17 entries only root can read, parsed in `sysreport/smbios.c`:
+`hw-memory-modules` (the SMBIOS type 17 entries only root can read, parsed in `rust/axia-codecs/src/smbios.rs`:
 slot, bank, size, type, speeds, manufacturer; never serial, asset tag or part number). On VM 116 the
 parser read `mem 4096|RAM|0|0|DIMM 0||QEMU` from QEMU's real tables (`build/sysreport-test smbios` as
 root); the button itself was not exercised on screen (the isolated test session has no admin helper,

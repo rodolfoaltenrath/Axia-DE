@@ -123,7 +123,7 @@ SRC += $(BACKUP_SRC)
 HDR += $(wildcard src/backup/*.h)
 # Backup encryption uses allocation-free Rust primitives through axia-shell.
 # Disks (docs/SYSTEM.md): disks, partitions and mounts without root, our own SMART and the disk-* actions
-DISK_SRC := src/disk/disk.c src/disk/smart.c src/disk/smartctl.c src/ui/js_disk.c
+DISK_SRC := src/disk/disk.c src/disk/smartctl.c src/ui/js_disk.c
 SRC += $(DISK_SRC)
 HDR += $(wildcard src/disk/*.h)
 SRC += src/platform/admin.c src/platform/net.c
@@ -734,9 +734,9 @@ build/axia-bench: build/gen/profile.h
 
 # SMART parsers (ATA and NVMe) of the Disks app: hand-built data, healthy/warning/failing
 test: build/smart-test
-build/smart-test: tests/smart_test.c src/disk/smart.c src/disk/disk.h src/admin.h
+build/smart-test: tests/smart_test.c src/disk/disk.h src/admin.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smart_test.c src/disk/smart.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smart_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # smart-* actions (smartmontools): which device names are accepted, JSON compaction and LOG pieces;
 # Disk SMART helper tests (Monitor sensor coverage is in Rust).
