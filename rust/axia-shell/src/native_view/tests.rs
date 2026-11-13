@@ -1052,3 +1052,54 @@ fn a_native_field_edits_at_the_caret_and_starts_with_the_selection_it_asks_for()
     drop(host);
     scene::destroy(mount);
 }
+
+#[test]
+fn pointer_actions_carry_position_and_modifiers_and_the_extra_events_reach_the_app() {
+    struct Ev(Rc<RefCell<Vec<Value>>>);
+    impl NativeApp for Ev {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                return json!({"tree":{"kind":"view","children":[{"kind":"view","events":{
+                    "onClick":["click"],"onDoubleClick":["dbl"],"onContextMenu":["ctx"],"onWheel":["wheel"],"onMouseMove":["mv"]},
+                    "children":[{"kind":"text","label":"Tile"}]}]}});
+            }
+            self.0.borrow_mut().push(input.clone());
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Ev(log.clone())), "", None);
+    host.facts(json!({}));
+    let tile = node_with_text(mount, "Tile");
+    let cmds = |name: &str| log.borrow().iter().filter(|v| v["cmd"] == name).cloned().collect::<Vec<_>>();
+    super::axia_view_set_modifiers(2 | 1); // Ctrl and Shift held
+    host.pointer("move", tile, 5., 6., 0);
+    assert_eq!(cmds("mv").len(), 1, "a move reaches onMouseMove");
+    host.pointer("down", tile, 5., 6., 0);
+    host.pointer("up", tile, 5., 6., 0);
+    let click = &cmds("click")[0];
+    assert_eq!((click["ctrl"].clone(), click["shift"].clone(), click["alt"].clone()), (json!(true), json!(true), json!(false)));
+    assert_eq!((click["button"].clone(), click["x"].is_number(), click["y"].is_number()), (json!(0), true, true));
+    assert!(cmds("dbl").is_empty(), "one click is not a double click");
+    host.pointer("down", tile, 5., 6., 0);
+    host.pointer("up", tile, 5., 6., 0);
+    assert_eq!(cmds("click").len(), 2);
+    assert_eq!(cmds("dbl").len(), 1, "the second one soon after is");
+    host.pointer("down", tile, 5., 6., 0);
+    host.pointer("up", tile, 5., 6., 0);
+    assert_eq!(cmds("dbl").len(), 1, "a third click starts over");
+    host.pointer("down", tile, 5., 6., 2);
+    host.pointer("up", tile, 5., 6., 2);
+    assert_eq!(cmds("ctx").len(), 1, "a right click is onContextMenu");
+    assert_eq!(cmds("ctx")[0]["button"], 2);
+    host.pointer("wheel", tile, 5., 6., 1);
+    let wheel = &cmds("wheel")[0];
+    assert_eq!((wheel["deltaY"].clone(), wheel["notches"].clone(), wheel["ctrl"].clone()), (json!(-48.), json!(1), json!(true)));
+    super::axia_view_set_modifiers(0);
+    drop(host);
+    scene::destroy(mount);
+}

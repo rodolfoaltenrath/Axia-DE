@@ -194,6 +194,12 @@ pub struct Host {
     tip_view: Vec<Mounted>,
     /// The focused field's caret and the other end of its selection (in characters), and the value
     /// they were set for: another value (the app's own change) puts the caret at its end.
+    /// The events of the views (node → their `events`), for the ones that bubble up to an ancestor.
+    events: HashMap<i32, Value>,
+    /// While a pointer event is handled: where, which button and the modifiers, sent with its actions.
+    pointer_info: Option<Map<String, Value>>,
+    /// The view and time of the last left click, for `onDoubleClick`.
+    last_click: (i32, f64),
     caret: usize,
     anchor: usize,
     caret_value: String,
@@ -246,6 +252,9 @@ impl Host {
             lit: false,
             tip_due: None,
             tip_view: Vec::new(),
+            events: HashMap::new(),
+            pointer_info: None,
+            last_click: (0, 0.),
             caret: 0,
             anchor: 0,
             caret_value: String::new(),
@@ -878,8 +887,11 @@ impl Host {
         }
         self.portals.clear();
         layered(&self.root, &mut self.portals);
-        fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>) {
+        fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>, ev: &mut HashMap<i32, Value>) {
             for m in list {
+                if m.kind == Kind::View && m.spec["events"].is_object() {
+                    ev.insert(m.node, m.spec["events"].clone());
+                }
                 if m.tip.is_some() {
                     b.entry(m.node).or_insert(m.node);
                 }
@@ -910,14 +922,15 @@ impl Host {
                     }
                     _ => {}
                 }
-                walk(&m.children, t, b);
+                walk(&m.children, t, b, ev);
             }
         }
         // Keep the buckets across reconciliations: Calculator has the same
         // keys on every hover/press, and Monitor repeatedly rebuilds its tabs.
         self.targets.clear();
         self.buttons.clear();
-        walk(&self.root, &mut self.targets, &mut self.buttons);
+        self.events.clear();
+        walk(&self.root, &mut self.targets, &mut self.buttons, &mut self.events);
     }
 }
 /// Interaction: pointer, wheel, keys, the refresh timer and caret/scroll-bar timers.
@@ -1037,6 +1050,11 @@ impl Host {
         input.insert("cmd".into(), action[0].clone());
         input.insert("key".into(), action[1].clone());
         input.extend(extra);
+        if let Some(info) = &self.pointer_info {
+            for (k, v) in info {
+                input.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
         let reply = self.app.request(&Value::Object(input));
         self.queue(&reply);
     }
@@ -1077,7 +1095,41 @@ impl Host {
         self.scroll_by(node, target - current);
     }
     /// Some(mount) when the event is this view's: JS then sees it on the mount node.
+    /// The nearest ancestor of `node` (itself first) with an `events` entry `name`, and its action.
+    fn ancestor_event(&self, mut node: i32, name: &str) -> Option<(i32, Value)> {
+        for _ in 0..4096 {
+            if node <= 0 || node == self.mount {
+                return None;
+            }
+            if let Some(action) = self.events.get(&node).map(|e| &e[name]).filter(|a| a.is_array()) {
+                return Some((node, action.clone()));
+            }
+            node = scene::parent(node);
+        }
+        None
+    }
+    /// What the app is told about a pointer event: where (in the view), the button and the modifiers.
+    fn pointer_data(&self, x: f32, y: f32, button: i32) -> Map<String, Value> {
+        let (fx, fy) = scene::frame(self.mount).map_or((0., 0.), |f| (f.0, f.1));
+        let m = super::modifiers();
+        Map::from_iter([
+            ("x".into(), json!(x - fx)),
+            ("y".into(), json!(y - fy)),
+            ("button".into(), json!(button)),
+            ("shift".into(), json!(m & 1 != 0)),
+            ("ctrl".into(), json!(m & 2 != 0)),
+            ("alt".into(), json!(m & 4 != 0)),
+            ("meta".into(), json!(m & 16 != 0)),
+        ])
+    }
+    /// Some(mount) when the event is this view's: JS then sees it on the mount node.
     pub fn pointer(&mut self, kind: &str, target: i32, x: f32, y: f32, button: i32) -> Option<i32> {
+        self.pointer_info = Some(self.pointer_data(x, y, button));
+        let out = self.pointer_event(kind, target, x, y, button);
+        self.pointer_info = None;
+        out
+    }
+    fn pointer_event(&mut self, kind: &str, target: i32, x: f32, y: f32, button: i32) -> Option<i32> {
         let _ = x;
         let inside = self.owns(target);
         if self.icon_mode().is_some() {
@@ -1102,6 +1154,11 @@ impl Host {
                     0
                 };
                 self.set_hover(hover);
+                if inside {
+                    if let Some((_, action)) = self.ancestor_event(target, "onMouseMove") {
+                        self.dispatch(&action, Map::new());
+                    }
+                }
             }
             "down" => {
                 self.hide_tip();
@@ -1158,6 +1215,11 @@ impl Host {
             }
             "up" => {
                 if button != 0 {
+                    if button == 2 && inside {
+                        if let Some((_, action)) = self.ancestor_event(target, "onContextMenu") {
+                            self.dispatch(&action, Map::new());
+                        }
+                    }
                     return inside.then_some(self.mount);
                 }
                 if let Some((node, _)) = self.drag.take() {
@@ -1183,14 +1245,40 @@ impl Host {
                         }
                     }
                 }
+                // a second click on the same view soon after: onDoubleClick (after its onClick, as in JS)
+                if inside {
+                    if let Some((node, action)) = self.ancestor_event(target, "onDoubleClick") {
+                        let now = now_ms();
+                        if self.last_click.0 == node && now - self.last_click.1 < 450. {
+                            self.last_click = (0, 0.);
+                            self.send(&action, Map::new());
+                            changed = true;
+                        } else {
+                            self.last_click = (node, now);
+                        }
+                    }
+                }
                 if changed {
                     self.sync();
                 }
             }
             "wheel" if inside => {
                 self.hide_tip();
-                if let Some((node, _)) = self.target(target, |t| matches!(t, Target::Scroll)) {
-                    self.scroll_by(node, -(button as f64) * WHEEL_STEP);
+                let mods = super::modifiers();
+                let wheel = self.ancestor_event(target, "onWheel");
+                let scroll = self.target(target, |t| matches!(t, Target::Scroll));
+                match (wheel, scroll) {
+                    // Ctrl or Cmd with the wheel is the app's (zoom), or any wheel where nothing scrolls
+                    (Some((_, action)), scroll) if mods & (2 | 16) != 0 || scroll.is_none() => {
+                        let extra = Map::from_iter([
+                            ("deltaY".into(), json!(-(button as f64) * WHEEL_STEP)),
+                            ("notches".into(), json!(button)),
+                        ]);
+                        self.send(&action, extra);
+                        self.sync();
+                    }
+                    (_, Some((node, _))) => self.scroll_by(node, -(button as f64) * WHEEL_STEP),
+                    _ => {}
                 }
             }
             _ => {}
