@@ -73,6 +73,107 @@ static void old_gradient(Canvas *c, float x, float y, float w, float h, float r,
     }
 }
 
+static void old_mid_span(float cx, float lim, int x0, int x1, int *s0, int *s1) {
+    int a = (int)ceilf(cx - lim - 0.5f), b = (int)floorf(cx + lim - 0.5f) + 1;
+    if (a < x0) a = x0;
+    if (b > x1) b = x1;
+    /* the same float test as rr_sdf, so the span's edges agree exactly (pixels left out are only
+     * worked out per pixel, as before) */
+    while (a < b && fabsf(a + 0.5f - cx) - lim > 0) a++;
+    while (b > a && fabsf(b - 0.5f - cx) - lim > 0) b--;
+    if (a < b) { *s0 = a; *s1 = b; } else { *s0 = *s1 = x1; }
+}
+
+static void old_rrect(Canvas *c, float x, float y, float w, float h, float r, uint32_t argb) {
+    uint32_t a = argb >> 24;
+    int x0, y0, x1, y1;
+    if (!a || w <= 0 || h <= 0 || !old_bounds(c, x, y, w, h, &x0, &y0, &x1, &y1)) return;
+    r = old_fix_radius(r, w, h);
+    float cx = x + w * 0.5f, cy = y + h * 0.5f, hw = w * 0.5f, hh = h * 0.5f;
+    int fx0 = (int)ceilf(x), fx1 = (int)floorf(x + w);   /* fully covered columns */
+    for (int j = y0; j < y1; j++) {
+        uint32_t *row = c->px + (size_t)j * c->stride;
+        if (j >= y + r && j + 1 <= y + h - r) {
+            /* Straight band: only the left/right edges are partial; the middle, in one run. */
+            int m0 = fx0 > x0 ? fx0 : x0, m1 = fx1 < x1 ? fx1 : x1;
+            if (m1 < m0) m1 = m0;
+            for (int i = x0; i < m0; i++) {
+                float cov = fminf(i + 1.0f, x + w) - fmaxf((float)i, x);
+                if (cov > 0) old_put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
+            }
+            if (a >= 255) { uint32_t v = argb | 0xff000000u; for (int i = m0; i < m1; i++) row[i] = v; }
+            else for (int i = m0; i < m1; i++) row[i] = old_blend(row[i], argb, a);
+            for (int i = m1; i < x1; i++) {
+                float cov = fminf(i + 1.0f, x + w) - fmaxf((float)i, x);
+                if (cov > 0) old_put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
+            }
+        } else {
+            float py = j + 0.5f;
+            /* between the corners the distance only depends on the row (once the row is outside the
+             * straight band): worked out once there, per pixel at the corners */
+            int s0 = x1, s1 = x1;
+            if (fabsf(py - cy) - (hh - r) > 0) old_mid_span(cx, hw - r, x0, x1, &s0, &s1);
+            for (int i = x0; i < x1; i++) {
+                if (i == s0) {
+                    float cov = old_cov_of(old_rr_sdf(i + 0.5f, py, cx, cy, hw, hh, r));
+                    if (cov > 0) { uint32_t k = (uint32_t)(a * cov + 0.5f); for (; i < s1; i++) old_put(&row[i], argb, k); }
+                    i = s1 - 1;
+                    continue;
+                }
+                float cov = old_cov_of(old_rr_sdf(i + 0.5f, py, cx, cy, hw, hh, r));
+                if (cov > 0) old_put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
+            }
+        }
+    }
+}
+
+static void old_stroke(Canvas *c, float x, float y, float w, float h, float r, float bw, uint32_t argb) {
+    uint32_t a = argb >> 24;
+    int x0, y0, x1, y1;
+    if (!a || bw <= 0 || w <= 0 || h <= 0 || !old_bounds(c, x, y, w, h, &x0, &y0, &x1, &y1)) return;
+    r = old_fix_radius(r, w, h);
+    float ir = r - bw > 0 ? r - bw : 0;
+    float cx = x + w * 0.5f, cy = y + h * 0.5f, hw = w * 0.5f, hh = h * 0.5f;
+    float edge = (r > bw ? r : bw) + 1;
+    for (int j = y0; j < y1; j++) {
+        uint32_t *row = c->px + (size_t)j * c->stride;
+        float py = j + 0.5f;
+        int middle = py > y + edge && py < y + h - edge;
+        /* the span where both distances only depend on the row (rows outside both straight bands) */
+        int s0 = x1, s1 = x1;
+        if (!middle && fabsf(py - cy) - (hh - r) > 0 && fabsf(py - cy) - ((hh - bw) - ir) > 0) {
+            int a0, a1, b0, b1;
+            old_mid_span(cx, hw - r, x0, x1, &a0, &a1);
+            old_mid_span(cx, (hw - bw) - ir, x0, x1, &b0, &b1);
+            if (a0 < x1 && b0 < x1) {
+                s0 = a0 > b0 ? a0 : b0;
+                s1 = a1 < b1 ? a1 : b1;
+                if (s0 >= s1) s0 = s1 = x1;
+            }
+        }
+        for (int i = x0; i < x1; i++) {
+            float px = i + 0.5f;
+            if (middle && px > x + bw + 1 && px < x + w - bw - 1) {
+                /* skips the middle: up to the last pixel whose center is before the right
+                 * edge (never backwards: with fractional coordinates that was a loop) */
+                int last = (int)ceilf(x + w - bw - 1 - 0.5f) - 1;
+                if (last > i) i = last;
+                continue;
+            }
+            if (i == s0) {                  /* between the corners: one value for the whole span */
+                float cov = old_cov_of(old_rr_sdf(px, py, cx, cy, hw, hh, r)) - old_cov_of(old_rr_sdf(px, py, cx, cy, hw - bw, hh - bw, ir));
+                if (cov > 0) { uint32_t k = (uint32_t)(a * cov + 0.5f); for (; i < s1; i++) old_put(&row[i], argb, k); }
+                i = s1 - 1;
+                continue;
+            }
+            float outer = old_cov_of(old_rr_sdf(px, py, cx, cy, hw, hh, r));
+            float inner = old_cov_of(old_rr_sdf(px, py, cx, cy, hw - bw, hh - bw, ir));
+            float cov = outer - inner;
+            if (cov > 0) old_put(&row[i], argb, (uint32_t)(a * cov + 0.5f));
+        }
+    }
+}
+
 static void old_shadow(Canvas *c, float x, float y, float w, float h, float r, float dx, float dy, float blur, uint32_t argb) {
     if (!(argb >> 24) || w <= 0 || h <= 0) return;
     int b = blur < 1 ? 1 : (int)roundf(blur);
@@ -191,6 +292,37 @@ int main(void) {
         gpix += W * H;
     }
     printf("gradient C/Rust: 1500 random gradients, %ld pixels identical to the former C\n", gpix);
+    /* rounded rectangles and outlines: fractional boxes, radii past the box, opaque and translucent, clips */
+    for (int pass = 0; pass < 2; pass++) {
+        long rpix = 0;
+        for (int k = 0; k < 1500; k++) {
+            for (int i = 0; i < W * H; i++) a[i] = i % 4 == 0 ? 0 : (rnd(0x7fffffff) * 2654435761u) | (i % 4 == 1 ? 0xff000000u : 0);
+            for (int i = 0; i < W * H; i++) if ((a[i] >> 24) < 255) { uint32_t al = a[i] >> 24, v = a[i];
+                a[i] = al << 24 | ((((v >> 16) & 255) * al / 255) << 16) | ((((v >> 8) & 255) * al / 255) << 8) | ((v & 255) * al / 255); }
+            memcpy(b, a, W * H * 4);
+            Canvas ca, cb;
+            canvas_init(&ca, a, W, H, W);
+            canvas_init(&cb, b, W, H, W);
+            Rect clip = { (int)rnd(80), (int)rnd(80), W - (int)rnd(80), H - (int)rnd(80) };
+            canvas_set_clip(&ca, clip);
+            canvas_set_clip(&cb, clip);
+            float x = (float)rnd(600) - 50 + rnd(100) / 100.f, y = (float)rnd(420) - 50 + rnd(100) / 100.f;
+            float w = (float)rnd(500) + rnd(100) / 100.f, h = (float)rnd(380) + rnd(100) / 100.f;
+            if (k % 7 == 0) { w = rnd(40) / 4.f; h = rnd(40) / 4.f; }
+            float r = (float)rnd(80) - 4 + rnd(4) / 4.f, bw = 0.25f + (float)rnd(24) + rnd(4) / 4.f;
+            uint32_t argb = (uint32_t)rnd(256) << 24 | (uint32_t)rnd(0x1000000);
+            if (k % 3 == 0) argb |= 0xff000000u;
+            if (pass == 0) { old_rrect(&ca, x, y, w, h, r, argb); canvas_rrect(&cb, x, y, w, h, r, argb); }
+            else { old_stroke(&ca, x, y, w, h, r, bw, argb); canvas_rrect_stroke(&cb, x, y, w, h, r, bw, argb); }
+            if (memcmp(a, b, W * H * 4)) {
+                for (int i = 0; i < W * H; i++)
+                    if (a[i] != b[i]) { fprintf(stderr, "%s case %d: pixel %d,%d %08x != %08x\n", pass ? "stroke" : "rrect", k, i % W, i / W, a[i], b[i]); break; }
+                return 1;
+            }
+            rpix += W * H;
+        }
+        printf("%s C/Rust: 1500 random shapes, %ld pixels identical to the former C\n", pass ? "stroke" : "rrect", rpix);
+    }
 
     /* a maximized window's shadow, the whole screen repainted (an app's frame under glass, a theme
      * animation): the former blend read every byte under the window */
@@ -221,6 +353,18 @@ int main(void) {
     assert(!memcmp(s1, s2, (size_t)SW * SH * 4));
     printf("a 1600x900 gradient: %.3f ms (the former C) -> %.3f ms, same pixels\n",
            ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / 20, ((t2.tv_sec - t1.tv_sec) * 1e3 + (t2.tv_nsec - t1.tv_nsec) / 1e6) / 20);
+
+    for (int translucent = 0; translucent < 2; translucent++) {
+        uint32_t color = translucent ? 0xe0303040u : 0xff303040u;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        for (int i = 0; i < 20; i++) old_rrect(&c1, 100, 80, 1600, 900, 12, color);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        for (int i = 0; i < 20; i++) canvas_rrect(&c2, 100, 80, 1600, 900, 12, color);
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+        assert(!memcmp(s1, s2, (size_t)SW * SH * 4));
+        printf("a 1600x900 %s rounded rectangle: %.3f ms (the former C) -> %.3f ms, same pixels\n", translucent ? "translucent" : "opaque",
+               ((t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6) / 20, ((t2.tv_sec - t1.tv_sec) * 1e3 + (t2.tv_nsec - t1.tv_nsec) / 1e6) / 20);
+    }
     free(s1);
     free(s2);
     return 0;

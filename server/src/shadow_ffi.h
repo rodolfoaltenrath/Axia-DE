@@ -17,4 +17,9 @@ void axia_canvas_fill(uint32_t *px, int32_t stride, int32_t x0, int32_t y0, int3
 void axia_canvas_rrect_gradient(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, int32_t cx1, int32_t cy1,
                                 float x, float y, float w, float h, float r, uint32_t from, uint32_t to,
                                 float angle_deg, float opacity);
+/* canvas_rrect and canvas_rrect_stroke (canvas_ops.rs), inside the clip [cx0, cx1) × [cy0, cy1). */
+void axia_canvas_rrect(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, int32_t cx1, int32_t cy1,
+                       float x, float y, float w, float h, float r, uint32_t argb);
+void axia_canvas_rrect_stroke(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, int32_t cx1, int32_t cy1,
+                              float x, float y, float w, float h, float r, float bw, uint32_t argb);
 #endif
