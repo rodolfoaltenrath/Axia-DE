@@ -11,7 +11,7 @@ import { locale } from './i18n.js';
 import { createSearchSession, searchCaption, searchSourceIcon, spotlightOpen } from './search.js';
 import { useSettings } from './settings.js';
 import { NativeView } from './nativeview.js';
-import { NATIVE_TREE, treeBridge } from './nativetree.js';
+import { NATIVE_TREE, treeOwners } from './nativetree.js';
 function Widget({ node, session }) {
   if (!node) return null;
   const props = { style: node.style };
@@ -46,9 +46,9 @@ function NativePanel() {
   const [session] = useState(() => createSearchSession(true, context));
   const snapshot = useStore(session.store);
   useEffect(() => { session.context(context); }, [theme, language, apps, screen.width, screen.height]);
-  useEffect(() => () => { session.close(); treeBridge.perform = null; }, []);
-  treeBridge.perform = ({ action, extra }) => { session.event(action, action[0] === 'key' ? { reveal: !!extra?.meta } : {}); };
-  return h(NativeView, { manifest: NATIVE_TREE, args: { tree: snapshot.tree },
+  useEffect(() => () => { session.close(); treeOwners.delete('spotlight'); }, []);
+  treeOwners.set('spotlight', ({ action, extra }) => { session.event(action, action[0] === 'key' ? { reveal: !!extra?.meta } : {}); });
+  return h(NativeView, { manifest: NATIVE_TREE, args: { tree: snapshot.tree, owner: 'spotlight' },
     style: { position: 'absolute', left: 0, top: 0, width: screen.width, height: screen.height } });
 }
 export function SpotlightPanel() {

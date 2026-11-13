@@ -109,9 +109,10 @@ export const useNotifications = () => useStore(notifications);
 // theme). Always on the end side of the line.
 let placement = 'top';
 export function setBannerPlacement(p) { placement = p === 'bottom' ? 'bottom' : 'top'; }
+export const bannerPlacement = () => placement;
 export const clearNotifyHistory = () => notifyHistory.set([]);
 
-function runAction(n, a) {
+export function runAction(n, a) {
   dismissNotification(n.id, a.id || 'action');
   try { a.run?.(); } catch (e) { console.error('notify:', e); }
 }
@@ -146,7 +147,7 @@ function Banner({ n, th }) {
     }, h(Text, { style: { fontSize: 12, fontWeight: 600, color: a.primary ? '#fff' : th.text } }, a.label)))) : null);
 }
 
-export function NotificationBanner() {
+export function ReactNotificationBanner() {
   const list = useNotifications();
   // drawn outside the theme's provider: follow the user's light/dark setting
   const base = useTheme(), mode = useStore(settings, (x) => x.mode);
@@ -168,7 +169,7 @@ export function NotificationBanner() {
 }
 
 // Grouping by app (Settings → Notifications): the newest banner of each app, with "+N".
-function grouped(list) {
+export function grouped(list) {
   if (notifyPrefs().grouping === 'off') return list;
   const out = [], seen = new Map();
   for (const n of list) {
