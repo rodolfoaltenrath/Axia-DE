@@ -1,4 +1,4 @@
-/* ipp_test.c — our own IPP encoder and decoder (src/print/ipp.c), mDNS reader
+/* ipp_test.c — our own IPP encoder and decoder (rust/axia-codecs/src/ipp.rs), mDNS reader
  * (rust/axia-codecs/src/mdns.rs) and page ranges (src/print/cups.c). Includes broken messages: truncated at
  * every byte and with random byte changes, which must be rejected without breaking anything. */
 #include "print/ipp.h"

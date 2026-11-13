@@ -3,7 +3,7 @@
  *   share-mount "smb|nfs\n<ipv4>\n<share or path>\n<user>\n<domain>\n<password>"
  *   share-unmount <folder>
  *
- * Everything in the argument is validated here (lan/lanaddr.c): a private IPv4 address and nothing
+ * Everything in the argument is validated here (lanaddr.h, rust/axia-codecs/src/lanaddr.rs): a private IPv4 address and nothing
  * else (no names, so nothing resolves as root), a share or an absolute export path from a strict
  * set. The kernel's own clients do the work through the new mount API, one fsconfig() call per
  * option: no option string to inject into, no program, no shell, no argv. The password arrives on

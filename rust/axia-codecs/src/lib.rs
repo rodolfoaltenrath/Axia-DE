@@ -20,6 +20,12 @@ mod thbrk;
 mod lanparse;
 #[cfg(not(feature = "secure-memory"))]
 mod mdns;
+#[cfg(not(feature = "secure-memory"))]
+mod lanaddr;
+#[cfg(not(feature = "secure-memory"))]
+mod rconnect;
+#[cfg(not(feature = "secure-memory"))]
+mod ipp;
 mod compression;
 mod qr;
 mod tzif;

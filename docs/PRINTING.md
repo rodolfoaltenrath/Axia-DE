@@ -24,7 +24,7 @@ apps (PDF Viewer, Editor, Notes, Photos…)
         ├── preview          axia-doc (built PDF or the app's PDF), see DOCUMENTS.md
         └── lord.print.submit(printer, blob | path, options)
               └── server/src/print  (axia-server threads, never the compositor)
-                    ├── ipp.c     our own IPP/1.1 encoder/decoder
+                    ├── ipp.h     our own IPP/1.1 encoder/decoder (rust/axia-codecs/src/ipp.rs)
                     ├── phttp.c   minimal HTTP/1.1 (CUPS unix socket, TCP to the LAN)
                     ├── cups.c    operations: printers, queue, print, cancel, add…
                     ├── mdns.c    DNS-SD over mDNS (legacy unicast; packets: rust/axia-codecs/src/mdns.rs)
@@ -54,7 +54,7 @@ CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
 - **What it reads is tested:** the decoder validates every length, nests collections up to 8
   levels and has caps on attributes and values. `build/ipp-test` tests it with messages truncated
   at every byte and 20,000 random mutations.
-- **The cost is small:** ~920 lines of our own (`ipp.c`, `phttp.c` and `cups.c`).
+- **The cost is small:** ~920 lines of our own (`ipp.rs`, `phttp.c` and `cups.c`).
 
 ### Managing printers: CUPS policy, without admin.c
 
