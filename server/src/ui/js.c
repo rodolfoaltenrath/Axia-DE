@@ -788,6 +788,7 @@ void js_key(int code, int value) {
     if (!kb_ready()) {                  /* the shell gets the same event as with XKB */
         char key[64], chr[64], base[64];
         int flags = axia_keymap_translate(code, value, key, chr, base, sizeof key);
+        axia_view_set_modifiers(flags & 31);
         JSValueConst args[6] = { JS_NewInt32(ctx, code), JS_NewInt32(ctx, value), JS_NewString(ctx, key),
                                  JS_NewString(ctx, chr), JS_NewString(ctx, base), JS_NewInt32(ctx, flags) };
         JS_FreeValue(ctx, call_global("__lordKey", 6, args));
@@ -795,6 +796,7 @@ void js_key(int code, int value) {
         drain_jobs();
         return;
     }
+    axia_view_set_modifiers(k.shift | k.ctrl << 1 | k.alt << 2 | k.altgr << 3 | k.meta << 4);
     int to_app = wl_key(code, value, &k);                       /* the focused Wayland app */
     if (to_app == 1) { drain_jobs(); return; }
     if (value && !to_app) {

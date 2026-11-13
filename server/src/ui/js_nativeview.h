@@ -22,6 +22,9 @@ int      axia_view_find_text(unsigned handle, const char *label);
 int      axia_view_pointer(const char *type, int target, float x, float y, int button);
 int      axia_view_gesture(const char *kind, const char *phase, int target, double dx, double dy);
 int      axia_view_key(const char *key, const char *chr, int flags);
+/* The modifiers held (shift 1, ctrl 2, alt 4, altgr 8, meta 16), after each key: the pointer events of a
+ * native view carry them (Files' Ctrl+click and Shift+click). */
+void     axia_view_set_modifiers(int flags);
 void     axia_view_tick(double now);
 double   axia_view_timeout(double now);
 int      axia_view_pending(void);

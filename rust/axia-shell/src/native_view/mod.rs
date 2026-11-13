@@ -68,6 +68,15 @@ struct Registry {
     hosts: BTreeMap<u32, Host>,
 }
 thread_local! { static VIEWS: RefCell<Registry> = RefCell::new(Registry::default()); }
+static MODIFIERS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+/// The modifiers held (shift 1, ctrl 2, alt 4, altgr 8, meta 16), set by the compositor after each key.
+#[no_mangle]
+pub extern "C" fn axia_view_set_modifiers(flags: i32) {
+    MODIFIERS.store(flags & 31, std::sync::atomic::Ordering::Relaxed);
+}
+pub(crate) fn modifiers() -> i32 {
+    MODIFIERS.load(std::sync::atomic::Ordering::Relaxed)
+}
 fn with<T>(f: impl FnOnce(&mut Registry) -> T) -> T {
     VIEWS.with(|r| f(&mut r.borrow_mut()))
 }
