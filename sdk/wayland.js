@@ -7,6 +7,7 @@
 // draws only the content. The app may switch while open ('deco'). Moving, resizing and the window
 // menu from the app's own bar arrive as requests from the compositor.
 import { createElement as h } from 'react';
+import { dispatchFileDrag } from './filedrag.js';
 import { View, Text, Surface, addListener, onShellKeyboard, shellHasKeyboard } from '@lordos/runtime';
 import { windows, wm, registerBuiltinApp, windowChrome, pointerWorkArea, openingArea, getApp, placeLinuxWindow, activeDesktop, onActiveDesktop, surfaceState, windowPolicy } from './windows.js';
 import { desktopOfSurface } from './desktops.js';
@@ -60,6 +61,8 @@ globalThis.__lordWayland = (sid, type, d = {}) => {
   const id = idOf(sid);
   const win = wm.get(id);
   switch (type) {
+    case 'filedrop':
+    case 'dragend': dispatchFileDrag(type, d); break;
     case 'textinput':
       // a text field of the app took or lost focus (zwp_text_input_v3)
       osk.linuxField(id, !!d.on, d.h > 0 ? d.y : -1, d.h);

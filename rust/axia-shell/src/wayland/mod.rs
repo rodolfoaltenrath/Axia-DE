@@ -3,3 +3,6 @@ pub(crate) mod ffi;
 mod gestures;
 pub(crate) mod input;
 mod text_input;
+
+mod dnd;
+pub(crate) mod dnd_protocol;

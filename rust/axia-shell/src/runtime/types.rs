@@ -184,6 +184,7 @@ pub struct NodeTf {
 pub struct Node {
     pub id: i32,
     pub kind: i32,
+    pub file_drop: u32,
     pub s: Style,
     pub text: *mut c_char,
     pub img: *mut c_void,

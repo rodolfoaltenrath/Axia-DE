@@ -142,6 +142,25 @@ pub extern "C" fn node_get(i: i32) -> *mut Node {
         }
     })
 }
+/// Opt-in native drop tokens share the existing node lifetime and hit test.
+#[no_mangle]
+pub unsafe extern "C" fn node_set_file_drop(id: i32, token: u32) -> i32 {
+    let Some(node) = node_get(id).as_mut() else {
+        return 0;
+    };
+    node.file_drop = token;
+    1
+}
+#[no_mangle]
+pub unsafe extern "C" fn node_file_drop(mut node: *const Node) -> u32 {
+    while let Some(current) = node.as_ref() {
+        if current.file_drop != 0 {
+            return current.file_drop;
+        }
+        node = current.parent;
+    }
+    0
+}
 #[no_mangle]
 pub extern "C" fn node_count() -> i32 {
     SCENE.with(|s| s.borrow().count() as i32)

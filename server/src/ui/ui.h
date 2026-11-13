@@ -98,6 +98,7 @@ typedef struct NodeTf {
 
 typedef struct Node {
     int id, type;
+    uint32_t file_drop;         /* opt-in receiver token; zero has no drag work */
     Style s;
     char *text;                 /* NODE_RAW */
     Image *img;                 /* NODE_IMAGE */

@@ -33,7 +33,7 @@ Apps that only speak X11 open through Xwayland, started on demand, with our own 
 | `wp_fractional_scale_v1` | 1 | the exact scale of the display(s) a surface is on (GTK 4, Qt 6, Chromium render sharp at 125–175 %) |
 | `wl_seat` | 9 | pointer (enter, leave, motion, buttons, wheel with `axis_source` and `axis_value120`; fine touchpad scrolling with `axis_source finger`, `axis_stop` and `axis_relative_direction` for natural scrolling), keyboard with LordOS's XKB keymap (`rust/axia-shell/src/keyboard`), modifiers and repeat, and `wl_touch` if there's a touchscreen |
 | `zwp_pointer_gestures_v1` | 3 | touchpad gestures: pinch (zoom in Chromium, GTK, Firefox), swipe and hold (Rust `wayland/input.rs`, see `TRACKPAD.md`) |
-| `wl_data_device_manager` | 3 | clipboard shared with LordOS's in both directions (see below) |
+| `wl_data_device_manager` | 3 | clipboard and pointer drag/drop; the Rust drag controller also bridges opted-in native views ([details](FILE-DRAG.md)) |
 | `zwp_primary_selection_device_manager_v1` | 1 | primary selection: select to copy, middle click to paste (0.8.3, see "X11 apps") |
 | `xdg_wm_base` | 6 | windows (`xdg_toplevel`: title, move, resize, maximize, minimize, close) and popup menus (`xdg_popup` with `xdg_positioner`: anchor, gravity, flip and slide within the screen) |
 | `zxdg_decoration_manager_v1` | 1 | the app picks who draws the frame: server side (Qt, foot, Kitty, Alacritty: the theme's frame) or client side (Chromium with its own bar), also while it's open (0.8.4) |
@@ -448,8 +448,9 @@ Both ways, for **CLIPBOARD** and **PRIMARY** (select to copy, middle click to pa
 - **Offers are bound to their selection.** A `wl_data_offer` (and a primary offer) carries the
   generation it was made for and only gives data for that selection, and only to its client while
   it has the keyboard: an app can't keep an old offer to read later copies (`build/clip-offers`).
-- **Drag and drop** between X11 and Wayland apps: not yet (LordOS has no Wayland drag and drop
-  yet). Inside X (X app to X app) it's X's own protocol; not tested.
+- **Drag and drop** between X11 and Wayland apps: the XDND bridge remains unimplemented.
+  Native Wayland and opted-in shell views use the [Rust drag controller](FILE-DRAG.md).
+  Inside X (X app to X app) it's X's own protocol; not tested.
 
 ### HiDPI and displays
 
