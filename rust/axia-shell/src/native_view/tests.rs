@@ -948,3 +948,50 @@ fn a_menu_node_is_drawn_in_the_layer_acts_on_its_rows_and_is_dismissed() {
     scene::destroy(mount);
     scene::destroy(outside);
 }
+
+#[test]
+fn a_tooltip_shows_after_the_pointer_rests_and_goes_with_a_press_or_leaving() {
+    struct Tip;
+    impl NativeApp for Tip {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                return json!({"tree":{"kind":"view","children":[
+                    {"kind":"view","tooltip":"A long file name.txt","children":[{"kind":"text","label":"short"}]},
+                    {"kind":"text","label":"plain"}]}});
+            }
+            json!({})
+        }
+        fn pixels(&self, _: &str) -> Option<(usize, usize, &[u8])> {
+            None
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let layer = scene::create(scene::VIEW);
+    let outside = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, Box::new(Tip), "", None);
+    host.facts(json!({"layers":{"tooltip":layer}}));
+    let short = node_with_text(mount, "short");
+    let tile = scene::parent(short);
+    host.pointer("move", short, 1., 1., 0);
+    assert_eq!(node_with_text(layer, "A long file name.txt"), 0, "not at once");
+    assert!(host.deadline().is_some(), "the host asks to be woken for it");
+    host.tick(1e18);
+    let bubble = node_with_text(layer, "A long file name.txt");
+    assert_ne!(bubble, 0, "after the delay it is in the tooltip layer");
+    host.pointer("down", tile, 1., 1., 0);
+    assert_eq!(node_with_text(layer, "A long file name.txt"), 0, "a press hides it");
+    host.pointer("up", tile, 1., 1., 0);
+    host.pointer("move", outside, 1., 1., 0);
+    host.pointer("move", short, 1., 1., 0);
+    host.tick(1e18);
+    assert_ne!(node_with_text(layer, "A long file name.txt"), 0);
+    host.pointer("move", outside, 1., 1., 0);
+    assert_eq!(node_with_text(layer, "A long file name.txt"), 0, "leaving hides it");
+    host.pointer("move", short, 1., 1., 0);
+    host.tick(1e18);
+    drop(host);
+    assert_eq!(node_with_text(layer, "A long file name.txt"), 0, "and the host takes it away with itself");
+    scene::destroy(layer);
+    scene::destroy(mount);
+    scene::destroy(outside);
+}

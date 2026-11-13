@@ -12,6 +12,8 @@ use std::collections::{HashMap, VecDeque};
 const CARET_BLINK: f64 = 530.;
 const BAR_SHOWN: f64 = 1000.;
 const WHEEL_STEP: f64 = 48.;
+/// How long the pointer rests on a view with a "tooltip" before the bubble shows.
+const TIP_DELAY: f64 = 550.;
 pub fn now_ms() -> f64 {
     let mut t = libc::timespec {
         tv_sec: 0,
@@ -70,6 +72,8 @@ struct Mounted {
     layer: i32,
     /// A view with a `hoverStyle`: its style without it.
     base: Value,
+    /// Its "tooltip" as text (a view or a text).
+    tip: Option<String>,
     offset: f64,
     children: Vec<Mounted>,
 }
@@ -89,6 +93,7 @@ impl Mounted {
             click: None,
             layer: 0,
             base: Value::Null,
+            tip: None,
             offset: 0.,
             children: Vec::new(),
         }
@@ -181,6 +186,9 @@ pub struct Host {
     portals: Vec<i32>,
     /// While a view that is hovered is being updated: its texts with a `hoverStyle` take it.
     lit: bool,
+    /// When the bubble of the hovered view shows, and the bubble while it does.
+    tip_due: Option<f64>,
+    tip_view: Vec<Mounted>,
     effects: VecDeque<Value>,
     title: String,
     window_focused: bool,
@@ -199,6 +207,9 @@ impl Drop for Host {
         let _ = self.app.request(&json!({"cmd":"close"}));
         if !scene::alive() {
             return;
+        }
+        for m in self.tip_view.drain(..) {
+            m.destroy();
         }
         for m in self.root.drain(..) {
             // React may have destroyed the mount node (and these) first; the scene reuses
@@ -223,6 +234,8 @@ impl Host {
             buttons: HashMap::new(),
             portals: Vec::new(),
             lit: false,
+            tip_due: None,
+            tip_view: Vec::new(),
             effects: VecDeque::new(),
             title: String::new(),
             window_focused: true,
@@ -445,6 +458,7 @@ impl Host {
         for m in old.into_iter().flatten() {
             if m.node == self.hover {
                 self.hover = 0;
+                self.hide_tip();
             }
             m.destroy();
         }
@@ -494,6 +508,10 @@ impl Host {
     }
     fn update(&mut self, m: &mut Mounted, spec: &Value) {
         let style = spec["style"].clone();
+        m.tip = match m.kind {
+            Kind::View | Kind::Text if !spec["tooltip"].is_null() => Some(self.i18n.caption(&spec["tooltip"])).filter(|t| !t.is_empty()),
+            _ => None,
+        };
         match m.kind {
             Kind::View => {
                 // "layer": "popover" puts the view in that shell layer when the shell named its node
@@ -756,6 +774,44 @@ impl Host {
             },
         )
     }
+    /// The pointer came to `node` (0: left every view): the old bubble goes, and the new view's shows
+    /// after `TIP_DELAY` if it has a tooltip.
+    fn tip_hover(&mut self, node: i32) {
+        self.hide_tip();
+        if node != 0 && self.window_focused && find(&mut self.root, node).is_some_and(|m| m.tip.is_some()) {
+            self.tip_due = Some(now_ms() + TIP_DELAY);
+        }
+    }
+    fn hide_tip(&mut self) {
+        self.tip_due = None;
+        for m in std::mem::take(&mut self.tip_view) {
+            m.destroy();
+        }
+    }
+    /// The bubble of the hovered view, in the tooltip layer: under it, or above if the screen's bottom
+    /// is near, as wide as its text (at most 440) and kept inside the screen.
+    fn show_tip(&mut self) {
+        let Some(layer) = self.facts["layers"]["tooltip"].as_i64().filter(|n| scene::exists(*n as i32)) else { return };
+        let node = self.hover;
+        let Some(text) = find(&mut self.root, node).and_then(|m| m.tip.clone()) else { return };
+        let Some((x, y, _, h)) = scene::frame(node) else { return };
+        let screen = scene::frame(layer as i32).filter(|f| f.2 > 0. && f.3 > 0.).map_or((1920., 1080.), |f| (f64::from(f.2), f64::from(f.3)));
+        let measured = super::menu::measure(&text, 12., 400.);
+        let width = 440f64.min(screen.0 - 16.).min(measured.ceil() + 20.).max(100.);
+        let lines = (measured / (width - 20.)).ceil().max(1.);
+        let height = (lines * 17. + 16.).min(screen.1 - 16.);
+        let (x, y, h) = (f64::from(x), f64::from(y), f64::from(h));
+        let left = x.min(screen.0 - width - 8.).max(8.);
+        let top = if y + h + height + 8. < screen.1 { y + h + 6. } else { (y - height - 6.).max(8.) };
+        let spec = json!({"kind":"view","layer":"tooltip","key":"tip","style":{"position":"absolute","left":left,"top":top,"width":width,
+            "paddingHorizontal":10,"paddingVertical":8,"borderRadius":7,"pointerEvents":"none",
+            "backgroundColor":self.theme("popupBg", if self.dark() { "#34343a" } else { "#fafafa" }),
+            "border":format!("1px solid {}", self.theme("separator", "rgba(128,128,128,0.3)").as_str().unwrap_or("")),
+            "boxShadow":"0 4px 14px rgba(0,0,0,0.25)"},
+            "children":[{"kind":"text","label":text,"style":{"fontSize":12,"lineHeight":1.4,"color":self.theme("text", if self.dark() { "#ffffff" } else { "#1d1d1f" })}}]});
+        let old = std::mem::take(&mut self.tip_view);
+        self.tip_view = self.reconcile(self.mount, old, std::slice::from_ref(&spec));
+    }
     /// A press at `target`: the layered views it is outside of (a menu, a popover) get their
     /// `onDismiss`. True if one was sent (the caller syncs).
     fn dismiss(&mut self, target: i32) -> bool {
@@ -796,6 +852,9 @@ impl Host {
         layered(&self.root, &mut self.portals);
         fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>) {
             for m in list {
+                if m.tip.is_some() {
+                    b.entry(m.node).or_insert(m.node);
+                }
                 match m.kind {
                     Kind::View => {
                         if let Some(action) = &m.click {
@@ -885,6 +944,7 @@ impl Host {
             return false;
         }
         let old = std::mem::replace(&mut self.hover, node);
+        self.tip_hover(node);
         let mut changed = self.pointer_action(old, "onMouseLeave");
         changed |= self.pointer_action(node, "onMouseEnter");
         for n in [old, node] {
@@ -1002,6 +1062,7 @@ impl Host {
                 self.set_hover(hover);
             }
             "down" => {
+                self.hide_tip();
                 if !self.portals.is_empty() && self.dismiss(target) {
                     self.sync();
                 }
@@ -1085,6 +1146,7 @@ impl Host {
                 }
             }
             "wheel" if inside => {
+                self.hide_tip();
                 if let Some((node, _)) = self.target(target, |t| matches!(t, Target::Scroll)) {
                     self.scroll_by(node, -(button as f64) * WHEEL_STEP);
                 }
@@ -1134,6 +1196,7 @@ impl Host {
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
+        self.hide_tip();
         if !self.window_focused || self.icon_mode().is_some() {
             return false;
         }
@@ -1209,6 +1272,10 @@ impl Host {
         if resized || self.next_sync.is_some_and(|t| now >= t) {
             self.sync();
         }
+        if self.tip_due.is_some_and(|t| now >= t) {
+            self.tip_due = None;
+            self.show_tip();
+        }
         if self.next_blink.is_some_and(|t| now >= t) && self.field != 0 {
             self.caret_on = !self.caret_on;
             self.next_blink = Some(now + CARET_BLINK);
@@ -1229,6 +1296,7 @@ impl Host {
         [
             self.next_sync,
             self.next_blink.filter(|_| self.field != 0),
+            self.tip_due,
             self.bars
                 .values()
                 .copied()
