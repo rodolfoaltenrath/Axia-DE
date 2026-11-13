@@ -32,3 +32,4 @@ tests/files-smoke.bundle.js
 tests/dock-preview-smoke.bundle.js
 
 tests/clipboard-smoke.bundle.js
+tests/menubar-smoke.bundle.js

@@ -8,6 +8,7 @@ import { version as reactVersion, createElement as h, useEffect, useLayoutEffect
 import { View, screen, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
 import { LAYERS, shellLayers } from './layers.js';
 import { filesEffect } from './nativefiles.js';
+import { barEffect } from './nativemenubar.js';
 import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
@@ -56,6 +57,8 @@ function runner(handle, manifest, winId, node = () => 0) {
   return (effect) => {
     // a Files window: its own effects (apps/files/native_app.rs), host ones too
     if (manifest.id === 'files' && !effect.host) { try { filesEffect(effect, { handle, winId, node, act }); } catch (e) { console.error('native files:', e); } return; }
+    // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)
+    if (manifest.id === 'shell:menubar' && !effect.host) { barEffect(effect, handle); return; }
     if (effect.host) {                 // the host's own: no result goes back to the app
       try {
         if (effect.kind === 'title' && winId) wm.setTitle(winId, effect.title);
@@ -119,7 +122,8 @@ export function NativeView({ manifest, args, icon, style }) {
   const clock = useStore(manifest.facts === 'clock' && !icon ? clockState : emptyClock);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
   const owner = useRef(null);
-  owner.current = { focused: win.focused !== false, shell: !!manifest.shell };
+  // a shell view (the menu bar) is in no window: the context's default says unfocused
+  owner.current = { focused: !!manifest.shell || win.focused !== false, shell: !!manifest.shell };
   const ownsKeyboard = () => owner.current.focused && !textFieldActive()
     && (owner.current.shell || !shellHasKeyboard());
   const [sampled] = useState(() => ({}));

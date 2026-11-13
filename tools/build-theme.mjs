@@ -155,6 +155,13 @@ if (!names.length) await build({
   define: defines, logLevel: 'warning',
 });
 if (!names.length) await build({
+  entryPoints: [path.join(root, 'server/tests/menubar_smoke.jsx')],
+  outfile: path.join(root, 'tests/menubar-smoke.bundle.js'),
+  bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
+  alias: { '@lordos/runtime': path.join(root, 'runtime/index.js'), '@lordos/sdk': path.join(root, 'sdk/index.js') },
+  define: defines, logLevel: 'warning',
+});
+if (!names.length) await build({
   entryPoints: [path.join(root, 'server/tests/dock_bench.jsx')],
   outfile: path.join(root, 'tests/dock-bench.bundle.js'),
   bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
