@@ -39,6 +39,9 @@ static JSValue make(JSContext *ctx, const char *id) {
     JS_SetPropertyStr(ctx, object, "request", JS_NewCFunction(ctx, request, "request", 1));
     return object;
 }
+/* In an isolated app's process: the one model it may create (its own id), or "" in the shell. */
+static char only_id[129];
+
 static JSValue create(JSContext *ctx, JSValueConst self, int argc, JSValueConst *argv) {
     (void)self;
     if (!argc || !JS_IsString(argv[0])) return JS_ThrowTypeError(ctx, "native app id required");
@@ -49,16 +52,36 @@ static JSValue create(JSContext *ctx, JSValueConst self, int argc, JSValueConst 
         JS_FreeCString(ctx, id);
         return JS_ThrowRangeError(ctx, "invalid native app id");
     }
+    if (only_id[0] && strcmp(id, only_id)) {
+        JS_FreeCString(ctx, id);
+        return JS_ThrowRangeError(ctx, "an isolated app can only use its own native model");
+    }
     JSValue result = make(ctx, id);
     JS_FreeCString(ctx, id);
     return result;
 }
-void js_native_apps_register(JSContext *ctx, JSValue lord) {
+static int register_class(JSContext *ctx) {
     if (!class_id) JS_NewClassID(&class_id);
     if (!JS_IsRegisteredClass(JS_GetRuntime(ctx), class_id)) {
         JSClassDef def = { .class_name = "AxiaNativeApp", .finalizer = finalize };
-        if (JS_NewClass(JS_GetRuntime(ctx), class_id, &def) < 0) return;
+        if (JS_NewClass(JS_GetRuntime(ctx), class_id, &def) < 0) return -1;
     }
+    return 0;
+}
+
+/* An isolated app (js_broker.c) gets lord.nativeApps with create() only: its own model (the
+ * Passwords category catalog, for instance), never the shell's session control. */
+void js_native_apps_register_isolated(JSContext *ctx, JSValue lord, const char *id) {
+    if (!id || strlen(id) >= sizeof only_id || register_class(ctx)) return;
+    snprintf(only_id, sizeof only_id, "%s", id);
+    JSValue object = JS_NewObject(ctx);
+    if (JS_IsException(object)) return;
+    JS_SetPropertyStr(ctx, object, "create", JS_NewCFunction(ctx, create, "create", 1));
+    JS_SetPropertyStr(ctx, lord, "nativeApps", object);
+}
+
+void js_native_apps_register(JSContext *ctx, JSValue lord) {
+    if (register_class(ctx)) return;
     JSValue object = make(ctx, "forcequit");
     if (JS_IsException(object)) {                /* no compiled apps; the exception is not left pending */
         JS_FreeValue(ctx, JS_GetException(ctx));

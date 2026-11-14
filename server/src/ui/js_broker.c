@@ -13,6 +13,7 @@
 #include "js.h"
 #include "js_sys.h"
 #include "js_err.h"
+#include "js_native_apps.h"
 
 #include <dirent.h>
 
@@ -770,4 +771,5 @@ void js_broker_register(JSContext *c, JSValue lord, const char *id) {
     app_windows_register(c, lord);           /* several windows per isolated app */
     js_brokercam_register(c, lord);          /* lord.media: the camera through axia-server (js_brokercam.c) */
     js_brokermail_register(c, lord, id);     /* lord.mail: system Mail, Calendar, Contacts, Reminders (js_brokermail.c) */
+    js_native_apps_register_isolated(c, lord, id);  /* lord.nativeApps: only this app's own Rust model */
 }
