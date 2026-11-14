@@ -57,7 +57,7 @@ void brokermail_conn_closed(int conn) { (void)conn; }
 void brokermail_tick(void) {}
 int brokermail_pollfd(void) { return -1; }
 int brokermail_wants_write(int conn) { (void)conn; return 0; }
-int lpk_valid_id(const char *id) { return id && id[0] && strlen(id) < 48; }
+/* lpk_valid_id: the real one, from the codecs library the firewall links (rust/axia-codecs/src/lpk.rs) */
 
 struct MAudio { int open; };
 static struct MAudio mics[8];

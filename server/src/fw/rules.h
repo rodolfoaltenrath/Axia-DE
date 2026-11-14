@@ -17,8 +17,11 @@
  *      stays allowed).
  *
  * Lookups: hash table of apps; per app, a hash table of exact domains, a suffix table for
- * wildcards (the name's labels are walked from right to left), a binary prefix trie per family
- * for addresses and networks. Everything is O(1) or O(key length). */
+ * wildcards (the name's labels are walked from right to left), a table per (family, prefix,
+ * network) for addresses and networks. Everything is O(1) or O(key length).
+ *
+ * The store and the decider are Rust (rust/axia-codecs/src/fwrules.rs); the JSON file
+ * (fw_to_json … fw_load) is rules_json.c on top of this API. */
 #ifndef LORD_FW_RULES_H
 #define LORD_FW_RULES_H
 
@@ -114,6 +117,7 @@ typedef struct FwStore FwStore;
 
 FwStore *fw_store_new(void);
 void     fw_store_free(FwStore *s);
+void     fw_store_swap(FwStore *a, FwStore *b);   /* swaps the whole contents (fw_from_json) */
 
 /* Canonical id: "lordos", "desktop:<id>", "lpk:<id>" or an absolute executable path. cgroup
  * scopes are translated: app-lordos-lpk-<id>.scope → lpk:<id>, app-lordos-<id>.scope →

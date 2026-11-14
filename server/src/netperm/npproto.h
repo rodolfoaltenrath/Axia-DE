@@ -11,7 +11,7 @@
  *                   compiled blocklists, through the same reader)
  * Rules never travel over the socket: axia-netperm reads the user's file itself, from a fixed,
  * validated path (no links, owned by the user, regular file, up to 4 MB) with the strict reader
- * of fw/rules.c. Any other message, or one longer than NP_IN_MAX bytes, closes the connection.
+ * of the rule store (fw/rules.h). Any other message, or one longer than NP_IN_MAX bytes, closes the connection.
  *
  * From axia-netperm to axia-server (compact JSON in the data):
  *   NP_MSG_STATUS   {"bpf":true,"devices":true,"bluetooth":true,"bytes":true,"dns":"resolved","error":""}

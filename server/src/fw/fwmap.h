@@ -1,4 +1,4 @@
-/* fwmap.h — chained hash table, internal to the firewall (rules.c, dnsmap.c). Byte keys with a
+/* fwmap.h — chained hash table, internal to the firewall (dnsmap.c, fwlists.c). Byte keys with a
  * length, one void* value per key and a hash seeded per process (so nobody can deliberately
  * craft keys that all land in the same bucket). Grows by doubling. */
 #ifndef LORD_FW_FWMAP_H
