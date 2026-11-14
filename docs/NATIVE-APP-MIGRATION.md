@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Monitor and Store have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Monitor and Store have compiled
 Rust implementations. Files still has a compatibility mount controlled by
 `filesNativeView`; its native implementation and shared dialogs need to remain
 part of the final integration audit.
@@ -15,7 +15,7 @@ PDF: geometry, navigation, cache, search/selection, annotation/form state and th
 sidebar are Rust. The sidebar mounts native widgets. The main window, page
 overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
 
-Remaining apps (all remain in scope): calendar, camera, contacts, disks,
+Remaining apps (all remain in scope): calendar, contacts, disks,
 editor, mail, notes, passwords, photos, player, reminders,
 screenshots, settings, sysinfo, sysprobe and terminal. Existing Rust
 models in some of these apps do not count as native-window completion.
@@ -24,7 +24,7 @@ The asynchronous service lease in `runtime/nativeapps.js` is shared transport,
 with no application UI. Rust chooses jobs; existing SDK APIs perform I/O. Jobs
 and subscriptions belong to a window. The generic broker isolates results,
 discards obsolete jobs, fragments large JSON results and suppresses late
-publication after close. Logs, Fonts, Scanner, Recorder and Backups use it. Document image handles remain in the
+publication after close. Logs, Fonts, Scanner, Recorder, Backups and Camera use it. Document image handles remain in the
 window lease after delivery and are released by Rust or on close. Native async
 request transport is shared in `native_view/async_jobs.rs`. Internal numeric
 leases are independent of string WM IDs (`logs`, `fonts#2`); a real React/runtime
@@ -60,6 +60,16 @@ Fixtures compare 73 status captions with the original window and 426 byte-size
 captions with the SDK, including decimals and terabytes. Tests exercise the
 native browse/restore/settings flow and configuration-before-key-creation order.
 Actual backup devices and final graphical/build checks remain pending.
+
+Camera now mounts its complete native window. Rust owns device choice and the
+3 s hot-plug poll, preferences (mirror, device) written through `settings.patch`,
+photo/video mode, collision-free names captured at shutter time with the mirror
+setting of that moment, the record timer, flash, recent shots and thumbnail
+requests. SDK adapters keep permission prompts, V4L2 capture and encoding. The
+media lease releases the camera and, for an active or pending recording, its
+microphone indicator before closing. Rust tests cover naming, mirroring, device
+switches and late results; service tests cover session ownership and release.
+A physical webcam and graphical checks remain part of the final desktop check.
 
 Before final completion, audit every app folder and registry entry, native host
 registration, remaining JSX/JS policy, complete feature coverage, lifecycle and
