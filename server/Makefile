@@ -12,6 +12,8 @@ CRYPTO_INPUTS := ../rust/axia-crypto/Cargo.toml $(wildcard ../rust/axia-crypto/s
 CODEC_INPUTS := $(CRYPTO_INPUTS) ../rust/axia-codecs/Cargo.toml $(wildcard ../rust/axia-codecs/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock
 MAIL_CODEC_INPUTS := $(CODEC_INPUTS) ../rust/axia-mail/Cargo.toml $(wildcard ../rust/axia-mail/src/*.rs)
 CODEC_NATIVE_LIBS := -Wl,--gc-sections -ldl -lpthread -lm
+# what links the firewall rule store (rust/axia-codecs/src/fwrules.rs) without axia-shell
+FW_LINK = $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 # The Rust archive also contains launcher callbacks into the host sandbox.
 # Helpers using only MIME/filesystem functions must discard unreachable sections.
 RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0) -lxkbcommon
@@ -95,7 +97,7 @@ DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/print/phttp.c src/pr
            src/print/escl.c src/print/print.c src/ui/js_print.c
 SRC += $(DOC_SRC)
 # Per-app firewall (src/fw, docs/FIREWALL.md): rules, decision and names learned from DNS
-FW_SRC := src/fw/rules.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
+FW_SRC := src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
 SRC += $(FW_SRC)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
@@ -273,7 +275,7 @@ endif
 .DEFAULT_GOAL := all
 BPF ?= 0
 NP_SRC := src/netperm/netperm.c src/netperm/bpfsys.c src/netperm/npcompile.c src/netperm/npdns.c src/netperm/npdiag.c \
-          src/fw/rules.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/sec/json.c
+          src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/sec/json.c
 ifeq ($(BPF),1)
 NP_GEN := build/gen/np_bpf.h
 NP_CPP := -DNP_HAVE_BPF
@@ -287,9 +289,9 @@ build/np.bpf.o: src/netperm/np.bpf.c src/netperm/np_shared.h
 build/gen/np_bpf.h: build/np.bpf.o build/bpf2c
 	@mkdir -p build/gen
 	build/bpf2c $< $@
-build/axia-netperm: $(NP_SRC) $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) src/sec/json.h $(NP_GEN)
+build/axia-netperm: $(NP_SRC) $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) src/sec/json.h $(NP_GEN) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(NP_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ $(NP_SRC)
+	$(CC) $(CPPFLAGS) $(NP_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ $(NP_SRC) $(FW_LINK)
 # tests/npverify_test.c: the BTF reader, and (as root) every program through the kernel verifier
 ifeq ($(BPF),1)
 test: build/npverify-test
@@ -299,9 +301,9 @@ build/npverify-test: tests/npverify_test.c src/netperm/bpfsys.c $(wildcard src/n
 	./$@ || { rm -f $@; exit 1; }
 endif
 test: build/npcompile-test
-build/npcompile-test: tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules.c src/fw/dnsmap.c src/fw/fwmap.c src/sec/json.c $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h)
+build/npcompile-test: tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/sec/json.c $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules.c src/fw/dnsmap.c src/fw/fwmap.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # axia-fand (src/fan, docs/FANS.md): the root service that drives the fans by temperature. libc
 # only; it executes nothing and has no network. tests/fan_test.c: curves, fan.json, requests and a
@@ -397,10 +399,10 @@ test: build/fw-rules-test build/dnsmap-test build/broker-restrict-test
 # the firewall's non-network restrictions in the real broker code (docs/FIREWALL.md); open() is
 # wrapped so a fake /dev/video9 can be opened
 BROKER_RESTRICT_SRC := src/sec/brokersrv.c src/sec/brokercam.c src/sec/restrict.c src/sec/perms.c src/sec/json.c \
-                       src/fw/rules.c src/fw/fwmap.c src/media/proto.c
-build/broker-restrict-test: tests/broker_restrict_test.c $(BROKER_RESTRICT_SRC) $(wildcard src/sec/*.h src/fw/*.h src/media/*.h)
+                       src/fw/rules_json.c src/fw/fwmap.c src/media/proto.c
+build/broker-restrict-test: tests/broker_restrict_test.c $(BROKER_RESTRICT_SRC) $(wildcard src/sec/*.h src/fw/*.h src/media/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/broker_restrict_test.c $(BROKER_RESTRICT_SRC) -Wl,--wrap=open
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/broker_restrict_test.c $(BROKER_RESTRICT_SRC) -Wl,--wrap=open $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # axia-maild for the isolated system apps (src/sec/brokermail.c): who may ask what, files, Mail-only verbs
 test: build/brokermail-test
@@ -411,7 +413,7 @@ build/brokermail-test: tests/brokermail_test.c src/sec/brokermail.c src/sec/json
 # tests/launch_cli.c: the real Linux app launcher outside the desktop, for tests/fwlinux/files.sh
 # (built by `make test`, run by that script in the VM)
 LAUNCH_CLI_SRC := src/sec/cgroup.c src/sec/sandbox.c \
-                  src/sec/restrict.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+                  src/sec/restrict.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
 test: build/launch-cli
 build/launch-cli: tests/launch_cli.c $(LAUNCH_CLI_SRC) src/apps.h $(wildcard src/sec/*.h src/fw/*.h src/hw/*.h)
 	@mkdir -p build
@@ -430,54 +432,54 @@ build/defaults-test: tests/defaults_test.c $(LAUNCH_CLI_SRC) src/apps.h $(wildca
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/defaults_test.c $(LAUNCH_CLI_SRC) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # tests/notifyd_cli.c: the real notification server on a private bus, for tests/fwlinux/notify.sh
-NOTIFYD_CLI_SRC := src/hw/notifyd.c src/sec/appid.c src/hw/jbuf.c src/vault/dbus.c src/sec/restrict.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+NOTIFYD_CLI_SRC := src/hw/notifyd.c src/sec/appid.c src/hw/jbuf.c src/vault/dbus.c src/sec/restrict.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
 test: build/notifyd-cli build/notifyd-test
-build/notifyd-test: tests/notifyd_test.c $(NOTIFYD_CLI_SRC) $(wildcard src/hw/*.h src/sec/*.h src/fw/*.h src/vault/*.h)
+build/notifyd-test: tests/notifyd_test.c $(NOTIFYD_CLI_SRC) $(wildcard src/hw/*.h src/sec/*.h src/fw/*.h src/vault/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/notifyd_test.c $(NOTIFYD_CLI_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/notifyd_test.c $(NOTIFYD_CLI_SRC) $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/notifyd-cli: tests/notifyd_cli.c $(NOTIFYD_CLI_SRC) $(wildcard src/hw/*.h src/sec/*.h src/fw/*.h src/vault/*.h)
+build/notifyd-cli: tests/notifyd_cli.c $(NOTIFYD_CLI_SRC) $(wildcard src/hw/*.h src/sec/*.h src/fw/*.h src/vault/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/notifyd_cli.c $(NOTIFYD_CLI_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/notifyd_cli.c $(NOTIFYD_CLI_SRC) $(FW_LINK)
 # tests/pwguard_cli.c: the PipeWire guard against the session's PipeWire, for tests/fwlinux/mic.sh;
 # tests/pwguard_test.c: its POD reader and node classes
-PWGUARD_SRC := src/sec/pwguard.c src/sec/appid.c src/sec/restrict.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+PWGUARD_SRC := src/sec/pwguard.c src/sec/appid.c src/sec/restrict.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
 test: build/pwguard-cli build/pwguard-test
-build/pwguard-cli: tests/pwguard_cli.c $(PWGUARD_SRC) $(wildcard src/sec/*.h src/fw/*.h)
+build/pwguard-cli: tests/pwguard_cli.c $(PWGUARD_SRC) $(wildcard src/sec/*.h src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pwguard_cli.c $(PWGUARD_SRC)
-build/pwguard-test: tests/pwguard_test.c $(PWGUARD_SRC) $(wildcard src/sec/*.h src/fw/*.h)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pwguard_cli.c $(PWGUARD_SRC) $(FW_LINK)
+build/pwguard-test: tests/pwguard_test.c $(PWGUARD_SRC) $(wildcard src/sec/*.h src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pwguard_test.c $(PWGUARD_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pwguard_test.c $(PWGUARD_SRC) $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # tests/wl_globals.c: the compositor's globals as a client sees them (tests/fwlinux/screen.sh)
 build/wl-globals: tests/wl_globals.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -std=c11 -o $@ $< -lwayland-client
-build/fw-rules-test: tests/fw_rules_test.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h
+build/fw-rules-test: tests/fw_rules_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fw_rules_test.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fw_rules_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # subscribed blocklists (0.8.5): raw parsers, the set, the compiled file, fuzzing (docs/FIREWALL.md, "Blocklists")
 test: build/fwlists-test
-build/fwlists-test: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h
+build/fwlists-test: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/fwlists-test-asan: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h)
+build/fwlists-test-asan: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@
 # the destinations a user types in the rule sheet (tests/fw_dest_cases.txt), through the store's
 # parser; apps/monitor/tests.rs checks the Rust editor against the same cases.
 test: build/fwdest-test
-build/fwdest-test: tests/fwdest_test.c tests/fw_dest_cases.txt tests/fw_domain_cases.txt src/fw/rules.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h
+build/fwdest-test: tests/fwdest_test.c tests/fw_dest_cases.txt tests/fw_domain_cases.txt src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwdest_test.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwdest_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/dnsmap-test: tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h
+build/dnsmap-test: tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules.c src/fw/fwmap.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # backup engine: snapshots, hard links, restore, retention, interruptions, exclusions, encryption
 test: build/backup-test
@@ -708,12 +710,12 @@ build/arcpath-test: tests/arcpath_test.c src/doc/arcpath.c src/doc/arcpath.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/arcpath_test.c src/doc/arcpath.c
 # IPP encoder/decoder, mDNS and page ranges (tests/ipp_test.c)
 # (0.8.5) the components' network connectors (src/sec/netconn.c) and what they need, for the tests
-NETCONN_SRC := src/sec/netconn.c src/sec/cgroup.c src/fw/rules.c src/fw/fwmap.c
+NETCONN_SRC := src/sec/netconn.c src/sec/cgroup.c src/fw/rules_json.c src/fw/fwmap.c
 # the connectors: requests, sockets, the real connector process and its fail-closed start
 test: build/netconn-test
-build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c src/sec/netconn.h src/sec/cgroup.h
+build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c src/sec/netconn.h src/sec/cgroup.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c -lpthread $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 build/ipp-test: tests/ipp_test.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(wildcard src/print/*.h) $(CODEC_LIB)
 	@mkdir -p build

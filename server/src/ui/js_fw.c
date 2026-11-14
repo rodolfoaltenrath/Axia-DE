@@ -2,7 +2,7 @@
  * (docs/FIREWALL.md, steps 2 to 4).
  *
  * axia-server owns the user's rules (~/.config/axia/firewall.json, the store in
- * fw/rules.c): it reads them at startup, changes them with these calls and saves them. Then it notifies
+ * fw/rules.h): it reads them at startup, changes them with these calls and saves them. Then it notifies
  * axia-netperm (the root service that applies them in the kernel) with a single message without data,
  * "read again" (netperm/npproto.h); axia-netperm reads the file itself. Back come the
  * state, new connections and counters. No call takes paths: the file's path is

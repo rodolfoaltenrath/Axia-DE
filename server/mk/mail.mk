@@ -26,9 +26,9 @@ build/axia-server: $(MAILC_OBJ)
 $(MAILC_OBJ): $(wildcard src/mail/*.h) src/ui/js_mail.h
 # the connector's policy: allowed endpoints and the public-address check for remote images
 test: build/mailc-test
-build/mailc-test: tests/mailc_test.c src/mail/mailc.c src/mail/mailc.h src/doc/wire.c src/sec/json.c $(NETCONN_SRC)
+build/mailc-test: tests/mailc_test.c src/mail/mailc.c src/mail/mailc.h src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/mailc_test.c src/mail/mailc.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/mailc_test.c src/mail/mailc.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread -lm $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # hostile servers: HTTP chunk sizes / Content-Length / header limits and IMAP literal sizes,
 # over a socketpair (no network). Needs the OpenSSL headers (net.c), like axia-maild.
@@ -58,6 +58,6 @@ build/axia-maild: $(LMD_SRC) $(MAIL_CODEC_LIB) $(MAIL_HDR) src/sec/sandbox.h src
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LMD_SRC) $(MAIL_CODEC_LIB) $(shell pkg-config --libs openssl) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # manual driver for axia-maild (not in `make test`): build/maild-cli '{"op":"status"}' --wait 5
-build/maild-cli: tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c src/mail/mailc.h $(NETCONN_SRC)
+build/maild-cli: tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c src/mail/mailc.h $(NETCONN_SRC) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread -lm
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread -lm $(FW_LINK)

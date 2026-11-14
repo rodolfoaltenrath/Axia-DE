@@ -1,4 +1,4 @@
-/* fw_rules_test.c — per-app network rules (src/fw/rules.c, docs/FIREWALL.md): precedence, v4/v6
+/* fw_rules_test.c — per-app network rules (rust/axia-codecs/src/fwrules.rs and src/fw/rules_json.c, docs/FIREWALL.md): precedence, v4/v6
  * networks, LAN, wildcards, durations, restrictions, JSON (round trip and rejection) and a random
  * test against an obvious linear version of the decider. */
 #ifndef _GNU_SOURCE

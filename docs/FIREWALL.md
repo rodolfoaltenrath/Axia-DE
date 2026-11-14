@@ -980,7 +980,7 @@ in the kernel. Before, it was the standalone `curl`, which can't be filtered.
 | deny (0.8.5, "Deny silently") | whatever no rule allows is denied and recorded; loopback (127/8, `::1`) stays allowed, so the resolver's stub and local services keep working; trusted apps keep the network; the essential system services are not apps and are never affected |
 | ask | for now, the same as silent |
 
-The deny mode is `FW_MODE_DENY` in `fw/rules.c` and `NP_M_DENY` in `np_decide` (the last step: a
+The deny mode is `FW_MODE_DENY` in `rust/axia-codecs/src/fwrules.rs` and `NP_M_DENY` in `np_decide` (the last step: a
 rule, a restriction or a list decides first); with it every app's packet filter decides, so a
 connection that was open when the mode changed is cut ("Existing connections are cut"). It is offered
 in Settings → Privacy → App network and in the menu bar item. Tested: `fw-rules-test` (loopback,

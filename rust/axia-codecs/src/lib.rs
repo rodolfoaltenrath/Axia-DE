@@ -35,6 +35,9 @@ mod smbios;
 mod ids;
 #[cfg(not(feature = "secure-memory"))]
 mod night;
+// The firewall's rule store and decider (server/src/fw/rules.h).
+#[cfg(not(feature = "secure-memory"))]
+mod fwrules;
 mod compression;
 mod qr;
 mod tzif;

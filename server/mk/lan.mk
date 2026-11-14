@@ -36,7 +36,7 @@ build/rconnect-run-test: $(RCONNECT_RUN_SRC) src/lan/rconnect.h src/sec/sandbox.
 #   build/lan-scan   (not in a LordOS session: there are no sockets there without a connector). Built with
 #   LAN_ANY_LINK, so a test server behind a veth on an isolated network namespace counts as a link.
 build/lan-scan: tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/json.c src/sec/netconn.c src/sec/cgroup.c build/axia-lan $(CODEC_LIB)
-	$(CC) $(CPPFLAGS) -DLAN_ANY_LINK $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/json.c src/sec/netconn.c src/sec/cgroup.c src/fw/rules.c src/fw/fwmap.c $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) -DLAN_ANY_LINK $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/json.c src/sec/netconn.c src/sec/cgroup.c src/fw/rules_json.c src/fw/fwmap.c $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
 
 # the share-* actions alone, real mounts as root on a test machine (a tool, not part of make test)
 build/share-cli: tests/share_cli.c src/lan/share_admin.c src/lan/share_admin.h src/lan/lanaddr.h $(CODEC_LIB)

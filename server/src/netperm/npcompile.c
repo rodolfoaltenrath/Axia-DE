@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ---- order of precedence (the same as consider() in fw/rules.c) ------------------------------ */
+/* ---- order of precedence (the same as Pick::consider in rust/axia-codecs/src/fwrules.rs) ------------------------------ */
 
 static int nlabels(const char *d) {
     int n = 1;
