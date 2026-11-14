@@ -2,6 +2,7 @@
  * view its mount node, its facts (settings, theme, services) and runs the effects that belong
  * to the shell; drawing, input and captions are Rust's. */
 #include "js_nativeview.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,6 +25,9 @@ static JSValue owned_string(JSContext *c, char *s) {
     return r;
 }
 
+/* In an isolated app's process (axia-server --app <id>): the one view it may mount, its own. */
+static char only_app[64];
+
 /* mount(nodeId, appId, facts) → handle, or 0 when the app has no native view */
 static JSValue f_mount(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     (void)t;
@@ -32,7 +36,8 @@ static JSValue f_mount(JSContext *c, JSValueConst t, int argc, JSValueConst *arg
     const char *app = JS_ToCString(c, argv[1]);
     JSValue keep;
     const char *facts = arg_json(c, argv[2], &keep);
-    unsigned h = app && facts ? axia_view_mount(node, app, facts) : 0;
+    int allowed = app && (!only_app[0] || !strcmp(app, only_app));
+    unsigned h = allowed && facts ? axia_view_mount(node, app, facts) : 0;
     if (app) JS_FreeCString(c, app);
     if (facts) JS_FreeCString(c, facts);
     JS_FreeValue(c, keep);
@@ -160,6 +165,20 @@ static JSValue f_clock_request(JSContext *c, JSValueConst t, int argc, JSValueCo
     axia_view_free(out);
     return result;
 }
+
+/* An isolated app's process: lord.nativeViews for its own view only (no session clock). The app's
+ * loop drives the views through js_tick (js.c) once this is on. */
+void js_nativeview_register_isolated(JSContext *ctx, JSValue lord, const char *assets_dir, const char *id) {
+    if (!id || !*id || strlen(id) >= sizeof only_app) return;
+    snprintf(only_app, sizeof only_app, "%s", id);
+    const char *home = getenv("HOME");
+    axia_view_init(assets_dir ? assets_dir : "", home ? home : "");
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyFunctionList(ctx, o, funcs, sizeof funcs / sizeof funcs[0]);
+    JS_SetPropertyStr(ctx, lord, "nativeViews", o);
+}
+
+int js_nativeview_isolated(void) { return only_app[0] != 0; }
 
 void js_nativeview_register(JSContext *ctx, JSValue lord, const char *assets_dir) {
     JSValue clock = JS_NewObject(ctx);

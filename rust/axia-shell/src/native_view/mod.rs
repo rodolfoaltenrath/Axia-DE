@@ -86,6 +86,8 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::backup::ID => Some(Box::new(crate::backup_app::App::default())),
         crate::native_apps::camera::ID => Some(Box::new(crate::camera_app::App::default())),
         crate::native_apps::notes::ID => Some(Box::new(crate::notes_app::App::default())),
+        // only in its own isolated process (js_nativeview_register_isolated): not in the shell's registry
+        crate::passwords_app::ID => Some(Box::new(crate::passwords_app::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),

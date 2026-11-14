@@ -33,4 +33,7 @@ int      axia_view_pending(void);
 
 /* lord.nativeViews */
 void js_nativeview_register(JSContext *ctx, JSValue lord, const char *assets_dir);
+/* An isolated app's process: only its own view (`id`), driven from js_tick. */
+void js_nativeview_register_isolated(JSContext *ctx, JSValue lord, const char *assets_dir, const char *id);
+int  js_nativeview_isolated(void);
 #endif

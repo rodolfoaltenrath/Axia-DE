@@ -144,7 +144,7 @@ the Recorder draw their empty-state icons. `↻ ⤮ ♪ ◫ ▣ ☺ ≡` render 
   30 px tile, sort and "+" as toolbar buttons) and the detail pane (22/600 title, chips, the fields in
   an inset group with icon-only copy/show buttons, small secondary buttons, destructive ones in red).
   Under 960 px the columns shrink to 200 / 250 px and the detail title to 17 px. Category glyphs are
-  drawn (`apps/passwords/glyphs.jsx`); a category stores the glyph's name, and old emoji values map to
+  drawn (`apps/passwords/native/glyphs.rs`); a category stores the glyph's name, and old emoji values map to
   the nearest glyph. The lock screens are a 360–460 px centered column with a 22/600 title and a neutral
   method switch; sheets are 48 px title + 20 px padding and scroll when the window is too small. An
   isolated app gets the UI direction with the language (`locale.dir`), so it mirrors in RTL too.

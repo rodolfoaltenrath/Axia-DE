@@ -10,6 +10,7 @@ of the matching [GitHub release](https://github.com/lordbasex/LordOS/releases), 
 
 ## [Unreleased]
 
+- **Passwords in Rust:** the window (the lock screens, the list and its sidebar, an item and its editor, the security report, the 2FA codes, the generator, settings, import, export, categories and tags) is drawn by Rust in the app's own sandboxed process, which keeps axia-vault's channel; the layout, texts and shortcuts are the same.
 - **Lord Classic removed:** Lord Flow is the only desktop that ships. A session that still had Lord Classic selected opens in Lord Flow. Its start menu left the Rust launcher, the taskbar options left Settings → Desktop & Dock, and Settings → Appearance shows Desktop style only when another theme is installed. The Linux / Windows keyboard shortcuts (Alt+Tab, Alt+F4, Super+arrows…) stay, in Settings → Keyboard.
 
 ## [0.8.7-beta] - 2026-11-01

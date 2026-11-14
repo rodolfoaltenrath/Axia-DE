@@ -24,6 +24,8 @@ mod settings_model;
 mod terminal_model;
 #[path = "../../../apps/passwords/model.rs"]
 mod passwords_model;
+#[path = "../../../apps/passwords/native/mod.rs"]
+mod passwords_app;
 #[path = "../../../apps/sysinfo/model.rs"]
 mod sysinfo_model;
 mod native_apps_host;

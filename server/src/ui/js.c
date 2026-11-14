@@ -596,6 +596,7 @@ static void app_context(const char *app_id) {
     JS_SetPropertyStr(ctx, lord, "screen", screen);
     JS_SetPropertyStr(ctx, lord, "version", JS_NewString(ctx, LORD_VERSION));
     js_broker_register(ctx, lord, app_id);         /* fs/clipboard/perms through the broker + appId */
+    js_nativeview_register_isolated(ctx, lord, ui.theme_dir, app_id);   /* its own Rust view, if it has one */
     js_vault_register_app(ctx, lord);              /* Passwords only: its own channel to axia-vault */
     js_sys_register_app(ctx, lord);                /* lord.text (language, direction) and lord.image */
     js_winmodel_register(ctx, lord);               /* lord.winmodel: pure rules, no state or I/O */
@@ -672,6 +673,14 @@ double js_tick(double now) {
     r = call_hot(HOT_TICK, 1, &arg);
     JS_ToFloat64(ctx, &next, r);
     JS_FreeValue(ctx, r);
+    /* an isolated app's own native view: its refresh, caret and effects (the shell's loop does this
+     * itself in main.c) */
+    if (js_nativeview_isolated() && now >= 0) {
+        axia_view_tick(now);
+        js_native_view_notify();
+        double nvd = axia_view_timeout(now);
+        if (nvd >= 0 && (next < 0 || nvd < next)) next = nvd;
+    }
     return next;
 }
 

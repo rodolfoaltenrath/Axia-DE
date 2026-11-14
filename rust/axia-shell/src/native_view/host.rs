@@ -176,6 +176,29 @@ fn lit_children(list: &mut [Mounted], lit: bool) {
     }
 }
 /// `style` (an object, or arrays of them) with the window's origin added to its left and top.
+/// The window positions of the views a new tree anchors pop-ups to ("anchorKey"), as laid out now.
+fn anchor_frames(root: &[Mounted], tree: &Value, mount: i32) -> HashMap<String, (f64, f64)> {
+    fn wanted(v: &Value, out: &mut Vec<String>) {
+        if let Some(k) = v["anchorKey"].as_str() {
+            out.push(k.to_string());
+        }
+        for c in v["children"].as_array().into_iter().flatten() {
+            wanted(c, out);
+        }
+    }
+    fn named(list: &[Mounted], key: &str) -> Option<i32> {
+        list.iter().find_map(|m| if m.key == key { Some(m.node) } else { named(&m.children, key) })
+    }
+    let mut keys = vec![];
+    wanted(tree, &mut keys);
+    let Some((fx, fy, _, _)) = (!keys.is_empty()).then(|| scene::frame(mount)).flatten() else { return HashMap::new() };
+    keys.into_iter()
+        .filter_map(|k| {
+            let (x, y, _, _) = scene::frame(named(root, &k)?)?;
+            Some((k, (x as f64 - fx as f64, y as f64 - fy as f64)))
+        })
+        .collect()
+}
 fn offset_origin(style: Value, dx: f64, dy: f64) -> Value {
     match style {
         Value::Object(mut o) => {
@@ -213,6 +236,8 @@ pub struct Host {
     drops: HashMap<u32, (Value,bool)>,
     /// While a pointer event is handled: where, which button and the modifiers, sent with its actions.
     pointer_info: Option<Map<String, Value>>,
+    /// Where the views named by an "anchorKey" were (window coordinates), for the popups placed by them.
+    anchors: HashMap<String, (f64, f64)>,
     /// The view and time of the last left click, for `onDoubleClick`.
     last_click: (i32, f64),
     double_press: i32,
@@ -275,6 +300,7 @@ impl Host {
             events: HashMap::new(),
             drops: HashMap::new(),
             pointer_info: None,
+            anchors: HashMap::new(),
             last_click: (0, 0.),
             double_press: 0,
             capture: false,
@@ -499,6 +525,7 @@ impl Host {
         if reply["same"] == true || reply["tree"].is_null() {
             return;
         }
+        self.anchors = anchor_frames(&self.root, &reply["tree"], self.mount);
         let old = std::mem::take(&mut self.root);
         let tree = std::slice::from_ref(&reply["tree"]);
         self.root = self.reconcile(self.mount, old, tree);
@@ -632,6 +659,12 @@ impl Host {
                 // a point of the view, in a layer that covers the screen).
                 let style = match (m.layer, spec["anchor"].as_str(), scene::frame(self.mount)) {
                     (l, Some("mount"), Some((fx, fy, _, _))) if l != 0 => offset_origin(style, fx as f64, fy as f64),
+                    _ => style,
+                };
+                // "anchorKey": left and top count from where the view with that key is (a pop-up list
+                // under its button, drawn at the window's root so no scroll or sheet clips it)
+                let style = match spec["anchorKey"].as_str().and_then(|k| self.anchors.get(k)) {
+                    Some(&(ax, ay)) if m.layer == 0 => offset_origin(style, ax, ay),
                     _ => style,
                 };
                 // "hoverStyle": merged over the style while the pointer is on the view.
@@ -1096,7 +1129,12 @@ impl Host {
             .map(|m| m.spec["events"][event].clone())
             .filter(Value::is_array);
         if let Some(action) = action {
-            self.send(&action, Map::new());
+            // where the view is (window coordinates): a slider turns the pointer into its value
+            let mut extra = Map::new();
+            if let (Some((x, y, w, h)), Some((fx, fy, _, _))) = (scene::frame(node), scene::frame(self.mount)) {
+                extra.insert("frame".into(), json!([x - fx, y - fy, w, h]));
+            }
+            self.send(&action, extra);
             true
         } else {
             false
