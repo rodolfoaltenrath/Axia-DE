@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/`, `apps/backup/`, `apps/camera/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/`, `apps/backup/`, `apps/camera/`, `apps/notes/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -9,7 +9,7 @@ JSON manifest sources and no generated per-app JSX wrappers.
 
 `rust/native_apps.rs` is the shared registry. `cargo xtask native-apps` exports
 its metadata during the theme build; the common host in `sdk/nativeapps.js`
-binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Monitor and Store
+binds compiled apps to the desktop's current renderer. About, About App, Force Quit, Calculator, Emoji & Symbols, Clock, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Monitor and Store
 mount their widgets and icons directly into the Rust scene through
 `native_view/`; their content and input do not pass through React. Calculator
 keeps its existing widget tree, colors, arithmetic and localized display, and
@@ -223,3 +223,10 @@ no API to run commands (the terminal can only open the user's shell).
 `fs` only writes inside the home folder and the user's mounts and never to the folders the system uses to launch or
 install things (`.desktop`, autostart, installed apps), so an app can't turn a write into
 running a command.
+
+Notes keeps its Markdown/YAML persistence, multiline Unicode editor, undo/redo,
+Markdown reader, attachments, bilingual emoji, menus and desktop sticky notes in
+Rust. `runtime/native_session_widgets.js` only transports Rust widget metadata
+and mounts the common native view; Notes restores desktop cards without opening
+a window. Window leases provide clipboard, input-method and WM I/O through
+shared services, while Rust owns formatting, selection and composition rendering.

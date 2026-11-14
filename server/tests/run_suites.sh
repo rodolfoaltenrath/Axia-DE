@@ -176,6 +176,7 @@ EOF
         run "pdf-model-test (Rust geometry/cache + JS adapters)" node tests/pdf_model_test.mjs
         run "native-async-test (compiled app service ownership)" node tests/native_async_test.mjs
         run "native-async-mount-test (string WM IDs and window lifecycle)" node tests/native_async_mount_test.mjs
+        run "native-notes-test (native clipboard, menus, input and desktop startup)" node tests/native_notes_test.mjs
         run "native-media-test (native session ownership and permissions)" node tests/native_media_test.mjs
         run "native-backup-test (status ownership and backup operations)" node tests/native_backup_test.mjs
     else skip "pdf-model-test" "node, cargo and node_modules/esbuild"; fi

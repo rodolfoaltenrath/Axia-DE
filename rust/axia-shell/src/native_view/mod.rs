@@ -12,6 +12,7 @@ pub mod icons;
 pub mod i18n;
 mod launcher;
 mod menu;
+pub(crate) use menu::measure as measure_text;
 mod menubar;
 mod shell_icons;
 mod titlebar;
@@ -53,6 +54,10 @@ pub trait NativeApp {
     /// Active media may need timely control even when its window loses focus.
     fn background_refresh_ms(&self) -> Option<f64> { None }
     fn request(&mut self, input: &Value) -> Value;
+    /// Custom native editors share the host's text-focus and paste routing.
+    fn text_input(&self) -> bool { false }
+    fn paste(&mut self, _text: &str) -> Option<Value> { None }
+    fn blur(&mut self) {}
     fn pixels(&self, _id: &str) -> Option<(usize, usize, &[u8])> {
         None
     }
@@ -80,6 +85,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::recorder::ID => Some(Box::new(crate::recorder_app::App::default())),
         crate::native_apps::backup::ID => Some(Box::new(crate::backup_app::App::default())),
         crate::native_apps::camera::ID => Some(Box::new(crate::camera_app::App::default())),
+        crate::native_apps::notes::ID => Some(Box::new(crate::notes_app::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),

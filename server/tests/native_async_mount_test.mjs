@@ -11,6 +11,9 @@ globalThis.lord={screen:{width:960,height:620},version:'test',now:()=>0,stats:()
   css:text=>JSON.parse(text),fonts:{list:()=>[]}};
 globalThis.__nativeMountRecords=[];
 const stubs={
+  'widgets.js':'export const registerWidgetType=()=>{};export const setWidgets=()=>{};',
+  'ime.js':'export const imeState={get:()=>({}),subscribe:()=>()=>{}};',
+  'textfocus.js':'export const textFieldActive=()=>false;',
   'nativeapps.js':'export const nativeApp = manifest => ({...manifest});',
   'components.jsx':`import {useContext} from 'react'; export const useAppWindow=()=>useContext(globalThis.__nativeWindowContext);`,
   'nativeview.js':`import React from 'react'; export function NativeView({args}) {
@@ -20,7 +23,7 @@ const stubs={
     return React.createElement('view');
   }`,
   'logs.js':`export const logs={sources:()=>({user:1,system:false}),files:()=>[],query:()=>[],system:()=>[],tail:()=>'',follow(){},onChange:()=>()=>{}};`,
-  'fs.js':['write','stat','mkdir','copy','jobs','forgetJob','trash','list','rename','volumes'].map(name=>`export const ${name}=()=>null;`).join('\n'),
+  'fs.js':['write','stat','mkdir','copy','jobs','forgetJob','trash','list','rename','volumes','home'].map(name=>`export const ${name}=()=>null;`).join('\n'),
   'doc.js':['fontInfo','fontSample','fontGrid','releaseImage','decodeImage','convertImage','pdfThumb'].map(name=>`export const ${name}=()=>null;`).join('\n'),
   'print.js':`export const print={discover:()=>({scanners:[]}),scanCaps:()=>({}),scan:()=>({}),open:()=>null};`,
   'media.js':`export const media={};export const userDirs=()=>({music:'/home/test/Music',pictures:'/home/test/Pictures'});export const thumbRev={subscribe:()=>()=>{}};`,
@@ -41,7 +44,7 @@ const result=await build({stdin:{resolveDir:root,contents:`
   export async function windows(ids){await flush();update(ids);await flush();}
 `},bundle:true,write:false,format:'esm',platform:'node',define:{'process.env.NODE_ENV':'"production"'},alias:{'@lordos/runtime':path.join(root,'runtime/index.js')},plugins:[{
   name:'native-endpoints',setup(b){
-    b.onResolve({filter:/sdk\/(nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
+    b.onResolve({filter:/sdk\/(widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
   },
 }]});

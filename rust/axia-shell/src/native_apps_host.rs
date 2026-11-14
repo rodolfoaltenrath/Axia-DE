@@ -13,6 +13,7 @@ pub enum NativeApp {
     Passwords,
     Sysinfo,
     Pdf(pdf_model::Model),
+    Notes,
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
@@ -23,6 +24,7 @@ impl NativeApp {
             b"passwords" => Some(Self::Passwords),
             b"sysinfo" => Some(Self::Sysinfo),
             b"pdf" => Some(Self::Pdf(Default::default())),
+            b"notes" => Some(Self::Notes),
             _ => None,
         }
     }
@@ -42,6 +44,7 @@ impl NativeApp {
             Self::Passwords => crate::passwords_model::request(input),
             Self::Sysinfo => crate::sysinfo_model::request(input),
             Self::Pdf(model) => model.request(input),
+            Self::Notes => crate::notes_app::store::background(input),
         }
     }
 }

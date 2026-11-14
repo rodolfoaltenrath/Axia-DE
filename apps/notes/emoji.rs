@@ -1,6 +1,16 @@
-// emoji.js — common emojis with English and Spanish names (for the picker and ":name").
-// [character, English names, Spanish names, category]
-const RAW = `
+//! Original bilingual emoji catalog, compiled into the application.
+use std::sync::OnceLock;
+pub const CATEGORIES: [&str; 8] = [
+    "caras",
+    "gente",
+    "simbolos",
+    "objetos",
+    "comida",
+    "naturaleza",
+    "lugares",
+    "banderas",
+];
+const RAW: &str = r#"
 😀 grinning,smile sonrisa,feliz caras
 😃 smiley,happy alegre caras
 😄 smile,laugh risa caras
@@ -214,29 +224,68 @@ const RAW = `
 🇺🇾 uruguay uruguay banderas
 🏳️ white_flag bandera_blanca banderas
 🏁 checkered_flag llegada banderas
-`;
-
-export const CATEGORIES = ['caras', 'gente', 'simbolos', 'objetos', 'comida', 'naturaleza', 'lugares', 'banderas'];
-
-export const EMOJIS = RAW.trim().split('\n').map((l) => {
-  const [ch, en, es, cat] = l.trim().split(/\s+/);
-  return { ch, names: [...en.split(','), ...es.split(',')], name: en.split(',')[0], cat };
-});
-
-const byName = new Map();
-for (const e of EMOJIS) for (const n of e.names) if (!byName.has(n)) byName.set(n, e.ch);
-
-export const emojiFor = (name) => byName.get(name) || null;
-
-// Search by name: first the ones that start with it, then the ones that contain it.
-export function searchEmoji(q) {
-  const s = q.toLowerCase();
-  if (!s) return EMOJIS;
-  const starts = [], has = [];
-  for (const e of EMOJIS) {
-    const n = e.names.find((x) => x.startsWith(s));
-    if (n) starts.push({ ...e, name: n });
-    else { const m = e.names.find((x) => x.includes(s)); if (m) has.push({ ...e, name: m }); }
-  }
-  return [...starts, ...has];
+"#;
+#[derive(Clone, Debug)]
+pub struct Emoji {
+    pub ch: String,
+    pub names: Vec<String>,
+    pub name: String,
+    pub cat: String,
+}
+pub fn all() -> &'static Vec<Emoji> {
+    static DATA: OnceLock<Vec<Emoji>> = OnceLock::new();
+    DATA.get_or_init(|| {
+        RAW.lines()
+            .filter_map(|l| {
+                let p: Vec<_> = l.split_whitespace().collect();
+                if p.len() != 4 {
+                    return None;
+                }
+                Some(Emoji {
+                    ch: p[0].into(),
+                    names: p[1]
+                        .split(',')
+                        .chain(p[2].split(','))
+                        .map(str::to_owned)
+                        .collect(),
+                    name: p[1].split(',').next().unwrap().into(),
+                    cat: p[3].into(),
+                })
+            })
+            .collect()
+    })
+}
+pub fn get(name: &str) -> Option<&str> {
+    all()
+        .iter()
+        .find(|e| e.names.iter().any(|n| n == name))
+        .map(|e| e.ch.as_str())
+}
+pub fn search(q: &str) -> Vec<Emoji> {
+    let q = q.to_lowercase();
+    if q.is_empty() {
+        return all().clone();
+    }
+    let mut start = vec![];
+    let mut contains = vec![];
+    for e in all() {
+        if let Some(name) = e.names.iter().find(|n| n.starts_with(&q)) {
+            let mut v = e.clone();
+            v.name = name.clone();
+            start.push(v);
+        } else if let Some(name) = e.names.iter().find(|n| n.contains(&q)) {
+            let mut v = e.clone();
+            v.name = name.clone();
+            contains.push(v);
+        }
+    }
+    start.extend(contains);
+    start
+}
+pub fn expand(source: &str) -> String {
+    let re = regex::Regex::new(r":([a-zA-Z0-9_+-]+):").unwrap();
+    re.replace_all(source, |c: &regex::Captures| {
+        get(&c[1]).unwrap_or(&c[0]).to_owned()
+    })
+    .into_owned()
 }

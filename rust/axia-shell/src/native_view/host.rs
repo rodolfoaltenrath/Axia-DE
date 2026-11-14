@@ -362,6 +362,7 @@ impl Host {
         self.window_focused = focused;
         let mut changed = false;
         if !focused {
+            self.app.blur();
             self.double_press = 0;
             self.last_click = (0, 0.);
             self.blur();
@@ -384,7 +385,24 @@ impl Host {
             self.effects.push_back(reply["effect"].clone());
         }
         for effect in reply["effects"].as_array().into_iter().flatten() {
-            self.effects.push_back(effect.clone());
+            if effect["kind"] == "scrollTo" && effect["host"] == true {
+                fn named(list: &[Mounted], key: &str) -> Option<i32> {
+                    for m in list {
+                        if m.key == key { return Some(m.node); }
+                        if let Some(node) = named(&m.children, key) { return Some(node); }
+                    }
+                    None
+                }
+                let scroll = effect["key"].as_str().and_then(|k| named(&self.root, k));
+                let target = effect["target"].as_str().and_then(|k| named(&self.root, k));
+                if let (Some(scroll), Some(target)) = (scroll, target) {
+                    if let (Some(s), Some(t)) = (scene::frame(scroll), scene::frame(target)) {
+                        self.scroll_by(scroll, (t.1 - s.1) as f64 - 4.);
+                    }
+                }
+            } else {
+                self.effects.push_back(effect.clone());
+            }
         }
         // "capture": the app follows the pointer wherever it goes (a drag): pointerMove on each move and
         // dragEnd when the button is released, as the React host did with global listeners.
@@ -442,6 +460,7 @@ impl Host {
         }
         context["width"] = json!(width);
         context["height"] = json!(self.height);
+        context["focused"] = json!(self.window_focused);
         context
     }
     /// Asks the app for its tree and reconciles it into the scene.
@@ -1251,6 +1270,10 @@ impl Host {
                 }
             }
             "down" => {
+                if !inside && self.app.text_input() {
+                    self.app.blur();
+                    self.sync();
+                }
                 self.hide_tip();
                 if !self.portals.is_empty() && self.dismiss(target) {
                     self.sync();
@@ -1301,8 +1324,10 @@ impl Host {
                 let field = self
                     .target(target, |t| matches!(t, Target::Field))
                     .map_or(0, |(n, _)| n);
+                let editor_blurred = field != 0 && self.app.text_input();
+                if editor_blurred { self.app.blur(); }
                 self.focus(field);
-                if changed {
+                if changed || editor_blurred {
                     self.sync();
                 }
             }
@@ -1437,7 +1462,7 @@ impl Host {
         Some(m.label.clone())
     }
     pub fn owns_text_input(&self) -> bool {
-        self.field != 0 && self.window_focused && self.icon_mode().is_none()
+        (self.field != 0 || self.app.text_input()) && self.window_focused && self.icon_mode().is_none()
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
@@ -1481,6 +1506,13 @@ impl Host {
             secure,
         );
         if !out.handled {
+            if let Some(reply) = self.app.key(key, chr, flags) {
+                // A shortcut can transfer focus from a search field to a custom editor.
+                if self.app.text_input() { self.blur(); }
+                self.queue(&reply);
+                self.sync();
+                return true;
+            }
             return false;
         }
         if out.paste {
@@ -1518,6 +1550,13 @@ impl Host {
         true
     }
     pub fn paste(&mut self, text: &str) {
+        if self.field == 0 {
+            if let Some(reply) = self.app.paste(text) {
+                self.queue(&reply);
+                self.sync();
+            }
+            return;
+        }
         if let Some(value) = self.field_value() {
             let mut field = crate::text_edit::Field::new(&value, self.caret, self.anchor);
             if field.insert(text) && field.value().chars().count() <= 2048 {

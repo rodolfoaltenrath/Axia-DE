@@ -23,6 +23,9 @@ import { windowServices } from './native_window_services.js';
 import { wm } from '../sdk/windows.js';
 import { settings } from '../sdk/settings.js';
 import { settingsServices } from './native_settings_services.js';
+import { clipboardServices } from './native_clipboard_services.js';
+import { inputServices } from './native_input_services.js';
+import { startNativeSession } from './native_session_widgets.js';
 
 let followers = 0;
 const watches = new Map();
@@ -40,7 +43,9 @@ const methods = {
   ...mediaServices({ media, userDirs, soundState, thumbRev, events: owner => bridge.events(owner) }),
   ...settingsServices(settings),
   ...backupServices({ backup, backupStatus, events: owner => bridge.events(owner) }),
-  ...windowServices(wm),
+  ...windowServices(wm, owner => bridge.events(owner)),
+  ...inputServices(),
+  ...clipboardServices({ clipboard: lord.clipboard || {}, fs }),
   'logs.sources': { run: () => logs.sources() },
   'logs.files': { run: () => logs.files() },
   'logs.query': { run: ([query]) => logs.query(query) },
@@ -67,18 +72,22 @@ lord.nativeAsync = {
 };
 export function nativeApp(manifest) {
   const app = baseNativeApp(manifest);
+  startNativeSession(manifest, NativeAsyncMount);
   if (!manifest.asyncServices?.length) return app;
   return { ...app, Component: function NativeAsyncApp() {
-    const { args } = useAppWindow();
-    // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
-    // each mounted window gets a fresh one even when the WM reuses its name.
-    const [owner] = useState(() => ++ownerSequence);
-    const [ready, setReady] = useState(false);
-    useLayoutEffect(() => {
-      bridge.open(owner, manifest.asyncServices);
-      setReady(true);
-      return () => bridge.close(owner);
-    }, [owner]);
-    return ready ? h(NativeView, { manifest, args: { ...args, __nativeOwner: owner } }) : h(View, { style: { flex: 1 } });
+    const { args, id } = useAppWindow() || {};
+    return h(NativeAsyncMount, { manifest, args, window: id });
   } };
+}
+function NativeAsyncMount({ manifest, args, window }) {
+  // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
+  // each mounted window gets a fresh one even when the WM reuses its name.
+  const [owner] = useState(() => ++ownerSequence);
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    bridge.open(owner, manifest.asyncServices);
+    setReady(true);
+    return () => bridge.close(owner);
+  }, [owner]);
+  return ready ? h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window } }) : h(View, { style: { flex: 1 } });
 }

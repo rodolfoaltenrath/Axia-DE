@@ -1350,3 +1350,31 @@ fn captions_format_numbers_sizes_parts_and_uppercase_like_the_spotlight() {
     i.decimal = ".".into();
     assert_eq!(i.caption(&json!({"number":1234.5,"digits":1})), "1234.5");
 }
+
+#[test]
+fn notes_native_host_edits_long_unicode_text_and_flushes_on_focus_loss() {
+    let home = locales();
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mount = scene::create(scene::VIEW);
+    let mut host = Host::new(mount, super::app("notes").unwrap(), assets.to_str().unwrap(), Some(home.0.to_str().unwrap()));
+    host.facts(json!({"lang":"en","args":{"__nativeOwner":7,"__nativeWindow":"notes"},"context":{"theme":{"text":"#222","textDim":"#666","accent":"#06c","windowBg":"#fff","separator":"#ddd"}}}));
+    let search = host.find_text("Search notes");
+    assert_ne!(search, 0);
+    host.pointer("down", search, 0., 0., 0);
+    host.pointer("up", search, 0., 0., 0);
+    assert!(host.key("n", "", 2));
+    assert!(host.owns_text_input());
+    let body = "Unicode 😀 café 界\n".repeat(180);
+    host.paste(&body);
+    assert!(host.key("a", "", 2));
+    assert!(host.key("b", "", 2));
+    host.window_focus(false);
+    assert!(!host.owns_text_input());
+    let list = crate::notes_app::store::with(home.0.to_str().unwrap(), |s| s.list.clone());
+    assert_eq!(list.len(), 1);
+    let saved = std::fs::read_to_string(home.0.join("Notes").join(&list[0].slug).join("nota.md")).unwrap();
+    assert!(saved.contains(&body));
+    assert!(list[0].body.starts_with("**"));
+    drop(host);
+    scene::destroy(mount);
+}
