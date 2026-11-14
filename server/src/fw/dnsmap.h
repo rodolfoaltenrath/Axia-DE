@@ -6,7 +6,8 @@
  * (app, 192.0.2.7) → { www.example.com, cdn.example.net } until the TTL expires, and fw_decide
  * receives those names in FwQuery.hosts. Nobody is queried: neither reverse DNS nor services.
  *
- * It is a bounded LRU (max_entries app+IP+name pairs in total, DNSMAP_PER_IP names per IP):
+ * Implemented in rust/axia-codecs/src/dnsmap.rs. It is a bounded LRU (max_entries app+IP+name
+ * pairs in total, DNSMAP_PER_IP names per IP):
  * when the table is full, what was used longest ago is forgotten. */
 #ifndef LORD_FW_DNSMAP_H
 #define LORD_FW_DNSMAP_H

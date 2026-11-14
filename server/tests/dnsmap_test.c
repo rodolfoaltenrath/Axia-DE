@@ -1,4 +1,4 @@
-/* dnsmap_test.c — IP → names per app (src/fw/dnsmap.c): DNS answer reader (A, AAAA,
+/* dnsmap_test.c — IP → names per app (rust/axia-codecs/src/dnsmap.rs): DNS answer reader (A, AAAA,
  * CNAME chains, compression) with broken, truncated and pointer-loop packets; the LRU with
  * TTL; and its use together with the domain rules. Ends with random mutations. */
 #ifndef _GNU_SOURCE

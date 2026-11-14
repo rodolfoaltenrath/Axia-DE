@@ -97,7 +97,7 @@ DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/print/phttp.c src/pr
            src/print/escl.c src/print/print.c src/ui/js_print.c
 SRC += $(DOC_SRC)
 # Per-app firewall (src/fw, docs/FIREWALL.md): rules, decision and names learned from DNS
-FW_SRC := src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
+FW_SRC := src/fw/rules_json.c src/fw/fwmap.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
 SRC += $(FW_SRC)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
@@ -275,7 +275,7 @@ endif
 .DEFAULT_GOAL := all
 BPF ?= 0
 NP_SRC := src/netperm/netperm.c src/netperm/bpfsys.c src/netperm/npcompile.c src/netperm/npdns.c src/netperm/npdiag.c \
-          src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/fw/fwlists.c src/sec/json.c
+          src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
 ifeq ($(BPF),1)
 NP_GEN := build/gen/np_bpf.h
 NP_CPP := -DNP_HAVE_BPF
@@ -301,9 +301,9 @@ build/npverify-test: tests/npverify_test.c src/netperm/bpfsys.c $(wildcard src/n
 	./$@ || { rm -f $@; exit 1; }
 endif
 test: build/npcompile-test
-build/npcompile-test: tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/sec/json.c $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) $(CODEC_LIB)
+build/npcompile-test: tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/dnsmap.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # axia-fand (src/fan, docs/FANS.md): the root service that drives the fans by temperature. libc
 # only; it executes nothing and has no network. tests/fan_test.c: curves, fan.json, requests and a
@@ -462,13 +462,13 @@ build/fw-rules-test: tests/fw_rules_test.c src/fw/rules_json.c src/fw/fwmap.c sr
 	./$@ || { rm -f $@; exit 1; }
 # subscribed blocklists (0.8.5): raw parsers, the set, the compiled file, fuzzing (docs/FIREWALL.md, "Blocklists")
 test: build/fwlists-test
-build/fwlists-test: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
+build/fwlists-test: tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/fwlists-test-asan: tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) $(CODEC_LIB)
+build/fwlists-test-asan: tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwlists.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@
 # the destinations a user types in the rule sheet (tests/fw_dest_cases.txt), through the store's
 # parser; apps/monitor/tests.rs checks the Rust editor against the same cases.
@@ -477,9 +477,9 @@ build/fwdest-test: tests/fwdest_test.c tests/fw_dest_cases.txt tests/fw_domain_c
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwdest_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/dnsmap-test: tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
+build/dnsmap-test: tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/dnsmap.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # backup engine: snapshots, hard links, restore, retention, interruptions, exclusions, encryption
 test: build/backup-test
