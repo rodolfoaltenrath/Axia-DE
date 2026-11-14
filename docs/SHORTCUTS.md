@@ -9,8 +9,8 @@ never fires twice.
 
 Settings → Keyboard offers **macOS** and **Linux / Windows**, independently of
 the visual theme. The choice is stored in `shortcutProfile` and applied live.
-Without an explicit choice, existing users keep their theme's convention:
-macOS for the default theme, Linux / Windows for Classic.
+Without an explicit choice the profile is macOS. (Until the Lord Classic theme was removed, its users
+got Linux / Windows by default; they now keep it only if they chose it.)
 
 | Action | macOS | Linux / Windows |
 |---|---|---|
@@ -50,9 +50,9 @@ different modifier.
 
 - `BASE` in `sdk/shortcuts.js`: search, keyboard layout, clipboard, emoji, lock, quit and the media keys.
 - A theme's table, given to `useShortcuts({ grabs, table, onSuperTap, appsPaste })` from its root component
-  (`flowTable` in `themes/default/index.jsx`, `classicTable` in `themes/classic/index.jsx`).
+  (`flowTable` in `themes/default/index.jsx`).
 - `addShortcuts(entries)` from a module: Screenshots and the Terminal's drop-down window. `runShortcut(id)`
-  runs one of those from a table: Lord Classic's ❖⇧S is Screenshots' area capture.
+  runs one of those from a table: the Linux / Windows profile's ❖⇧S is Screenshots' area capture.
 
 Lookup order is modules, theme, base, and the first entry whose `when(e)` allows it wins. When none does the
 key goes on to the listeners, so `when` is how a key stays with an app (⌃Space in the Terminal).
@@ -67,24 +67,25 @@ their position. `label` lists the entry in Settings → Keyboard (`shortcutList(
 replaces its keys there; an entry with no `label` is not listed. A held key runs once unless the entry says
 `repeat: true`, and its repeats and its release are taken as well.
 
-❖ pressed and released alone calls the theme's `onSuperTap`: Lord Flow's launcher, Lord Classic's start menu.
+❖ pressed and released alone calls the theme's `onSuperTap`: Lord Flow's launcher.
 While a Linux app is fullscreen this tap is ignored, so a game cannot open a hidden launcher and blur
 behind itself. Super combinations, including the app switcher and the fullscreen escape shortcut, remain available.
 
 ## The keys kept from apps
 
-`rust/axia-shell/src/keygrab.rs` holds fixed tables, one per theme, written at build time: keyboard keys only, each
+`rust/axia-shell/src/keygrab.rs` holds fixed tables, one per shortcut profile, written at build time: keyboard keys only, each
 a modifier set plus a letter or an evdev code. `wl_key` compares modifiers exactly, so ⌃Tab and plain ⌃Q
-always stay with the app. The shell picks a table by name, `lord.wayland.grabKeys('flow' | 'flow-desktops' | 'classic' | '')`:
+always stay with the app. The shell picks a table by name, `lord.wayland.grabKeys('macos' | 'macos-desktops' | 'linux' | '')`
+(`flow` and `flow-desktops` are the same as the first two):
 any other name is refused, and nothing can add a key. `lord.wayland` does not exist in an isolated app's
 process (`js_broker_register`), which has no compositor to change either. `startShell` clears the table,
 so a theme that asks for none keeps none.
 
 | Table | Keys |
 |---|---|
-| `flow` | ❖Tab, ❖⇧Tab (hold), ❖M, ❖H, ❖⌥H, ❖⌥D, ❖,, ❖⌃← ❖⌃→ |
-| `flow-desktops` | The same plus ⌃ ← → ↑ ↓: Lord Flow with Settings → Keyboard's Desktops arrows on |
-| `classic` | ⌥Tab, ⌥⇧Tab (hold), ⌥F4, ⌃⇧Esc, ❖A, N, D, E, I, R, ❖⇧S, ❖ arrows, ❖1…9, ❖⌃D, ❖⌃F4, ❖⌃← ❖⌃→ |
+| `macos` | ❖Tab, ❖⇧Tab (hold), ❖M, ❖H, ❖⌥H, ❖⌥D, ❖,, ❖⌃← ❖⌃→ |
+| `macos-desktops` | The same plus ⌃ ← → ↑ ↓: Settings → Keyboard's Desktops arrows on |
+| `linux` | ⌥Tab, ⌥⇧Tab (hold), ⌥\`, ⌥F4, ⌃⇧Esc, ❖A, N, D, E, H, I, R, ❖⇧S, ❖ arrows, ❖1…9, ❖⌃D, ❖⌃F4, ❖⌃← ❖⌃→ |
 
 A Linux app never gets a ❖ combination, so for ❖ the table matters to isolated LordOS apps: without it those
 would receive the key and the theme would act as well. `system_meta_key` in `wl.c` still lists the ❖ keys
@@ -115,7 +116,7 @@ clipboard panel only with no window in front. Isolated apps never receive ❖V, 
 
 ## Desktops
 
-`flowDesktopKeys` and `classicDesktopKeys` in `sdk/desktops.js` are part of each theme's table; [DESKTOPS.md](DESKTOPS.md)
+`flowDesktopKeys` (macOS profile) and `linuxDesktopKeys` (Linux / Windows profile) in `sdk/desktops.js` join the table; [DESKTOPS.md](DESKTOPS.md)
 has the keys. In Lord Flow ⌃ arrows are word movement in apps, so they are an option, on by default: off, their
 entries stop applying and leave Settings → Keyboard's list (`listed`), and `useShortcuts` asks for the `flow` table
 (its `grabs` can change while the theme runs), so the keys reach the apps. ⌃⇧ arrows always stay with the app.

@@ -7,9 +7,9 @@ keywords: keys, shortcuts, hotkeys, super, cmd
 # Keyboard shortcuts
 
 ❖ is the Super key, ⌃ Ctrl, ⌥ Alt and ⇧ Shift. [Settings → Keyboard](settings:keyboard) lists the
-shortcuts of the theme you are using.
+shortcuts in use, and chooses between the **macOS** ones (the default) and the **Linux / Windows** ones.
 
-## In every theme
+## Always
 
 | Shortcut | What it does |
 |---|---|
@@ -30,7 +30,7 @@ Hold the modifier and press Tab: a strip of app icons shows the selected app's n
 recently used first. Tab moves, ⇧Tab goes back, Esc cancels, and releasing the modifier switches. A
 quick press goes back to the previous app.
 
-## Lord Flow
+## macOS shortcuts (the default)
 
 | Shortcut | What it does |
 |---|---|
@@ -51,23 +51,24 @@ emulator, where Ctrl+C is the interrupt), to that app only. So ❖V pastes and �
 there: with a Linux app in front the screen locks with ❖⌃Q, and the clipboard opens with ❖⇧V. In a
 Axia DE app inside the session ❖V pastes too; ❖⇧V is the clipboard.
 
-## Lord Classic
+## Linux / Windows shortcuts
+
+With **Linux / Windows** chosen in [Settings → Keyboard](settings:keyboard), these take the place of
+the macOS ones:
 
 | Shortcut | What it does |
 |---|---|
-| ❖ alone | Start menu |
-| ⌥Tab · ⌥⇧Tab | Switch apps |
-| ❖Tab | Overview ([Desktops](help:desktops)) |
+| ⌥Tab · ⌥⇧Tab | Switch apps (❖Tab too) |
+| ⌥\` · ⌥⇧\` | Next or previous window of the app |
 | ❖⌃← ❖⌃→ | Previous or next desktop |
 | ❖⌃D · ❖⌃F4 | New desktop · close this desktop |
 | ❖←→↑↓ | Snap the window |
+| ❖H | Minimize the window |
 | ⌥F4 | Close the window |
 | ❖D | Show the desktop, and back |
 | ❖E · ❖I | Files · Settings |
-| ❖R | Search |
-| ❖A · ❖N | Quick settings · notifications |
-| ❖1…9 | Open the app at that place in the bar |
 | ❖⇧S | Screenshot of an area |
+| ❖L | Lock the screen |
 | ⌃⇧Esc | Monitor |
 
 ## In apps
@@ -76,7 +77,7 @@ Axia DE app inside the session ❖V pastes too; ❖⇧V is the clipboard.
 
 | Shortcut | What it does |
 |---|---|
-| ❖N · ❖T · ❖W | New window · new tab · close (Lord Classic: ⌃N, ⌃T, ⌃W) |
+| ❖N · ❖T · ❖W | New window · new tab · close |
 | ❖F · ❖G | Find · next result |
 | ❖C · ❖X | Copy · cut |
 | ❖Z · ❖⇧Z | Undo · redo |

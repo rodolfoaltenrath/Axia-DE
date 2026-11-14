@@ -2,7 +2,7 @@
 
 ## Axia on Fedora: restart and shut down
 
-The default menu and classic Start menu retain their existing confirmation dialog.
+The crown menu keeps its existing confirmation dialog.
 On a local Fedora session, `lord.session.hostPower()` exposes the host backend
 without requiring `LORDOS_SESSIOND`. Rust validates the two fixed actions, prevents
 concurrent requests and classifies results; `server/src/platform/power.c` sends
@@ -296,21 +296,19 @@ after the screen went dark`.
   last frame. Before 0.8.1, Chromium's window came back black (`GPU.md`, "When the GPU context is
   re-created"; `tests/gpu_cycle.sh` repeats the off/on cycle).
 
-In the SDK: `session.lock()`, `session.switchUser()` and `session.managed()`. The `default` and
-`classic` themes show those items only if `managed()` is true.
+In the SDK: `session.lock()`, `session.switchUser()` and `session.managed()`. Lord Flow shows those
+items only if `managed()` is true.
 
 ### Restart and Shut Down from a session
 
 Since 0.8.1 the crown menu ends with **Restart…** and **Shut Down…**, after Lock Screen, Switch
-User… and Log Out; the Lord Classic theme has them behind a **Power** button at the bottom of its start
-menu. Before, they were only on the login screen. Sleep is not offered: suspend and resume with the
+User… and Log Out. Before, they were only on the login screen. Sleep is not offered: suspend and resume with the
 card lent to a session has not been tested on real hardware yet.
 
 | | |
 |---|---|
 | ![crown menu](session-power-menu-light.png) | ![crown menu, dark](session-power-menu-dark.png) |
 | ![restart confirmation](session-power-restart-light.png) | ![restart confirmation, dark](session-power-restart-dark.png) |
-| ![Lord Classic start menu, Power](session-power-classic-light.png) | ![Lord Classic, dark](session-power-classic-dark.png) |
 
 - **The confirmation** (`sdk/power.jsx`, `<PowerDialog>`, in the `modal` layer; a theme renders it
   inside its `ThemeProvider`) says what will happen and counts down 60 seconds; at zero it does it,

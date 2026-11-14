@@ -28,5 +28,5 @@ ningún comando escrito a mano.
   la barra de título y los bordes del sistema»; en Firefox, menú ☰ → Más herramientas → Personalizar
   barra de herramientas → desmarcar «Barra de título».
 - **GTK y GNOME** siguen el modo oscuro o claro y el color de acento de Axia DE en vivo, y ponen los
-  botones de la ventana a la izquierda, como los semáforos (en el tema Lord Classic, a la derecha). Las
+  botones de la ventana a la izquierda, como los semáforos. Las
   apps GTK 3 usan el tema «Axia DE»; su color de acento es fijo.

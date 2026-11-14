@@ -46,20 +46,20 @@ CPU or the GPU. So you write ordinary function components with hooks, but with `
 around the windows (bars, Dock, launcher, panels), where menus open, and the keyboard shortcuts of
 its own layout (for example what the Super key alone does).
 
-**The two built-in themes are the references:**
+**The built-in theme is the reference**, with [`examples/theme-minimal/`](../examples/theme-minimal/)
+as a small starting point (a bottom bar, an apps menu and a plain frame):
 
 | Theme | Folder | Layout |
 |---|---|---|
 | Lord Flow | `themes/default` | menu bar on top (with the app's menus), magnifying Dock, app launcher, Control Center |
-| Lord Classic | `themes/classic` | taskbar (bottom, top or a side), start menu with search, quick settings, notification panel, menus in each window, snapping and the SDK's Overview |
 
 `themes/greeter` is the login and lock screen: it is a separate program, not a desktop theme (see
 [The login and lock screen](#the-login-and-lock-screen-are-not-your-theme)).
 
 **Switching.** The user switches themes live from **Settings → Appearance → Desktop style**, which
 since 0.8.5 lists every installed theme (the only place to choose one; `StylePicker` in
-`apps/settings/index.jsx`). Lord Flow and Lord Classic come first, the others by name; a theme with
-`"hidden": true` in its `theme.json` is not listed. Switching discards the JavaScript context and
+`apps/settings/index.jsx`; it shows only when there is more than one). Lord Flow comes first, the
+others by name; a theme with `"hidden": true` in its `theme.json` is not listed. Switching discards the JavaScript context and
 loads the new bundle (`themes.use` in `sdk/index.js`, `lord.themes.use` in `server/src/ui/js_sys.c`,
 `switch_theme` in `server/src/main.c`): the LordOS app windows that were open (up to 8) reopen in
 the new theme with their frames, and Linux windows stay connected and get the new frame. The
@@ -184,11 +184,11 @@ startShell(<App />);
 - `workArea`: a function `display → { x, y, w, h }`, the free area for windows on that display
   (without the bar and the Dock). Maximize, snapping, new windows and `wm.beginMove`'s top limit use
   it. An object is still accepted and means the main display's area. Call it again when the bar or
-  Dock changes (both themes do it in a `useEffect` on the Dock settings and the screen size).
+  Dock changes (Lord Flow does it in a `useEffect` on the Dock settings and the screen size).
 - `chrome: { w, h }`: how much the frame adds around the content (borders plus title bar), so a
   Linux window opens at the size it asked for.
 - `snap: true`: window snapping (drag to the edges, `wm.snap`, `wm.snapKey`, the `snapPreview`
-  store to draw the preview; [WINDOWS.md](WINDOWS.md#snapping-083)). Lord Classic turns it on.
+  store to draw the preview; [WINDOWS.md](WINDOWS.md#snapping-083)). A taskbar-style theme turns it on.
 
 **`startShell(element)`** (`sdk/index.js`): switches to the user's theme if it isn't this one, turns
 the layers on, reopens the windows after a theme switch, renders your element inside a root that
@@ -219,7 +219,7 @@ Inside it:
 - a title bar whose `onMouseDown` calls **`wm.beginMove(w.id)`**. Moving and resizing are then done
   by `axia-server` in C (`server/src/ui/grab.c`): React gets no event per frame, and the moving
   window is painted from a cached layer ([WINDOWS.md](WINDOWS.md)). `beginMove` returns `false` when
-  it can't (a maximized window, no button held); Lord Classic then drags out of the maximized place
+  it can't (a maximized window, no button held); a theme can then drag out of the maximized place
   in JS with `wm.move`;
 - **`<AppHost id={w.id} focused={…} />`** for the content, in a `flex: 1` box;
 - no background under the content when `getApp(w.id).transparent` (the Terminal). Such a window has
@@ -251,10 +251,9 @@ The SDK gives menus as **item lists**; the theme draws them. An item is
 | `recentItems(n)`, `storeUpdates()`, `runningApps()`, `forceQuit(key)`, `appGroup(winId)` | for a system menu like Lord Flow's crown menu |
 
 Where they go is the theme's choice: Lord Flow shows the app menus in its top menu bar
-(`themes/default/components/MenuBar.jsx`), Lord Classic in a strip under each window's title bar
-(`themes/classic/components/Window.jsx`). A theme without either must still give the app's menus a
-place, or the apps lose commands. Each bundled theme has its own `components/Menu.jsx` that puts the
-menu in the `popover` layer.
+(`themes/default/components/MenuBar.jsx`); a theme without a menu bar can show them in a strip under
+each window's title bar. A theme must give the app's menus a place, or the apps lose commands. Lord
+Flow has its own `components/Menu.jsx` that puts the menu in the `popover` layer.
 
 ### Layers
 
@@ -289,20 +288,20 @@ drag image and the "poof"). The Trash: `useTrash()`, `openTrash()`, `emptyTrash(
 
 There are no ready-made panels in the SDK: each theme draws its own from SDK stores and controls.
 
-- **App launcher / start menu:** `useLauncherApps()` (LordOS apps and installed Linux apps, sorted by
-  name, with `name`, `Icon`, `kind`), `launchApp(id)`, `appCategory(app)`, `APP_CATEGORIES`;
-  system-wide search results from `searchEverything` (Lord Classic's start menu).
+- **App launcher:** `useLauncherApps()` (LordOS apps and installed Linux apps, sorted by name, with
+  `name`, `Icon`, `kind`), `launchApp(id)`, `appCategory(app)`, `APP_CATEGORIES`; system-wide search
+  results from `searchEverything`; or the SDK's own `RustLauncher` (the grid Lord Flow uses).
 - **Control Center / quick settings:** `Toggle`, `Slider`, `Segmented`; `useSound`, `sound`,
   `defaultSink`; `useBluetooth`; `useBattery`, `BatteryGlyph`; `nightActive`, `setNightManual`;
   `notifyPrefs`, `dndActive` (Do Not Disturb); `NowPlayingTile`; `useCpuUsage`, `useSystemInfo`;
   `keyboard.label(keyboard.active())`, `keyboard.next()`. See
-  `themes/default/components/ControlCenter.jsx` and `themes/classic/components/QuickSettings.jsx`.
+  `themes/default/components/ControlCenter.jsx`.
 - **Status area:** `<StatusItems color={…} />` (items apps register with `registerStatusItem`, such
   as the network item) and `<PrivacyIndicators />` (camera, microphone, screen in use).
 - **Notifications:** banners are drawn by the SDK (`NotificationBanner`, placed by `startShell`);
   `setBannerPlacement('bottom')` puts them above a bottom taskbar. A notification centre reads
   `notifyHistory` (and `useNotifications()` for what is on screen), with `dismissNotification(id)`
-  and `clearNotifyHistory()` (`themes/classic/components/NotificationCenter.jsx`).
+  and `clearNotifyHistory()`.
 - **Search:** the SDK's search panel opens with ❖Space or Ctrl+Space by itself; a button calls
   `spotlight.toggle()` ([SPOTLIGHT.md](SPOTLIGHT.md)).
 - **Session:** `session.quit()`, `session.lock()`, `session.switchUser()` (with `session.managed()`),
@@ -379,8 +378,8 @@ Linux apps. A slow theme makes the whole desktop slow.
   Keep blurred surfaces few and small, and turn blur off with `effects: false`.
 - **Subscribe narrowly**: `useStore(store, selector)` re-renders only when the selected value changes;
   a clock that renders every second should only re-render its own text.
-- **Don't poll** when a store exists (sound, battery, Bluetooth and displays arrive as events). Lord
-  Classic's network glyph polls every 5 s; that is the upper bound to aim for.
+- **Don't poll** when a store exists (sound, battery, Bluetooth and displays arrive as events). When
+  polling can't be avoided (a network glyph), every 5 s is the upper bound to aim for.
 - The style subset has no CSS animations, dashed borders, skew or 3D (`themes/README.md`). An
   unknown style key is logged as `js: unsupported style '<key>'`, once per key per process (an
   animation that sends it every frame writes one line). After 64 different keys, one more line ends
@@ -496,8 +495,8 @@ above):
    There is no hot reload.
 
 A theme that throws while its bundle is evaluated makes the switch fall back to the theme you came
-from (`axia-server: the theme failed, going back to …`); the error is in the log. Keep Lord Flow or
-Lord Classic installed: they are the fallback (`start_theme` in `main.c`).
+from (`axia-server: the theme failed, going back to …`); the error is in the log. Keep Lord Flow
+installed: it is the fallback (`start_theme` in `main.c`).
 
 **Debugging.**
 

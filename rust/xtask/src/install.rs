@@ -36,11 +36,10 @@ const ASSET_DIRS: [&str; 13] = [
     "browser",
 ];
 
-const REQUIRED: [&str; 6] = [
+const REQUIRED: [&str; 5] = [
     "server/build/axia-server",
     "server/build/axia-vault",
     "themes/default/theme.bundle.js",
-    "themes/classic/theme.bundle.js",
     "assets/app-host.bundle.js",
     "code-manifest.json",
 ];

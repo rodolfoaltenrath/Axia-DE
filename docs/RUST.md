@@ -306,16 +306,14 @@ restritos ainda devem ser conferidos antes da publicação final.
 
 ## Catálogo e menus de aplicativos
 
-`launcher.rs` e `launcher/` mantêm o catálogo e a implementação dos menus Flow
-e Classic. Rust recebe os metadados brutos do registro e dos aplicativos Linux,
-aplica traduções e visibilidade, prepara Unicode, ordena, categoriza e filtra.
-Também possui o estado da pesquisa, categoria, seleção, fixados/recentes,
-menus de contexto e energia, atalhos e descrições de widgets dos dois temas.
-O posicionamento do painel Classic, inclusive em múltiplos monitores e RTL,
-é calculado em Rust.
+`launcher.rs` e `launcher/` mantêm o catálogo e a grade de apps do Lord Flow.
+Rust recebe os metadados brutos do registro e dos aplicativos Linux, aplica
+traduções e visibilidade, prepara Unicode, ordena, categoriza e filtra. Também
+possui o estado da pesquisa e da categoria, o menu de contexto e as descrições
+de widgets. (O menu Iniciar do Lord Classic também era Rust; saiu com o tema.)
 
 Os arquivos `themes/default/components/Launchpad.jsx` e
-`themes/classic/components/StartMenu.jsx` foram removidos. `sdk/rustlauncher.jsx`
+`themes/classic/components/StartMenu.jsx` foram removidos (e depois o tema Classic inteiro). `sdk/rustlauncher.jsx`
 interpreta os widgets e liga eventos e efeitos aos serviços existentes. O SDK
 mantém apenas uma cópia dos metadados retornados para assinaturas React e
 vinculação dos ícones. Mudanças do registro, idioma ou atualização explícita
@@ -358,10 +356,9 @@ cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --lock
 cargo test --manifest-path rust/Cargo.toml --release --locked --offline launcher::tests::measure_large_catalog -- --ignored --nocapture
 ```
 
-A integração verifica os dois menus, identidade estável da lista, geometria,
-rolagem, pesquisa/Enter, categorias, contexto, fixar/desafixar na Dock e no
-Classic, fixados/recentes, busca geral, energia, início de arraste e instalação/
-remoção de pacote, mudança de idioma, Unicode, redimensionamento e touchpad.
+A integração verifica a grade, identidade estável da lista, geometria,
+rolagem, pesquisa/Enter, categorias, contexto, fixar/desafixar na Dock, início
+de arraste e instalação/remoção de pacote, mudança de idioma, Unicode, redimensionamento e touchpad.
 As coordenadas visíveis são verificadas contra valores fixos da interface validada,
 sem carregar os componentes antigos; o limite de nós montados também é verificado.
 `AXIA_LAUNCHER_OBSERVATIONS` permite salvar as observações em JSON.

@@ -3,7 +3,7 @@
 // runs the switch animation.
 //
 //   nextDesktopBy(step), addDesktopAndShow(), closeActiveDesktop(), desktopName(id)
-//   flowDesktopKeys, classicDesktopKeys     the theme tables' entries (sdk/shortcuts.js)
+//   flowDesktopKeys, linuxDesktopKeys       the shortcut profiles' entries (sdk/shortcuts.js)
 //   desktopSwipe(dir)                       a registerGestureActions action
 //
 // The animation: the windows arriving slide a little and fade in, stepped by the native animator
@@ -81,8 +81,8 @@ export const flowDesktopKeys = [
 ];
 export const flowGrabs = () => (ctrlArrowsOn() ? 'flow-desktops' : 'flow');
 
-// Lord Classic.
-export const classicDesktopKeys = [
+// The Linux/Windows-style shortcut profile.
+export const linuxDesktopKeys = [
   { id: 'overview', keys: ['Meta+Tab'], run: () => toggleOverview(), label: 'shell.shortcuts.overview', group: 'desktops' },
   { id: 'newDesktop', keys: ['Meta+Ctrl+D'], run: addDesktopAndShow, label: 'shell.shortcuts.newDesktop', group: 'desktops' },
   { id: 'switchDesktop', keys: ['Meta+Ctrl+ArrowLeft', 'Meta+Ctrl+ArrowRight'], show: ['❖⌃←→'], run: onStep, label: 'shell.shortcuts.switchDesktop', group: 'desktops' },

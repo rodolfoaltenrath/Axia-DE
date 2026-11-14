@@ -432,7 +432,7 @@ still the Dock's blur.
 
 ## Snapping (0.8.3)
 
-A theme turns it on with `configureWindows({ snap: true })` (both Lord Classic and Lord Flow do);
+A theme turns it on with `configureWindows({ snap: true })` (Lord Flow does);
 `snapAssist: false` keeps the snapping without Snap Assist. The rules are in Rust
 (`rust/axia-shell/src/snap/`, tests in `snap/tests.rs`), with the C ABI in `server/src/ui/snap_ffi.h`
 (checked by `server/tests/snap_ffi_test.c`). The session reaches them through `lord.snap`
@@ -505,9 +505,9 @@ Each app reopens where it was: size, position, maximized and display, per app, i
 
 ## The Window menu, the app menu and Force Quit (0.8.5)
 
-The same menus in both themes, built by the SDK (`sdk/windowmenu.js`, `sdk/appcontrol.js`); Lord Flow
-shows them in its menu bar (Window, the app's name, the crown menu), Lord Classic in each window's own
-Window and Help menus (its in-window menu strip, since it has no menu bar).
+The same menus in every theme, built by the SDK (`sdk/windowmenu.js`, `sdk/appcontrol.js`); Lord Flow
+shows them in its menu bar (Window, the app's name, the crown menu), and a theme without a menu bar can
+put them in each window's own Window and Help menus.
 
 - **Window menu** (`windowMenuItems`): Minimize, Zoom, Fill, Center; **Move & Resize** with the halves
   (left, right, top, bottom), the quarters and thirds (the zones of `wm.snap`, see "Snapping"), the
@@ -518,8 +518,7 @@ Window and Help menus (its in-window menu strip, since it has no menu bar).
   windows, the one in front checked.
 - **App menu** (`appMenuItems`, Lord Flow: a click on the app's name in the menu bar): About <app> (its
   icon, name, own version and where it comes from; a system window, `apps/appabout`), Settings… (the
-  app's own, ❖,), Hide <app>, Hide Others, Show All and Quit <app> (❖Q). In Lord Classic, About <app>
-  is in each window's Help menu.
+  app's own, ❖,), Hide <app>, Hide Others, Show All and Quit <app> (❖Q).
 - **Force Quit…** (the crown menu, a system window `apps/forcequit`) lists the open apps and ends the
   chosen one without asking it (`forceQuit`): a Linux or isolated app's own process gets SIGKILL from
   axia-server through `lord.wayland.kill(surface)` (`js_sys.c`), only that client of the same user and

@@ -201,22 +201,6 @@ fn real_launcher_catalog_and_both_theme_menus() {
     assert_eq!(get("dock-pinned")["pinned"], true);
     assert_eq!(get("dock-pinned")["closed"], false);
     assert_eq!(get("dock-unpinned")["pinned"], false);
-    assert_eq!(get("classic-pinned")["pinned"], true);
-    assert_eq!(get("classic-pinned")["closed"], false);
-    let home = get("classic-home")["labels"].as_array().unwrap();
-    for name in ["App 0000", "App 0001", "App 0002"] {
-        assert_eq!(home.iter().filter(|v| v["text"] == name).count(), 1);
-    }
-    assert!(get("power")["texts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v == "Log Out"));
-    assert_eq!(get("classic-search")["result"], "app:test-0007");
-    assert_eq!(get("classic")["catalogs"], 1);
-    assert!(get("classic")["labels"].as_array().unwrap().len() <= 20);
-    assert!(!get("classic")["labels"].as_array().unwrap().is_empty());
-    assert!(get("classic-scrolled")["offset"].as_f64().unwrap() > 0.);
     assert_eq!(get("installed")["catalogs"], 2);
     assert_eq!(get("installed")["found"], "new-package");
     assert_eq!(get("installed")["searchVisible"], true);
@@ -237,7 +221,7 @@ fn real_launcher_catalog_and_both_theme_menus() {
     assert_eq!(get("empty")["total"], 0);
     assert!(get("empty")["labels"].as_array().unwrap().is_empty());
     assert_eq!(get("empty-enter")["opened"], "test-0999");
-    println!("launcher real QuickJS/React: {} apps, {} mounted app labels; cache, search/Enter, category, wheel, context, drag, Classic and install/remove passed",
+    println!("launcher real QuickJS/React: {} apps, {} mounted app labels; cache, search/Enter, category, wheel, context, drag and install/remove passed",
         initial["total"], mounted.len());
 }
 
@@ -250,10 +234,7 @@ import { RustLauncher } from '@ROOT@/sdk/rustlauncher.jsx';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { settings } from '@ROOT@/sdk/settings.js';
-import { searchEverything } from '@ROOT@/sdk/search.js';
-import { Menu as ClassicMenu } from '@ROOT@/themes/classic/components/Menu.jsx';
 const Launchpad = props => h(RustLauncher,{...props,mode:'flow'});
-const StartMenu = props => h(RustLauncher,{...props,mode:'classic',Menu:ClassicMenu});
 
 
 const records = new Map(); let root, catalogs = 0, sourceNames, lastPlan, opened = null, closed = false;
@@ -296,15 +277,14 @@ function Harness() {
   const [mode,setMode] = useState('default'), [tick,setTick] = useState(0), [area,setArea] = useState({x:0,y:0,w:1000,h:700});
   control = {setMode,setTick,setArea};
   return h(ThemeProvider,{tokens},h(View,{style:{width:1000,height:700}},
-    mode.startsWith('classic') ? h(StartMenu,{key:mode,t:tokens,box:{left:0,top:0,width:640,height:700},onClose:()=>{closed=true;},isOnBar:()=>false})
-      : h(Launchpad,{key:mode,t:tokens,apps,onOpen:id=>{opened=id;},onClose:()=>{closed=true;},area})));
+    h(Launchpad,{key:mode,t:tokens,apps,onOpen:id=>{opened=id;},onClose:()=>{closed=true;},area})));
 }
 const alive = n => { for(let i=0;n && i<100;i++,n=records.get(n.parent)) if(n.id===root) return true; return false; };
 const texts = () => [...records.values()].filter(n=>n.text && alive(n));
 const labelNodes = () => texts().filter(n=>/^App \d{4}$/.test(n.text));
 const click = (node,button=0) => {const [x,y,w,hh]=lord.getLayout(node.parent); __lordEvent('down',node.parent,x+w/2,y+hh/2,button); __lordEvent('up',node.parent,x+w/2,y+hh/2,button);};
 const word = text => texts().find(n=>n.text===text);
-// The query itself is also a text node. Result rows start below the 72px header.
+// The query itself is also a text node (in the search field, above y = 72); the grid starts below it.
 const resultVisible = title => texts().some(n=>n.text===title && lord.getLayout(n.parent)[1]>=72);
 const snapshot = (name, extra={}) => {
   const data = {name,catalogs,stats:lord.stats(),total:lastPlan?.total,first:lastPlan?.first,
@@ -329,15 +309,7 @@ async function run() {
   click(appNode('App 0000'),2);await pause();click(word('Keep in Dock'));await pause();snapshot('dock-unpinned',{pinned:settings.get().dockPinned.includes('app:test-0000'),closed});
   control.setMode('drag');await pause();closed=false;node=appNode('App 0000');let [x,y]=lord.getLayout(node.parent);
   __lordEvent('down',node.parent,x+5,y+5,0);__lordEvent('move',node.parent,x+30,y+30,0);await pause();snapshot('drag',{closed});__lordEvent('up',node.parent,x+30,y+30,0);
-  control.setMode('classic');await pause();click(word('All apps'));await pause();snapshot('classic');
-  closed=false;click(appNode('App 0000'),2);await pause();click(word('Pin to Start'));await pause();snapshot('classic-pinned',{pinned:settings.get().startPinned.includes('test-0000'),closed});
-  settings.set({dockRecentApps:['app:test-0002','app:test-0001','app:test-0002']});click(word('Back'));await pause();snapshot('classic-home');
-  const power=[...records.values()].find(n=>alive(n) && lord.getLayout(n.id)[2]===40 && lord.getLayout(n.id)[3]===40);
-  click({parent:power.id});await pause();snapshot('power',{texts:texts().map(n=>n.text)});__lordKey(1,1,'Escape','','Escape',0);await pause();
-  click(word('All apps'));await pause();node=labelNodes()[0];__lordEvent('wheel',node.parent,200,200,-20);await pause();snapshot('classic-scrolled');
-  control.setMode('classic-search');await pause();const originalRun=searchEverything.run;let result;
-  searchEverything.run=it=>{result=it?.key;};await type('App 0007');__lordKey(28,1,'Enter','','Enter',0);snapshot('classic-search',{result});searchEverything.run=originalRun;
-  control.setMode('classic-install');await pause();await type('New Package');
+  control.setMode('install');await pause();await type('New Package');
   setPackageApps([{id:'new-package',name:'New Package',package:true,Icon,Component:()=>null}]);await pause();snapshot('installed',{found:currentApps.find(a=>a.id==='new-package')?.id || null,searchVisible:resultVisible('New Package')});
   setPackageApps([]);await pause();snapshot('removed',{found:currentApps.find(a=>a.id==='new-package')?.id || null,searchVisible:resultVisible('New Package')});
   snapshot('unicode',{greek:launcherView({query:'ΟΣ'}).first?.id,accent:launcherView({query:'árvore'}).total,turkish:launcherView({query:'İSTANBUL'}).first?.id});

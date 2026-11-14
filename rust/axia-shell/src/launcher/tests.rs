@@ -433,7 +433,7 @@ fn flow_state_restores_category_and_submits_only_real_results() {
 fn menu_handles_are_isolated_bounded_and_released() {
     let mut s = shell();
     let a = open_menu(&mut s, "flow");
-    let b = open_menu(&mut s, "classic");
+    let b = open_menu(&mut s, "flow");
     event(&mut s, a, json!(["query", "Files"]));
     assert_eq!(event(&mut s, b, json!(["noop"]))["query"], "");
     for _ in 0..14 {
@@ -455,46 +455,22 @@ fn menu_handles_are_isolated_bounded_and_released() {
 }
 
 #[test]
-fn classic_keyboard_uses_latest_service_results_and_clamps_selection() {
+fn only_the_flow_launcher_opens() {
     let mut s = shell();
-    let id = open_menu(&mut s, "classic");
-    let query = event(&mut s, id, json!(["query", "term"]));
-    assert_eq!(effect(&query, "search").unwrap()["query"], "term");
-    s.request(&json!({"op":"event","id":id,"action":["results"],"query":"term","sections":[{"id":"apps","items":[{"key":"app:terminal","title":"Terminal"},{"key":"app:files","title":"Files"}]}]})).unwrap();
-    assert_eq!(
-        event(&mut s, id, json!(["key", "ArrowDown"]))["handled"],
-        true
-    );
-    let enter = event(&mut s, id, json!(["key", "Enter"]));
-    assert_eq!(effect(&enter, "runSearch").unwrap()["key"], "app:files");
-    event(&mut s, id, json!(["query", "next"]));
-    s.request(&json!({"op":"event","id":id,"action":["results"],"query":"term","sections":[{"id":"apps","items":[{"key":"stale"}]}]})).unwrap();
-    assert!(effect(&event(&mut s, id, json!(["key", "Enter"])), "runSearch").is_none());
-    event(&mut s, id, json!(["key", "ArrowDown"]));
-    assert_eq!(s.menus[&id].selected, 0);
+    for mode in ["classic", "", "start"] {
+        assert!(s
+            .request(&json!({"op":"open","mode":mode,"context":context()}))
+            .is_err());
+    }
+    assert!(s.menus.is_empty());
 }
 
 #[test]
 fn popup_actions_work_after_the_material_closes_the_popup() {
     let mut s = shell();
-    let id = open_menu(&mut s, "classic");
+    let id = open_menu(&mut s, "flow");
     event(&mut s, id, json!(["context", "other"]));
     event(&mut s, id, json!(["closeContext"]));
-    let pinned = event(&mut s, id, json!(["pinStart", "other"]));
-    let patch = effect(&pinned, "settings").unwrap()["patch"].clone();
-    assert!(patch["startPinned"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("other")));
-    let mut ctx = context();
-    ctx["settings"] = patch;
-    s.request(&json!({"op":"context","id":id,"context":ctx}))
-        .unwrap();
-    let unpin = event(&mut s, id, json!(["pinStart", "other"]));
-    assert!(!effect(&unpin, "settings").unwrap()["patch"]["startPinned"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("other")));
     let dock=s.request(&json!({"op":"event","id":id,"action":["dock","other"],"dock":{"id":"app:other","pinned":false,"removable":true}})).unwrap();
     assert_eq!(effect(&dock, "dock").unwrap()["pin"], true);
     let locked=s.request(&json!({"op":"event","id":id,"action":["dock","files"],"dock":{"id":"app:files","pinned":true,"removable":false}})).unwrap();
@@ -502,18 +478,9 @@ fn popup_actions_work_after_the_material_closes_the_popup() {
 }
 
 #[test]
-fn classic_pins_recents_and_drag_are_catalog_validated() {
+fn drag_and_open_are_catalog_validated() {
     let mut s = shell();
-    let id = open_menu(&mut s, "classic");
-    let mut ctx = context();
-    ctx["settings"] = json!({"startPinned":["other","removed","files"],"dockRecentApps":["desktop:org.example.Editor","app:files","files","lpk:package","unknown"]});
-    s.request(&json!({"op":"context","id":id,"context":ctx}))
-        .unwrap();
-    assert_eq!(s.menus[&id].pins(&s), ["other", "files"]);
-    assert_eq!(
-        s.menus[&id].recent(&s),
-        ["desktop:org.example.Editor", "files", "package"]
-    );
+    let id = open_menu(&mut s, "flow");
     let left = s
         .request(&json!({"op":"event","id":id,"action":["drag","files"],"button":0,"x":12,"y":34}))
         .unwrap();
@@ -524,65 +491,29 @@ fn classic_pins_recents_and_drag_are_catalog_validated() {
         "drag"
     )
     .is_none());
+    assert!(effect(&event(&mut s, id, json!(["drag", "removed"])), "drag").is_none());
     let click = s
         .request(&json!({"op":"event","id":id,"action":["open","files"],"dragJustEnded":true}))
         .unwrap();
     assert!(effect(&click, "open").is_none());
+    assert!(effect(&event(&mut s, id, json!(["open", "removed"])), "open").is_none());
 }
 
 #[test]
-fn outside_cancel_and_power_follow_menu_mode_and_capabilities() {
+fn close_and_cancel_close_the_launcher() {
     let mut s = shell();
-    let id = open_menu(&mut s, "classic");
+    let id = open_menu(&mut s, "flow");
     let popup = s
         .request(&json!({"op":"event","id":id,"action":["close"],"insidePopup":true}))
         .unwrap();
     assert!(effect(&popup, "close").is_none());
     assert!(effect(&event(&mut s, id, json!(["close"])), "close").is_some());
     event(&mut s, id, json!(["query", "something"]));
-    event(&mut s, id, json!(["query", ""]));
-    assert!(effect(&event(&mut s, id, json!(["cancel", "something"])), "close").is_none());
-    assert!(effect(&event(&mut s, id, json!(["cancel", ""])), "close").is_some());
-    for facts in [
-        json!({"inside":true,"onBar":false}),
-        json!({"inside":false,"onBar":true}),
-    ] {
-        let mut args = facts;
-        args["op"] = json!("event");
-        args["id"] = json!(id);
-        args["action"] = json!(["outside"]);
-        assert!(effect(&s.request(&args).unwrap(), "close").is_none());
+    assert!(effect(&event(&mut s, id, json!(["cancel", "something"])), "close").is_some());
+    for gone in ["outside", "session", "powerMenu", "pinStart", "user"] {
+        assert!(event(&mut s, id, json!([gone, "quit"]))["effects"]
+            .as_array()
+            .unwrap()
+            .is_empty());
     }
-    assert!(effect(&event(&mut s, id, json!(["outside"])), "close").is_some());
-    assert!(effect(
-        &event(&mut s, id, json!(["session", "shutdown"])),
-        "session"
-    )
-    .is_none());
-    assert!(effect(&event(&mut s, id, json!(["session", "quit"])), "session").is_some());
-    let mut ctx = context();
-    ctx["session"] = json!({"managed":true,"canPower":true});
-    s.request(&json!({"op":"context","id":id,"context":ctx}))
-        .unwrap();
-    assert_eq!(
-        effect(&event(&mut s, id, json!(["session", "restart"])), "session").unwrap()["action"],
-        "restart"
-    );
-}
-
-#[test]
-fn classic_placement_matches_bars_multimonitor_and_rtl() {
-    let d = json!({"x":1920,"y":-200,"w":1280,"h":720});
-    let bottom = session::placement(&json!({"display":d,"position":"bottom","alignment":"center"}));
-    assert_eq!(
-        bottom,
-        json!({"left":2240.,"top":-188.,"width":640.,"height":648.})
-    );
-    let rtl =
-        session::placement(&json!({"display":d,"position":"top","alignment":"start","rtl":true}));
-    assert_eq!(rtl["left"], 2548.);
-    assert_eq!(rtl["top"], -140.);
-    let side = session::placement(&json!({"display":d,"position":"left"}));
-    assert_eq!(side["left"], 1988.);
-    assert_eq!(side["height"], 696.);
 }

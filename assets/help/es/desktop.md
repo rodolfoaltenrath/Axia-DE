@@ -39,14 +39,9 @@ El fondo se cambia en [Ajustes → Fondo de pantalla](settings:wallpaper). Las n
 
 ## Temas
 
-Axia DE trae dos temas: **Lord Flow** (barra de menú y Dock) y **Lord Classic** (barra de tareas y
-menú de inicio). Se cambian en vivo en [Ajustes → Apariencia](settings:appearance).
+El escritorio de Axia DE es **Lord Flow** (barra de menú y Dock). Un tema instalado de otro lado
+aparece en [Ajustes → Apariencia](settings:appearance), que lo cambia en vivo.
 
-En **Lord Classic**: el botón de inicio (o Super) abre el menú de inicio, donde escribir busca apps,
-ajustes y archivos; con clic derecho en una app la anclás a Inicio o a la barra de tareas. Los
-íconos de red y volumen abren los ajustes rápidos, y el reloj las notificaciones y un calendario.
-Arrastrá una ventana al borde izquierdo o derecho para que ocupe media pantalla, a una esquina para
-un cuarto o arriba para maximizarla; pasá el puntero por el botón de maximizar para ver más
-formas. Super+flechas hace lo mismo con el teclado, Super+Tab muestra todas las ventanas (vista de
-tareas), Super+A abre los ajustes rápidos, Super+N las notificaciones y Alt+F4 cierra la ventana
-del frente.
+¿Acostumbrado a las teclas de Linux o de Windows? Elegí **Linux / Windows** en
+[Ajustes → Teclado](settings:keyboard): Alt+Tab cambia de app, Alt+F4 cierra la ventana del frente,
+Super+flechas la acopla y Super+D muestra el escritorio ([Atajos de teclado](help:shortcuts)).

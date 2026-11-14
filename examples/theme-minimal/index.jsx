@@ -2,7 +2,7 @@
 // the bottom of the main display with an apps menu, one button per open window and a clock; a plain
 // window frame; menus from the SDK's item lists. Everything an app needs from a theme is here
 // (tokens, frames, both kinds of window, the work area, layers); the polish of the bundled themes
-// (themes/default, themes/classic) is not.
+// (themes/default) is not.
 //
 //   tokens.js   the colors (the contract with the apps) and this theme's own keys
 //   index.jsx   this file: work area, window frame, bar, menus, startShell
@@ -118,9 +118,9 @@ function Window({ t, win, focused }) {
         {Icon ? <Icon size={16} /> : null}
         <Text style={{ flex: 1, fontSize: 12, fontWeight: 500, textAlign: 'start', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
           color: focused ? t.text : t.textDim }}>{windowTitle(win)}</Text>
-        <FrameButton t={t} label={tr('shell.classic.minimize')} onClick={() => wm.minimize(win.id)} />
-        <FrameButton t={t} label={tr(win.maximized ? 'shell.classic.restore' : 'shell.classic.maximize')} onClick={() => wm.toggleMaximize(win.id)} />
-        <FrameButton t={t} label={tr('shell.classic.close')} onClick={() => wm.close(win.id)} />
+        <FrameButton t={t} label={tr('shell.window.minimize')} onClick={() => wm.minimize(win.id)} />
+        <FrameButton t={t} label={tr(win.maximized ? 'shell.window.previousSize' : 'shell.window.maximize')} onClick={() => wm.toggleMaximize(win.id)} />
+        <FrameButton t={t} label={tr('shell.window.close')} onClick={() => wm.close(win.id)} />
       </View>
       <View style={{ flex: 1 }}><AppHost id={win.id} focused={focused} /></View>
       {menu && <Menu t={t} at={menu} items={items} onClose={() => setMenu(null)} />}

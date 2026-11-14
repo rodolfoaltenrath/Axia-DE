@@ -16,8 +16,8 @@ covers the Dock goes to the menu.
 | Dock on the right: its menu over the window and the menu bar | The Control Center over the Dock on the right |
 | ![select list](layers-select-passwords-light.png) | ![select list, dark](layers-select-passwords-dark.png) |
 | Passwords → New item → Category: the list covers the form (the fields used to show through it) | Dark mode |
-| ![Lord Classic](layers-classic-left-menu.png) | ![RTL](layers-crown-dock-right-rtl.png) |
-| Lord Classic theme, taskbar on the left: its menu over the windows | Arabic, Dock on the right: the crown menu over the Dock |
+| ![RTL](layers-crown-dock-right-rtl.png) | |
+| Arabic, Dock on the right: the crown menu over the Dock | |
 
 ## Why it broke
 
@@ -37,14 +37,14 @@ in it, so an empty part of a layer lets the click through to whatever is below.
 | Layer | zIndex | What goes there |
 |---|---|---|
 | base | 0 | the theme's own tree: wallpaper, desktop widgets, windows (in tree order) |
-| `dock` | 10 | the Dock; the Lord Classic taskbar |
+| `dock` | 10 | the Dock (or a theme's taskbar) |
 | `menubar` | 20 | the top menu bar |
 | `floating` | 30 | fullscreen and picture-in-picture windows |
 | `overlay` | 40 | the app launcher, search |
-| `popover` | 50 | menus, context menus, the Dock's menus, the Control Center, select lists, popovers, the clipboard and emoji panels, the Lord Classic start menu, quick settings, notification panel and snap layouts |
+| `popover` | 50 | menus, context menus, the Dock's menus, the Control Center, select lists, popovers, the clipboard and emoji panels, snap layouts |
 | `modal` | 60 | shell sheets and confirmations (Empty Trash, Restart…, Shut Down…), the print dialog |
 | `notification` | 70 | notification banners, the clipboard toast, the remote desktop badge, the displays' Identify numbers (0.8.5, they never take clicks) |
-| `tooltip` | 80 | tooltips (the Dock's and the Lord Classic taskbar's names) |
+| `tooltip` | 80 | tooltips (the Dock's names) |
 | `drag` | 90 | drag images, the Dock's «poof» |
 | `system` | 100 | permission prompts, the keyring password prompt, Bluetooth pairing, «Keep this display?», the file chooser |
 | `input` | 110 | the input method's candidate window, the on-screen keyboard (`ON-SCREEN-KEYBOARD.md`) |

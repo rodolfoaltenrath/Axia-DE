@@ -6,10 +6,10 @@ keywords: teclas, atalhos, combinações, super, cmd
 ---
 # Atalhos de teclado
 
-❖ é a tecla Super, ⌃ Ctrl, ⌥ Alt e ⇧ Shift. [Ajustes → Teclado](settings:keyboard) lista os atalhos do
-tema em uso.
+❖ é a tecla Super, ⌃ Ctrl, ⌥ Alt e ⇧ Shift. [Ajustes → Teclado](settings:keyboard) lista os atalhos em
+uso e escolhe entre os do **macOS** (o padrão) e os do **Linux / Windows**.
 
-## Em todos os temas
+## Sempre
 
 | Atalho | O que faz |
 |---|---|
@@ -30,7 +30,7 @@ Segure o modificador e toque em Tab: uma faixa de ícones mostra o nome do app e
 recentes primeiro. Tab avança, ⇧Tab volta, Esc cancela e soltar o modificador alterna. Um toque rápido
 volta ao app anterior.
 
-## Lord Flow
+## Atalhos macOS (o padrão)
 
 | Atalho | O que faz |
 |---|---|
@@ -51,23 +51,24 @@ emulador de terminal, onde Ctrl+C é a interrupção), só para esse app. Por is
 dele: com um app Linux à frente a tela bloqueia com ❖⌃Q e a área de transferência abre com ❖⇧V. Em um
 app do Axia DE dentro da sessão ❖V também cola; ❖⇧V é a área de transferência.
 
-## Lord Classic
+## Atalhos Linux / Windows
+
+Com **Linux / Windows** escolhido em [Ajustes → Teclado](settings:keyboard), estes ficam no lugar dos
+do macOS:
 
 | Atalho | O que faz |
 |---|---|
-| ❖ sozinho | Menu Iniciar |
-| ⌥Tab · ⌥⇧Tab | Alternar entre apps |
-| ❖Tab | Visão geral ([Áreas de trabalho](help:desktops)) |
-| ❖⌃← ❖⌃→ | Anterior ou seguinte |
+| ⌥Tab · ⌥⇧Tab | Alternar entre apps (❖Tab também) |
+| ⌥\` · ⌥⇧\` | Próxima ou anterior janela do app |
+| ❖⌃← ❖⌃→ | Área de trabalho anterior ou seguinte |
 | ❖⌃D · ❖⌃F4 | Nova área de trabalho · fechar esta |
 | ❖←→↑↓ | Encaixar a janela |
+| ❖H | Minimizar a janela |
 | ⌥F4 | Fechar a janela |
 | ❖D | Mostrar a área de trabalho, e voltar |
 | ❖E · ❖I | Arquivos · Ajustes |
-| ❖R | Buscar |
-| ❖A · ❖N | Ajustes rápidos · notificações |
-| ❖1…9 | Abrir o app nessa posição da barra |
 | ❖⇧S | Captura de uma área |
+| ❖L | Bloquear a tela |
 | ⌃⇧Esc | Monitor |
 
 ## Nos apps
@@ -76,7 +77,7 @@ app do Axia DE dentro da sessão ❖V também cola; ❖⇧V é a área de transf
 
 | Atalho | O que faz |
 |---|---|
-| ❖N · ❖T · ❖W | Nova janela · nova aba · fechar (Lord Classic: ⌃N, ⌃T, ⌃W) |
+| ❖N · ❖T · ❖W | Nova janela · nova aba · fechar |
 | ❖F · ❖G | Buscar · próximo resultado |
 | ❖C · ❖X | Copiar · cortar |
 | ❖Z · ❖⇧Z | Desfazer · refazer |

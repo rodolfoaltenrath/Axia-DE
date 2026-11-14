@@ -105,8 +105,8 @@ export function dismissNotification(id, reason = 'closed') {
 
 export const useNotifications = () => useStore(notifications);
 
-// Where the banners go: 'top' (default: below a menu bar) or 'bottom' (above a taskbar, the Classic
-// theme). Always on the end side of the line.
+// Where the banners go: 'top' (default: below a menu bar) or 'bottom' (above a taskbar, for a theme
+// that has one). Always on the end side of the line.
 let placement = 'top';
 export function setBannerPlacement(p) { placement = p === 'bottom' ? 'bottom' : 'top'; }
 export const bannerPlacement = () => placement;

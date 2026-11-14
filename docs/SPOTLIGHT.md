@@ -97,9 +97,10 @@ the C compositor remain active parts of the DE.
 Extensions can still use `registerSpotlightSource(id, fn)`, returning a disposer.
 Provider callbacks are deferred until after the immediate input update; they should
 remain fast, since JavaScript callbacks still run on the UI thread. Built-in Help
-does not use such a callback. The Classic menu uses `searchEverything.prepare()` to
-acquire an explicit lease, passes it to `results(query, lease)` and calls
-`lease.close()` on unmount; its async results share the same Rust search core.
+does not use such a callback. A theme with its own search (the removed Lord Classic's start menu
+did) uses `searchEverything.prepare()` to acquire an explicit lease, passes it to
+`results(query, lease)` and calls `lease.close()` on unmount; its async results share the same Rust
+search core.
 
 After building the desktop and installing the locked frontend dependencies:
 

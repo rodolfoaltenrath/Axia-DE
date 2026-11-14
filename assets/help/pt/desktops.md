@@ -13,15 +13,14 @@ Você pode ter até nove.
 
 A visão geral mostra as janelas desta área de trabalho e, em cima, todas as áreas de trabalho.
 
-- **Lord Flow:** ⌃↑, ou Visão geral no menu Janela.
-- **Lord Classic:** ❖Tab, ou o botão ao lado da busca.
+- ⌃↑, ou Visão geral no menu Janela. Com os atalhos **Linux / Windows**: ❖Tab.
 
 Clique em uma janela para ir até ela e em uma área de trabalho para vê-la. O **+** adiciona uma, e o × de uma área
 de trabalho a fecha: as janelas passam para a seguinte. Arraste uma janela para uma área de trabalho para movê-la.
 
 ## Trocar de área de trabalho
 
-| | Lord Flow | Lord Classic |
+| | Atalhos macOS (o padrão) | Atalhos Linux / Windows |
 |---|---|---|
 | Anterior ou seguinte | ⌃← ⌃→ · ❖⌃← ❖⌃→ | ❖⌃← ❖⌃→ |
 | Nova área de trabalho | Na visão geral | ❖⌃D |

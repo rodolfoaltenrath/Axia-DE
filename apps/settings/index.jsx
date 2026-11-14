@@ -90,48 +90,39 @@ function ModeThumb({ mode, accent }) {
   );
 }
 
-// A small picture of a desktop style: a menu bar and a Dock ('default') or a centered taskbar
-// ('classic'). Drawn with views: our own sketch, no screenshots.
-function StyleThumb({ id, accent, dark }) {
+// A small picture of a desktop style: a menu bar and a Dock. Drawn with views: our own sketch,
+// no screenshots.
+function StyleThumb({ accent, dark }) {
   const glass = dark ? 'rgba(30,30,36,0.85)' : 'rgba(255,255,255,0.82)';
   const win = dark ? '#2c2c30' : '#ffffff';
-  const classic = id === 'classic';
   return (
     <View style={{ width: 132, height: 82, borderRadius: 7, overflow: 'hidden', direction: 'ltr',
       background: dark ? 'linear-gradient(160deg, #2b2d4a, #121218)' : 'linear-gradient(160deg, #cfe0ff, #eef1f7)' }}>
-      {classic ? null : <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 6, backgroundColor: glass }} />}
-      <View style={{ position: 'absolute', left: 22, top: classic ? 10 : 14, width: 86, height: 50, borderRadius: classic ? 3 : 5, backgroundColor: win,
+      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 6, backgroundColor: glass }} />
+      <View style={{ position: 'absolute', left: 22, top: 14, width: 86, height: 50, borderRadius: 5, backgroundColor: win,
         boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }}>
-        <View style={{ flexDirection: 'row', gap: 3, padding: 4, justifyContent: classic ? 'flex-end' : 'flex-start' }}>
-          {classic ? [0, 1, 2].map((i) => <View key={i} style={{ width: 5, height: 3, borderRadius: 1, backgroundColor: dark ? '#6a6a72' : '#b8b8c0' }} />)
-            : ['#ff5f57', '#febc2e', '#28c840'].map((c) => <View key={c} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: c }} />)}
+        <View style={{ flexDirection: 'row', gap: 3, padding: 4, justifyContent: 'flex-start' }}>
+          {['#ff5f57', '#febc2e', '#28c840'].map((c) => <View key={c} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: c }} />)}
         </View>
         <View style={{ marginLeft: 6, height: 4, borderRadius: 2, backgroundColor: accent, width: 30 }} />
       </View>
-      {classic ? (
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 11, backgroundColor: glass, flexDirection: 'row',
-          alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-          {[accent, '#8e8e93', '#8e8e93', '#8e8e93', '#8e8e93'].map((c, i) => <View key={i} style={{ width: 6, height: 6, borderRadius: 1.5, backgroundColor: c }} />)}
-        </View>
-      ) : (
-        <View style={{ position: 'absolute', left: 36, right: 36, bottom: 3, height: 9, borderRadius: 3, backgroundColor: glass, flexDirection: 'row',
-          alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-          {[0, 1, 2, 3].map((i) => <View key={i} style={{ width: 5, height: 5, borderRadius: 1.5, backgroundColor: i ? '#8e8e93' : accent }} />)}
-        </View>
-      )}
+      <View style={{ position: 'absolute', left: 36, right: 36, bottom: 3, height: 9, borderRadius: 3, backgroundColor: glass, flexDirection: 'row',
+        alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+        {[0, 1, 2, 3].map((i) => <View key={i} style={{ width: 5, height: 5, borderRadius: 1.5, backgroundColor: i ? '#8e8e93' : accent }} />)}
+      </View>
     </View>
   );
 }
 
-// Desktop style: every installed theme (Lord Flow and Lord Classic first; the login screen's is hidden),
-// switched live. The open app windows come back in the new one (sdk/index.js themes.use), Settings on
-// this page. Since 0.8.5 this is the only place to choose a theme (there is no separate Themes page).
+// Desktop style: every installed theme (Lord Flow first; the login screen's is hidden), switched
+// live. The open app windows come back in the new one (sdk/index.js themes.use), Settings on this
+// page. Shown only when there is a choice: Lord Flow is the desktop LordOS ships.
 function StylePicker() {
   const t = useTheme();
   const { t: tr } = useLocale();
-  const order = (id) => (id === 'default' ? 0 : id === 'classic' ? 1 : 2);
+  const order = (id) => (id === 'default' ? 0 : 1);
   const list = [...themes.list()].sort((a, b) => order(a.id) - order(b.id) || a.name.localeCompare(b.name));
-  if (!list.length) return null;
+  if (list.length < 2) return null;
   const pick = (id) => {
     wm.open('settings', { args: { section: 'appearance' } });
     themes.use(id);
@@ -144,7 +135,7 @@ function StylePicker() {
           return (
             <View key={id} onClick={() => { if (!th.current) pick(id); }} style={{ alignItems: 'center', gap: 6 }}>
               <View style={{ padding: 2, borderRadius: 10, border: `2px solid ${th.current ? t.accent : 'transparent'}` }}>
-                <StyleThumb id={id} accent={t.accent} dark={t.mode === 'dark'} />
+                <StyleThumb accent={t.accent} dark={t.mode === 'dark'} />
               </View>
               <Text style={{ fontSize: typeScale.callout, fontWeight: th.current ? 600 : 400, color: t.text }}>{th.name}</Text>
             </View>
@@ -449,7 +440,7 @@ function ShortcutsList() {
 function Keyboard() {
   const { t: tr } = useLocale();
   const [s, set] = useSettings();
-  const profile = shortcutProfile(s.shortcutProfile, themes.current());
+  const profile = shortcutProfile(s.shortcutProfile);
   const [sample, setSample] = useState('');
   const [adding, setAdding] = useState(false);
   const all = keyboard.list();

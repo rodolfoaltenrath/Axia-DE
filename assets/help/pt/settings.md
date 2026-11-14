@@ -12,7 +12,7 @@ Tudo o que se configura no Axia DE está nos Ajustes. O campo no alto busca entr
 | Seção | O que tem |
 |---|---|
 | [Geral](settings:general) | Este computador: nome, software e armazenamento |
-| [Aparência](settings:appearance) | Estilo da área de trabalho (Lord Flow ou Lord Classic), modo escuro ou claro, cor de destaque, transparências |
+| [Aparência](settings:appearance) | Estilo da área de trabalho (quando há outro tema instalado), modo escuro ou claro, cor de destaque, transparências |
 | [Fundo de tela](settings:wallpaper) | O fundo da área de trabalho |
 | [Telas](settings:displays) | Resolução, escala, disposição de várias telas, Luz noturna |
 | [Rede](settings:network) | Cabo, Wi-Fi e VPN (veja [Rede](help:network)) |

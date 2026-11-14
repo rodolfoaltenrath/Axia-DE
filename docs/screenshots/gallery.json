@@ -374,39 +374,6 @@
     }
   },
   {
-    "file": "docs/classic-theme-arabic.png",
-    "category": "desktop",
-    "theme": "dark",
-    "variant": "rtl",
-    "caption": {
-      "en": "Lord Classic theme in Arabic",
-      "es": "Tema clásico en árabe",
-      "pt": "Tema clássico em árabe"
-    }
-  },
-  {
-    "file": "docs/classic-theme-linux-app.png",
-    "category": "desktop",
-    "theme": "light",
-    "variant": "normal",
-    "caption": {
-      "en": "Linux app in the Lord Classic theme",
-      "es": "App de Linux con el tema Lord Classic",
-      "pt": "App Linux no tema Lord Classic"
-    }
-  },
-  {
-    "file": "docs/classic-theme-start-menu.png",
-    "category": "desktop",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Lord Classic theme start menu",
-      "es": "Menú de inicio del tema Lord Classic",
-      "pt": "Menu iniciar do tema Lord Classic"
-    }
-  },
-  {
     "file": "docs/clipboard-full-panel.png",
     "category": "desktop",
     "theme": "dark",
@@ -613,28 +580,6 @@
       "en": "Dock at the bottom",
       "es": "Dock abajo",
       "pt": "Dock embaixo"
-    }
-  },
-  {
-    "file": "docs/dock-classic-left-with-bar.png",
-    "category": "desktop",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Lord Classic left taskbar with top bar",
-      "es": "Barra de Lord Classic a la izquierda y barra superior",
-      "pt": "Barra do Lord Classic à esquerda com barra superior"
-    }
-  },
-  {
-    "file": "docs/dock-classic-left.png",
-    "category": "desktop",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Lord Classic taskbar on the left",
-      "es": "Barra de tareas de Lord Classic a la izquierda",
-      "pt": "Barra de tarefas do Lord Classic à esquerda"
     }
   },
   {
@@ -2288,17 +2233,6 @@
     }
   },
   {
-    "file": "docs/m3-classic-theme.png",
-    "category": "desktop",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Early Lord Classic theme",
-      "es": "Primer tema Lord Classic",
-      "pt": "Primeiro tema Lord Classic"
-    }
-  },
-  {
     "file": "docs/m3-control-center.png",
     "category": "desktop",
     "theme": "dark",
@@ -2648,17 +2582,6 @@
       "en": "Song now playing",
       "es": "Canción en reproducción",
       "pt": "Música tocando agora"
-    }
-  },
-  {
-    "file": "docs/notes-classic-theme.png",
-    "category": "apps",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Notes in the Lord Classic theme",
-      "es": "Notas con el tema Lord Classic",
-      "pt": "Notas no tema Lord Classic"
     }
   },
   {
@@ -7546,17 +7469,6 @@
     }
   },
   {
-    "file": "docs/classic-in-window-menus.png",
-    "category": "desktop",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Lord Classic: an app's own menus in a strip under its title bar",
-      "es": "Lord Classic: los menús de la app en una franja bajo la barra de título",
-      "pt": "Lord Classic: os menus do app numa faixa sob a barra de título"
-    }
-  },
-  {
     "file": "docs/crown-menu.png",
     "category": "desktop",
     "theme": "light",
@@ -7653,17 +7565,6 @@
       "en": "Firewall mode Deny silently: only what a rule allows can connect",
       "es": "Modo del cortafuegos Denegar en silencio: solo se conecta lo que una regla permite",
       "pt": "Modo do firewall Negar em silêncio: só conecta o que uma regra permite"
-    }
-  },
-  {
-    "file": "docs/settings-desktop-style.png",
-    "category": "settings",
-    "theme": "dark",
-    "variant": "normal",
-    "caption": {
-      "en": "Settings → Appearance → Desktop style: Lord Flow or Lord Classic",
-      "es": "Ajustes → Apariencia → Estilo de escritorio: Lord Flow o Lord Classic",
-      "pt": "Ajustes → Aparência → Estilo da área de trabalho: Lord Flow ou Lord Classic"
     }
   },
   {

@@ -38,14 +38,9 @@ podem ficar coladas na área de trabalho como post-its.
 
 ## Temas
 
-O Axia DE traz dois temas: **Lord Flow** (barra de menus e Dock) e **Lord Classic** (barra de
-tarefas e menu iniciar). Eles mudam na hora em [Ajustes → Aparência](settings:appearance).
+A área de trabalho do Axia DE é o **Lord Flow** (barra de menus e Dock). Um tema instalado de outra
+fonte aparece em [Ajustes → Aparência](settings:appearance), que muda para ele na hora.
 
-No **Lord Classic**: o botão iniciar (ou Super) abre o menu iniciar, onde digitar pesquisa apps,
-configurações e arquivos; com o botão direito em um app você o fixa em Iniciar ou na barra de
-tarefas. Os ícones de rede e volume abrem as configurações rápidas, e o relógio as notificações e um
-calendário. Arraste uma janela até a borda esquerda ou direita para ocupar meia tela, até um canto
-para um quarto ou até o alto para maximizá-la; passe o ponteiro pelo botão de maximizar para ver
-mais layouts. Super+setas faz o mesmo pelo teclado, Super+Tab mostra todas as janelas (visão de
-tarefas), Super+A abre as configurações rápidas, Super+N as notificações e Alt+F4 fecha a janela da
-frente.
+Acostumado às teclas do Linux ou do Windows? Escolha **Linux / Windows** em
+[Ajustes → Teclado](settings:keyboard): Alt+Tab alterna os apps, Alt+F4 fecha a janela da frente,
+Super+setas a encaixa e Super+D mostra a área de trabalho ([Atalhos de teclado](help:shortcuts)).

@@ -56,7 +56,7 @@ def main():
         assert path.stat().st_size == file['size']
         assert hashlib.sha256(path.read_bytes()).hexdigest() == file['sha256']
         assert not file['path'].startswith('themes/greeter/')
-    for name in ['default', 'classic']:
+    for name in ['default']:
         bundle = (REPO / f'themes/{name}/theme.bundle.js').read_text()
         assert 'pkg-install-file' not in bundle, 'Debian store bundled into desktop'
         assert 'install-run' not in bundle, 'OS installer bundled into desktop'
@@ -108,7 +108,7 @@ def main():
                 os.chown(home / '.config', 65534, 65534)
                 os.chown(config, 65534, 65534)
                 opts = {'user': 65534, 'group': 65534, 'extra_groups': []}
-            for theme in ['default', 'classic']:
+            for theme in ['default']:
                 # Exercise real app rendering through upstream's session restore:
                 # a shell-only startup misses Store/Settings integration errors.
                 saved = [{'id': f'app:{app}', 'f': {'x': 20, 'y': 30, 'w': 700, 'h': 500},
@@ -272,7 +272,6 @@ def main():
             assert 'banner integration: passed' in log, log
             assert 'menu integration: passed' in log, log
             assert 'dock parts integration: passed' in log, log
-            assert 'classic launcher integration: passed' in log, log
             for error in ['menu bar smoke:', 'title bar:', 'native launcher:', 'native tree:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
             # Real isolated app using the same Rust scheduler, driven by actual Wayland callbacks.

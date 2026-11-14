@@ -1986,7 +1986,7 @@ static int render_frame(Server *s) {
 
 /* Cambio de tema pedido desde JS (lord.themes.use): se descarta el contexto JS y el árbol. */
 /* Loads the first theme that passes the verified-code check (sec/codesig.c): the one asked for,
- * then the default and the classic theme next to it; if none can be loaded because the system code
+ * then the default theme next to it; if neither can be loaded because the system code
  * was modified, the built-in recovery screen (never a blank screen). The login screen goes straight
  * to the recovery screen. `used` gets the bundle that is running. 0 if something is on screen. */
 static int start_theme(const char *theme, int greeter, char *used, size_t n) {
@@ -2002,7 +2002,7 @@ static int start_theme(const char *theme, int greeter, char *used, size_t n) {
         snprintf(root, sizeof root, "%s", d);
         snprintf(tmp, sizeof tmp, "%s", root);
         snprintf(root, sizeof root, "%s", dirname(tmp));   /* .../themes */
-        static const char *const fallback[] = { "default", "classic" };
+        static const char *const fallback[] = { "default" };
         for (size_t i = 0; i < sizeof fallback / sizeof fallback[0]; i++) {
             char alt[sizeof ui.theme_request];
             if ((size_t)snprintf(alt, sizeof alt, "%.*s/%s/theme.bundle.js", (int)(sizeof alt - 32), root, fallback[i]) >= sizeof alt) continue;

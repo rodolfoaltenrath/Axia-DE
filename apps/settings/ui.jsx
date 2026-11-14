@@ -176,7 +176,7 @@ export function PopUp({ value, options, onChange, width = 190, disabled }) {
       {cur && cur[2] ? h(cur[2], { size: 16 }) : null}
       <Text style={{ flex: 1, fontSize: 12, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textAlign: 'start' }}>{cur ? cur[1] : ''}</Text>
       {t.menuHighlight === 'subtle'
-        // a drawn chevron (the themes with subtle menus, such as Classic)
+        // a drawn chevron (themes with subtle menus)
         ? <View style={{ width: 16, height: 18, alignItems: 'center', justifyContent: 'center' }}>
           <View style={{ width: 6, height: 6, marginTop: -3, borderRightWidth: 1.5, borderBottomWidth: 1.5, borderColor: t.textDim, transform: 'rotate(45deg)' }} />
         </View>

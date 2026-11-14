@@ -6,7 +6,7 @@
 //
 //   BASE                      the keys every theme shares
 //   useShortcuts({ grabs, table, onSuperTap, appsPaste })  a theme's own: its table, which fixed list
-//                             of keys axia-server keeps from apps ('flow' or 'classic',
+//                             of keys axia-server keeps from apps ('flow', 'macos' or 'linux',
 //                             rust/axia-shell/src/keygrab.rs), what ❖ pressed alone does and whether ❖V
 //                             belongs to the apps
 //   addShortcuts(entries)     a module's own (Screenshots, the Terminal's drop-down window);
@@ -33,7 +33,7 @@ import { wm } from './windows.js';
 import { switcherOpen, switcherKey, openSwitcher, cycleAppWindows, cancelSwitcher } from './appswitcher.jsx';
 import { useSettings } from './settings.js';
 import { shortcutProfile, profileEntry } from './shortcutprofile.js';
-import { flowDesktopKeys, classicDesktopKeys } from './desktops.js';
+import { flowDesktopKeys, linuxDesktopKeys } from './desktops.js';
 import { hideApp, hideOthers, toggleShowDesktop, appSettingsItem } from './appcontrol.js';
 
 const MOD_BITS = { Shift: 1, Alt: 2, Ctrl: 4, Meta: 8 };
@@ -119,7 +119,7 @@ const COMMON = [
 const COMMON_IDS = new Set(COMMON.map((e) => e.id));
 
 function activeEntries() {
-  const desktopKeys = currentProfile === 'macos' ? flowDesktopKeys : classicDesktopKeys;
+  const desktopKeys = currentProfile === 'macos' ? flowDesktopKeys : linuxDesktopKeys;
   return [
     ...added, ...COMMON,
     ...themeTable.filter((e) => !COMMON_IDS.has(e.id) && e.group !== 'desktops'),
@@ -149,7 +149,7 @@ function index() {
   return map;
 }
 
-// Is this combination the shell's right now? A menu shows another key for what the theme takes (Files in Lord Classic).
+// Is this combination the shell's right now? A menu shows another key for what the shell takes (Files with the Linux profile).
 export function shortcutTaken(combo) {
   lookup = lookup || index();
   return (lookup.get(parseCombo(combo)) || []).some((e) => !e.when || e.when());
@@ -197,7 +197,7 @@ function setGrabs(name) { if (typeof lord.wayland !== 'undefined') lord.wayland.
 // A theme's shortcuts. The table is read once: `run` should be stable or go through a ref.
 export function useShortcuts({ grabs = '', table = [], onSuperTap: tap = null, appsPaste: paste = false }) {
   const [prefs] = useSettings();
-  const profile = shortcutProfile(prefs.shortcutProfile, grabs.startsWith('classic') ? 'classic' : 'default');
+  const profile = shortcutProfile(prefs.shortcutProfile);
   const tapRef = useRef(tap);
   tapRef.current = tap;
   useEffect(() => {
@@ -219,7 +219,7 @@ export function useShortcuts({ grabs = '', table = [], onSuperTap: tap = null, a
   }, [grabs, profile, prefs.desktopArrows]);
 }
 
-// Runs a module's entry by its id (Lord Classic's ❖⇧S is Screenshots' area capture).
+// Runs a module's entry by its id (the Linux profile's ❖⇧S is Screenshots' area capture).
 export function runShortcut(id) { added.find((x) => x.id === id)?.run(); }
 
 export function addShortcuts(entries) {

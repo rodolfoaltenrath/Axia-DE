@@ -2,7 +2,7 @@
 // Down from a session").
 //
 // session.restart() / session.shutdown() open <PowerDialog>, which a theme renders in the «modal»
-// layer inside its ThemeProvider (so the sheet takes the theme's colors; default and classic do):
+// layer inside its ThemeProvider (so the sheet takes the theme's colors; Lord Flow does):
 // what will happen, a 60 s countdown that does it if nobody cancels, the apps still open and the
 // other users logged in. Fedora sessions ask logind asynchronously through the
 // Rust service and C D-Bus adapter. The host decides authorization, including other

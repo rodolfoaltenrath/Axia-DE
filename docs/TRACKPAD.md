@@ -168,7 +168,6 @@ on):
 
 - the theme chooses with `registerGestureActions({ up, down, left, right })`:
   - `default` theme: up opens the app launcher, down closes it;
-  - `classic` theme: the same with the start menu;
 - left and right switch desktops (`desktopSwipe`, [DESKTOPS.md](DESKTOPS.md)); swiping left brings the next one, and
   with only one desktop they switch windows;
 - four fingers up (with four-finger swipes on) opens the Overview;
@@ -399,7 +398,7 @@ The maximum is a frame that was being drawn on the CPU at that exact moment.
 7. **Pinch:**
    - the Monitor map, Photos, Chromium (page zoom);
    - a GTK 4 viewer, if there is one.
-8. **Three-finger swipe:** up opens the app launcher (default) or the start menu (classic); left and
+8. **Three-finger swipe:** up opens the app launcher; left and
    right switch windows.
 9. **Three-finger drag:** moves a window; swiping moves to 4 fingers.
 10. **Palms:** while typing in the Editor with the palm on the touchpad, the pointer doesn't move and

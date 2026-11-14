@@ -35,13 +35,9 @@ Change the wallpaper in [Settings → Wallpaper](settings:wallpaper). Notes from
 
 ## Themes
 
-Axia DE ships two themes: **Lord Flow** (menu bar and Dock) and **Lord Classic** (taskbar and start
-menu). Switch them live in [Settings → Appearance](settings:appearance).
+Axia DE's desktop is **Lord Flow** (menu bar and Dock). A theme installed from elsewhere shows up in
+[Settings → Appearance](settings:appearance), which switches to it live.
 
-In **Lord Classic**: the start button (or Super) opens the start menu, where typing searches apps,
-settings and files; right click an app there to pin it to Start or to the taskbar. The network and
-volume icons open quick settings, the clock opens the notifications and a calendar. Drag a window to
-the left or right edge to fill half the screen, to a corner for a quarter, or to the top to maximize
-it; hover over the maximize button for more layouts. Super+arrows do the same from the keyboard,
-Super+Tab shows the [Overview](help:desktops), Super+A opens quick settings, Super+N the notifications
-and Alt+F4 closes the window in front.
+Used to the keys of Linux or Windows desktops? Choose **Linux / Windows** in
+[Settings → Keyboard](settings:keyboard): Alt+Tab switches apps, Alt+F4 closes the window in front,
+Super+arrows snap it and Super+D shows the desktop ([Keyboard shortcuts](help:shortcuts)).

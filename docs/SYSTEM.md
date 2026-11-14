@@ -707,7 +707,7 @@ running, and so does its JS.
 
 `registerStatusItem(id, Component, order)` and `<StatusItems color />`: an optional registry so
 system apps can show something in the theme's bar, like the "menu extras" of popular desktop systems. The `default` theme
-(next to the privacy indicators) and `classic` (in the taskbar) draw it; a theme that does not draw
+draws it next to the privacy indicators; a theme that does not draw
 it simply doesn't show them.
 
 ### Session notifications (`sdk/notify.js`)

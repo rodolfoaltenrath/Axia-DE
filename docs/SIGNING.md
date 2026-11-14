@@ -171,7 +171,7 @@ development tree), lists the size and SHA-256 of every file LordOS runs as JavaS
 
 | File | What it is |
 |---|---|
-| `themes/<theme>/theme.bundle.js` | the shell, the SDK, the React runtime and **every native app** (they are bundled into each theme), for `default`, `classic` and `greeter` (the login screen) |
+| `themes/<theme>/theme.bundle.js` | the shell, the SDK, the React runtime and **every native app** (they are bundled into each theme), for `default` and `greeter` (the login screen) |
 | `assets/app-host.bundle.js` | React + SDK of isolated app processes (`axia-server --app <id>`) |
 | `assets/sysapps/<id>/app.js` | system apps that run as their own sandboxed process (Passwords; Mail, Calendar, Contacts and Reminders since 0.8.2; System Information's Sandbox Probe `sysprobe` in 0.8.5) |
 
@@ -237,8 +237,8 @@ development state: without a valid signature nothing is loaded.
 - The bundle is **not run**. The refusal is logged (`code: REFUSED themes/default/theme.bundle.js:
   SHA-256 differs from the manifest — this LordOS component was modified and was not loaded` in the
   session log or the journal) and remembered for the session.
-- **A theme:** at session start axia-server falls back to Lord Flow (`default`), then Lord Classic
-  (`classic`); on a theme switch it keeps the last theme that loaded (since 0.8.5, so two refused
+- **A theme:** at session start axia-server falls back to Lord Flow (`default`); on a theme switch it
+  keeps the last theme that loaded (since 0.8.5, so two refused
   switches in a row no longer leave the session without a theme). The desktop
   shows a notification: **"This LordOS component was modified and was not loaded"**, naming the file,
   with a Details button (About). The broken theme is not offered again in this session.

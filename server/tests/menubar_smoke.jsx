@@ -32,7 +32,6 @@ const press = (node) => {
   }
   globalThis.__lordNativeView();
 };
-let classicOn = false, setClassic = () => {};
 let dockParts = false, setDockParts = () => {};
 let menuRan = [], menuClosed = 0, showMenu = false, setMenuShown = () => {};
 let kbd = 0, ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
@@ -41,8 +40,7 @@ const drags = [];
 function Harness() {
   const [launcher, setShow] = useState(false);
   showLauncher = launcher; setLauncher = setShow;
-  const [menuOn, setMenuOn] = useState(false), [partsOn, setPartsOn] = useState(false), [classic, setClassicOn] = useState(false);
-  classicOn = classic; setClassic = setClassicOn;
+  const [menuOn, setMenuOn] = useState(false), [partsOn, setPartsOn] = useState(false);
   dockParts = partsOn; setDockParts = setPartsOn;
   showMenu = menuOn; setMenuShown = setMenuOn;
   useEffect(() => { setTimeout(() => run().catch((e) => { console.error(e); }), 150); }, []);
@@ -55,7 +53,6 @@ function Harness() {
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
         onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
     h(SpotlightPanel), h(NotificationBanner),
-    classicOn && h(RustLauncher, { mode: 'classic', t: theme, box: { left: 50, top: 60, width: 420, height: 560 }, onOpen: (id) => { opened.push(id); }, onClose: () => { closed++; }, isOnBar: () => false }),
     dockParts && h(NativeDockTip, { t: theme, label: 'Smoke tip', style: { position: 'absolute', left: 400, top: 300 } }),
     dockParts && h(NativeDockGhost, { t: theme, base: 54, removeLabel: 'Smoke remove cue', drag: { id: 'smoke-app', x: 600, y: 400, removing: true } }),
     showMenu && h(Menu, { x: 300, y: 200, onClose: () => { menuClosed++; }, items: [
@@ -147,17 +144,6 @@ async function run() {
   setDockParts(false);
   check(await until(() => !find('Smoke tip') && !find('Smoke remove cue')), 'and go away');
   console.log('dock parts integration: passed');
-  // the start menu of the classic theme: a search whose results come from JS, run with Enter
-  setClassic(true);
-  await sleep(600);
-  for (const ch of ['s', 'm', 'o', 'k', 'e']) { check(lord.nativeViews.key(ch, ch, 0) === true, 'the start menu field takes ' + ch); globalThis.__lordNativeView(); await sleep(80); }
-  check(await until(() => lines().some((l) => l.includes('Smoke App'))), 'the search lists the app');
-  closed = 0;
-  check(lord.nativeViews.key('ArrowDown', '', 0) === true, 'the field passes the arrows on');
-  check(lord.nativeViews.key('Enter', '', 0) === true, 'and Enter');
-  globalThis.__lordNativeView();
-  check(await until(() => closed >= 1), 'running a result closes the start menu');
-  console.log('classic launcher integration: passed');
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
 settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true, menuNativeView: true });

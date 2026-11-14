@@ -309,7 +309,6 @@ impl AxiaLauncher {
             "catalog" => Ok(self.catalog()),
             "categories" => Ok(json!({"categories":CATEGORIES})),
             "view" => self.view(args),
-            "placement" => Ok(session::placement(args)),
             "open" | "context" | "event" | "scroll" | "close" => self.menu_request(args),
             "window" => {
                 let want = string(args, "id").to_lowercase();

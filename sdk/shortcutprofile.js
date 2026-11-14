@@ -1,6 +1,7 @@
-// Keyboard conventions are independent of the visual theme.
-export function shortcutProfile(value, theme = 'default') {
-  return value === 'macos' || value === 'linux' ? value : theme === 'classic' ? 'linux' : 'macos';
+// Keyboard conventions are independent of the visual theme: macOS-style keys unless the user
+// chose the Linux/Windows-style ones.
+export function shortcutProfile(value) {
+  return value === 'linux' ? 'linux' : 'macos';
 }
 
 const MAC = {

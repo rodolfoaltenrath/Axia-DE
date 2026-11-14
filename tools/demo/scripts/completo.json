@@ -914,58 +914,6 @@
   "min": 5
  },
  {
-  "chapter": "Temas",
-  "chapter_es": "Cambiá todo el escritorio en vivo",
-  "en": "Finally, themes. A theme is a React app, and you can switch it live without closing anything. This is the Lord Classic theme, with a taskbar and a start menu.",
-  "es": "Por último, los temas: un tema es una app de React y se cambia en vivo sin cerrar nada. Este es el tema Lord Classic, con barra de tareas y menú de inicio.",
-  "actions": [
-   [
-    "key",
-    "{f4}"
-   ],
-   [
-    "wait",
-    1
-   ],
-   [
-    "type",
-    "ajustes{ret}"
-   ],
-   [
-    "wait",
-    2
-   ],
-   [
-    "click",
-    300,
-    589
-   ],
-   [
-    "wait",
-    1.5
-   ],
-   [
-    "click",
-    1042,
-    290
-   ],
-   [
-    "wait",
-    4
-   ],
-   [
-    "click",
-    40,
-    778
-   ],
-   [
-    "wait",
-    3
-   ]
-  ],
-  "min": 9
- },
- {
   "chapter": "LordOS",
   "chapter_es": "Rápido, liviano y propio",
   "en": "That's LordOS: its own display server, its own engine and its own apps, built on Debian, and light enough for modest hardware. Thanks for watching.",

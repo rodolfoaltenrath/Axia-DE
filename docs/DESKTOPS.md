@@ -1,6 +1,6 @@
 # Desktops
 
-Several desktops, each with its own windows, in Lord Flow and Lord Classic. All displays switch together.
+Several desktops, each with its own windows. All displays switch together.
 There is always at least one, and at most nine. Most of this is SDK work: `axia-server` knows only that a
 window is *parked*.
 
@@ -10,7 +10,7 @@ window is *parked*.
 | `rust/axia-shell/src/winmodel` (`sdk/winmodel.js`) | The list of desktops (add, close, neighbors, arrows and swipes in RTL), the saved count and position, and the Overview's grid and strip. `winmodel/tests.rs` |
 | `sdk/windows.js` | The mirror of Rust's list for React: `windows`, `activeDesktop`, `desktopList`, `windowViews`; `wm.moveToDesktop`, `wm.raise`, `useWindows`, `useWindowHidden`, `onActiveDesktop` |
 | `sdk/desktops.js` | Switching, the keys, the saved count, the indicator, the animation |
-| `sdk/overview.jsx` | The Overview, the same in both themes (it replaced Lord Classic's task view) |
+| `sdk/overview.jsx` | The Overview, the SDK's own, for every theme |
 | `sdk/windowshell.jsx` | `display: none` on a hidden desktop, the window's place in the Overview |
 | `sdk/wayland.js`, `server/src/wl/wl.c` | The keyboard and the parked state of Linux windows |
 
@@ -57,8 +57,8 @@ A parked X11 window goes iconic and to the bottom of X's stack through the path 
 
 ## The Overview
 
-Ctrl+Up in Lord Flow, Super+Tab or the taskbar button in Lord Classic, the Window menu or the desktop's menu in
-both, and a four-finger swipe up. The windows of the desktop in a grid, drawn smaller by a transform on their
+Ctrl+Up (Super+Tab with the Linux / Windows shortcuts), the Window menu or the desktop's menu, and a
+four-finger swipe up. The windows of the desktop in a grid, drawn smaller by a transform on their
 real frame (axia-server paints a raster of it, so no app redraws; on the GPU path a Linux window's quad is drawn
 at the scaled box, with its hole opened there, so it stays live and can't overflow or reach the Dock), with
 minimized ones too: a minimized Linux window that has nothing to draw, such as an iconic X11 window, shows its app
@@ -83,7 +83,7 @@ showing. The last desktop can't be closed.
 
 ## Keys and gestures
 
-| | Lord Flow | Lord Classic |
+| | macOS shortcuts (default) | Linux / Windows shortcuts |
 |---|---|---|
 | Overview | ⌃↑ | ❖Tab |
 | App windows | ⌃↓ | |
@@ -133,9 +133,9 @@ over `remote.sock`, with a small Wayland client that logs keys, focus and `confi
 - A Help search and tour step survived switching away and back, with no keys reaching the hidden field.
 - Dock click and app switcher jumping desktops, Move to Desktop, session restore after a stop, a live theme switch.
 
-| ![Lord Flow](desktops-overview-flow.png) | ![Lord Classic](desktops-overview-classic.png) |
-|---|---|
-| The Overview in Lord Flow | The Overview in Lord Classic |
+![Lord Flow](desktops-overview-flow.png)
+
+The Overview in Lord Flow.
 
 ![Move to Desktop](desktops-move-menu.png)
 
