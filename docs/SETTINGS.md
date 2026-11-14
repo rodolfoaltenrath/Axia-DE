@@ -27,7 +27,7 @@ pairing, Sound with a Bluetooth headset, a Linux app's notification and Files' "
 
 | Page | Sidebar group | Code |
 |---|---|---|
-| Displays | with Appearance, Wallpaper, Desktop & Dock | `apps/settings/Displays.jsx`, `hw/display.c`, `hw/edid.c`, `hw/modes.c`, `rust/axia-codecs/src/night.rs`, `kms.c` |
+| Displays | with Appearance, Wallpaper, Desktop & Dock | `apps/settings/Displays.jsx`, `hw/display.c`, `rust/axia-codecs/src/edid.rs` (EDID and modes), `rust/axia-codecs/src/night.rs`, `kms.c` |
 | Bluetooth | with Network and Sound | `apps/settings/Bluetooth.jsx`, `hw/bt.c`, `hw/sysbus.c` |
 | Notifications | with Sound | `apps/settings/Notifications.jsx`, `sdk/notify.js`, `hw/notifyd.c` |
 | Date & Time | with Language & Region | `apps/settings/DateTime.jsx`, `hw/hw.c` (timedated) |
@@ -76,8 +76,8 @@ timer that sleeps until the next change (30 s steps only during the 30-minute fa
 ![Displays](settings-displays-dark.png)
 
 - **Outputs and modes.** `kms_outputs()` reads every connector with its modes and EDID blob.
-  `hw/edid.c` parses the base block (vendor, product, serial, name descriptor, size, native
-  timing) and `hw/modes.c` computes exact refresh rates (`clock·1000/(htotal·vtotal)`, interlace
+  `rust/axia-codecs/src/edid.rs` parses the base block (vendor, product, serial, name descriptor, size, native
+  timing) and computes exact refresh rates (`clock·1000/(htotal·vtotal)`, interlace
   and double-scan aware), the list of resolutions (largest first, highest rate per size) and the
   best mode for a size and rate (progressive before interlaced; ties go to the preferred mode).
 - **Applying.** `lord.display.apply(conn, w, h, mHz, rotation, scale)` changes that display's live

@@ -1,7 +1,7 @@
 /* edid.h — our own EDID 1.3/1.4 reader (the 128-byte base block a monitor sends).
  * Used to name displays in Settings → Displays and to store each display's configuration by
  * its identity (vendor, product and serial number) rather than by connector. See
- * docs/SETTINGS.md, "Displays". */
+ * docs/SETTINGS.md, "Displays". Implemented in rust/axia-codecs/src/edid.rs. */
 #ifndef LORD_HW_EDID_H
 #define LORD_HW_EDID_H
 

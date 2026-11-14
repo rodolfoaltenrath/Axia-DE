@@ -1,6 +1,6 @@
 /* modes.h — KMS mode helpers for Settings → Displays: exact refresh rate, picking a mode by
  * resolution and refresh, and the list of resolutions a connector offers. Pure functions over
- * struct drm_mode_modeinfo (kernel uapi), unit-tested in tests/modes_test.c. */
+ * struct drm_mode_modeinfo (kernel uapi), implemented in rust/axia-codecs/src/edid.rs. */
 #ifndef LORD_HW_MODES_H
 #define LORD_HW_MODES_H
 

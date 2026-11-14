@@ -1,7 +1,7 @@
 # System Information (0.8.5, src/sysreport, docs/BENCHMARK.md): the collector, shared by the
 # `axia-sysreport` and `axia-fetch` commands (one binary; build/axia-fetch is a link) and
 # (later) lord.sysinfo. Read-only, no root, libc only; `bench` starts the sandboxed axia-bench next to it.
-SYSREPORT_SRC := src/sysreport/sysreport.c src/sysreport/fetch.c src/sysreport/facts.c src/sysreport/sysreport_out.c src/hw/edid.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
+SYSREPORT_SRC := src/sysreport/sysreport.c src/sysreport/fetch.c src/sysreport/facts.c src/sysreport/sysreport_out.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
 SYSREPORT_HDR := $(wildcard src/sysreport/*.h) src/hw/edid.h src/hw/rpifw.h src/hw/jbuf.h src/sec/json.h
 all: build/axia-sysreport build/axia-fetch
 build/axia-fetch: build/axia-sysreport
