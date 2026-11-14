@@ -1,4 +1,4 @@
-/* fwlists_test.c — subscribed blocklists (src/fw/fwlists.c, docs/FIREWALL.md "Blocklists"):
+/* fwlists_test.c — subscribed blocklists (rust/axia-codecs/src/fwlists.rs, docs/FIREWALL.md "Blocklists"):
  * the raw parsers (hosts, domains, addresses) and their strictness, the set's lookups, the
  * compiled file's reader, the shared-address rule, mutation fuzzing and a measurement. */
 #define _POSIX_C_SOURCE 200809L

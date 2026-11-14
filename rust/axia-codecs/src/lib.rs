@@ -38,6 +38,11 @@ mod night;
 // The firewall's rule store and decider (server/src/fw/rules.h).
 #[cfg(not(feature = "secure-memory"))]
 mod fwrules;
+// Subscribed blocklists and names learned from DNS (fwlists.h, dnsmap.h).
+#[cfg(not(feature = "secure-memory"))]
+mod fwlists;
+#[cfg(not(feature = "secure-memory"))]
+mod dnsmap;
 mod compression;
 mod qr;
 mod tzif;

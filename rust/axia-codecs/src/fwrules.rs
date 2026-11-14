@@ -22,7 +22,7 @@ use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
 
 const FW_APP_MAX: usize = 128;
-const FW_NAME_MAX: usize = 254;
+pub(crate) const FW_NAME_MAX: usize = 254;
 const FW_MAX_RULES: usize = 65536;
 const FW_MAX_APPS: usize = 4096;
 
@@ -42,7 +42,7 @@ const FW_MODE_OFF: c_int = 2;
 const FW_MODE_DENY: c_int = 3;
 const FW_DST_ANY: c_int = 0;
 const FW_DST_DOMAIN: c_int = 1;
-const FW_DST_CIDR: c_int = 2;
+pub(crate) const FW_DST_CIDR: c_int = 2;
 const FW_DST_LAN: c_int = 3;
 const FW_DST_INTERNET: c_int = 4;
 
@@ -64,21 +64,21 @@ const FW_BY_LIST: c_int = 4;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FwRule {
-    id: u32,
-    app: [u8; FW_APP_MAX],
-    dir: c_int,
-    kind: c_int,
-    wildcard: c_int,
-    domain: [u8; FW_NAME_MAX],
-    fam: c_int,
-    addr: [u8; 16],
-    prefix: c_int,
-    port_lo: u16,
-    port_hi: u16,
-    proto: c_int,
-    action: c_int,
-    life: c_int,
-    when: i64,
+    pub(crate) id: u32,
+    pub(crate) app: [u8; FW_APP_MAX],
+    pub(crate) dir: c_int,
+    pub(crate) kind: c_int,
+    pub(crate) wildcard: c_int,
+    pub(crate) domain: [u8; FW_NAME_MAX],
+    pub(crate) fam: c_int,
+    pub(crate) addr: [u8; 16],
+    pub(crate) prefix: c_int,
+    pub(crate) port_lo: u16,
+    pub(crate) port_hi: u16,
+    pub(crate) proto: c_int,
+    pub(crate) action: c_int,
+    pub(crate) life: c_int,
+    pub(crate) when: i64,
 }
 
 #[repr(C)]
@@ -103,12 +103,12 @@ pub struct FwDecision {
     record: c_int,
 }
 
-fn zeroed_rule() -> FwRule {
+pub(crate) fn zeroed_rule() -> FwRule {
     // SAFETY: plain integers and byte arrays.
     unsafe { std::mem::zeroed() }
 }
 
-fn cs(b: &[u8]) -> &[u8] {
+pub(crate) fn cs(b: &[u8]) -> &[u8] {
     &b[..b.iter().position(|&c| c == 0).unwrap_or(b.len())]
 }
 
@@ -224,7 +224,7 @@ fn labels(d: &[u8]) -> i32 {
     1 + d.iter().filter(|&&c| c == b'.').count() as i32
 }
 
-fn is_mapped4(a: &[u8]) -> bool {
+pub(crate) fn is_mapped4(a: &[u8]) -> bool {
     a[..10].iter().all(|&b| b == 0) && a[10] == 0xff && a[11] == 0xff
 }
 
@@ -306,7 +306,7 @@ fn pton(fam: c_int, ip: &[u8]) -> Option<[u8; 16]> {
     (unsafe { inet_pton(af, c.as_ptr().cast(), a.as_mut_ptr().cast()) } == 1).then_some(a)
 }
 
-fn ntop(fam: c_int, a: &[u8; 16]) -> Option<Vec<u8>> {
+pub(crate) fn ntop(fam: c_int, a: &[u8; 16]) -> Option<Vec<u8>> {
     let mut buf = [0u8; 64];
     let af = if fam == 4 { libc::AF_INET } else { libc::AF_INET6 };
     // SAFETY: buf has 64 bytes.

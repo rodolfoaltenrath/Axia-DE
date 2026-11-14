@@ -1,6 +1,7 @@
 /* fwlists.h — subscribed blocklists (0.8.5, docs/FIREWALL.md, "Blocklists").
  *
- * Three pieces, all pure C with no network and no files of their own:
+ * Three pieces, with no network and no files of their own, implemented in
+ * rust/axia-codecs/src/fwlists.rs:
  *
  *   1. The raw parsers (fwl_parse_raw): what a list's server sent (a hosts file, one domain per
  *      line, or one address / network per line) → normalized lines. They run in axia-dl, the
