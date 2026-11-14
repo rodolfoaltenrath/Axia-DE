@@ -11,7 +11,7 @@ frame plan in Rust. All native app content receives the shared style through
 `AppHost`, including fullscreen/PiP and auxiliary app windows. Published app
 tokens carry it to isolated native apps as well. The default shell uses the
 same Rust plan for all server-decorated frames; app-owned title bars keep their
-own structure. Classic already uses standard right-hand window controls.
+own structure.
 
 Settings → Appearance → Traditional style in native applications restores the
 previous style live when disabled, preserving app state. `nativeAppearance` is

@@ -175,7 +175,7 @@ user's folders). It writes nothing and runs nothing.
 | `ssh_key` | an OpenSSH public key line | up to 16; ed25519, ECDSA, security keys or RSA ≥ 2048 bits; the blob's type must match; no `command=` or other options |
 | `remote_desktop` | `0` \| `1` | needs `user` |
 | `bluetooth` | `0` \| `1` | |
-| `theme` | `default` \| `classic` | |
+| `theme` | `default` | |
 | `mode` | `light` \| `dark` | |
 | `accent` | a LordOS accent name | `azul`, `violeta`, `rosa`, `naranja`, `verde`, `grafito`, … |
 | `wallpaper` | a wallpaper id | `[a-z0-9-]{1,48}` |

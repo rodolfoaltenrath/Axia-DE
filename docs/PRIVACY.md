@@ -392,7 +392,7 @@ its own section (see connections per app, locate them on the map) through
 ### Camera and microphone indicators
 
 A **green** dot in the menu bar while the camera is in use and an **orange** one for the
-microphone (`default` and `classic` themes); tapping it shows which app is using it. Sources: the
+microphone (Lord Flow); tapping it shows which app is using it. Sources: the
 broker (isolated apps) and, for Linux apps, the shared firewall transport `sdk/firewall.js` (via PipeWire, phase 2)
 through `globalThis.__lordos.monitorDevices`.
 

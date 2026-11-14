@@ -1,4 +1,4 @@
-// dock.js — Dock and taskbar: pinned apps, windows grouped by app, the right-click menu, dragging
+// dock.js — the Dock: pinned apps, windows grouped by app, the right-click menu, dragging
 // to add, reorder and remove, and the Trash. Every theme uses it; each one draws it its own way.
 //
 //   const entries = useDockEntries(['files', 'terminal'], { launcher: { Icon } })   // the theme's defaults
@@ -102,23 +102,21 @@ export const dock = {
   reset: () => settings.set({ dockPinned: null }),
 };
 
-// ---- Dock and taskbar preferences (Settings → Desktop & Dock) ----
+// ---- Dock preferences (Settings → Desktop & Dock) ----
 // Stored in settings.json. Left and right are physical sides of the screen, even with a
 // right-to-left language.
 export const DOCK_DEFAULTS = {
-  dockPosition: 'bottom',     // 'bottom' | 'left' | 'right' (Lord Flow theme)
+  dockPosition: 'bottom',     // 'bottom' | 'left' | 'right'
   dockSize: 54,               // px of each icon (36–80)
   dockMagnify: false,         // opt-in; hover and press feedback work at a fixed size
   dockMagnifySize: 86,        // px of the largest icon when magnified (more than dockSize)
   dockAutohide: false,        // hides and comes back when the edge is touched
   dockRecents: false,         // shows the most recently used apps that aren't pinned
-  taskbarPosition: 'bottom',  // 'bottom' | 'top' | 'left' | 'right' (Classic theme)
 };
 export function dockPrefs(s = settings.get()) {
   const p = { ...DOCK_DEFAULTS };
   for (const k of Object.keys(DOCK_DEFAULTS)) if (s[k] !== undefined && s[k] !== null) p[k] = s[k];
   if (!['bottom', 'left', 'right'].includes(p.dockPosition)) p.dockPosition = 'bottom';
-  if (!['bottom', 'top', 'left', 'right'].includes(p.taskbarPosition)) p.taskbarPosition = 'bottom';
   p.dockSize = Math.max(36, Math.min(80, Math.round(+p.dockSize) || 54));
   p.dockMagnifySize = Math.max(p.dockSize, Math.min(128, Math.round(+p.dockMagnifySize) || 86));
   return p;
@@ -374,7 +372,7 @@ export function trashMenu({ onEmpty }) {
   ];
 }
 
-// ---- dragging (shared by the Dock and the taskbar) ----
+// ---- dragging ----
 // The theme starts a press with beginDockDrag on mouse down (an icon of the Dock, the app launcher
 // or the start menu); past DRAG_START px it becomes a drag. The bar that accepts drops registers
 // a target: hit(x, y) → { index } (a position among the shown pinned items) | { trash: true } | null,

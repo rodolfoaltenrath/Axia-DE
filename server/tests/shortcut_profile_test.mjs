@@ -2,11 +2,10 @@ import assert from 'node:assert/strict';
 import { shortcutProfile, profileEntry } from '../../sdk/shortcutprofile.js';
 import { dockGlass } from '../../sdk/glass.js';
 const keys = (id, profile, original = []) => profileEntry({ id, keys: original }, profile).keys;
-assert.equal(shortcutProfile(null, 'default'), 'macos');
-assert.equal(shortcutProfile(null, 'classic'), 'linux');
-assert.equal(shortcutProfile('linux', 'default'), 'linux');
-assert.equal(shortcutProfile('macos', 'classic'), 'macos');
-assert.equal(shortcutProfile('invalid', 'classic'), 'linux');
+assert.equal(shortcutProfile(null), 'macos');
+assert.equal(shortcutProfile('linux'), 'linux');
+assert.equal(shortcutProfile('macos'), 'macos');
+assert.equal(shortcutProfile('invalid'), 'macos');
 assert.deepEqual(keys('switchApps', 'macos'), ['Meta+Tab', 'Meta+Shift+Tab']);
 assert.deepEqual(keys('switchApps', 'linux'), ['Meta+Tab', 'Meta+Shift+Tab', 'Alt+Tab', 'Alt+Shift+Tab']);
 for (const profile of ['macos', 'linux']) {

@@ -1,24 +1,5 @@
 use super::*;
 
-pub(super) const START_DEFAULT: [&str; 16] = [
-    "files",
-    "terminal",
-    "editor",
-    "calculator",
-    "notes",
-    "photos",
-    "player",
-    "mail",
-    "calendar",
-    "contacts",
-    "store",
-    "settings",
-    "monitor",
-    "clock",
-    "help",
-    "about",
-];
-
 pub(super) fn dock_id(a: &Value) -> Option<String> {
     let kind = string(a, "kind");
     let id = if kind == "linux" {
@@ -57,56 +38,13 @@ pub(super) fn dock_id(a: &Value) -> Option<String> {
     })
 }
 
-pub(super) fn placement(a: &Value) -> Value {
-    let d = &a["display"];
-    let (x, y, w, h) = (
-        number(d, "x", 0., -1e6, 1e6),
-        number(d, "y", 0., -1e6, 1e6),
-        number(d, "w", 1000., 1., 16384.),
-        number(d, "h", 700., 1., 16384.),
-    );
-    let pos = string(a, "position");
-    let vertical = pos == "left" || pos == "right";
-    let width = 640_f64.min((w - 24.).max(1.));
-    let height = 700_f64.min((h - if vertical { 0. } else { 48. } - 24.).max(1.));
-    let left = if vertical {
-        if pos == "left" {
-            x + 56. + 12.
-        } else {
-            x + w - 56. - 12. - width
-        }
-    } else if string(a, "alignment") == "start" {
-        if truthy(&a["rtl"]) {
-            x + w - 12. - width
-        } else {
-            x + 12.
-        }
-    } else {
-        x + ((w - width) / 2.).round()
-    };
-    let top = if pos == "top" {
-        y + 48. + 12.
-    } else if pos == "bottom" {
-        y + h - 48. - 12. - height
-    } else {
-        y + 12.
-    };
-    json!({"left":left,"top":top,"width":width,"height":height})
-}
-
 #[derive(Default)]
 pub(super) struct Menu {
     pub id: u64,
-    pub classic: bool,
     pub context: Value,
     pub query: String,
     pub category: String,
-    pub all: bool,
-    pub selected: usize,
     pub popup: Option<Value>,
-    pub power: Option<Value>,
-    pub hover: Option<String>,
-    pub results: Vec<Value>,
     pub scroll_generation: u64,
     pub offsets: HashMap<String, (f64, f64)>,
     pub effects: Vec<Value>,
@@ -115,52 +53,6 @@ pub(super) struct Menu {
 }
 
 impl Menu {
-    pub fn pins(&self, model: &AxiaLauncher) -> Vec<String> {
-        let defaults = json!(START_DEFAULT);
-        let raw = self.context["settings"]["startPinned"]
-            .as_array()
-            .unwrap_or_else(|| defaults.as_array().unwrap());
-        raw.iter()
-            .filter_map(|id| id.as_str())
-            .filter(|id| {
-                model
-                    .entries
-                    .iter()
-                    .any(|a| string(&a.metadata, "id") == *id)
-            })
-            .map(str::to_owned)
-            .collect()
-    }
-    pub fn recent(&self, model: &AxiaLauncher) -> Vec<String> {
-        let mut out = Vec::new();
-        if let Some(raw) = self.context["settings"]["dockRecentApps"].as_array() {
-            for id in raw.iter().filter_map(Value::as_str) {
-                if let Some(a) = model.entries.iter().find(|a| {
-                    string(&a.metadata, "dockId") == id || string(&a.metadata, "id") == id
-                }) {
-                    let key = string(&a.metadata, "id").to_owned();
-                    if !out.contains(&key) {
-                        out.push(key);
-                    }
-                    if out.len() == 6 {
-                        break;
-                    }
-                }
-            }
-        }
-        out
-    }
-    fn flat(&self) -> Vec<&Value> {
-        self.results
-            .iter()
-            .filter_map(|s| s["items"].as_array())
-            .flatten()
-            .collect()
-    }
-    fn search(&mut self) {
-        self.effects
-            .push(json!({"type":"search","query":self.query}));
-    }
     fn open(&mut self, model: &AxiaLauncher, id: &str) {
         if model
             .entries
@@ -169,14 +61,6 @@ impl Menu {
         {
             self.effects
                 .extend([json!({"type":"close"}), json!({"type":"open","id":id})]);
-        }
-    }
-    fn run(&mut self, key: &str) {
-        if self.flat().iter().any(|a| string(a, "key") == key) {
-            self.effects.extend([
-                json!({"type":"close"}),
-                json!({"type":"runSearch","key":key}),
-            ]);
         }
     }
     fn reset_scroll(&mut self) {
@@ -194,12 +78,7 @@ impl Menu {
                     return;
                 }
                 self.query = target.to_owned();
-                self.selected = 0;
-                self.results.clear();
                 self.reset_scroll();
-                if self.classic {
-                    self.search();
-                }
             }
             "category" => {
                 if target.is_empty() || CATEGORIES.contains(&target) {
@@ -207,24 +86,7 @@ impl Menu {
                     self.reset_scroll();
                 }
             }
-            "all" => {
-                self.all = true;
-                self.reset_scroll();
-            }
-            "home" => {
-                self.all = false;
-                self.reset_scroll();
-            }
-            "cancel" => {
-                if !self.classic || target.is_empty() {
-                    self.effects.push(json!({"type":"close"}));
-                }
-            }
-            "outside" => {
-                if self.classic && !truthy(&a["inside"]) && !truthy(&a["onBar"]) {
-                    self.effects.push(json!({"type":"close"}));
-                }
-            }
+            "cancel" => self.effects.push(json!({"type":"close"})),
             "close" => {
                 if !truthy(&a["insidePopup"]) {
                     self.effects.push(json!({"type":"close"}));
@@ -237,61 +99,13 @@ impl Menu {
                 }
             }
             "submit" => {
-                if self.classic {
-                    if !unicode::query(&self.query).is_empty() {
-                        let key = self
-                            .flat()
-                            .get(self.selected)
-                            .map(|v| string(v, "key").to_owned());
-                        if let Some(key) = key {
-                            self.run(&key);
-                        }
-                    }
-                } else if let Ok(v) =
+                if let Ok(v) =
                     model.view(&json!({"query":self.query,"category":self.category,"height":1}))
                 {
                     if let Some(i) = v["first"].as_u64() {
                         let id = string(&model.entries[i as usize].metadata, "id").to_owned();
                         self.open(model, &id);
                     }
-                }
-            }
-            "key" => {
-                if self.classic && !unicode::query(&self.query).is_empty() {
-                    let len = self.flat().len();
-                    match target {
-                        "ArrowDown" => {
-                            self.selected = (self.selected + 1).min(len.saturating_sub(1));
-                            self.handled = true;
-                        }
-                        "ArrowUp" => {
-                            self.selected = self.selected.saturating_sub(1);
-                            self.handled = true;
-                        }
-                        "Enter" => {
-                            let key = self
-                                .flat()
-                                .get(self.selected)
-                                .map(|v| string(v, "key").to_owned());
-                            if let Some(key) = key {
-                                self.run(&key);
-                            }
-                            self.handled = true;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            "select" => {
-                if let Some(i) = action[1].as_u64() {
-                    self.selected = (i as usize).min(self.flat().len().saturating_sub(1));
-                }
-            }
-            "hover" => {
-                if action[2] == true {
-                    self.hover = Some(target.to_owned());
-                } else if self.hover.as_deref() == Some(target) {
-                    self.hover = None;
                 }
             }
             "context" => {
@@ -308,9 +122,6 @@ impl Menu {
             "closeContext" => {
                 self.popup = None;
             }
-            "closePower" => {
-                self.power = None;
-            }
             "dock" => {
                 let d = &a["dock"];
                 if model
@@ -325,27 +136,6 @@ impl Menu {
                         .push(json!({"type":"dock","id":target,"pin":!truthy(&d["pinned"])}));
                 }
             }
-            "pinStart" => {
-                if model
-                    .entries
-                    .iter()
-                    .any(|app| string(&app.metadata, "id") == target)
-                {
-                    self.popup = None;
-                    let id = target;
-                    let on = !self.pins(model).iter().any(|x| x == id);
-                    let mut pins = self.context["settings"]["startPinned"]
-                        .as_array()
-                        .cloned()
-                        .unwrap_or_else(|| START_DEFAULT.iter().map(|s| json!(s)).collect());
-                    pins.retain(|v| v.as_str() != Some(id));
-                    if on {
-                        pins.push(json!(id));
-                    }
-                    self.effects
-                        .push(json!({"type":"settings","patch":{"startPinned":pins}}));
-                }
-            }
             "drag" => {
                 if a["button"].as_i64() == Some(0)
                     && model.entries.iter().any(|v| {
@@ -354,47 +144,6 @@ impl Menu {
                 {
                     self.effects
                         .push(json!({"type":"drag","id":target,"x":a["x"],"y":a["y"]}));
-                }
-            }
-            "powerMenu" => {
-                self.power = Some(
-                    json!({"x":number(a,"x",0.,-1e6,1e6)-200.,"y":number(a,"y",0.,-1e6,1e6)-12.}),
-                );
-            }
-            "session" => {
-                let allowed = match target {
-                    "quit" => true,
-                    "lock" | "switchUser" => truthy(&self.context["session"]["managed"]),
-                    "restart" | "shutdown" => truthy(&self.context["session"]["canPower"]),
-                    _ => false,
-                };
-                if allowed {
-                    self.effects.extend([
-                        json!({"type":"close"}),
-                        json!({"type":"session","action":target}),
-                    ]);
-                }
-            }
-            "user" => {
-                self.effects
-                    .extend([json!({"type":"close"}), json!({"type":"userSettings"})]);
-            }
-            "run" => self.run(target),
-            "searchRefresh" => {
-                if self.classic && !unicode::query(&self.query).is_empty() {
-                    self.search();
-                }
-            }
-            "results" => {
-                if string(a, "query") == self.query {
-                    if let Some(sections) = a["sections"].as_array().filter(|s| s.len() <= 16) {
-                        self.results = sections
-                            .iter()
-                            .filter(|s| s["items"].as_array().is_some_and(|i| i.len() <= 64))
-                            .cloned()
-                            .collect();
-                        self.selected = self.selected.min(self.flat().len().saturating_sub(1));
-                    }
                 }
             }
             _ => {}
@@ -409,21 +158,15 @@ impl AxiaLauncher {
             if self.menus.len() >= 16 {
                 return Err("too many launcher menus");
             }
-            let classic = match string(args, "mode") {
-                "flow" => false,
-                "classic" => true,
-                _ => return Err("invalid menu mode"),
-            };
+            if string(args, "mode") != "flow" {
+                return Err("invalid menu mode");
+            }
             self.sequence = self.sequence.wrapping_add(1);
             let mut menu = Menu {
                 id: self.sequence,
-                classic,
                 context: args["context"].clone(),
                 ..Menu::default()
             };
-            if classic {
-                menu.effects.push(json!({"type":"prepareSearch"}));
-            }
             let reply = menu.snapshot(self);
             self.menus.insert(menu.id, menu);
             return Ok(reply);
@@ -444,7 +187,7 @@ impl AxiaLauncher {
             }
             "scroll" => {
                 let key = string(args, "key");
-                if !["grid", "all", "pins", "search"].contains(&key) {
+                if key != "grid" {
                     self.menus.insert(id, menu);
                     return Err("invalid scroll region");
                 }

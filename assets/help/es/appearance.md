@@ -11,9 +11,8 @@ keywords: apariencia, modo oscuro, claro, color, acento, tema, fondo, transparen
 - **Transparencias:** las barras y los menús con desenfoque. Apagarlas ahorra trabajo en equipos
   lentos.
 - **Fondo de pantalla:** [Ajustes → Fondo de pantalla](settings:wallpaper).
-- **Estilo de escritorio:** [Ajustes → Apariencia](settings:appearance) cambia todo el escritorio
-  en vivo, sin cerrar las apps: **Lord Flow** (barra de menú arriba y Dock) o **Lord Classic** (barra
-  de tareas centrada con menú de inicio, ajustes rápidos y notificaciones). Las ventanas abiertas
-  vuelven en el estilo nuevo. Cualquier otro tema instalado también aparece acá.
+- **Estilo de escritorio:** el escritorio de Axia DE es **Lord Flow** (barra de menú arriba y Dock).
+  Cuando hay otro tema instalado, [Ajustes → Apariencia](settings:appearance) cambia todo el
+  escritorio a ese tema en vivo, sin cerrar las apps: las ventanas abiertas vuelven en el estilo nuevo.
 
 Todas las apps toman los colores del tema, incluidas las que instalás desde la Tienda.

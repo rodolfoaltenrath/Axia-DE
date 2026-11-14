@@ -1,18 +1,16 @@
-//! The launcher (the grid of apps, "flow" mode, and the start menu, "classic") as a native view: `shell:launcher`, mounted by the
+//! The launcher (the grid of apps of Lord Flow) as a native view: `shell:launcher`, mounted by the
 //! shell over the display's work area in place of the React widget of sdk/rustlauncher.jsx. The
 //! state, the layout and the decisions are the launcher's own (rust/axia-shell/src/launcher): this
 //! only asks it for the tree and sends it the events, as `lord.launcher.request` does for React,
 //! and turns its widget tree into what the host draws: app icons are `appIcon` nodes (the host has
-//! the catalog), the search field is a native input, the scroll regions come whole (the rows the
+//! the catalog), the search field is a native input, the scroll region comes whole (the rows the
 //! launcher plans for the first screens of pixels), a menu is a `"kind":"menu"` node.
 //!
-//! Facts: `args = {"mode":"flow"|"classic","info":{"fullName","user"},"session":{"managed","canPower"},
-//! "dock":{<app id>:{"id","pinned","removable"}}}` and the `settings` and `catalog` facts. Every
-//! effect of the launcher goes to the shell as `{"kind":"launcher","effect":{…}}` (close, open an
-//! app, start a drag to the Dock, pin, settings, session; sdk/nativelauncher.js runs them).
+//! Facts: `args = {"mode":"flow","dock":{<app id>:{"id","pinned","removable"}}}` and the `catalog`
+//! fact. Every effect of the launcher goes to the shell as `{"kind":"launcher","effect":{…}}`
+//! (close, open an app, start a drag to the Dock, pin; sdk/nativelauncher.js runs them).
 use super::NativeApp;
-use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use serde_json::{json, Value};
 
 /// Rows planned per scroll region: the launcher caps a window at this many pixels.
 const SCROLL_PX: f64 = 16384.;
@@ -24,14 +22,11 @@ pub struct LauncherView {
     /// The launcher's handle for this menu (0 while it is not open).
     id: u64,
     context: Value,
-    classic: bool,
     /// The launcher's last widget tree and what the host was given for it.
     raw: Value,
     last: Value,
     /// Effects that came with a reply and wait for the next answer to the host.
     pending: Vec<Value>,
-    /// Search results by key, for the icons of their rows.
-    results: HashMap<String, Value>,
     dock: Value,
 }
 
@@ -47,7 +42,7 @@ fn rtl(lang: &str) -> bool {
 
 impl LauncherView {
     pub fn with(call: Call) -> Self {
-        Self { call, id: 0, context: Value::Null, classic: false, raw: Value::Null, last: Value::Null, pending: Vec::new(), results: HashMap::new(), dock: Value::Null }
+        Self { call, id: 0, context: Value::Null, raw: Value::Null, last: Value::Null, pending: Vec::new(), dock: Value::Null }
     }
     fn context(input: &Value) -> Value {
         let mut theme = input["context"]["theme"].clone();
@@ -56,11 +51,8 @@ impl LauncherView {
             t.remove("accents");
         }
         json!({"theme":theme,
-            // the flow mode reads x, y, w and h; the classic one, left, top, width and height
-            "area":{"x":0,"y":0,"w":input["context"]["width"],"h":input["context"]["height"],
-                "left":0,"top":0,"width":input["context"]["width"],"height":input["context"]["height"]},
-            "settings":{"startPinned":input["settings"]["startPinned"],"dockRecentApps":input["settings"]["dockRecentApps"]},
-            "info":input["args"]["info"],"rtl":rtl(input["lang"].as_str().unwrap_or("")),"session":input["args"]["session"]})
+            "area":{"x":0,"y":0,"w":input["context"]["width"],"h":input["context"]["height"]},
+            "rtl":rtl(input["lang"].as_str().unwrap_or(""))})
     }
     fn take(&mut self, reply: Result<Value, &'static str>) {
         let Ok(reply) = reply else { return };
@@ -71,34 +63,14 @@ impl LauncherView {
             self.pending.push(json!({"kind":"launcher","effect":effect}));
         }
     }
-    /// `hover` carries its on/off in the action's third element, which the host does not send.
-    fn actions(events: &Value) -> Value {
-        let Some(map) = events.as_object() else { return Value::Null };
-        let mut out = Map::new();
-        for (name, action) in map {
-            let mut action = action.clone();
-            if action[0] == "hover" {
-                action = json!([if action[2] == true { "hoverOn" } else { "hoverOff" }, action[1]]);
-            }
-            out.insert(name.clone(), action);
-        }
-        Value::Object(out)
-    }
     fn convert(&mut self, node: &Value) -> Value {
         match node["kind"].as_str().unwrap_or("") {
             "icon" => json!({"kind":"appIcon","app":node["app"],"size":node["size"]}),
-            "resultIcon" => self.result_icon(node),
             "input" => {
-                let mut out = json!({"kind":"input","key":node["key"],"style":node["style"],"value":node["value"],
+                // no "change": the host then sends ["query", text], what the launcher takes
+                json!({"kind":"input","key":node["key"],"style":node["style"],"value":node["value"],
                     "placeholder":node["placeholder"],"autoFocus":node["autoFocus"],
-                    // no "change": the host then sends ["query", text], what the launcher takes
-                    "submit":["submit"],"cancel":["cancel",node["value"]]});
-                // the start menu moves through its results with the arrows and runs one with Enter
-                if self.classic {
-                    out["keys"] = json!(["ArrowDown", "ArrowUp", "Enter"]);
-                    out["onKey"] = json!(["key"]);
-                }
-                out
+                    "submit":["submit"],"cancel":["cancel",node["value"]]})
             }
             "scroll" => self.scroll(node),
             "menu" => {
@@ -107,18 +79,9 @@ impl LauncherView {
                 out["events"] = json!({"onDismiss":node["close"]});
                 out
             }
-            "text" => {
-                let mut out = node.clone();
-                if node["events"].is_object() {
-                    out["events"] = Self::actions(&node["events"]);
-                }
-                out
-            }
+            "text" => node.clone(),
             _ => {
                 let mut out = node.clone();
-                if node["events"].is_object() {
-                    out["events"] = Self::actions(&node["events"]);
-                }
                 if let Some(children) = node["children"].as_array() {
                     out["children"] = Value::Array(children.iter().map(|c| self.convert(c)).collect());
                 }
@@ -139,17 +102,6 @@ impl LauncherView {
         };
         out
     }
-    fn result_icon(&self, node: &Value) -> Value {
-        let size = node["size"].as_f64().unwrap_or(28.);
-        let item = self.results.get(node["result"].as_str().unwrap_or(""));
-        if let Some(app) = item.and_then(|i| i["app"].as_str()) {
-            return json!({"kind":"appIcon","app":app,"size":size});
-        }
-        let glyph = item.and_then(|i| i["glyph"].as_str()).unwrap_or("");
-        json!({"kind":"view","style":{"width":size,"height":size,"borderRadius":size*0.225,"alignItems":"center","justifyContent":"center",
-            "backgroundColor":"rgba(128,128,128,0.35)"},
-            "children":[{"kind":"text","label":glyph,"style":{"fontSize":size*0.5,"color":"#ffffff"}}]})
-    }
     fn dock_of(&self, app: &str) -> Value {
         self.dock[app].clone()
     }
@@ -158,20 +110,13 @@ impl LauncherView {
             return;
         }
         let mut args = json!({"op":"event","id":self.id,"action":action,"dock":Value::Null,"dragJustEnded":false,"insidePopup":false});
-        for k in ["x", "y", "button", "query", "sections"] {
+        for k in ["x", "y", "button"] {
             if !input[k].is_null() {
                 args[k] = input[k].clone();
             }
         }
         if let Some(app) = args["action"][1].as_str() {
             args["dock"] = self.dock_of(app);
-        }
-        if let Some(sections) = args["sections"].as_array() {
-            self.results = sections
-                .iter()
-                .flat_map(|s| s["items"].as_array().into_iter().flatten())
-                .filter_map(|i| Some((i["key"].as_str()?.to_owned(), i.clone())))
-                .collect();
         }
         let reply = (self.call)(&args);
         self.take(reply);
@@ -194,8 +139,7 @@ impl NativeApp for LauncherView {
                 let context = Self::context(input);
                 self.dock = input["args"]["dock"].clone();
                 if self.id == 0 {
-                    self.classic = input["args"]["mode"] == "classic";
-                    let reply = (self.call)(&json!({"op":"open","mode":if self.classic {"classic"} else {"flow"},"context":context}));
+                    let reply = (self.call)(&json!({"op":"open","mode":"flow","context":context}));
                     if let Ok(r) = &reply {
                         self.id = r["id"].as_u64().unwrap_or(0);
                     }
@@ -214,14 +158,6 @@ impl NativeApp for LauncherView {
                     self.id = 0;
                 }
                 json!({})
-            }
-            "hoverOn" => {
-                self.event(json!(["hover", input["key"], true]), input);
-                json!({"effects":std::mem::take(&mut self.pending)})
-            }
-            "hoverOff" => {
-                self.event(json!(["hover", input["key"], false]), input);
-                json!({"effects":std::mem::take(&mut self.pending)})
             }
             // the rows of a native menu light up by themselves; the launcher has no keyboard row
             "menuHover" | "menuSubHover" | "next" => json!({}),
@@ -253,7 +189,7 @@ mod tests {
     fn sync(width: f64) -> Value {
         json!({"cmd":"sync","lang":"en","settings":{},
             "context":{"width":width,"height":700.,"theme":{"text":"#ffffff","textDim":"#999999","accent":"#0a84ff","mode":"dark","wallpapers":[1,2]}},
-            "args":{"mode":"flow","info":{"fullName":"Ada Lovelace","user":"ada"},"session":{"managed":false,"canPower":false},"dock":{}}})
+            "args":{"mode":"flow","dock":{}}})
     }
     fn find<'a>(tree: &'a Value, test: &dyn Fn(&Value) -> bool) -> Option<&'a Value> {
         if test(tree) {
@@ -271,7 +207,7 @@ mod tests {
         assert!(find(tree, &|n| n["kind"] == "scroll").is_some());
         assert!(find(tree, &|n| n["kind"] == "scroll" && n["children"].as_array().is_some_and(|c| !c.is_empty())).is_some(),
             "a scroll region comes with its content");
-        assert!(find(tree, &|n| n["kind"] == "icon" || n["kind"] == "resultIcon").is_none(), "no node left for React to draw");
+        assert!(find(tree, &|n| n["kind"] == "icon").is_none(), "no node left for React to draw");
         let icon = find(tree, &|n| n["kind"] == "appIcon" && n["app"] == "calculator").expect("an app icon node");
         assert!(icon["size"].as_f64().unwrap() > 0.);
         let input = find(tree, &|n| n["kind"] == "input").expect("the search field");
@@ -286,17 +222,6 @@ mod tests {
         v.request(&sync(1000.));
         let reply = v.request(&sync(640.));
         assert!(reply["tree"].is_object(), "the launcher re-lays itself out in the new width");
-    }
-    #[test]
-    fn hover_actions_keep_their_on_off_through_the_host() {
-        let events = LauncherView::actions(&json!({"onMouseEnter":["hover","a",true],"onMouseLeave":["hover","a",false],"onClick":["open","a"]}));
-        assert_eq!(events["onMouseEnter"], json!(["hoverOn", "a"]));
-        assert_eq!(events["onMouseLeave"], json!(["hoverOff", "a"]));
-        assert_eq!(events["onClick"], json!(["open", "a"]));
-        let (mut v, _) = view();
-        v.request(&sync(1000.));
-        assert_eq!(v.request(&json!({"cmd":"hoverOn","key":"calculator"})), json!({"effects":[]}));
-        assert_eq!(v.request(&json!({"cmd":"hoverOff","key":"calculator"})), json!({"effects":[]}));
     }
     #[test]
     fn opening_an_app_is_an_effect_for_the_shell() {
@@ -340,43 +265,10 @@ mod tests {
     fn a_menu_node_dismisses_through_the_host() {
         let (mut v, _) = view();
         v.request(&sync(1000.));
-        v.request(&json!({"cmd":"powerMenu","x":300.,"y":300.}));
+        v.request(&json!({"cmd":"context","key":"notes","x":300.,"y":300.}));
         let tree = v.request(&sync(1000.))["tree"].clone();
-        let menu = find(&tree, &|n| n["kind"] == "menu").expect("the power menu");
+        let menu = find(&tree, &|n| n["kind"] == "menu").expect("the app's context menu");
         assert_eq!(menu["layer"], "popover");
-        assert_eq!(menu["events"]["onDismiss"], json!(["closePower"]));
-    }
-
-    fn classic_sync() -> Value {
-        let mut input = sync(400.);
-        input["args"]["mode"] = json!("classic");
-        input
-    }
-    #[test]
-    fn the_start_menu_opens_for_a_search_and_its_field_passes_the_arrows() {
-        let (mut v, _) = view();
-        let reply = v.request(&classic_sync());
-        assert!(reply["effects"].as_array().unwrap().iter().any(|e| e["effect"]["type"] == "prepareSearch"), "{reply}");
-        let input = find(&reply["tree"], &|n| n["kind"] == "input").expect("the search field");
-        assert_eq!(input["keys"], json!(["ArrowDown", "ArrowUp", "Enter"]));
-        assert_eq!(input["onKey"], json!(["key"]));
-        let flow = LauncherView::with(Box::new(|_| Err("unused")));
-        assert!(!flow.classic);
-    }
-    #[test]
-    fn typing_in_the_start_menu_asks_the_shell_to_search_and_its_results_come_back() {
-        let (mut v, _) = view();
-        v.request(&classic_sync());
-        let reply = v.request(&json!({"cmd":"query","key":"calc"}));
-        let search = reply["effects"].as_array().unwrap().iter().find(|e| e["effect"]["type"] == "search").expect("a search effect");
-        assert_eq!(search["effect"]["query"], "calc");
-        let sections = json!([{"id":"apps","title":"Apps","items":[{"key":"app:calculator","title":"Calculator","subtitle":"","glyph":"","hasIcon":true,"hasImage":false,"app":"calculator"}]}]);
-        v.request(&json!({"cmd":"results","query":"calc","sections":sections}));
-        let tree = v.request(&classic_sync())["tree"].clone();
-        let text = tree.to_string();
-        assert!(text.contains("Calculator"), "the result is listed");
-        assert!(find(&tree, &|n| n["kind"] == "appIcon" && n["app"] == "calculator" && n["size"].as_f64() == Some(28.)).is_some(), "with its icon: {text}");
-        let enter = v.request(&json!({"cmd":"key","key":"Enter"}));
-        assert!(enter["effects"].as_array().unwrap().iter().any(|e| e["effect"]["type"] == "runSearch"), "{enter}");
+        assert_eq!(menu["events"]["onDismiss"], json!(["closeContext"]));
     }
 }

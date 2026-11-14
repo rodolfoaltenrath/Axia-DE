@@ -160,7 +160,7 @@ the shell's confirmation and power sheets) their shape through tokens next to th
 (`sdk/theme.js`, `DEFAULT_TOKENS`). Apps don't read them: they use the controls, so every app takes
 the theme's look without changes, and isolated apps receive the same tokens through the broker.
 
-| Token | Lord Flow | Lord Classic | What it changes |
+| Token | Lord Flow | The other value a theme can choose | What it changes |
 |---|---|---|---|
 | `controlRadius` / `controlRadiusSmall` | 7 / 6 | 4 / 4 | `Button`, `TextInput`, `SearchField`, `Segmented`, `Stepper`, toolbar buttons, sidebar rows, pop-up buttons |
 | `groupRadius` | 10 | 6 | `GroupBox`, Settings' sections and page headers, dialogs (+2) |
@@ -171,66 +171,8 @@ the theme's look without changes, and isolated apps receive the same tokens thro
 | `buttonBorder` | `false` | `true` | a 1 px border around neutral buttons and pop-up buttons |
 | `popupBg` | `null` (by mode) | its own | the surface of menus, lists and tooltips |
 
-Control heights, spacing and the type scale stay the same in both themes, so layouts don't move
+Control heights, spacing and the type scale are the same in every theme, so layouts don't move
 when the user switches.
-
-## Lord Classic
-
-The second full appearance (0.8.3), for people used to a taskbar layout. Same apps, same SDK; only
-the frame, the shell and the tokens above change. Our own design: drawn icons (`themes/classic/glyphs.jsx`),
-Inter, the LordOS wallpapers and LordOS names, no assets or names from any other system.
-
-| | |
-|---|---|
-| ![desktop](classic/shell-desktop-dark.png) | ![start](classic/shell-start-dark.png) |
-| The desktop: the centered taskbar and a window frame | Start menu: search, pinned, recent, user and power |
-| ![search](classic/shell-search-dark.png) | ![quick](classic/shell-quick-light.png) |
-| Typing in the start menu searches like the system search | Quick settings, light mode |
-| ![notifications](classic/shell-notifications-dark.png) | ![task view](classic/shell-taskview-dark.png) |
-| Notifications and the calendar, from the clock | The Overview before Desktops (Super+Tab): live windows, smaller ([DESKTOPS.md](DESKTOPS.md)) |
-| ![layouts](classic/shell-snap-layouts-dark.png) | ![preview](classic/shell-snap-preview-dark.png) |
-| Snap layouts, from the maximize button | Dragging to the left edge: the preview |
-| ![rtl](classic/shell-rtl-dark.png) | ![switch](classic/shell-switch-dark.png) |
-| Arabic: the taskbar and the frame mirror | Settings → Appearance → Desktop style |
-| ![before](classic/shell-before-start-dark.png) | ![after](classic/shell-start-light.png) |
-| Before (0.8.2): the Lord Classic template | After: the start menu in light mode |
-| ![files rtl](classic/files-classic-rtl.png) | ![settings rtl](classic/settings-classic-rtl.png) |
-| Files in Arabic | Settings in Arabic: the selection bar on the leading edge |
-
-- **Window frame:** a 34 px title bar with the app icon and the title (12 px) at the start and
-  44 × 34 px minimize, maximize/restore and close buttons at the end (close turns red on hover);
-  corners of 8 px, square when maximized or snapped; the focused window has a stronger border and
-  shadow. In right-to-left languages the engine mirrors the row (buttons at the start).
-- **Menus inside the window (0.8.5):** Lord Classic has no menu bar on top, so an app that declares
-  menus (`useAppMenus`: Files, Text Editor, Notes, Terminal, PDF Viewer, Photos, Screenshots, Mail,
-  Passwords) shows them in a 26 px strip under its title bar (File, Edit, View, Go…, then Window and
-  Help, one menu open at a time; `MenuStrip` in `themes/classic/components/Window.jsx`). Apps without
-  menus of their own get no strip. Help holds About <app>; the Window menu is the same in both themes
-  (`windowMenuItems`, `sdk/windowmenu.js`: Minimize, Zoom, Fill, Center, Move & Resize, Move to
-  <display>, Bring All to Front and the open windows), and the app menu and Force Quit come from
-  `sdk/appcontrol.js` (Lord Flow shows them under the app's name and in the crown menu).
-- **Taskbar:** 48 px (56 px wide on the left or right), a translucent material with the theme's
-  blur (none with Transparency off). Buttons are 40 × 40 with a 6 px radius; the running app has a
-  short pill below its icon, longer and in the accent color when it is in front. Tooltips after
-  600 ms. The tray ends with a narrow "show desktop" strip.
-- **Panels** (start menu 640 × up to 700, quick settings 360, notifications 380): 10 px radius,
-  the panel material with a 1 px border, 28 px side insets in the start menu, a footer band
-  (`panelFoot`) for the user and power or the battery and Settings.
-- **Quick settings tiles:** 48 px high, accent fill when on, a chevron segment that opens the
-  matching Settings page.
-- **Shortcuts:** Super alone opens the start menu; Super+arrows snap the window in front; Super+Tab
-  is the Overview; Super+A quick settings; Super+N notifications; Alt+F4 closes the window in front.
-
-Every app in both themes, dark and light, is in [`docs/classic/`](classic/) (`<app>-classic-dark.png`,
-`<app>-classic-light.png`, `<app>-default-dark.png`, `<app>-default-light.png`; 28 apps), with
-right-to-left samples (`files`, `settings`, `calculator`, `notes`, `mail`: `<app>-<theme>-rtl.png`)
-and the shell (`shell-*.png`; `shell-before-*.png` is the 0.8.2 template).
-
-| Lord Classic | Lord Flow |
-|---|---|
-| ![](classic/settings-classic-light.png) | ![](classic/settings-default-light.png) |
-| ![](classic/mail-classic-dark.png) | ![](classic/mail-default-dark.png) |
-| ![](classic/calculator-classic-dark.png) | ![](classic/calculator-default-dark.png) |
 
 ## Scroll bars (0.8.3)
 
@@ -254,8 +196,8 @@ Every scrolling area uses the SDK's `ScrollView`, which draws an **overlay scrol
   The fade changes only the thumb's opacity with `lord.setStyle` (no React render per frame).
 - **Direction and themes:** the bar is on the end edge (`end`), so on the left in right-to-left
   languages. The theme styles it with the optional tokens `scrollThumb`, `scrollThumbHover`,
-  `scrollRadius` and `scrollThumbBorder` (a pill in Lord Flow; the Lord Classic theme's is squarer and
-  solid with a hairline). `ThemeProvider` passes the setting (`scrollBars`) and `reduceMotion` with
+  `scrollRadius` and `scrollThumbBorder` (a pill in Lord Flow; a theme can make it squarer and solid
+  with a hairline). `ThemeProvider` passes the setting (`scrollBars`) and `reduceMotion` with
   the tokens, so isolated apps follow them too.
 - The Terminal's history bar (drawn in C, `term_paint.c`) uses the same size and inset and shows
   only while you look at the history.

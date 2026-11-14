@@ -7,7 +7,6 @@ their own. `axia-server` runs the theme with QuickJS and paints it with its C en
 | Theme | Style |
 |---|---|
 | `default` | Lord Flow: menu bar, dock with magnification, app launcher, Control Center |
-| `classic` | Lord Classic: a centered taskbar, start menu with search, tray with quick settings and notifications, window snapping and the SDK's Overview (0.8.3) |
 
 ```sh
 npm install           # once (React + esbuild)
@@ -25,8 +24,8 @@ The full guide, for a React developer new to LordOS, is [`docs/THEMES-GUIDE.md`]
 a checklist); a small starting point is [`examples/theme-minimal/`](../examples/theme-minimal/).
 Note that a theme LordOS did not sign only loads on a development build (see the guide). In short:
 
-1. Copy `themes/classic` to `themes/mytheme` (`index.jsx` puts the pieces together; the frame,
-   taskbar and panels are in `components/`, the colors and shape tokens in `tokens.js`).
+1. Copy `examples/theme-minimal` (or `themes/default`) to `themes/mytheme` (`index.jsx` puts the
+   pieces together; the frame, bars and panels are components, the colors and shape tokens are tokens).
 2. Edit `theme.json` (the name and description Settings shows).
 3. Modify `index.jsx`. A theme must:
    - call `configureWindows({ apps, workArea })` with the free area for windows,
@@ -118,8 +117,7 @@ Globals: `addListener('pointermove' | 'pointerup' | 'pointerdown' | 'keydown' | 
 Three-finger swipes (or four, depending on Settings → Trackpad) belong to the desktop. The theme
 chooses what each direction does with the SDK's `registerGestureActions({ up, down, left, right })`,
 which returns the function to remove them (use it in a `useEffect`). Examples:
-- `default`: up opens the app launcher and down closes it;
-- `classic`: up opens the start menu and down closes it.
+- `default`: up opens the app launcher and down closes it.
 
 Without a theme action, left and right switch windows and up/down do nothing.
 Keyboard: `e.key`, `e.char` (depending on the layout), `e.code` (evdev), `e.shift`, `e.ctrl`, `e.alt`.

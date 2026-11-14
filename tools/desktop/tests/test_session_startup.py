@@ -24,10 +24,10 @@ class SessionStartupTests(unittest.TestCase):
             root = Path(tmp)
             config = root / '.config/axia'
             config.mkdir(parents=True)
-            bundle = root / 'themes/classic/theme.bundle.js'
+            bundle = root / 'themes/custom/theme.bundle.js'
             bundle.parent.mkdir(parents=True)
             bundle.write_text('// test theme')
-            (config / 'settings.json').write_text(json.dumps({'theme': 'classic'}))
+            (config / 'settings.json').write_text(json.dumps({'theme': 'custom'}))
             env = {'HOME': str(root), 'XDG_CONFIG_HOME': str(root / 'different-config')}
             self.assertEqual(session.theme_args(env, root), ['--theme', str(bundle)])
 
@@ -38,7 +38,8 @@ class SessionStartupTests(unittest.TestCase):
             config.mkdir(parents=True)
             env = {'HOME': tmp}
             self.assertEqual(session.theme_args(env, root), [])
-            for value in ['../other', '/tmp/theme', '', 'a' * 65, None, [], 'missing']:
+            # 'classic': the Lord Classic theme was removed; a session that still names it gets Lord Flow
+            for value in ['../other', '/tmp/theme', '', 'a' * 65, None, [], 'missing', 'classic']:
                 with self.subTest(theme=value):
                     (config / 'settings.json').write_text(json.dumps({'theme': value}))
                     self.assertEqual(session.theme_args(env, root), [])

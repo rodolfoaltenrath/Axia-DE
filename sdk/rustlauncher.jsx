@@ -1,24 +1,16 @@
-// Host adapter for Rust-owned menu state and widget trees. UI callbacks stay
-// here; catalog preparation, menu decisions, layouts and effects live in Rust.
+// Host adapter for the Rust-owned launcher (the grid of apps of Lord Flow): menu state, widget
+// trees, layouts and decisions live in Rust (rust/axia-shell/src/launcher); UI callbacks stay here.
 import { createElement as h, useEffect, useRef, useState } from 'react';
-import { View, Text, addListener, mainDisplay } from '@lordos/runtime';
+import { View, Text } from '@lordos/runtime';
 import { TextInput, ScrollView } from './components.jsx';
-import { SearchField } from './controls.jsx';
 import { useLauncherApps, launcherRequest, launcherApp, launchApp, refreshApps } from './apps.js';
-import { settings, useSettings } from './settings.js';
-import { locale, t, tOptional, direction } from './i18n.js';
+import { useSettings } from './settings.js';
+import { locale, t } from './i18n.js';
 import { useStore } from './store.js';
 import { Menu as DefaultMenu } from './menu.jsx';
 import { dock, dockIdOf, beginDockDrag, dockDragJustEnded } from './dock.js';
-import { searchEverything } from './search.js';
-import { session } from './index.js';
-import { wm } from './windows.js';
-import { useSystemInfo } from './system.js';
 import { NativeView } from './nativeview.js';
 import { NATIVE_LAUNCHER, launcherBridge } from './nativelauncher.js';
-
-export const launcherPlacement = (position, alignment, display = mainDisplay()) =>
-  launcherRequest({ op: 'placement', position, alignment, display, rtl: direction() === 'rtl' });
 
 const caption = (value) => value && typeof value === 'object' ? t(value.key, value.params) : String(value ?? '');
 const contains = (target, roots) => {
@@ -39,11 +31,9 @@ function Widget({ node, host }) {
     case 'view': return h(View, props, children());
     case 'text': return h(Text, props, caption(node.label));
     case 'icon': { const Icon = launcherApp(node.app)?.Icon; return Icon ? h(Icon, { size: node.size }) : null; }
-    case 'resultIcon': { const Icon = host.results.current.get(node.result)?.Icon; return Icon ? h(Icon, { size: node.size }) : null; }
-    case 'input': return h(node.search ? SearchField : TextInput, { ...props, value: node.value, autoFocus: node.autoFocus,
+    case 'input': return h(TextInput, { ...props, value: node.value, autoFocus: node.autoFocus,
       placeholder: caption(node.placeholder), onChange: (value) => host.send(['query', value]),
-      onKeyDown: (e) => host.send(['key', e.key]), onSubmit: () => host.send(['submit']),
-      onCancel: () => host.send(['cancel', node.value]) });
+      onSubmit: () => host.send(['submit']), onCancel: () => host.send(['cancel', node.value]) });
     case 'scroll': return h(ScrollView, props, ({ offset, height }) => {
       if (!host.live.current) return null;
       const reply = launcherRequest({ op: 'scroll', id: host.id.current, key: node.region, offset, ...(height ? { height } : {}) });
@@ -59,25 +49,19 @@ function Widget({ node, host }) {
   }
 }
 
-function ReactLauncher({ mode = 'flow', t: theme, area, box, onOpen = launchApp, onClose, isOnBar = () => false, Menu = DefaultMenu }) {
+function ReactLauncher({ t: theme, area, onOpen = launchApp, onClose, Menu = DefaultMenu }) {
   useState(refreshApps);                // apps installed since the last look show up at once
   const apps = useLauncherApps();
   const [prefs] = useSettings();
   const language = useStore(locale);
-  const version = useStore(searchEverything.version());
-  const info = useSystemInfo(60000);
-  const root = useRef(null), live = useRef(true), id = useRef(0), results = useRef(new Map()), popups = useRef(new Map()), latest = useRef(null), themeRef = useRef(theme);
-  const searchLease = useRef(null);
+  const root = useRef(null), live = useRef(true), id = useRef(0), popups = useRef(new Map()), latest = useRef(null), themeRef = useRef(theme);
   themeRef.current = theme;
   const { wallpapers, accents, ...tokens } = theme;
-  const context = { theme: tokens, area: box || area,
-    settings: { startPinned: prefs.startPinned, dockRecentApps: prefs.dockRecentApps }, info: { fullName: info.fullName, user: info.user }, rtl: direction() === 'rtl',
-    session: { managed: session.managed(), canPower: session.canPower() } };
-  latest.current = { context, onOpen, onClose, isOnBar };
+  const context = { theme: tokens, area };
+  latest.current = { context, onOpen, onClose };
   const [snapshot, setSnapshot] = useState(() => {
-    const reply = launcherRequest({ op: 'open', mode, context }); id.current = reply.id; return reply;
+    const reply = launcherRequest({ op: 'open', mode: 'flow', context }); id.current = reply.id; return reply;
   });
-  const initial = useRef(snapshot);
   const send = (action, data = {}) => {
     if (!live.current) return false;
     const app = launcherApp(action?.[1]);
@@ -93,55 +77,27 @@ function ReactLauncher({ mode = 'flow', t: theme, area, box, onOpen = launchApp,
       case 'drag': if (app) beginDockDrag({ id: dockIdOf(app), Icon: app.Icon, x: effect.x, y: effect.y,
         source: 'launcher', onStart: () => send(['dragStarted']) }); break;
       case 'dock': if (app) (effect.pin ? dock.pin(app) : dock.unpin(app)); break;
-      case 'settings': settings.set(effect.patch); break;
-      case 'userSettings': wm.open('settings', { args: { section: 'users' } }); break;
-      case 'session': ({ quit: session.quit, lock: session.lock, switchUser: session.switchUser,
-        restart: session.restart, shutdown: session.shutdown })[effect.action]?.(); break;
-      case 'prepareSearch': searchLease.current = searchEverything.prepare(); break;
-      case 'runSearch': searchEverything.run(results.current.get(effect.key)); break;
-      case 'search': {
-        const sections = searchEverything.results(effect.query, searchLease.current);
-        results.current = new Map(sections.flatMap((section) => section.items.map((it) => [it.key, it])));
-        send(['results'], { query: effect.query, sections: sections.map((section) => ({ id: section.id,
-          title: tOptional(`shell.spotlight.section.${section.id}`) || section.id,
-          items: section.items.map((it) => ({ key: it.key, title: it.title, subtitle: it.subtitle, glyph: it.glyph,
-            hasIcon: !!it.Icon, hasImage: !!it.image, app: it.preview?.kind === 'app' ? it.preview.app.id : null })) })) });
-        break;
-      }
     }
   };
   const accept = (reply) => { if (!live.current) return; setSnapshot(reply); for (const effect of reply.effects || []) perform(effect); };
-  useEffect(() => { for (const effect of initial.current.effects || []) perform(effect); }, []);
   useEffect(() => {
     accept(launcherRequest({ op: 'context', id: id.current, context: latest.current.context }));
-  }, [apps, prefs, language, theme, info, area?.x, area?.y, area?.w, area?.h, box?.left, box?.top, box?.width, box?.height]);
-  useEffect(() => { send(['searchRefresh']); }, [version, language, apps]);
-  useEffect(() => addListener('pointerdown', (e) => {
-    const roots = [root.current, ...[...popups.current.values()].map((ref) => ref.current)];
-    send(['outside'], { inside: contains(e.target, roots), onBar: latest.current.isOnBar(e.x, e.y) });
-  }), []);
-  useEffect(() => () => { live.current = false; searchLease.current?.close(); searchLease.current = null; launcherRequest({ op: 'close', id: id.current }); }, []);
-  return h(Widget, { node: snapshot.tree, host: { send, root, live, id, results, popups, Menu, theme: themeRef } });
+  }, [apps, prefs, language, theme, area?.x, area?.y, area?.w, area?.h]);
+  useEffect(() => () => { live.current = false; launcherRequest({ op: 'close', id: id.current }); }, []);
+  return h(Widget, { node: snapshot.tree, host: { send, root, live, id, popups, Menu, theme: themeRef } });
 }
 
-// "launcherNativeView": true in settings.json draws the launcher in Rust: the grid of apps (flow) and
-// the start menu (classic).
-function NativeLauncher({ mode = 'flow', area, box, onOpen = launchApp, onClose, isOnBar = () => false }) {
+// "launcherNativeView": true in settings.json draws the launcher in Rust, with no React.
+function NativeLauncher({ area, onOpen = launchApp, onClose }) {
   useState(refreshApps);                // apps installed since the last look show up at once
   const apps = useLauncherApps();
   useSettings();                        // the pins in the Dock live in the settings
-  const language = useStore(locale);
-  const version = useStore(searchEverything.version());
-  const info = useSystemInfo(60000);
-  const latest = useRef(null), mount = useRef(null), act = useRef(null), lease = useRef(null), results = useRef(new Map());
-  latest.current = { onOpen, onClose, isOnBar };
-  const at = box ? { x: box.left, y: box.top, w: box.width, h: box.height } : area;
-  const classic = mode === 'classic';
+  const latest = useRef(null), mount = useRef(null);
+  latest.current = { onOpen, onClose };
   // what the Dock says of each app, for its menu: its id there, if it is pinned and if it can leave
   const dockFacts = {};
   for (const app of apps) dockFacts[app.id] = { id: dockIdOf(app), pinned: dock.isPinned(app), removable: dock.canRemove(app) };
   launcherBridge.perform = (effect, ctx) => {
-    act.current = ctx.act;
     const { node } = ctx;
     const app = launcherApp(effect.id);
     switch (effect.type) {
@@ -152,32 +108,10 @@ function NativeLauncher({ mode = 'flow', area, box, onOpen = launchApp, onClose,
         beginDockDrag({ id: dockIdOf(app), Icon: app.Icon, x: ox + effect.x, y: oy + effect.y, source: 'launcher', onStart: () => ctx.act(['dragStarted']) });
       } break;
       case 'dock': if (app) (effect.pin ? dock.pin(app) : dock.unpin(app)); break;
-      case 'settings': settings.set(effect.patch); break;
-      case 'userSettings': wm.open('settings', { args: { section: 'users' } }); break;
-      case 'session': ({ quit: session.quit, lock: session.lock, switchUser: session.switchUser,
-        restart: session.restart, shutdown: session.shutdown })[effect.action]?.(); break;
-      case 'prepareSearch': lease.current = searchEverything.prepare(); break;
-      case 'runSearch': searchEverything.run(results.current.get(effect.key)); break;
-      case 'search': {
-        const sections = searchEverything.results(effect.query, lease.current);
-        results.current = new Map(sections.flatMap((section) => section.items.map((it) => [it.key, it])));
-        ctx.act(['results'], { query: effect.query, sections: sections.map((section) => ({ id: section.id,
-          title: tOptional(`shell.spotlight.section.${section.id}`) || section.id,
-          items: section.items.map((it) => ({ key: it.key, title: it.title, subtitle: it.subtitle, glyph: it.glyph,
-            hasIcon: !!it.Icon, hasImage: !!it.image, app: it.preview?.kind === 'app' ? it.preview.app.id : null })) })) });
-        break;
-      }
     }
   };
-  useEffect(() => { if (classic) act.current?.(['searchRefresh']); }, [version, language, apps]);
-  useEffect(() => () => { lease.current?.close(); lease.current = null; }, []);
-  // the start menu closes on a press outside it (not on the bar that opened it)
-  useEffect(() => classic ? addListener('pointerdown', (e) => {
-    if (!contains(e.target, [mount.current]) && !latest.current.isOnBar(e.x, e.y)) latest.current.onClose();
-  }) : undefined, [classic]);
-  return h(NativeView, { manifest: NATIVE_LAUNCHER, mountRef: mount,
-    args: { mode: classic ? 'classic' : 'flow', info: { fullName: info.fullName, user: info.user }, session: { managed: session.managed(), canPower: session.canPower() }, dock: dockFacts },
-    style: { position: 'absolute', left: at?.x ?? 0, top: at?.y ?? 0, width: at?.w ?? 0, height: at?.h ?? 0 } });
+  return h(NativeView, { manifest: NATIVE_LAUNCHER, mountRef: mount, args: { mode: 'flow', dock: dockFacts },
+    style: { position: 'absolute', left: area?.x ?? 0, top: area?.y ?? 0, width: area?.w ?? 0, height: area?.h ?? 0 } });
 }
 
 export function RustLauncher(props) {

@@ -30,7 +30,7 @@ export { ime, useIme } from './ime.js';
 export { wayland } from './wayland.js';
 export { useFileDrop } from './filedrag.js';
 export { useLauncherApps, launchApp, refreshApps, isLinuxApp, linuxAppFor, shortAppName, windowAppName, LetterIcon, iconFromFile, APP_CATEGORIES, appCategory } from './apps.js';
-export { RustLauncher, launcherPlacement } from './rustlauncher.jsx';
+export { RustLauncher } from './rustlauncher.jsx';
 import { windowIcon as windowIconOf, linuxAppFor as linuxAppOf, launchApp as launchAppOf } from './apps.js';
 import { ImeOverlay } from './ime.js';
 import { startOsk } from './osk.js';
@@ -80,7 +80,7 @@ export {
   registerBuiltinApp, isSystemApp, snapPreview, snapRect, snapZoneAt, snapEnabled, SNAP_ZONES, useWindowHidden, activeDesktop, desktopList,
 } from './windows.js';
 // Desktops and the Overview (docs/DESKTOPS.md)
-export { desktopName, nextDesktopBy, addDesktopAndShow, closeActiveDesktop, moveToDesktopItems, flowDesktopKeys, classicDesktopKeys, flowGrabs, ctrlArrowsOn, desktopSwipe, DesktopHud } from './desktops.js';
+export { desktopName, nextDesktopBy, addDesktopAndShow, closeActiveDesktop, moveToDesktopItems, flowDesktopKeys, linuxDesktopKeys, flowGrabs, ctrlArrowsOn, desktopSwipe, DesktopHud } from './desktops.js';
 import { startDesktops, desktopsForThemeSwitch, desktopAt, indexOfDesktop } from './desktops.js';
 export { overview, OverviewBackdrop, OverviewChrome, openOverview, closeOverview, toggleOverview, toggleAppWindows, overviewOpen } from './overview.jsx';
 export { codeStatus } from './codesig.js';

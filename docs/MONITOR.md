@@ -171,7 +171,7 @@ embedded directly, avoiding decompression when opening a window.
 ```sh
 cargo test --manifest-path rust/Cargo.toml --locked --offline
 make -C server test
-node tools/build-theme.mjs default classic
+node tools/build-theme.mjs default
 make -C server build/axia-server
 cargo test --manifest-path rust/Cargo.toml --package axia-shell \
   --locked --offline --test native_apps_runtime -- --ignored --nocapture

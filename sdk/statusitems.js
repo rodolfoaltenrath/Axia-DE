@@ -3,8 +3,8 @@
 //   const off = registerStatusItem('clock', ClockStatus, 10)   // ClockStatus({ color }) draws its own
 //   <StatusItems color={t.menuText} />                          // the theme shows them wherever it wants
 //
-// It is optional: a theme that does not draw <StatusItems /> simply doesn't show them. The default
-// and classic themes put them next to the privacy indicators. An item with nothing to show returns
+// It is optional: a theme that does not draw <StatusItems /> simply doesn't show them. Lord Flow
+// puts them next to the privacy indicators. An item with nothing to show returns
 // null.
 import { createElement as h } from 'react';
 import { View } from '@lordos/runtime';

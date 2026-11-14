@@ -18,8 +18,6 @@ a 1080p one at 100 % is sharp on both. Tested on VM 118 (`lordos-notes`) with tw
 | The Terminal at 150 %: same 105×24 grid, glyphs rasterized at 1.5× | Per-display rotation: the second display at 90° (portrait, 150 %) |
 | ![gpu](displays-gpu.png) | ![unplugged](displays-unplugged.png) |
 | GPU path (llvmpipe, `LORD_GPU=1`): two EGL surfaces on one context, GTK at 150 % | The second display unplugged: its window came back to the main one |
-| ![classic](displays-classic.png) | |
-| The Lord Classic theme: its bar on the main display, the second one is all work area | |
 
 The cursor plane is not in `screendump`; on the CPU path the cursor is drawn into the frame and
 shows in the captures.
@@ -163,7 +161,7 @@ Like macOS's "Arrange Displays", with more than one display (extend mode):
   a window never goes under a menu bar but can go up to the top of a display without one.
 - System dialogs (permission prompts, Search, clipboard, keyring, print dialog, the display
   confirmation) go on the main display (`mainBox()`); fullscreen SDK windows cover their display.
-- Both themes: wallpaper per display, menu bar (Lord Flow) or taskbar (Lord Classic) and Dock on the main
+- Lord Flow: wallpaper per display, menu bar and Dock on the main
   display, the app launcher and Control Center on the main display (or the menu bar's display).
 - **Window menu → Move to <display>** (0.8.5, both themes, `sdk/windowmenu.js`): one item for every
   other display; `wm.moveToDisplay(id, displayId)` (`sdk/windows.js`) keeps a snapped window in its zone

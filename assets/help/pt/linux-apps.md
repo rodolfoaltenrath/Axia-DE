@@ -28,5 +28,5 @@ um comando digitado.
   título e bordas do sistema»; no Firefox, menu ☰ → Mais ferramentas → Personalizar barra de
   ferramentas → desmarcar «Barra de título».
 - **GTK e GNOME** seguem o modo escuro ou claro e a cor de destaque do Axia DE ao vivo, e põem os
-  botões da janela à esquerda, como os semáforos (à direita no tema Lord Classic). Os apps GTK 3 usam o
+  botões da janela à esquerda, como os semáforos. Os apps GTK 3 usam o
   tema «Axia DE»; a cor de destaque deles é fixa.

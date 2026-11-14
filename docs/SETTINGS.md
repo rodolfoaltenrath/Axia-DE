@@ -338,7 +338,7 @@ it from LordOS would make dpkg ask about it on every package update (or drop the
 - **12/24 hours:** "like the region" (Language & Region), or forced; `formatTime` honors it
   everywhere.
 - **Menu bar clock:** weekday and date, weekday only or time only, with or without seconds
-  (`menuClock()`; the default theme uses it, the classic one honors the seconds).
+  (`menuClock()`; Lord Flow uses it).
 
 ## Default Apps
 
@@ -354,7 +354,7 @@ since freedesktop has no category for them).
   kept), so `xdg-open` and GNOME/KDE apps agree. LordOS apps are written as `lordos-<app>.desktop`.
   The terminal goes in `~/.config/xdg-terminals.list`.
 - **Screenshots** has no MIME type: the choice is settings.json `screenshotApp` (unset: Screenshots,
-  shown as automatic). Print Screen and ❖⇧3/4/5 (and Classic's ❖⇧S) open the chosen Linux app
+  shown as automatic). Print Screen and ❖⇧3/4/5 (and the Linux / Windows profile's ❖⇧S) open the chosen Linux app
   instead of capturing (`screenshotLauncher()`, `apps/screenshots/index.jsx`); a recording in
   progress is still stopped by ❖⇧5. axia-server offers no screen capture to Linux apps yet (no
   screencopy protocol nor Screenshot portal), so the page warns that they can't capture for now.
@@ -436,7 +436,8 @@ Not hardware pages, listed here so this document points to them:
 - **Appearance → Desktop style** lists every installed theme and is the only place to choose one; the
   separate Themes page is gone (an old link to it opens Appearance). The two LordOS themes are now
   called **Lord Flow** (menu bar and Dock) and **Lord Classic** (taskbar and start menu); the choice
-  is kept (`THEMES-GUIDE.md`).
+  is kept (`THEMES-GUIDE.md`). Lord Classic was removed later: Lord Flow is the only bundled theme, and
+  Desktop style shows only when another theme is installed.
 - **Privacy → Blocklists** and the **Deny silently** firewall mode, plus the optional network item in
   the menu bar (`FIREWALL.md`, "Blocklists" and "The modes"; `MONITOR.md`).
 

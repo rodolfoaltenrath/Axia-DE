@@ -7,9 +7,9 @@ keywords: teclas, atajos, combinaciones, super, cmd
 # Atajos de teclado
 
 ❖ es la tecla Super, ⌃ Ctrl, ⌥ Alt y ⇧ Mayús. [Ajustes → Teclado](settings:keyboard) lista los atajos
-del tema que estás usando.
+en uso y elige entre los de **macOS** (los de siempre) y los de **Linux / Windows**.
 
-## En todos los temas
+## Siempre
 
 | Atajo | Qué hace |
 |---|---|
@@ -30,7 +30,7 @@ Mantené el modificador y tocá Tab: una tira de íconos de apps muestra el nomb
 las más recientes primero. Tab avanza, ⇧Tab retrocede, Esc cancela y al soltar el modificador cambia.
 Una pulsación rápida vuelve a la app anterior.
 
-## Lord Flow
+## Atajos macOS (los de siempre)
 
 | Atajo | Qué hace |
 |---|---|
@@ -51,23 +51,24 @@ emulador de terminal, donde Ctrl+C es la interrupción), solo a esa app. Por eso
 propio Ctrl+L: con una app Linux al frente la pantalla se bloquea con ❖⌃Q y el portapapeles se abre con
 ❖⇧V. En una app de Axia DE dentro de la sesión ❖V también pega; ❖⇧V es el portapapeles.
 
-## Lord Classic
+## Atajos Linux / Windows
+
+Con **Linux / Windows** elegido en [Ajustes → Teclado](settings:keyboard), estos reemplazan a los de
+macOS:
 
 | Atajo | Qué hace |
 |---|---|
-| ❖ solo | Menú Inicio |
-| ⌥Tab · ⌥⇧Tab | Cambiar de app |
-| ❖Tab | Vista general ([Escritorios](help:desktops)) |
+| ⌥Tab · ⌥⇧Tab | Cambiar de app (❖Tab también) |
+| ⌥\` · ⌥⇧\` | Ventana siguiente o anterior de la app |
 | ❖⌃← ❖⌃→ | Escritorio anterior o siguiente |
 | ❖⌃D · ❖⌃F4 | Nuevo escritorio · cerrar este escritorio |
 | ❖←→↑↓ | Acoplar la ventana |
+| ❖H | Minimizar la ventana |
 | ⌥F4 | Cerrar la ventana |
 | ❖D | Mostrar el escritorio, y volver |
 | ❖E · ❖I | Archivos · Ajustes |
-| ❖R | Buscar |
-| ❖A · ❖N | Ajustes rápidos · notificaciones |
-| ❖1…9 | Abrir la app de ese lugar de la barra |
 | ❖⇧S | Captura de un área |
+| ❖L | Bloquear la pantalla |
 | ⌃⇧Esc | Monitor |
 
 ## En las apps
@@ -76,7 +77,7 @@ propio Ctrl+L: con una app Linux al frente la pantalla se bloquea con ❖⌃Q y 
 
 | Atajo | Qué hace |
 |---|---|
-| ❖N · ❖T · ❖W | Ventana nueva · pestaña nueva · cerrar (Lord Classic: ⌃N, ⌃T, ⌃W) |
+| ❖N · ❖T · ❖W | Ventana nueva · pestaña nueva · cerrar |
 | ❖F · ❖G | Buscar · resultado siguiente |
 | ❖C · ❖X | Copiar · cortar |
 | ❖Z · ❖⇧Z | Deshacer · rehacer |

@@ -8,7 +8,7 @@
 // itself), so a click on a menu over the Dock goes to the menu.
 //
 //   base (0)      the theme's own tree: wallpaper, desktop widgets, windows (tree order)
-//   dock          the Dock / the Classic taskbar
+//   dock          the Dock (or a theme's taskbar)
 //   menubar       the top menu bar
 //   floating      fullscreen and picture-in-picture windows (above the Dock and the bar)
 //   overlay       full-screen shell overlays: the app launcher, search

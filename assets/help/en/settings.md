@@ -12,7 +12,7 @@ Everything you can configure in Axia DE is in Settings. The field at the top sea
 | Section | What it has |
 |---|---|
 | [General](settings:general) | This computer: name, software and storage |
-| [Appearance](settings:appearance) | Desktop style (Lord Flow or Lord Classic), dark or light mode, accent color, transparency |
+| [Appearance](settings:appearance) | Desktop style (when another theme is installed), dark or light mode, accent color, transparency |
 | [Wallpaper](settings:wallpaper) | The desktop background |
 | [Displays](settings:displays) | Resolution, scale, arrangement of several displays, Night Light |
 | [Network](settings:network) | Wired, Wi-Fi and VPN (see [Network](help:network)) |

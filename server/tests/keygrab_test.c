@@ -25,7 +25,8 @@ int main(void) {
     CHECK(keygrab_match(KEY_LEFT, 0, KG_CTRL | KG_SHIFT) == KG_PASS);      /* selecting by word */
     CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_HOLD);
     CHECK(keygrab_is_remap('c', KG_META));
-    CHECK(keygrab_set("classic"));
+    CHECK(!keygrab_set("classic"));          /* the Classic theme and its profile are gone */
+    CHECK(keygrab_set("linux"));
     CHECK(keygrab_match(KEY_LEFT, 0, KG_META | KG_CTRL) == KG_TAKE);
     CHECK(keygrab_match(KEY_F4, 0, KG_META | KG_CTRL) == KG_TAKE);
     CHECK(keygrab_match(KEY_D, 'd', KG_META | KG_CTRL) == KG_TAKE);
@@ -35,7 +36,7 @@ int main(void) {
     CHECK(!keygrab_set(NULL));
     CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_HOLD);
 
-    /* Lord Classic */
+    /* the Linux profile (still set: the invalid names above changed nothing) */
     CHECK(keygrab_match(KEY_TAB, 0, KG_ALT | KG_SHIFT) == KG_HOLD);
     CHECK(keygrab_match(KEY_TAB, 0, KG_CTRL) == KG_PASS);                  /* Ctrl+Tab stays with the apps */
     CHECK(keygrab_match(KEY_F4, 0, KG_ALT) == KG_TAKE);
@@ -77,7 +78,7 @@ int main(void) {
     CHECK(keygrab_letter(KEY_A, NULL) == 'a');
 
     /* a letter key never matches through its code: on Dvorak the V position is K */
-    CHECK(keygrab_set("classic"));
+    CHECK(keygrab_set("linux"));
     CHECK(keygrab_match(KEY_COMMA, 'w', KG_META) == KG_PASS);
 
     /* Keyboard conventions can change without switching the visual theme. */
@@ -102,7 +103,7 @@ int main(void) {
     CHECK(keygrab_match(KEY_TAB, 0, KG_ALT) == KG_PASS);
     CHECK(keygrab_match(KEY_TAB, 0, KG_META) == KG_PASS);
     CHECK(keygrab_match(KEY_SPACE, 0, KG_META) == KG_PASS);
-    const char *profiles[] = { "macos", "macos-desktops", "linux", "flow", "flow-desktops", "classic" };
+    const char *profiles[] = { "macos", "macos-desktops", "linux", "flow", "flow-desktops" };
     for (unsigned i = 0; i < sizeof profiles / sizeof profiles[0]; i++) {
         CHECK(keygrab_set(profiles[i]));
         CHECK(keygrab_match(KEY_SPACE, 0, KG_META) == KG_TAKE);

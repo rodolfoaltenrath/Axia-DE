@@ -26,5 +26,5 @@ frame. For safety, Axia DE only opens installed apps (their `.desktop` files), n
   browser's own tab strip: in Chromium, ⋮ menu → Settings → Appearance → turn off "Use system title
   bar and borders"; in Firefox, ☰ menu → More tools → Customize toolbar → uncheck "Title Bar".
 - **GTK and GNOME** follow Axia DE's dark or light mode and accent color live, and put the window
-  buttons on the left, like the traffic lights (on the right with the Lord Classic theme). GTK 3 apps use
+  buttons on the left, like the traffic lights. GTK 3 apps use
   the "Axia DE" theme; their accent color is fixed.

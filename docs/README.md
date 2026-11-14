@@ -112,7 +112,6 @@ Website: [lordos.org](https://lordos.org) · Brand kit: [LORDOS-BRAND.md](LORDOS
 | [iso-final/](iso-final/) | Screenshots of the final ISO test |
 | [polish/](polish/) | Before and after screenshots of the visual polish pass |
 | [packs/](packs/) | Sample language pack and script test text |
-| [classic/](classic/) | Screenshots of the Lord Classic theme and the Lord Flow theme, light and dark |
 | [imager/](imager/) | Screenshots of LordOS Imager (native app and desktop app) |
 | [qa/](qa/) | Screenshots of the app-by-app QA pass (see [VM-SETUP.md](VM-SETUP.md)) |
 

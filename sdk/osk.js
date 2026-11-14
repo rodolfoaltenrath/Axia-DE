@@ -59,7 +59,7 @@ function fieldWindow() {
   return w && !w.minimized ? w : null;
 }
 
-// From the window's top to its content: the title bar, and Lord Classic's menu strip when it has one.
+// From the window's top to its content: the title bar, and the theme's menu strip when it has one.
 const contentTop = (w) => (w.args?.csd ? 0 : windowChrome().h + (appMenus.get()[w.id]?.length ? windowChrome().menu || 0 : 0));
 
 function boxFor(w) {

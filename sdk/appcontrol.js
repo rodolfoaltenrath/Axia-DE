@@ -10,7 +10,7 @@
 //   hideApp, hideOthers, toggleShowDesktop, appSettingsItem   what the keyboard shortcuts call too
 //
 // Lord Flow shows the app menu under the app's name in its menu bar and the rest in the crown menu;
-// Lord Classic offers About in each window's Help menu. About <app> and Force Quit are system windows
+// a theme without a menu bar can offer About in each window's Help menu. About <app> and Force Quit are system windows
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
 import { windows, wm, getApp, appMenus, onActiveDesktop, activeDesktop } from './windows.js';
 import { launcherIdOf, quitApp } from './dock.js';

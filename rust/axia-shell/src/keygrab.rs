@@ -16,7 +16,6 @@ enum Profile {
     Disabled,
     Flow,
     FlowDesktops,
-    Classic,
     Linux,
 }
 
@@ -26,7 +25,6 @@ impl Profile {
             b"" => Self::Disabled,
             b"flow" | b"macos" => Self::Flow,
             b"flow-desktops" | b"macos-desktops" => Self::FlowDesktops,
-            b"classic" => Self::Classic,
             b"linux" => Self::Linux,
             _ => return None,
         })
@@ -102,8 +100,7 @@ fn current() -> Profile {
     match PROFILE.load(Ordering::Relaxed) {
         1 => Profile::Flow,
         2 => Profile::FlowDesktops,
-        3 => Profile::Classic,
-        4 => Profile::Linux,
+        3 => Profile::Linux,
         _ => Profile::Disabled,
     }
 }

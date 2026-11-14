@@ -11,9 +11,8 @@ keywords: aparência, modo escuro, claro, cor, destaque, tema, fundo, transparê
 - **Transparências:** as barras e os menus com desfoque. Desligá-las poupa trabalho em computadores
   lentos.
 - **Fundo de tela:** [Ajustes → Fundo de tela](settings:wallpaper).
-- **Estilo da área de trabalho:** [Ajustes → Aparência](settings:appearance) muda a área de
-  trabalho inteira na hora, sem fechar os apps: **Lord Flow** (barra de menus no alto e Dock) ou
-  **Lord Classic** (barra de tarefas centralizada com menu iniciar, configurações rápidas e
-  notificações). As janelas abertas voltam no estilo novo. Qualquer outro tema instalado também aparece aqui.
+- **Estilo da área de trabalho:** a área de trabalho do Axia DE é o **Lord Flow** (barra de menus no
+  alto e Dock). Quando outro tema está instalado, [Ajustes → Aparência](settings:appearance) muda a
+  área de trabalho inteira para ele na hora, sem fechar os apps: as janelas abertas voltam no estilo novo.
 
 Todos os apps usam as cores do tema, inclusive os instalados pela Loja.

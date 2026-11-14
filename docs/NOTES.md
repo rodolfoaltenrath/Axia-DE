@@ -15,8 +15,6 @@ save themselves in the home folder.
 | The table of contents jumps to the heading; the image is part of the note | Emoji picker with search in Spanish or English (also `:name` while typing) |
 | ![desktop](notes-desktop-image.png) | ![pinned](notes-pinned.png) |
 | A note on the desktop, with an attachment, checkboxes and an image | Pinned to the front: it stays above the windows |
-| ![classic](notes-classic-theme.png) | |
-| Lord Classic theme: a note pinned in front of the Terminal | |
 
 ## Where they are stored
 
