@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Monitor and Store have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Monitor and Store have compiled
 Rust implementations. Files still has a compatibility mount controlled by
 `filesNativeView`; its native implementation and shared dialogs need to remain
 part of the final integration audit.
@@ -16,7 +16,7 @@ sidebar are Rust. The sidebar mounts native widgets. The main window, page
 overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
 
 Remaining apps (all remain in scope): calendar, contacts, disks,
-editor, mail, notes, passwords, photos, player, reminders,
+editor, mail, passwords, photos, player, reminders,
 screenshots, settings, sysinfo, sysprobe and terminal. Existing Rust
 models in some of these apps do not count as native-window completion.
 
@@ -70,6 +70,18 @@ media lease releases the camera and, for an active or pending recording, its
 microphone indicator before closing. Rust tests cover naming, mirroring, device
 switches and late results; service tests cover session ownership and release.
 A physical webcam and graphical checks remain part of the final desktop check.
+
+Notes now has only Rust sources, including its manifest and emoji catalog.
+Rust owns the complete native window and desktop cards, multiline Unicode editor,
+selection/undo/Markdown formatting, reader/outline/tasks, note search, file picker,
+attachments/duplicates, and the original Markdown/YAML persistence. The shared
+session publishes widget metadata at startup; it continues polling attachment
+workers and flushing saves while no window is open. Generic runtime services
+only carry clipboard, input-method, WM menus/events and printing I/O. Tests cover
+frozen original storage outputs, Unicode and long-document editing, attachment
+publication, multiple mounts, widget geometry, composition, native-host focus
+and saving, and session restoration before opening a window. Graphical and input
+device checks remain reserved for the final desktop validation.
 
 Before final completion, audit every app folder and registry entry, native host
 registration, remaining JSX/JS policy, complete feature coverage, lifecycle and

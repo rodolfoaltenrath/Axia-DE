@@ -27,6 +27,8 @@ mod passwords_model;
 #[path = "../../../apps/sysinfo/model.rs"]
 mod sysinfo_model;
 mod native_apps_host;
+#[path = "../../../apps/notes/mod.rs"]
+mod notes_app;
 mod native_view;
 #[path = "../../../apps/monitor/mod.rs"]
 mod monitor;

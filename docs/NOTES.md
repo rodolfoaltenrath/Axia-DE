@@ -16,6 +16,19 @@ save themselves in the home folder.
 | ![desktop](notes-desktop-image.png) | ![pinned](notes-pinned.png) |
 | A note on the desktop, with an attachment, checkboxes and an image | Pinned to the front: it stays above the windows |
 
+## Native implementation
+
+`apps/notes/` contains only `.rs` files. `manifest.rs` registers the compiled
+application, `mod.rs` owns its controller, `ui.rs` builds native widgets,
+`editor.rs` implements editing, `emoji.rs` owns the bilingual catalog, and
+`store.rs` owns the session and persistence. The shared Rust Markdown renderer
+provides the reading view. No per-app JavaScript or JSON manifest remains.
+
+Generic runtime adapters transport window menus, clipboard and input-method
+I/O. Rust draws the editor, composition/candidate popup, dialogs and sticky-note
+contents. `runtime/native_session_widgets.js` publishes Rust metadata to the
+existing desktop widget layer at session startup, without opening a Notes window.
+
 ## Where they are stored
 
 Each note is a folder in `~/Notes/<note>/`:
@@ -29,7 +42,7 @@ Each note is a folder in `~/Notes/<note>/`:
 ```
 
 Before 0.7.0 the folder was `~/Notas`. On the first run Notes moves it to `~/Notes` (a rename
-in the home folder through `lord.fs`). If both folders exist, Notes uses `~/Notes` and leaves
+in the home folder through Rust filesystem operations). If both folders exist, Notes uses `~/Notes` and leaves
 `~/Notas` untouched; Search also falls back to `~/Notas` while `~/Notes` doesn't exist yet. If
 there is no Trash, a deleted note goes to `~/Notes/.trash`.
 
@@ -53,10 +66,10 @@ updated: "2026-10-16T13:56:30.386Z"
 - [x] yerba
 ```
 
-- **Saving.** It is automatic, about 600 ms after the last change, with `fs.write` (atomic).
+- **Saving.** It is automatic, about 600 ms after the last change, with a temporary file, data sync and atomic rename.
   Pending changes are also written when the window closes.
 - **Title.** It is the first line with text, without the markdown marks.
-- **Deleting.** The note's folder goes to the Trash (`fs.trash`) and can be restored from Files.
+- **Deleting.** The note's folder goes to the Trash (the shared Rust Freedesktop Trash service) and can be restored from Files.
 
 ## Window
 
@@ -82,7 +95,7 @@ Each note marked «On the desktop» is a sticky note between the wallpaper and t
 - It is dragged by the bar and resized from the bottom-right corner.
 - The position, size and color are stored in the note, so after a reboot it comes back in its
   place (tested).
-- It is edited right there: it takes the text focus (the SDK's `takeTextFocus`), so keys don't
+- It is edited right there: it takes the text focus (the native host's text-input ownership), so keys don't
   go to the frontmost window. Esc goes back to reading.
 
 ## Editing
@@ -100,15 +113,14 @@ Each note marked «On the desktop» is a sticky note between the wallpaper and t
 | ❖C / ❖X / ❖V | copy / cut / paste. If what was copied is an image (from any app, Linux ones too), it is saved as `image-N.png` in the note and inserted |
 | `:` + name | emoji suggestions (`:cafe` → ☕); Enter or Tab picks |
 
-The editor is our own (`apps/notes/NoteEditor.jsx`): text in a monospace font with word wrap,
+The editor is our own (`apps/notes/editor.rs`): text in a monospace font with word wrap,
 mouse selection (double click: word; triple click: line), input methods (Japanese, Chinese,
 Korean) and highlighted headings.
 
-## Markdown (the SDK's `<Markdown>`)
+## Markdown
 
-`sdk/markdown.jsx` is reusable by any app: `<Markdown source base width onLink
-onToggleTask onHeadingRef emoji />`, plus `markdownHeadings(text)` to build a table of contents
-and `toggleTask(text, line)`.
+The shared Rust renderer in `apps/help/markdown.rs` supplies the reading view.
+Notes resolves local image paths and owns outline jumps and checkbox updates.
 
 - **Blocks:** headings, paragraphs, quotes (nested), lists with levels, numbered lists,
   checkboxes (`- [ ]` / `- [x]`, ticked with a click, which changes the `.md`), code blocks,
@@ -129,7 +141,7 @@ It is a generic layer, not just for notes:
 
 - An app registers a type with `registerWidgetType('note', Component)` and publishes its widgets
   with `setWidgets('note', [{ id, x, y, w, h, pinned }])`.
-- Both themes draw `<DesktopWidgets layer="below" />` between the wallpaper and the windows, and
+- The theme draws `<DesktopWidgets layer="below" />` between the wallpaper and the windows, and
   `<DesktopWidgets layer="above" />` on top, for the pinned ones.
 - Notes are loaded when the session starts (the app's module is evaluated with the theme), so
   the desktop ones appear without opening the app.
