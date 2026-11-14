@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createNativeAsync } from '../../runtime/native_async.js';
 import { mediaServices } from '../../runtime/native_media_services.js';
+import { settingsServices } from '../../runtime/native_settings_services.js';
 const calls=[],closed=[],listeners=new Map(),soundListeners=new Set();
 let allowRecording;
 const sdk={
@@ -49,4 +50,56 @@ bridge.open(1,methods);
 const discarded=bridge.start(1,'media.record',['recorder','/Music/discard.wav',{}]);await flush();
 bridge.take(1,[],[discarded]);allowRecording(11);await flush();assert.deepEqual(closed,[9,7,10,11]);assert.equal(listeners.size,0);
 bridge.close(1);bridge.close(2);
-console.log('native-media-test: permissions, session ownership, events, export and close passed');
+
+// Camera: the session belongs to the window; a recording (and its microphone
+// indicator) is stopped before the camera closes, also when the window goes.
+const cam={calls:[],closed:[],listeners:new Map(),thumbSubs:new Set(),allowCamera:null};
+const camSdk={
+  on(id,fn){cam.listeners.set(id,fn);return()=>cam.listeners.delete(id);},
+  close(id){cam.closed.push(id);},
+  cameras(){return [{device:'/dev/video0',name:'Desk'}];},
+  camera(...args){cam.calls.push(['camera',args]);return new Promise(resolve=>{cam.allowCamera=resolve;});},
+  view(...args){cam.calls.push(['view',args]);return true;},
+  photo(...args){cam.calls.push(['photo',args]);return true;},
+  cameraRecord(...args){cam.calls.push(['cameraRecord',args]);return Promise.resolve(true);},
+  thumb(...args){cam.calls.push(['thumb',args]);return 'thumb:'+args[0];},
+};
+const camBridge=createNativeAsync(mediaServices({media:camSdk,userDirs:()=>({pictures:'/Pictures'}),soundState:{get:()=>({}),subscribe:()=>()=>{}},
+  thumbRev:{subscribe(fn){cam.thumbSubs.add(fn);return()=>cam.thumbSubs.delete(fn);}},events:owner=>camBridge.events(owner)}));
+const camMethods=['media.cameras','media.camera','media.view','media.photo','media.cameraRecord','media.thumbs','media.thumb','media.close','media.events'];
+async function camInvoke(owner,method,args=[]){const token=camBridge.start(owner,method,args);await flush();return camBridge.take(owner,[token])[0]?.value;}
+camBridge.open(1,camMethods);camBridge.open(2,camMethods);
+assert.deepEqual(await camInvoke(1,'media.cameras'),[{device:'/dev/video0',name:'Desk'}]);
+const opening=camBridge.start(1,'media.camera',['camera','/dev/video0',{width:1280,height:720}]);await flush();
+cam.allowCamera(21);await flush();assert.equal(camBridge.take(1,[opening])[0].value,21);
+assert.equal(await camInvoke(2,'media.view',[21,{mirror:1}]),false,'another window cannot drive the viewfinder');
+assert.equal(await camInvoke(2,'media.photo',[21,'/x.jpg',true]),false);
+assert.equal(await camInvoke(2,'media.cameraRecord',[21,'camera','/x.mp4',{}]),false);
+assert.equal(await camInvoke(1,'media.view',[21,{mirror:1}]),true);
+assert.equal(await camInvoke(1,'media.photo',[21,'/Pictures/Camera/a.jpg',true]),true);
+assert.equal(await camInvoke(1,'media.thumb',['/Pictures/Camera/a.jpg',128]),'thumb:/Pictures/Camera/a.jpg');
+await camInvoke(1,'media.thumbs');assert.equal(cam.thumbSubs.size,1);
+cam.thumbSubs.forEach(fn=>fn());assert.deepEqual(await camInvoke(1,'media.events'),[{kind:'thumb'}]);
+assert.equal(await camInvoke(1,'media.cameraRecord',[21,'camera','/Pictures/Camera/v.mp4',{mic:true}]),true);
+cam.listeners.get(21)('video',{ok:true,path:'/Pictures/Camera/v.mp4'});
+assert.deepEqual(await camInvoke(1,'media.events'),[{kind:'media',id:21,type:'video',data:{ok:true,path:'/Pictures/Camera/v.mp4'}}]);
+assert.deepEqual(await camInvoke(2,'media.events'),[]);
+const before=cam.calls.length;
+camBridge.close(1);await flush();
+assert.deepEqual(cam.calls.slice(before),[['cameraRecord',[21,'camera',null]]],'closing a recording window stops its recording first');
+assert.deepEqual(cam.closed,[21]);assert.equal(cam.listeners.size,0);assert.equal(cam.thumbSubs.size,0);
+// a camera granted after its window closed is closed at once
+camBridge.open(1,camMethods);
+camBridge.start(1,'media.camera',['camera','/dev/video0',{}]);await flush();camBridge.close(1);
+cam.allowCamera(22);await flush();assert.deepEqual(cam.closed,[21,22]);assert.equal(cam.listeners.size,0);
+camBridge.close(2);
+
+// settings.patch: the shared settings transport writes the patch and returns the result
+const saved=[];let current={camera:{mirror:true}};
+const prefs=createNativeAsync(settingsServices({set(p){saved.push(p);current={...current,...p};},get:()=>current}));
+prefs.open(5,['settings.patch']);
+const patched=prefs.start(5,'settings.patch',[{camera:{mirror:false,device:'/dev/video1'}}]);await flush();
+assert.deepEqual(prefs.take(5,[patched])[0].value,{camera:{mirror:false,device:'/dev/video1'}});
+assert.deepEqual(saved,[{camera:{mirror:false,device:'/dev/video1'}}]);prefs.close(5);
+
+console.log('native-media-test: permissions, session ownership, events, export, camera, settings and close passed');

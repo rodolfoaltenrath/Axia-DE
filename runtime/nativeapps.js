@@ -15,12 +15,14 @@ import { documentServices } from './native_doc_services.js';
 import { scanServices } from './native_scan_services.js';
 import { fileServices } from './native_fs_services.js';
 import { mediaServices } from './native_media_services.js';
-import { media, userDirs } from '../sdk/media.js';
+import { media, userDirs, thumbRev } from '../sdk/media.js';
 import { soundState } from '../sdk/sound.js';
 import { backup, backupStatus } from '../sdk/backup.js';
 import { backupServices } from './native_backup_services.js';
 import { windowServices } from './native_window_services.js';
 import { wm } from '../sdk/windows.js';
+import { settings } from '../sdk/settings.js';
+import { settingsServices } from './native_settings_services.js';
 
 let followers = 0;
 const watches = new Map();
@@ -35,7 +37,8 @@ const methods = {
   ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),
   ...fileServices(fs),
   ...scanServices(print),
-  ...mediaServices({ media, userDirs, soundState, events: owner => bridge.events(owner) }),
+  ...mediaServices({ media, userDirs, soundState, thumbRev, events: owner => bridge.events(owner) }),
+  ...settingsServices(settings),
   ...backupServices({ backup, backupStatus, events: owner => bridge.events(owner) }),
   ...windowServices(wm),
   'logs.sources': { run: () => logs.sources() },
