@@ -175,7 +175,13 @@ fn real_compiled_app_widgets_and_effects() {
             "forcequit",
             "help",
             "monitor",
-            "store"
+            "store",
+            "logs",
+            "fonts",
+            "scanner",
+            "recorder",
+            "backup",
+            "camera"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
