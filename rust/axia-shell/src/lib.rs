@@ -40,6 +40,8 @@ mod fonts_app;
 mod scanner_app;
 #[path = "../../../apps/recorder/mod.rs"]
 mod recorder_app;
+#[path = "../../../apps/backup/mod.rs"]
+mod backup_app;
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod flip_pacing;

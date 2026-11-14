@@ -777,14 +777,16 @@ impl Host {
             self.anchor = self.caret;
             self.caret_value = value.clone();
         }
-        let chars: Vec<char> = value.chars().collect();
+        let chars: Vec<char> = if m.spec["secure"] == true {
+            value.chars().map(|_| '•').collect()
+        } else { value.chars().collect() };
         let n = chars.len();
         let (caret, anchor) = if focused { (self.caret.min(n), self.anchor.min(n)) } else { (n, n) };
         let (a, b) = (caret.min(anchor), caret.max(anchor));
         let (before, sel, after): (String, String, String) = if focused {
             (chars[..a].iter().collect(), chars[a..b].iter().collect(), chars[b..].iter().collect())
         } else {
-            (value.clone(), String::new(), String::new())
+            (chars.iter().collect(), String::new(), String::new())
         };
         let accent = self.theme("accent", "#0a84ff");
         let border = if focused { accent.clone() } else { self.theme("separator", "#555555") };
@@ -1464,6 +1466,7 @@ impl Host {
         };
         let altgr = flags & 8 != 0;
         let plain_alt = alt && !altgr;
+        let secure = find(&mut self.root, self.field).is_some_and(|m| m.spec["secure"] == true);
         let mut field = crate::text_edit::Field::new(&value, self.caret, self.anchor);
         // Alt is for the shell's shortcuts (and word moves), not a typed character; AltGr types.
         let out = field.key(
@@ -1475,7 +1478,7 @@ impl Host {
                 shift: flags & 1 != 0,
                 base: key,
             },
-            false,
+            secure,
         );
         if !out.handled {
             return false;

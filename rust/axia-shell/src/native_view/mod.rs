@@ -78,6 +78,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::fonts::ID => Some(Box::new(crate::fonts_app::App::default())),
         crate::native_apps::scanner::ID => Some(Box::new(crate::scanner_app::App::default())),
         crate::native_apps::recorder::ID => Some(Box::new(crate::recorder_app::App::default())),
+        crate::native_apps::backup::ID => Some(Box::new(crate::backup_app::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),
