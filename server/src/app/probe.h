@@ -1,4 +1,4 @@
-/* probe.h — System Information's sandbox probe (probe.c), run by app mode for the system package
+/* probe.h — System Information's sandbox probe (probe.rs), run by app mode for the system package
  * `sysprobe` only, after its sandbox is applied. */
 #ifndef LORD_APP_PROBE_H
 #define LORD_APP_PROBE_H

@@ -59,6 +59,7 @@ shape() {
 
 quick() {
     echo "== suites (tests/run_suites.sh)"
+    run "app-mode-ffi-test (isolated Rust app host and verified bytecode)" build/app-mode-ffi-test
     # terminal emulator (examples of docs/TERMINAL.md and docs/VM-SETUP.md)
     vt "vt-dump: colors, resize and search" 'hello\033[31m red\r\n' 20 5 12 6 red <<'EOF'
 --- 20x5 cursor 0,1 history 0 alt 0

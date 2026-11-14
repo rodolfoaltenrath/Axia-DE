@@ -1,5 +1,5 @@
 /* app.h — axia-server's "app mode": running an .lpk app as its own isolated process and a
- * Wayland client of the compositor (see appclient.c, docs/PRIVACY.md). */
+ * Wayland client of the compositor (see client.rs, docs/PRIVACY.md). */
 #ifndef LORD_APP_H
 #define LORD_APP_H
 

@@ -20,7 +20,7 @@ RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0) -lxkbco
 # Recurse through module directories: a native_view/ edit must rebuild the Rust
 # archive even when no top-level .rs file changed.
 rust_sources = $(wildcard $(1)/*.rs) $(foreach d,$(wildcard $(1)/*/),$(call rust_sources,$(patsubst %/,%,$(d))))
-RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(call rust_sources,../rust/axia-shell/src) $(call rust_sources,../apps) ../rust/native_apps.rs ../.cargo/config.toml
+RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(call rust_sources,../rust/axia-shell/src) $(call rust_sources,../apps) $(call rust_sources,src/app) ../rust/native_apps.rs ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
 RUST_INPUTS += $(CODEC_INPUTS)
 RUST_INPUTS += ../assets/emoji.json
@@ -82,7 +82,7 @@ MON_SRC := src/ui/js_monitor.c src/ui/js_nativeview.c
 MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/capture.c src/media/annot.c src/media/maudio.c src/media/mpulse.c src/media/proto.c src/ui/js_media.c
 SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
-APP_SRC := src/app/appclient.c src/app/appspawn.c src/app/probe.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c src/app/apphost_bc.c
+APP_SRC := src/ui/js_app_host.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c
 SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c src/users/homedirs.c src/wl/wl.c src/wl/xwm.c \
        src/ui/text.c \
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/wasm/wasm.c src/wasm/wasm_run.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
@@ -207,6 +207,11 @@ build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --locked --offline
+# Isolated app mode: Rust policies/Wayland with a deterministic compositor and real QuickJS.
+test test-platform: build/app-mode-ffi-test
+build/app-mode-ffi-test: tests/app_mode_ffi_test.c src/ui/js_app_host.c src/ui/js_app_host.h src/pkg/crypto.c src/app/app.h src/app/apphost_bc.h $(QJS_OBJ) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -Dui=axia_app_fixture_ui -Dnode_get=axia_app_fixture_node_get -Dlayout_root=axia_app_fixture_layout_root -ffunction-sections -fdata-sections -Wl,--gc-sections,--wrap=fork,--wrap=pipe2,--wrap=read,--wrap=waitpid -o $@ tests/app_mode_ffi_test.c src/ui/js_app_host.c src/pkg/crypto.c $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-client -lwayland-server -ldl -lpthread -lm
+
 test test-platform: build/input-ffi-test
 build/input-ffi-test: tests/input_ffi_test.c src/input.h src/tp/tp.h $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -Wl,--wrap=ioctl,--wrap=stat -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm

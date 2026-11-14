@@ -1,4 +1,4 @@
-/* apphost_bc.h — the app host compiled to QuickJS bytecode once per session (see apphost_bc.c). */
+/* apphost_bc.h — the app host compiled to QuickJS bytecode once per session (see bytecode.rs). */
 #ifndef LORD_APPHOST_BC_H
 #define LORD_APPHOST_BC_H
 
