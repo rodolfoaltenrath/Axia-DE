@@ -1096,6 +1096,38 @@ fn a_native_field_edits_at_the_caret_and_starts_with_the_selection_it_asks_for()
 }
 
 #[test]
+fn secure_native_fields_mask_unicode_and_never_copy_secrets() {
+    struct Form(Rc<RefCell<String>>);
+    impl NativeApp for Form {
+        fn request(&mut self,input:&Value)->Value{
+            match input["cmd"].as_str().unwrap_or("") {
+                "sync"=>json!({"tree":{"kind":"input","value":self.0.borrow().clone(),"autoFocus":true,"secure":true,"placeholder":"Passphrase"}}),
+                "query"=>{*self.0.borrow_mut()=input["key"].as_str().unwrap_or("").into();json!({})},
+                _=>json!({})
+            }
+        }
+    }
+    let value=Rc::new(RefCell::new("sëcret😀".into()));
+    let mount=scene::create(scene::VIEW);
+    let mut host=Host::new(mount,Box::new(Form(value.clone())),"",None);
+    host.facts(json!({}));
+    assert!(!host.text().contains("sëcret"));assert!(host.text().contains("•••••••"));
+    host.key("a","a",2);host.key("c","c",2);assert!(host.take().is_none());
+    host.key("x","x",2);assert!(host.take().is_none());assert_eq!(&*value.borrow(),"sëcret😀");
+    host.paste("new😀");assert_eq!(&*value.borrow(),"new😀");assert!(!host.text().contains("new"));
+    host.key("Backspace","",0);assert_eq!(&*value.borrow(),"new");
+    host.window_focus(false);assert!(!host.text().contains("new"));
+    drop(host);scene::destroy(mount);
+}
+
+#[test]
+fn byte_captions_match_sdk_rounding_decimals_and_terabytes(){
+    let cases:Value=serde_json::from_str(include_str!("../../tests/fixtures/native_bytes.json")).unwrap();
+    let mut i=I18n::new("",None);
+    for c in cases.as_array().unwrap(){i.decimal=c["decimal"].as_str().unwrap().into();assert_eq!(i.caption(&json!({"bytes":c["n"]})),c["expected"].as_str().unwrap(),"{c}");}
+}
+
+#[test]
 fn pointer_actions_carry_position_and_modifiers_and_the_extra_events_reach_the_app() {
     struct Ev(Rc<RefCell<Vec<Value>>>);
     impl NativeApp for Ev {

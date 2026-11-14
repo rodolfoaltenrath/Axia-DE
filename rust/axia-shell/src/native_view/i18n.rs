@@ -226,6 +226,17 @@ impl I18n {
                 if let Some(n) = o.get("number").and_then(Value::as_f64) {
                     return self.number(n, o.get("digits").and_then(Value::as_u64).unwrap_or(0).min(15) as usize);
                 }
+                // sdk/system.js formatBytes: one fixed decimal below 10 units,
+                // otherwise a plain rounded integer, through terabytes.
+                if let Some(mut n) = o.get("bytes").and_then(Value::as_f64) {
+                    let units=["B","KB","MB","GB","TB"];
+                    let mut unit=0;
+                    while n>=1024. && unit<units.len()-1 { n/=1024.;unit+=1; }
+                    let number=if n<10. && unit>0 {
+                        format!("{:.1}",(n*10.).round()/10.).replace('.',&self.decimal)
+                    } else { format!("{:.0}",(n+0.5).floor()) };
+                    return format!("{number} {}",units[unit]);
+                }
                 if let Some(n) = o.get("size").and_then(Value::as_f64) {
                     return match n {
                         n if n < 1024. => format!("{n} B"),

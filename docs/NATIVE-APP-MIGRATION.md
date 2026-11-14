@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Monitor and Store have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Monitor and Store have compiled
 Rust implementations. Files still has a compatibility mount controlled by
 `filesNativeView`; its native implementation and shared dialogs need to remain
 part of the final integration audit.
@@ -15,7 +15,7 @@ PDF: geometry, navigation, cache, search/selection, annotation/form state and th
 sidebar are Rust. The sidebar mounts native widgets. The main window, page
 overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
 
-Remaining apps (all remain in scope): backup, calendar, camera, contacts, disks,
+Remaining apps (all remain in scope): calendar, camera, contacts, disks,
 editor, mail, notes, passwords, photos, player, reminders,
 screenshots, settings, sysinfo, sysprobe and terminal. Existing Rust
 models in some of these apps do not count as native-window completion.
@@ -24,7 +24,7 @@ The asynchronous service lease in `runtime/nativeapps.js` is shared transport,
 with no application UI. Rust chooses jobs; existing SDK APIs perform I/O. Jobs
 and subscriptions belong to a window. The generic broker isolates results,
 discards obsolete jobs, fragments large JSON results and suppresses late
-publication after close. Logs, Fonts, Scanner and Recorder use it. Document image handles remain in the
+publication after close. Logs, Fonts, Scanner, Recorder and Backups use it. Document image handles remain in the
 window lease after delivery and are released by Rust or on close. Native async
 request transport is shared in `native_view/async_jobs.rs`. Internal numeric
 leases are independent of string WM IDs (`logs`, `fonts#2`); a real React/runtime
@@ -49,6 +49,17 @@ events are reduced in Rust; active playback can keep a 100 ms background cadence
 to enforce the trim endpoint. Fixtures compare 80 waveforms against original JSX
 pixels; native-host tests cover selection, playback and trimmed WAV export.
 Audio-device and graphical validation remain part of the final desktop check.
+
+Backups now mounts its complete native window. Rust owns status captions and
+progress, destination/schedule/exclusion settings, encryption form validation,
+snapshot/date navigation, directory generations, restore options, confirmations
+and opening snapshots in a new Files window. SDK APIs retain the session engine,
+notifications and encrypted-storage operations. Status subscriptions close with
+the window. Native password fields mask text and prevent copying/cutting secrets.
+Fixtures compare 73 status captions with the original window and 426 byte-size
+captions with the SDK, including decimals and terabytes. Tests exercise the
+native browse/restore/settings flow and configuration-before-key-creation order.
+Actual backup devices and final graphical/build checks remain pending.
 
 Before final completion, audit every app folder and registry entry, native host
 registration, remaining JSX/JS policy, complete feature coverage, lifecycle and

@@ -177,6 +177,7 @@ EOF
         run "native-async-test (compiled app service ownership)" node tests/native_async_test.mjs
         run "native-async-mount-test (string WM IDs and window lifecycle)" node tests/native_async_mount_test.mjs
         run "native-media-test (native session ownership and permissions)" node tests/native_media_test.mjs
+        run "native-backup-test (status ownership and backup operations)" node tests/native_backup_test.mjs
     else skip "pdf-model-test" "node, cargo and node_modules/esbuild"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.js): GPU layers, CPU reasons, Compatibility
     if have node && have cargo; then
