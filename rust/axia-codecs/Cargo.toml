@@ -15,6 +15,9 @@ fonts = ["dep:fontdue", "dep:ttf-parser"]
 # ABI of server/src/mail/*.h. Never enabled for the compositor or the vault,
 # which define their own b64_encode/b64_decode.
 mail = ["dep:axia-mail"]
+# Test builds only: exports axia_disk_test_root() so a C harness can point the Disks code at
+# a synthetic /sys, /proc and /run/udev tree. Never enabled in a shipped binary.
+disk-test-root = []
 # Only the vault executable may link this variant. All codec allocations,
 # including decoder scratch buffers, then use its protected secrets arena.
 secure-memory = []

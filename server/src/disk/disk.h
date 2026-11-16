@@ -1,10 +1,15 @@
 /* disk.h — disks and partitions for the Disks app (see docs/SYSTEM.md, "Disks").
  *
- * disk.c reads without root: /sys/block, the udev database (/run/udev/data/b<major>:<minor>) and
- * /proc/self/mountinfo. It is used by axia-server (lord.disks, js_disk.c) and by the admin helper
- * (disk_admin.c), which validates with these same functions on the root side.
- * rust/axia-codecs/src/smart.rs holds the parsers (pure functions) for ATA SMART and the NVMe health log; the helper
- * reads them with SG_IO / NVME_IOCTL_ADMIN_CMD (action disk-smart). */
+ * rust/axia-codecs/src/disk.rs implements the readers declared here, without root: /sys/block, the
+ * udev database (/run/udev/data/b<major>:<minor>) and /proc/self/mountinfo. axia-server uses them
+ * (lord.disks, js_disk.c; the main loop for the change notifications). Returned strings are malloc'd:
+ * free() them. docs/RUST-DISK.md says what is Rust and what is not.
+ * rust/axia-codecs/src/smart.rs holds the parsers (pure functions) for ATA SMART and the NVMe health
+ * log, and smartctl.rs the pure helpers of the smart-* actions.
+ *
+ * disk_admin.c and smartctl_admin.c (the disk-* and smart-* actions of the privileged helper) still use
+ * the declarations below, but no build compiles them: the standalone desktop has no helper
+ * (platform/admin.c), so the Disks app's actions answer admin.unavailable. */
 #ifndef LORD_DISK_H
 #define LORD_DISK_H
 

@@ -124,8 +124,10 @@ BACKUP_SRC := src/backup/engine.c src/backup/crypt.c src/backup/backup.c src/ui/
 SRC += $(BACKUP_SRC)
 HDR += $(wildcard src/backup/*.h)
 # Backup encryption uses allocation-free Rust primitives through axia-shell.
-# Disks (docs/SYSTEM.md): disks, partitions and mounts without root, our own SMART and the disk-* actions
-DISK_SRC := src/disk/disk.c src/disk/smartctl.c src/ui/js_disk.c
+# Disks (docs/SYSTEM.md): disks, partitions and mounts without root. The readers, the SMART parsers and the
+# smartctl helpers are Rust (rust/axia-codecs/src/{disk,smartctl,smart}.rs, docs/RUST-DISK.md) behind
+# src/disk/disk.h; only the lord.disks binding is C.
+DISK_SRC := src/ui/js_disk.c
 SRC += $(DISK_SRC)
 HDR += $(wildcard src/disk/*.h)
 SRC += src/platform/admin.c src/platform/net.c
@@ -748,9 +750,16 @@ build/smart-test: tests/smart_test.c src/disk/disk.h src/admin.h $(CODEC_LIB)
 # smart-* actions (smartmontools): which device names are accepted, JSON compaction and LOG pieces;
 # Disk SMART helper tests (Monitor sensor coverage is in Rust).
 test: build/smartctl-test
-build/smartctl-test: tests/smartctl_test.c src/disk/smartctl.c src/disk/disk.h src/admin.h
+build/smartctl-test: tests/smartctl_test.c src/disk/disk.h src/admin.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smartctl_test.c src/disk/smartctl.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smartctl_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+	./$@ || { rm -f $@; exit 1; }
+# Disks without root: the C ABI of src/disk/disk.h (list, tools, SMART-independent helpers, watch) against
+# this machine's /sys, udev database and mountinfo. The Rust unit tests cover the parsers on synthetic trees.
+test: build/disk-test
+build/disk-test: tests/disk_test.c src/disk/disk.h src/admin.h src/sec/json.c src/sec/json.h $(CODEC_LIB)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/disk_test.c src/sec/json.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 
 # a system with no administrator (src/users/admin_rescue.c): who may become one

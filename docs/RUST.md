@@ -938,3 +938,13 @@ WebDAV, o sanitizador de HTML, iCalendar e vCard) estão em `rust/axia-mail`,
 com a mesma ABI C de `server/src/mail/*.h`. Só o `axia-maild` liga essa
 variante do `axia-codecs` (feature `mail`). Detalhes, limites e validação em
 [RUST-MAIL.md](RUST-MAIL.md).
+
+## Discos
+
+A leitura de discos sem root (sysfs, banco do udev, mountinfo, o conjunto de
+discos do sistema, as notificações de mudança) e os auxiliares puros do
+`smartctl` estão em `rust/axia-codecs/src/{disk,smartctl}.rs`, com a mesma ABI C
+de `server/src/disk/disk.h`; só o `js_disk.c` continua em C. O que ficou em C e
+por quê, os dois defeitos corrigidos na migração e a validação estão em
+[RUST-DISK.md](RUST-DISK.md).
+

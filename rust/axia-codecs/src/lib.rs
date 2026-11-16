@@ -30,6 +30,10 @@ mod ipp;
 #[cfg(not(feature = "secure-memory"))]
 mod smart;
 #[cfg(not(feature = "secure-memory"))]
+mod smartctl;
+#[cfg(not(feature = "secure-memory"))]
+mod disk;
+#[cfg(not(feature = "secure-memory"))]
 mod smbios;
 #[cfg(not(feature = "secure-memory"))]
 mod ids;
