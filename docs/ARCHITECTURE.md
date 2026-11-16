@@ -204,7 +204,7 @@ Since M7, what LordOS does with its own code and what it delegates to a Debian p
     since 0.8.5 HTTPS goes through the `lord-tls` relay above, which alone links OpenSSL);
   - the sandbox, permissions and signing of `.lpk` apps (`server/src/sec`): Landlock,
     seccomp, cgroup v2, Ed25519 (signing and verifying) and a JSON reader, with no external libraries;
-  - the WebAssembly interpreter (`server/src/wasm`);
+  - the WebAssembly interpreter (`rust/axia-codecs/src/wasm`, C API in `server/src/wasm/wasm.h`);
   - the PulseAudio protocol client (`server/src/sound`);
   - netlink, DHCP and WireGuard (`server/src/net`);
   - the CUPS IPP client, mDNS/DNS-SD and eSCL (`server/src/print`, M9): no libcups, avahi-client

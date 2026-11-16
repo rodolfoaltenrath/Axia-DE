@@ -32,6 +32,8 @@ mod smart;
 #[cfg(not(feature = "secure-memory"))]
 mod smartctl;
 #[cfg(not(feature = "secure-memory"))]
+mod wasm;
+#[cfg(not(feature = "secure-memory"))]
 mod disk;
 #[cfg(not(feature = "secure-memory"))]
 mod smbios;

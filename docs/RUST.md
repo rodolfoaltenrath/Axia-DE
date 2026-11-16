@@ -948,3 +948,10 @@ de `server/src/disk/disk.h`; só o `js_disk.c` continua em C. O que ficou em C e
 por quê, os dois defeitos corrigidos na migração e a validação estão em
 [RUST-DISK.md](RUST-DISK.md).
 
+## WebAssembly
+
+O interpretador (decodificador, validador, compilador para o código interno,
+instâncias, memórias, tabelas e globais) está em
+`rust/axia-codecs/src/wasm/`, com a mesma ABI C de `server/src/wasm/wasm.h`;
+só o `js_wasm.c` (o global `WebAssembly` do QuickJS) continua em C. Detalhes,
+diferenças e validação em [RUST-WASM.md](RUST-WASM.md).

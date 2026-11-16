@@ -17,8 +17,10 @@
 #ifndef LORD_WASM_H
 #define LORD_WASM_H
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 enum {
     WASM_I32 = 0x7f, WASM_I64 = 0x7e, WASM_F32 = 0x7d, WASM_F64 = 0x7c,
@@ -54,8 +56,17 @@ typedef struct {
     char msg[160];
 } WasmError;
 
-/* Fills err (for host functions). */
-void wasm_err(WasmError *err, WasmErrKind kind, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+/* Fills err (for host functions). Inline: the interpreter is Rust (rust/axia-codecs/src/wasm), and Rust
+ * cannot define a variadic function. */
+static inline void wasm_err(WasmError *err, WasmErrKind kind, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+static inline void wasm_err(WasmError *err, WasmErrKind kind, const char *fmt, ...) {
+    if (!err) return;
+    err->kind = kind;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(err->msg, sizeof err->msg, fmt, ap);
+    va_end(ap);
+}
 
 /* Function type (interned: two equal types are the same pointer). */
 typedef struct WasmFuncType {

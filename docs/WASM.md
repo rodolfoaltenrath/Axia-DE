@@ -1,15 +1,15 @@
 # WebAssembly in LordOS
 
-LordOS ships its own WebAssembly interpreter, written in C with no dependencies. It doesn't use
+LordOS ships its own WebAssembly interpreter, written in Rust (`rust/axia-codecs`) with no dependencies. It doesn't use
 wasm3, WAMR, V8 or Wasmtime. From JavaScript it is used through the standard `WebAssembly`
 global, just like in a browser, so a native LordOS app (React) can carry modules compiled from
 C, C++, Rust or Zig and call them.
 
 | Piece | File |
 |---|---|
-| Decoder, validator and compiler to internal code | `server/src/wasm/wasm.c` |
-| Interpreter, instances, memories, tables and globals | `server/src/wasm/wasm_run.c` |
-| C API | `server/src/wasm/wasm.h` (internals: `wasm_int.h`) |
+| Decoder, validator and compiler to internal code | `rust/axia-codecs/src/wasm/decode.rs` |
+| Interpreter, instances, memories, tables and globals | `rust/axia-codecs/src/wasm/exec.rs`, `mod.rs` |
+| C API (the contract; the implementation is Rust) | `server/src/wasm/wasm.h` |
 | `WebAssembly` global in QuickJS | `server/src/ui/js_wasm.c` |
 | Tests | `server/tests/wasm_test.c`, `server/tests/wasm_js_test.c`, `server/tests/wasm/` |
 
