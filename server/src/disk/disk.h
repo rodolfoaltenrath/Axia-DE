@@ -6,10 +6,7 @@
  * free() them. docs/RUST-DISK.md says what is Rust and what is not.
  * rust/axia-codecs/src/smart.rs holds the parsers (pure functions) for ATA SMART and the NVMe health
  * log, and smartctl.rs the pure helpers of the smart-* actions.
- *
- * disk_admin.c and smartctl_admin.c (the disk-* and smart-* actions of the privileged helper) still use
- * the declarations below, but no build compiles them: the standalone desktop has no helper
- * (platform/admin.c), so the Disks app's actions answer admin.unavailable. */
+ */
 #ifndef LORD_DISK_H
 #define LORD_DISK_H
 
@@ -18,7 +15,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "../admin.h"
 
 /* Block device name as the kernel gives it: sda, sda1, nvme0n1p2, mmcblk0p1, vdb, loop3
  * (lowercase letters and digits, starts with a letter, up to 31). */
@@ -99,68 +95,5 @@ int    smartctl_valid_disk(const char *name);
 size_t smartctl_compact(char *s, size_t n);
 /* Length of the next LOG piece (at most max bytes, never inside a UTF-8 sequence). */
 size_t smartctl_chunk(const char *s, size_t n, size_t max);
-
-/* ---- helper actions (disk_admin.c, smartctl_admin.c) ---- */
-
-/* The disk-* target() check for a whole disk (the system disk allowed): /dev path into dev, and
- * whether it is on USB. need_admin: an internal disk needs an administrator. -1 after admin_err. */
-int  disk_admin_target(const AdminReq *r, const char *name, int need_admin, char *dev, size_t n, int *usb);
-void smart_act_info(const AdminReq *r, const char *arg, size_t len);
-void smart_act_health(const AdminReq *r, const char *arg, size_t len);
-void smart_act_test(const AdminReq *r, const char *arg, size_t len);
-void smart_act_abort(const AdminReq *r, const char *arg, size_t len);
-
-/* ---- for the LordOS Imager's actions (imager/imager_admin.c), the same checks as disk-* ---- */
-typedef struct {
-    char name[32], disk[32], dev[48];
-    int part, removable;
-    uint64_t size;
-    unsigned major, minor;
-} DiskTarget;
-/* A whole disk that is not the system disk (after admin_err on failure: -1). */
-int  disk_admin_whole(const AdminReq *r, const char *name, DiskTarget *t);
-/* Unmounts its partitions under /media or /run/media; refuses anything mounted elsewhere. */
-int  disk_admin_unmount(const DiskTarget *t);
-/* O_RDWR | O_EXCL | extra, with admin_err on failure. */
-int  disk_admin_open_excl(const DiskTarget *t, int extra);
-/* The user's image file: regular, from their home or their mounts, opened as them. */
-int  disk_admin_open_user_file(const AdminReq *r, const char *path, struct stat *st);
-int  disk_admin_wipe_ends(int fd, uint64_t size);
-/* Cancellable job (disk-cancel), low priority; disk_admin_cancelled() after SIGTERM. */
-void disk_admin_job_begin(const AdminReq *r, const char *disk);
-void disk_admin_job_end(const char *disk);
-int  disk_admin_cancelled(void);
-void disk_admin_reread(const char *disk);     /* uevent "change" and udevadm settle */
-/* The disk holding the file st describes is this one (an image can't be read from the disk being written). */
-int  disk_admin_file_on(const struct stat *st, const char *disk);
-
-void disk_act_smart(const AdminReq *r, const char *arg, size_t len);
-void disk_act_mount(const AdminReq *r, const char *arg, size_t len);
-void disk_act_unmount(const AdminReq *r, const char *arg, size_t len);
-void disk_act_eject(const AdminReq *r, const char *arg, size_t len);
-void disk_act_format(const AdminReq *r, const char *arg, size_t len);
-void disk_act_label(const AdminReq *r, const char *arg, size_t len);
-void disk_act_erase(const AdminReq *r, const char *arg, size_t len);
-void disk_act_write_image(const AdminReq *r, const char *arg, size_t len);
-void disk_act_cancel(const AdminReq *r, const char *arg, size_t len);
-
-/* All are A_ANYONE: each one requires an administrator for internal disks (removable ones are
- * open to any session user, like udisks) and refuses the system disk. The smart-* ones
- * (smartmontools) accept the system disk: reading is open to anyone, a self-test on an internal disk
- * needs an administrator. */
-#define DISK_ADMIN_ACTIONS \
-    { "disk-smart", disk_act_smart, A_FORK | A_ANYONE }, \
-    { "disk-mount", disk_act_mount, A_ANYONE }, \
-    { "disk-unmount", disk_act_unmount, A_ANYONE }, \
-    { "disk-eject", disk_act_eject, A_FORK | A_ANYONE }, \
-    { "disk-format", disk_act_format, A_FORK | A_ANYONE }, \
-    { "disk-label", disk_act_label, A_FORK | A_ANYONE }, \
-    { "disk-erase", disk_act_erase, A_FORK | A_ANYONE }, \
-    { "disk-write-image", disk_act_write_image, A_FORK | A_ANYONE }, \
-    { "disk-cancel", disk_act_cancel, A_ANYONE }, \
-    { "smart-info", smart_act_info, A_FORK | A_ANYONE }, \
-    { "smart-health", smart_act_health, A_FORK | A_ANYONE }, \
-    { "smart-test", smart_act_test, A_FORK | A_ANYONE }, \
-    { "smart-abort", smart_act_abort, A_FORK | A_ANYONE },
 
 #endif

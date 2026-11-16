@@ -743,21 +743,21 @@ build/axia-bench: build/gen/profile.h
 
 # SMART parsers (ATA and NVMe) of the Disks app: hand-built data, healthy/warning/failing
 test: build/smart-test
-build/smart-test: tests/smart_test.c src/disk/disk.h src/admin.h $(CODEC_LIB)
+build/smart-test: tests/smart_test.c src/disk/disk.h $(CODEC_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smart_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # smart-* actions (smartmontools): which device names are accepted, JSON compaction and LOG pieces;
 # Disk SMART helper tests (Monitor sensor coverage is in Rust).
 test: build/smartctl-test
-build/smartctl-test: tests/smartctl_test.c src/disk/disk.h src/admin.h $(CODEC_LIB)
+build/smartctl-test: tests/smartctl_test.c src/disk/disk.h $(CODEC_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/smartctl_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # Disks without root: the C ABI of src/disk/disk.h (list, tools, SMART-independent helpers, watch) against
 # this machine's /sys, udev database and mountinfo. The Rust unit tests cover the parsers on synthetic trees.
 test: build/disk-test
-build/disk-test: tests/disk_test.c src/disk/disk.h src/admin.h src/sec/json.c src/sec/json.h $(CODEC_LIB)
+build/disk-test: tests/disk_test.c src/disk/disk.h src/sec/json.c src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/disk_test.c src/sec/json.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }

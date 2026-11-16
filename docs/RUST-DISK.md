@@ -12,16 +12,16 @@ there is no C fallback.
 | Which names `smartctl` may be pointed at, the compaction of its JSON, the LOG pieces | `smartctl.rs` | Rust |
 | ATA SMART and NVMe health log parsers | `smart.rs` | Rust (already) |
 | `lord.disks` binding for QuickJS | `server/src/ui/js_disk.c` | C |
-| `disk_admin.c`, `smartctl_admin.c`, `diskkinds.h` | `server/src/disk/` | C, **not compiled** |
+| `diskkinds.h` | `server/src/disk/` | C (used by `tests/lan_test.c`) |
 
-The last row matters. The privileged helper no longer exists in the standalone desktop:
-`server/src/platform/admin.c` is a stub (`admin_known()` is 0, `admin_send()` fails with
-`ENOTSUP`), nothing registers `DISK_ADMIN_ACTIONS`, no build lists those files, and the Imager
-that used the `disk_admin_*` API is gone. So the Disks app's format, erase, mount and SMART
-buttons already answer `admin.unavailable`. The files were left as they are: porting
-data-destroying root-side code that nothing builds, and that cannot be exercised without root and
-a real block device, would add risk and no behaviour. They either come back with a replacement for
-the helper or they get deleted; that is a decision for whoever owns the feature.
+The `disk-*` and `smart-*` actions of the privileged helper (`disk_admin.c`, `smartctl_admin.c`, about
+940 lines) were **deleted, not ported**. The privileged helper no longer exists in the standalone
+desktop: `server/src/platform/admin.c` is a stub (`admin_known()` is 0, `admin_send()` fails with
+`ENOTSUP`), nothing registered `DISK_ADMIN_ACTIONS`, no build listed those files and the Imager that
+used the `disk_admin_*` API is gone. So the Disks app's format, erase, mount and SMART buttons already
+answer `admin.unavailable`. Nothing outside the folder referenced the files or their symbols, and the
+declarations only they used were removed from `disk.h`. They are in the git history (before commit
+"Remove the dead disk helper actions") if a replacement for the helper ever needs them.
 
 ## Boundary
 

@@ -35,8 +35,7 @@ The LordOS disk utility, like GNOME Disks.
 |---|---|
 | `rust/axia-codecs/src/disk.rs` (C ABI in `server/src/disk/disk.h`; [RUST-DISK.md](RUST-DISK.md)) | The list, without root, from three sources. **`/sys/block`:** size, removable, read-only, rotational, model. **The udev database** (`/run/udev/data/b<major>:<minor>`): file system, label, UUID, partition table and bus; udev already probed them, so the device is never opened. **`/proc/self/mountinfo`:** where each one is mounted. It also recognizes the system disk and watches for changes. |
 | `rust/axia-codecs/src/smart.rs` | ATA SMART and NVMe health log parsers: pure functions, no I/O |
-| `server/src/disk/disk_admin.c` | The helper's `disk-*` actions (root). **Not compiled** in the standalone desktop, which has no privileged helper (`server/src/platform/admin.c`): the app's format, erase, mount and SMART buttons answer `admin.unavailable` |
-| `server/src/disk/smartctl_admin.c`; `rust/axia-codecs/src/smartctl.rs` | The helper's `smart-*` actions (smartmontools, root; not compiled, as above) and their pure checks (Rust) |
+| `rust/axia-codecs/src/smartctl.rs` | Pure checks for the `smart-*` actions: which device names smartctl accepts, JSON compaction, LOG pieces. The actions themselves (smartmontools, root) have no helper to run in, see below |
 | `sdk/smart.js`, `sdk/smartparse.js` | `smart.info/health/test/abort/install`, the summaries the Monitor shows, and smartctl's JSON turned into one model |
 | `server/src/ui/js_disk.c`, `sdk/disks.js` | `lord.disks.list()`, `tools()`, `watch(on)`; in the SDK, `useDisks()` and `disks` |
 | `apps/disks/` | The app: `index.jsx`, `health.jsx` (SMART), `dialogs.jsx` (format, rename, erase, bootable USB), `icons.jsx` |
@@ -56,7 +55,7 @@ fingerprint of the mountinfo content (a few KB) is compared with the previous on
 
 ### Actions (`admin.run('disk-…', arg)`)
 
-All are in the closed table of `admin.c` (macro `DISK_ADMIN_ACTIONS` in `disk/disk.h`).
+These are the actions the app asks for. **The standalone desktop has no helper to run them** (`platform/admin.c` is a stub), and their root-side code (`disk_admin.c`, `smartctl_admin.c`) was deleted; they stay documented here as the specification of what a replacement must do (see [RUST-DISK.md](RUST-DISK.md)).
 
 | Action | Argument | What it does |
 |---|---|---|
@@ -85,7 +84,7 @@ and `disk-eject` or `disk-unmount` from its ⏏ (`FILES.md`).
 
 ### Security
 
-- **The same rules for all of them, on the root side (`target()` in `disk_admin.c`):**
+- **The same rules for all of them, on the root side (`target()` in the deleted `disk_admin.c`):**
   - the name must be a real block device (`sd*`, `vd*`, `hd*`, `xvd*`, `nvme*`, `mmcblk*`,
     `loop*`, lowercase letters and digits only);
   - `/dev/<name>` is checked with `lstat`: a block device with the same major:minor as sysfs;
