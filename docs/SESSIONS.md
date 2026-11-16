@@ -453,7 +453,7 @@ screen.
 The list comes from `lord.users.list()`, read-only: accounts with uid 1000–59999 and a real
 shell. It shows the avatar, whether the user is an administrator and whether they have an open
 session. Everything that changes something goes through closed `admin.c` actions
-(`server/src/users/users_admin.c`), validated on the root side:
+(`server/src/users/users_admin.c`, since deleted: the standalone desktop has no privileged helper), validated on the root side:
 
 | Action            | Argument (lines)                           | Who                                           |
 |-------------------|--------------------------------------------|-----------------------------------------------|
@@ -514,7 +514,7 @@ session. Everything that changes something goes through closed `admin.c` actions
 | `server/src/remote/sess.c`             | accounts, passwords, waits, creating and finding sessions |
 | `server/src/remote/mirror.c`           | session side: viewers, lent monitor, size, requests       |
 | `server/src/remote/proto.h`            | the local protocol                                        |
-| `server/src/users/users_admin.c`       | `user-*` actions                                          |
+| `server/src/users/users_admin.c`       | `user-*` actions (deleted, no helper in the standalone desktop) |
 | `server/src/users/homedirs.c`          | common folders and `user-dirs.dirs` (Users and the installer) |
 | `server/src/remote/netsup.c`           | starts, supervises and adopts `lord-netd` (NETWORK.md)       |
 | `/run/lordos/netd.sock`, `netd.pid`, `netd.enabled` | the system network (NETWORK.md)                 |

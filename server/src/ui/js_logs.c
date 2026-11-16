@@ -3,7 +3,7 @@
  * Everything is read-only and runs as the session user: the journal files that the kernel and
  * journald's ACLs let them read (their user-<uid>.journal; the system one only if they are in
  * systemd-journal or adm) and their LordOS logs (~/.cache/axia/<name>.log). The system journal
- * for an administrator goes through the helper's logs-system action (logs/logs_admin.c).
+ * for an administrator goes through the helper's logs-system action (logs/logs_admin.c, deleted: the standalone desktop has no helper).
  *
  *   sources()                  { user: n files, system: bool (readable directly), uid }
  *   query({ scope, since, until, prio, kernel, match, grep, limit })  → id (>0)

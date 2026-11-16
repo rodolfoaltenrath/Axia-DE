@@ -197,7 +197,7 @@ That way PipeWire takes real time by itself, without polkit: its `data-loop` thr
 `SCHED_FIFO` 88/83 and the main ones at nice -11. The group is added:
 - to the live ISO user (`tools/iso/build.sh`);
 - to the installer's first user (`server/src/install/install.c`);
-- to new users from Settings → Users (`server/src/users/users_admin.c`).
+- to new users from Settings → Users (`server/src/users/users_admin.c`, deleted: no privileged helper in the standalone desktop).
 
 A user that already existed needs to log in again, or `systemctl restart user@<uid>`.
 

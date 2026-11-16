@@ -71,7 +71,7 @@ CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
 **Who has `lpadmin`:** LordOS **administrators**, as in Ubuntu.
 - The installer (`server/src/install/install.c`) gives it to the first user.
 - Settings → Users adds and removes it together with `sudo` when checking or unchecking
-  "Administrator" (`users_admin.c`). If CUPS isn't installed, the group doesn't exist and it's
+  "Administrator" (`users_admin.c`, since deleted). If CUPS isn't installed, the group doesn't exist and it's
   skipped.
 
 **A regular user:**

@@ -1,6 +1,6 @@
 /* homedirs.h — the common home folders in the user's language (Escritorio, Documentos, Descargas,
  * Música, Imágenes, Videos in Spanish) and ~/.config/user-dirs.dirs (xdg-user-dirs). One list for
- * the installer (install.c) and Settings → Users (users_admin.c); it matches lordos-live-prep in
+ * the installer (install.c) and Settings → Users (the deleted users_admin.c); it matches lordos-live-prep in
  * the live ISO. Called as root. */
 #ifndef LORD_HOMEDIRS_H
 #define LORD_HOMEDIRS_H

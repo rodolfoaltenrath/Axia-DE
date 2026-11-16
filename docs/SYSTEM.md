@@ -580,7 +580,7 @@ axia-server.
 - **The user's own logs** are read by axia-server **as the user**: the kernel and journald's ACLs
   decide. `user-<uid>.journal` is readable by its owner; the system journal only by
   `systemd-journal`/`adm`.
-- **System logs for administrators** go through `logs-system` (`server/src/logs/logs_admin.c`,
+- **System logs for administrators** go through `logs-system` (`server/src/logs/logs_admin.c`, deleted: no helper in the standalone desktop;
   `LOGS_ADMIN_ACTIONS`, administrators only, `A_FORK`):
   - the argument is `key=value` lines validated as root (`jq_parse`): `since`/`until` (seconds or
     µs), `prio` 0–7, `kernel` 0/1, `match` (`[A-Za-z0-9@._:-]`, up to 95), `grep` (no control
