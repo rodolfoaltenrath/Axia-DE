@@ -11,8 +11,9 @@ apps/terminal/          React: tabs, panes, profiles, search, toolbelt, shortcut
 server/src/term/
   term.c        sessions: PTY ↔ emulator, keyboard, mouse, events, Instant Replay, logging,
                 tmux -CC (virtual panes), save/restore screen
-  vt.c          xterm-256color emulator: VT500 parser, grid + history, reflow, selection,
-                search, marks, graphemes, OSC 7/8/52/133/1337, images (OSC 1337 and Sixel)
+  (Rust: rust/axia-codecs/src/vt, the ABI is term.h) xterm-256color emulator: VT500 parser, grid +
+                history, reflow, selection, search, marks, graphemes, OSC 7/8/52/133/1337, images
+                (OSC 1337 and Sixel)
   pty.c         posix_openpt + fork/exec of the user's shell, without privileges
   hold.c        holders: keep the shells alive if axia-server restarts
   term_paint.c  grid drawing: fonts, ligatures, emoji, boxes, cursor, selection, images

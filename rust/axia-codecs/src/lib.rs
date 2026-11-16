@@ -33,6 +33,9 @@ mod smart;
 mod smartctl;
 #[cfg(not(feature = "secure-memory"))]
 mod wasm;
+// The terminal emulator (server/src/term/vt.c).
+#[cfg(not(feature = "secure-memory"))]
+mod vt;
 #[cfg(not(feature = "secure-memory"))]
 mod disk;
 #[cfg(not(feature = "secure-memory"))]

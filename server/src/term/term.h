@@ -1,4 +1,4 @@
-/* term.h — LordOS terminal engine: xterm emulator (vt.c), PTY (pty.c),
+/* term.h — LordOS terminal engine: xterm emulator (Rust: rust/axia-codecs/src/vt), PTY (pty.c),
  * sessions and events (term.c) and grid drawing (term_paint.c).
  *
  * Emulation and drawing are in C so that `cat` of large files or `htop` do not
@@ -34,7 +34,7 @@ enum {
 typedef struct { uint32_t cp, fg, bg; uint16_t attr, link; } Cell;
 
 /* Graphemes of more than one character (e + combining accent, 👍🏽, 👨‍👩‍👧, flags): cp =
- * CP_CLUSTER | index into an internal global table (vt.c), shared by all sessions. */
+ * CP_CLUSTER | index into an internal global table (the emulator's), shared by all sessions. */
 #define CP_CLUSTER 0x80000000u
 #define CLUSTER_LEN 12
 
@@ -178,7 +178,9 @@ typedef struct Term {
     void *user;
 } Term;
 
-/* vt.c */
+/* The emulator (rust/axia-codecs/src/vt; the structs above are its ABI, field for field). */
+/* term.c registers its clipboard writer once; OSC 52 and OSC 1337 Copy call it. */
+void  vt_set_clipboard_hook(void (*fn)(const char *s, size_t n));
 uint32_t vt_base_cp(uint32_t cp);                        /* first character of the grapheme */
 int   vt_cluster_cps(uint32_t cp, uint32_t *out, int max); /* all its characters */
 int   vt_init(Term *t, int cols, int rows, int scrollback, TermProfile *p);

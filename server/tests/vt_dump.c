@@ -1,4 +1,4 @@
-/* vt_dump.c — headless test of the emulator: reads bytes from stdin, feeds them through vt.c and
+/* vt_dump.c — headless test of the emulator: reads bytes from stdin, feeds them through the emulator (Rust) and
  * prints the grid as text. Usage:
  *   printf 'hola\033[31m rojo' | build/vt-dump 20 5 [cols2 rows2]
  * With cols2/rows2 it resizes at the end (tests reflow). */
@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* term.c dependencies that vt.c uses. */
+/* term.c dependencies that the emulator uses. */
 static char clip[4096];
 void term_set_clipboard(const char *s, size_t n) { snprintf(clip, sizeof clip, "%.*s", (int)n, s); }
 
@@ -53,6 +53,7 @@ static void dump(Term *t) {
 int main(int argc, char **argv) {
     int cols = argc > 1 ? atoi(argv[1]) : 20, rows = argc > 2 ? atoi(argv[2]) : 5;
     setlocale(LC_CTYPE, "C.UTF-8");
+    vt_set_clipboard_hook(term_set_clipboard);
     TermProfile p;
     memset(&p, 0, sizeof p);
     snprintf(p.word_chars, sizeof p.word_chars, "/-+\\~_.");

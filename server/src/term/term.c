@@ -86,6 +86,7 @@ void term_init(const char *fonts_dir, const char *shell_dir) {
     }
     fonts_set_builtin_dir(fonts_dir);
     pty_set_integration(shell_dir);
+    vt_set_clipboard_hook(term_set_clipboard);
 }
 
 int term_mono_font(int bold, int italic) {

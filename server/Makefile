@@ -87,7 +87,7 @@ SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c 
        src/ui/text.c \
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/textlayout.c \
-       src/term/vt.c src/term/pty.c src/term/term.c src/term/term_paint.c src/term/hold.c \
+       src/term/pty.c src/term/term.c src/term/term_paint.c src/term/hold.c \
        src/net/nl.c src/net/state.c \
        src/pkg/crypto.c src/ui/js_sec.c \
        $(SEC_SRC) $(APP_SRC) $(MON_SRC) $(MEDIA_SRC)
@@ -618,7 +618,8 @@ MEDIA_TEST_SRC := tests/media_test.c src/media/proto.c src/media/maudio.c src/me
 build/media-test: $(MEDIA_TEST_SRC) src/media/proto.h src/media/aring.h src/media/media_int.h src/media/mpulse.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(MEDIA_TEST_SRC) -lm
 
-build/vt-dump: tests/vt_dump.c build/obj/term/vt.o $(CODEC_LIB)
+# the emulator is Rust (rust/axia-codecs/src/vt)
+build/vt-dump: tests/vt_dump.c $(CODEC_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $^ $(LDLIBS) $(CODEC_NATIVE_LIBS)
 
 build/gen/%-protocol.h: $(WLPROTO)/stable/xdg-shell/%.xml

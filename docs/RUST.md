@@ -955,3 +955,13 @@ instâncias, memórias, tabelas e globais) está em
 `rust/axia-codecs/src/wasm/`, com a mesma ABI C de `server/src/wasm/wasm.h`;
 só o `js_wasm.c` (o global `WebAssembly` do QuickJS) continua em C. Detalhes,
 diferenças e validação em [RUST-WASM.md](RUST-WASM.md).
+
+## Emulador de terminal
+
+O emulador xterm do Terminal (parser VT500, grade com histórico, reflow,
+seleção, busca, marcas, grafemas, OSC e imagens) está em
+`rust/axia-codecs/src/vt/`, com a mesma ABI C de `server/src/term/term.h`: a
+struct `Term` e as que ela contém são `#[repr(C)]`, campo a campo, porque
+`term.c`, `term_paint.c` e `js_term.c` as leem e escrevem diretamente. Detalhes,
+o defeito corrigido na migração e a validação em [RUST-VT.md](RUST-VT.md).
+
