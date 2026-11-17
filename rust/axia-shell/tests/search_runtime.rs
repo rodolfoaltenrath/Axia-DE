@@ -272,6 +272,7 @@ import {configureWindows,wm} from '@ROOT@/sdk/windows.js';
 import {spotlight,spotlightOpen,registerSpotlightSource} from '@ROOT@/sdk/search.js';
 import {SpotlightPanel} from '@ROOT@/sdk/rustsearch.jsx';
 import {MenuBar} from '@ROOT@/themes/default/components/MenuBar.jsx';
+import {treeOwners} from '@ROOT@/sdk/nativetree.js';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {clipboard,clipboardHistory} from '@ROOT@/sdk/clipboard.js';
 
@@ -313,8 +314,8 @@ async function run(){
  await pause(250);
 
  key(57,'Space',' ',16);await pause();snapshot('shortcut',{open:spotlightOpen.get()});key(1,'Escape');await pause();
- const circle=[...records.values()].find(n=>alive(n)&&Math.abs(Number(n.style.width)-11.7)<0.001&&Math.abs(Number(n.style.height)-11.7)<0.001);
- if(!circle)throw Error('search button circle not found');const button=records.get(records.get(circle.parent).parent);const [x,y,w,hh]=lord.getLayout(button.id);__lordEvent('down',button.id,x+w/2,y+hh/2,0);__lordEvent('up',button.id,x+w/2,y+hh/2,0);await pause();snapshot('button',{open:spotlightOpen.get()});
+ // the search button is drawn by Rust (shell:tree): its click reaches the bar's owner, as the host does
+ const owner=treeOwners.get('bar-search');if(!owner)throw Error('search button owner not found');owner({action:['search']});await pause();snapshot('button',{open:spotlightOpen.get()});
  keyTimes=[];await type('App 0042');await waitReady();snapshot('app',{layout:layout(),keyToNodeMs:keyTimes});key(28,'Enter');await pause();snapshot('entered',{opened});
  await fresh('15% of 2400');key(28,'Enter');await pause();snapshot('calculated',{copied});
  await fresh('1,5 gb to mb');key(28,'Enter');await pause();snapshot('converted',{copied});

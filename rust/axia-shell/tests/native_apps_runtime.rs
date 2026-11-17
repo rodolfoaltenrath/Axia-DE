@@ -181,7 +181,8 @@ fn real_compiled_app_widgets_and_effects() {
             "scanner",
             "recorder",
             "backup",
-            "camera"
+            "camera",
+            "notes"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
