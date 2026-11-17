@@ -5,7 +5,7 @@
 # its workloads), the UI engine and the shaper (ENGINE_SRC: the layout, paint and shaping workloads,
 # bench/lbui.c, with their fonts built in), the Rust glass renderer, and, with GPU=1,
 # Mesa (GBM, EGL, GLESv2).
-LB_SRV_SRC := src/bench/lbrun.c src/bench/lbcond.c src/bench/lbproto.c src/bench/bench.c src/bench/lbframes.c src/bench/lbvideo.c src/bench/lbinput.c
+LB_SRV_SRC := src/bench/lbrun.c src/bench/lbcond.c src/bench/lbframes.c src/bench/lbvideo.c src/bench/lbinput.c
 LB_SRV_OBJ := $(LB_SRV_SRC:src/%.c=build/obj/%.o)
 $(LB_SRV_OBJ): $(wildcard src/bench/*.h) src/hw/rpifw.h src/media/proto.h build/gen/lord_version.h
 build/obj/main.o: src/bench/lbframes.h src/bench/lbinput.h
@@ -40,30 +40,30 @@ build/gen/lb_fonts.h: build/lbcorpus $(LB_FONTS)
 	  ./build/lbcorpus embed lb_font_thai < src/bench/fonts/NotoSansThai-LB.ttf && \
 	  ./build/lbcorpus embed lb_font_cjk < src/bench/fonts/NotoSansCJKsc-LB.otf; } > $@.new && mv $@.new $@
 
-LB_SRC := src/bench/lbmain.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/bench.c src/pkg/crypto.c \
+LB_SRC := src/bench/lbmain.c src/bench/lbwork.c src/bench/lbui.c src/pkg/crypto.c \
           src/sec/sandbox.c src/sec/cgroup.c $(ENGINE_SRC)
 LB_GL_SRC := $(if $(filter 1,$(GPU)),src/bench/lbgpu.c src/bench/glscene.c)
 LB_GL_FLAGS := $(if $(filter 1,$(GPU)),-DLORD_GPU $(shell pkg-config --cflags gbm egl glesv2))
 LB_GL_LIBS := $(if $(filter 1,$(GPU)),$(shell pkg-config --libs gbm egl glesv2))
 all: build/axia-bench
-build/axia-bench: $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) build/gen/lb_corpus.h build/gen/lb_fonts.h $(wildcard src/bench/*.h) src/sec/sandbox.h src/sec/cgroup.h $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LB_GL_FLAGS) $(WARN) -std=c11 -o $@ $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LB_GL_LIBS) -ldl -lm -lpthread
+build/axia-bench: $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) build/gen/lb_corpus.h build/gen/lb_fonts.h $(wildcard src/bench/*.h) src/sec/sandbox.h src/sec/cgroup.h $(HDR) $(RUST_LIB) $(BENCH_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LB_GL_FLAGS) $(WARN) -std=c11 -o $@ $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) $(LB_GL_LIBS) -ldl -lm -lpthread
 
 # the workloads (short; the UI scene and every paragraph's glyphs too), the record checks (the sandbox
 # self-test's included), the thermal guard on fake sysfs trees and the boot history
 test: build/lordbench-test
-build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/lbcond.c src/bench/lbrun.c src/bench/bench.c \
-                      src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
-                      build/gen/lb_fonts.h build/gen/lord_version.h $(wildcard src/bench/*.h) src/hw/rpifw.h $(ENGINE_SRC) $(HDR) $(RUST_LIB)
+build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbcond.c src/bench/lbrun.c \
+                      src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
+                      build/gen/lb_fonts.h build/gen/lord_version.h $(wildcard src/bench/*.h) src/hw/rpifw.h $(ENGINE_SRC) $(HDR) $(RUST_LIB) $(BENCH_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbproto.c src/bench/lbcond.c \
-	    src/bench/lbrun.c src/bench/bench.c src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
-	    $(ENGINE_SRC) $(QJS_OBJ) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbcond.c \
+	    src/bench/lbrun.c src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
+	    $(ENGINE_SRC) $(QJS_OBJ) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # from a terminal, without a session: build/lordbench-cli quick|full [sustained_s] (needs build/axia-bench, and build/axia-media
 # for the video measurements; desktop mode needs a session: without one its frame results are skipped)
-LB_CLI_SRC := tests/lordbench_cli.c src/bench/lbrun.c src/bench/lbcond.c src/bench/lbproto.c src/bench/bench.c src/bench/lbframes.c \
-              src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
+LB_CLI_SRC := tests/lordbench_cli.c src/bench/lbrun.c src/bench/lbcond.c src/bench/lbframes.c \
+              src/bench/lbvideo.c src/media/proto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
 build/lordbench-cli: $(LB_CLI_SRC) \
-                     build/gen/lord_version.h $(wildcard src/bench/*.h) build/axia-bench
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LB_CLI_SRC) -lm -lpthread
+                     build/gen/lord_version.h $(wildcard src/bench/*.h) build/axia-bench $(BENCH_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LB_CLI_SRC) $(BENCH_LIB) -ldl -lm -lpthread

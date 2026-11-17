@@ -7,11 +7,11 @@ all: build/axia-sysreport build/axia-fetch
 build/axia-fetch: build/axia-sysreport
 	ln -sf axia-sysreport $@
 # `axia-sysreport bench` links LordBench's axia-server side (mk/lordbench.mk), libc only too
-SYSREPORT_BENCH_SRC := src/bench/lbrun.c src/bench/lbcond.c src/bench/lbproto.c src/bench/bench.c src/bench/lbframes.c \
-                       src/bench/lbvideo.c src/bench/boottest.c src/media/proto.c
-build/axia-sysreport: src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_HDR) $(SYSREPORT_BENCH_SRC) $(wildcard src/bench/*.h) build/gen/lord_version.h $(CODEC_LIB)
+SYSREPORT_BENCH_SRC := src/bench/lbrun.c src/bench/lbcond.c src/bench/lbframes.c \
+                       src/bench/lbvideo.c src/media/proto.c
+build/axia-sysreport: src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_HDR) $(SYSREPORT_BENCH_SRC) $(wildcard src/bench/*.h) build/gen/lord_version.h $(CODEC_LIB) $(BENCH_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -Ibuild/gen $(CFLAGS) $(WARN) -std=c11 -o $@ src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_BENCH_SRC) $(CODEC_LIB) -lm -lpthread $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) -Ibuild/gen $(CFLAGS) $(WARN) -std=c11 -o $@ src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_BENCH_SRC) $(CODEC_LIB) $(BENCH_LIB) -lm -lpthread $(CODEC_NATIVE_LIBS)
 # five fake machines full of serials, UUIDs, MACs and names that must not reach a report (periph.c is
 # lord.sysinfo.peripherals(): on screen only, so it is not in SYSREPORT_SRC and the commands can't print it);
 # `build/sysreport-test fixture <dir> amd|intel|nvidia|rpi5|vm` writes one for `--root`

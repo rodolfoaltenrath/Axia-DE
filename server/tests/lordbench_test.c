@@ -593,7 +593,7 @@ int main(void) {
     free(h);
     unlink(bt);
 
-    /* ---- the boot time test's state (bench/boottest.c) ---- */
+    /* ---- the boot time test's state (bench/boot.rs) ---- */
     BootTest b = { 5, 5, 1793000000LL }, bs, after;
     char text[128];
     CHECK(bt_format(&b, text, sizeof text) == 0 && !strcmp(text, "lordos-boot-test 1\ntotal 5\nleft 5\nat 1793000000\n"), "format: %s", text);

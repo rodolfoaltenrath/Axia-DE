@@ -1,0 +1,14 @@
+[package]
+name = "axia-bench"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native desktop benchmark measurements, workloads and isolated helper"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+
+[lib]
+path = "../../server/src/bench/mod.rs"
+crate-type = ["staticlib", "rlib"]

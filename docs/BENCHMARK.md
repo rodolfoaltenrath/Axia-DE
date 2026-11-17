@@ -341,7 +341,7 @@ development package.
   latency is "failed". On VM 116 without a monitor: 14.6 ms median and 25.2 ms p99 alone, 15.1 and 30.9 ms under
   load; on the Pi 5 (no monitor): about 15.7 and 27 ms alone, 22 and 52 ms under load ("The desktop under load").
 - **Boot time test** (Performance → Boot time, administrators): N boots in a row (3, 5 or 10). The closed admin
-  action `boot-test <n>` writes `/var/lib/lordos/boot-test` in a fixed format (`bench/boottest.c`) and the session
+  action `boot-test <n>` writes `/var/lib/lordos/boot-test` in a fixed format (`bench/boot.rs`) and the session
   restarts as usual (its confirmation included). At each boot's first frame lord-sessiond records the boot with its
   number in the test and, while boots are left, writes the file again and restarts 30 s later; the login screen
   shows the boot and the countdown with **Stop the test**, and a login there stops it too (`docs/SESSIONS.md`,

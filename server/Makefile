@@ -4,6 +4,7 @@ CC      ?= cc
 CARGO   ?= cargo
 RUST_MANIFEST := ../rust/Cargo.toml
 RUST_LIB := build/rust/release/libaxia_shell.a
+BENCH_LIB := build/bench-rust/release/libaxia_bench.a
 CODEC_LIB := build/codecs/release/libaxia_codecs.a
 VAULT_CODEC_LIB := build/vault-codecs/release/libaxia_codecs.a
 # axia-maild's archive also carries the mail parsers (rust/axia-mail, docs/RUST-MAIL.md).
@@ -243,6 +244,9 @@ build/wayland-input-ffi-test: tests/wayland_input_ffi_test.c tests/wayland_input
 build/text-input-ffi-test: tests/text_input_ffi_test.c src/wl/wl_input.h $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ tests/text_input_ffi_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
 	./$@ || { rm -f $@; exit 1; }
+BENCH_INPUTS := ../rust/axia-bench/Cargo.toml $(wildcard src/bench/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
+$(BENCH_LIB): $(BENCH_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --target-dir $(abspath build/bench-rust) --release --locked --offline
 $(RUST_LIB): $(RUST_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
 build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
@@ -639,8 +643,8 @@ $(foreach p,$(WL_MORE),$(eval $(call wl_proto,$(p))))
 build/gen/%.o: build/gen/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -w -c -o $@ $<
 
-build/axia-server: $(OBJ) $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB)
-	$(CC) $(LDFLAGS) -o $@ $(filter-out $(RUST_LIB),$^) $(RUST_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS)
+build/axia-server: $(OBJ) $(QJS_OBJ) $(WL_OBJ) $(RUST_LIB) $(BENCH_LIB)
+	$(CC) $(LDFLAGS) -o $@ $(filter-out $(RUST_LIB) $(BENCH_LIB),$^) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) $(LDLIBS)
 
 # Version, channel and build of LordOS, shown in About and Settings → General (lord.version and
 # lord.system.info()). Version and channel come from ../package.json ("version" and "lordos": {"channel"}),

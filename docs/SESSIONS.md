@@ -245,7 +245,7 @@ shows its own timer (`tools/boot/plymouth/lordos/lordos.script`). How to check a
 
 **Boot time test (0.8.6, LordBench).** System Information → Performance can measure N boots in a row (2 to
 10). The admin action `boot-test <n>` writes `/var/lib/lordos/boot-test` (root's, a fixed format:
-`bench/boottest.c`) and the session restarts as usual. At each boot's first frame lord-sessiond records the
+`bench/boot.rs`) and the session restarts as usual. At each boot's first frame lord-sessiond records the
 boot with `"test":k,"testOf":n` and, while boots are left, writes the file again and restarts 30 s later
 (`boot_test_tick`). The login screen shows which boot it was and the countdown, with **Stop the test**; a login
 there also stops it, and so does `boot-test-cancel`. Before restarting, lord-sessiond reads the file again and
