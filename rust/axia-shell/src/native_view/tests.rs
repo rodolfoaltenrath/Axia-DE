@@ -1392,6 +1392,12 @@ fn notes_native_host_edits_long_unicode_text_and_flushes_on_focus_loss() {
     let mount = scene::create(scene::VIEW);
     let mut host = Host::new(mount, super::app("notes").unwrap(), assets.to_str().unwrap(), Some(home.0.to_str().unwrap()));
     host.facts(json!({"lang":"en","args":{"__nativeOwner":7,"__nativeWindow":"notes"},"context":{"theme":{"text":"#222","textDim":"#666","accent":"#06c","windowBg":"#fff","separator":"#ddd"}}}));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while host.find_text("Search notes") == 0 {
+        assert!(std::time::Instant::now() < deadline, "Notes did not finish loading");
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        host.tick(super::host::now_ms() + 1000.);
+    }
     let search = host.find_text("Search notes");
     assert_ne!(search, 0);
     host.pointer("down", search, 0., 0., 0);
@@ -1406,6 +1412,13 @@ fn notes_native_host_edits_long_unicode_text_and_flushes_on_focus_loss() {
     assert!(!host.owns_text_input());
     let list = crate::notes_app::store::with(home.0.to_str().unwrap(), |s| s.list.clone());
     assert_eq!(list.len(), 1);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while crate::notes_app::store::with(home.0.to_str().unwrap(), |s| {
+        s.tick(crate::clock::now()); s.saving()
+    }) {
+        assert!(std::time::Instant::now() < deadline, "Notes did not finish saving");
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
     let saved = std::fs::read_to_string(home.0.join("Notes").join(&list[0].slug).join("nota.md")).unwrap();
     assert!(saved.contains(&body));
     assert!(list[0].body.starts_with("**"));

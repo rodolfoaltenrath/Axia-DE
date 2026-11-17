@@ -84,7 +84,7 @@ fn dot(color: &str, selected: bool, size: f64) -> Value {
 }
 fn headings(source: &str) -> Vec<(usize, usize, String)> {
     let mut fenced = false;
-    let h = regex::Regex::new(r"^(#{1,6})\s+(.*?)\s*#*\s*$").unwrap();
+    let h = pattern!(r"^(#{1,6})\s+(.*?)\s*#*\s*$");
     source
         .lines()
         .enumerate()
@@ -104,7 +104,7 @@ fn read(app: &App, n: &store::Note, width: f64) -> Value {
     let t = paper_theme();
     let base = store::with(&app.home, |s| s.path(&n.slug).unwrap_or_default());
     let expanded = emoji::expand(&n.body);
-    let images = regex::Regex::new(r"!\[([^\]]*)\]\(([^)\s]+)\)").unwrap();
+    let images = pattern!(r"!\[([^\]]*)\]\(([^)\s]+)\)");
     let source = images
         .replace_all(&expanded, |c: &regex::Captures| {
             let path = std::path::Path::new(&c[2]);
@@ -149,8 +149,7 @@ fn read(app: &App, n: &store::Note, width: f64) -> Value {
                 fenced = !fenced;
             }
             if !fenced
-                && regex::Regex::new(r"^\s*(>\s*)*([-*+]|\d+[.)])\s+\[[ xX]\]")
-                    .unwrap()
+                && pattern!(r"^\s*(>\s*)*([-*+]|\d+[.)])\s+\[[ xX]\]")
                     .is_match(l)
             {
                 Some(i)
@@ -364,9 +363,16 @@ fn panel(app: &App, note: Option<&store::Note>, t: &Value) -> Value {
         _ => Value::Null,
     }
 }
+pub(super) const SIDEBAR_ROW: f64 = 60.;
+pub(super) fn sidebar_height(app: &App) -> f64 { (app.height - 50.).max(1.) }
 pub(super) fn tree(app: &mut App, now: i64) -> Value {
     if app.home.is_empty() {
         return view(json!({}), vec![]);
+    }
+    let (ready, error) = store::with(&app.home, |s| (s.ready(), s.error.clone()));
+    if !ready {
+        return view(json!({"flex":1,"alignItems":"center","justifyContent":"center"}), vec![label(
+            if error.is_empty() { key("docs.loading") } else { json!(error) }, &app.theme, true)]);
     }
     let note = app.note();
     let t = app.theme.clone();
@@ -482,10 +488,41 @@ pub(super) fn tree(app: &mut App, now: i64) -> Value {
     };
     let mut children = vec![];
     if !app.widget {
-        let notes = store::with(&app.home, |s| s.list.clone());
-        let query = app.query.trim().to_lowercase();
-        let rows=notes.iter().filter(|n|query.is_empty()||format!("{}\n{}",n.title,n.body).to_lowercase().contains(&query)).map(|n|{let on=note.as_ref().is_some_and(|x|x.slug==n.slug);let date=note_date(app,&n.updated);let mut colors=t.clone();if on{colors["text"]=json!("#fff");colors["textDim"]=json!("rgba(255,255,255,0.75)");}click(v(&n.slug,json!({"flexDirection":"row","gap":10,"paddingVertical":9,"paddingHorizontal":10,"borderRadius":8,"marginBottom":2,"backgroundColor":if on{t["accent"].clone()}else{json!("transparent")}}),vec![dot(&n.color,false,8.),v("summary",json!({"flex":1,"gap":2}),vec![label(if n.title.is_empty(){key("notes.untitled")}else{json!(n.title)},&colors,false),label(json!(format!("{date} {}",if n.desktop{app.i18n.caption(&key("notes.onDesktop"))}else{store::preview(&n.body)})),&colors,true)])]),json!(["select",n.slug]))}).collect::<Vec<_>>();
-        children.push(v("sidebar",json!({"width":side,"backgroundColor":t["sidebarBg"],"paddingTop":12,"paddingHorizontal":10,"gap":10,"borderEndWidth":1,"borderEndColor":t["separator"]}),vec![row("search",vec![input("query",&app.query,key("notes.search")),button(json!("✎"),"new",Value::Null,false)]),json!({"kind":"scroll","key":"notes-list","style":{"flex":1},"children":rows})]));
+        let notes = store::with(&app.home, |s| s.sidebar(&app.query));
+        let height = sidebar_height(app);
+        let full = notes.len() as f64 * SIDEBAR_ROW;
+        app.sidebar_offset = app.sidebar_offset.clamp(0., (full - height).max(0.));
+        let first = (app.sidebar_offset / SIDEBAR_ROW).floor() as usize;
+        let count = (height / SIDEBAR_ROW).ceil() as usize + 2;
+        let mut rows = Vec::new();
+        for (i, n) in notes.iter().enumerate().skip(first).take(count) {
+            let selected = note.as_ref().is_some_and(|x| x.slug == n.slug);
+            let date = note_date(app, &n.updated);
+            let mut colors = t.clone();
+            if selected { colors["text"] = json!("#fff"); colors["textDim"] = json!("rgba(255,255,255,0.75)"); }
+            let caption = if n.title.is_empty() { key("notes.untitled") } else { json!(n.title) };
+            let mut title = label(caption, &colors, false);
+            title["style"]["whiteSpace"] = json!("nowrap");
+            title["style"]["textOverflow"] = json!("ellipsis");
+            let mut detail = label(json!(format!("{date} {}", if n.desktop { app.i18n.caption(&key("notes.onDesktop")) } else { n.preview.clone() })), &colors, true);
+            detail["style"]["whiteSpace"] = json!("nowrap");
+            detail["style"]["textOverflow"] = json!("ellipsis");
+            let mut row = click(v(&n.slug, json!({"position":"absolute","left":0,"right":8,"top":i as f64*SIDEBAR_ROW-app.sidebar_offset,"height":SIDEBAR_ROW-2.,"flexDirection":"row","gap":10,"paddingVertical":9,"paddingHorizontal":10,"borderRadius":8,"backgroundColor":if selected{t["accent"].clone()}else{json!("transparent")}}), vec![
+                dot(&n.color, false, 8.), v("summary", json!({"flex":1,"minWidth":0,"gap":2}), vec![title, detail])]), json!(["select",n.slug]));
+            row["tooltip"] = json!(n.title);
+            rows.push(row);
+        }
+        if full > height {
+            let thumb = (height * height / full).max(24.).min(height);
+            let mut bar = v("notes-scrollbar", json!({"position":"absolute","right":0,"top":app.sidebar_offset/(full-height)*(height-thumb),"width":6,"height":thumb,"borderRadius":3,"backgroundColor":t["textDim"]}), vec![]);
+            bar["events"]["onMouseDown"] = json!(["sidebarDrag"]);
+            rows.push(bar);
+        }
+        let mut list = v("notes-list", json!({"flex":1,"minHeight":0,"overflow":"hidden"}), rows);
+        list["events"]["onWheel"] = json!(["sidebarWheel"]);
+        let mut add = button(json!("✎"), "new", Value::Null, false);
+        add["disabled"] = json!(!store::with(&app.home, |s| s.ready()));
+        children.push(v("sidebar",json!({"width":side,"backgroundColor":t["sidebarBg"],"paddingTop":12,"paddingHorizontal":10,"gap":10,"borderEndWidth":1,"borderEndColor":t["separator"]}),vec![row("search",vec![input("query",&app.query,key("notes.search")),add]),list]));
     }
     children.push(content);
     let error = store::with(&app.home, |s| s.error.clone());

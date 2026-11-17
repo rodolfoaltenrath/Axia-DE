@@ -1,16 +1,14 @@
 //! Shared Rust session and the original Markdown/YAML storage format.
+use super::persistence::{Event, Persistence, Save};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     cell::RefCell,
-    collections::BTreeMap,
-    fs,
-    io::{self, Write},
+    collections::{BTreeMap, BTreeSet},
+    fs, io,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        mpsc,
-    },
+    rc::Rc,
+    sync::mpsc,
 };
 pub const COLORS: [&str; 6] = ["yellow", "pink", "green", "blue", "purple", "gray"];
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -27,27 +25,27 @@ pub struct Note {
     pub pinned: bool,
     pub created: String,
     pub updated: String,
-}
-fn re(s: &str) -> regex::Regex {
-    regex::Regex::new(s).unwrap()
+    #[serde(skip)]
+    pub preview: String,
 }
 pub fn title(body: &str) -> String {
     let line = body
         .lines()
-        .find(|l| !l.trim().is_empty() && !re(r"^(`{3,}|---)").is_match(l.trim()))
+        .find(|l| !l.trim().is_empty() && !pattern!(r"^(`{3,}|---)").is_match(l.trim()))
         .unwrap_or("");
-    let line = re(r"^\s*(#{1,6}\s+|>\s*|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)").replace(line, "");
-    let line = re(r"[*_`~]|!\[[^\]]*\]\([^)]*\)").replace_all(&line, "");
+    let line =
+        pattern!(r"^\s*(#{1,6}\s+|>\s*|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)").replace(line, "");
+    let line = pattern!(r"[*_`~]|!\[[^\]]*\]\([^)]*\)").replace_all(&line, "");
     line.trim().chars().take(60).collect()
 }
 pub fn preview(body: &str) -> String {
     let line = body
         .lines()
         .map(str::trim)
-        .find(|l| !l.is_empty() && !re(r"^(`{3,}|---|#)").is_match(l))
+        .find(|l| !l.is_empty() && !pattern!(r"^(`{3,}|---|#)").is_match(l))
         .unwrap_or("");
-    let line = re(r"^(>\s*|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)").replace(line, "");
-    re(r"[*_`~]|!\[[^\]]*\]\([^)]*\)")
+    let line = pattern!(r"^(>\s*|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)").replace(line, "");
+    pattern!(r"[*_`~]|!\[[^\]]*\]\([^)]*\)")
         .replace_all(&line, "")
         .chars()
         .take(80)
@@ -56,15 +54,15 @@ pub fn preview(body: &str) -> String {
 pub fn parse(text: &str) -> (Value, String) {
     let normalized = text.replace("\r\n", "\n");
     let mut meta = json!({});
-    if let Some(c) = re(r"^---\n([\s\S]*?)\n---\n?").captures(&normalized) {
+    if let Some(c) = pattern!(r"^---\n([\s\S]*?)\n---\n?").captures(&normalized) {
         for line in c[1].lines() {
-            if let Some(c) = re(r"^(\w+):\s*(.*)$").captures(line) {
+            if let Some(c) = pattern!(r"^(\w+):\s*(.*)$").captures(line) {
                 let v = c[2].trim();
                 let value = if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
                     json!(v[1..v.len() - 1].replace("\\\"", "\""))
                 } else if v == "true" || v == "false" {
                     json!(v == "true")
-                } else if re(r"^-?\d+(\.\d+)?$").is_match(v) {
+                } else if pattern!(r"^-?\d+(\.\d+)?$").is_match(v) {
                     v.parse::<f64>().ok().map_or(json!(v), |n| json!(n))
                 } else {
                     json!(v)
@@ -88,7 +86,7 @@ fn yaml(v: &Value) -> String {
             || s == "false"
             || s.starts_with(char::is_whitespace)
             || s.ends_with(char::is_whitespace)
-            || re(r#"[:#"'\n]|^-?\d"#).is_match(s)
+            || pattern!(r#"[:#"'\n]|^-?\d"#).is_match(s)
         {
             return format!("\"{}\"", s.replace('"', "\\\"").replace('\n', " "));
         }
@@ -127,7 +125,16 @@ fn segment(s: &str) -> bool {
     !s.is_empty() && !s.starts_with('.') && !s.contains(['/', '\\', '\0'])
 }
 pub fn image(name: &str) -> bool {
-    re(r"(?i)\.(png|jpe?g)$").is_match(name)
+    pattern!(r"(?i)\.(png|jpe?g)$").is_match(name)
+}
+#[derive(Clone)]
+pub struct Summary {
+    pub slug: String,
+    pub title: String,
+    pub preview: String,
+    pub color: String,
+    pub updated: String,
+    pub desktop: bool,
 }
 struct Copy {
     rx: mpsc::Receiver<Result<(), String>>,
@@ -138,115 +145,144 @@ struct Copy {
 }
 pub struct Session {
     pub home: PathBuf,
+    source_home: PathBuf,
+    known: BTreeSet<String>,
     pub list: Vec<Note>,
     pub revision: u64,
     pub error: String,
-    dirty: BTreeMap<String, i64>,
+    dirty: BTreeMap<String, (i64, u64)>,
+    persistence: Persistence,
+    loaded: bool,
+    pending: BTreeMap<String, u64>,
+    versions: BTreeMap<String, u64>,
+    save_errors: BTreeMap<String, String>,
+    summaries: Option<(u64, String, Rc<Vec<Summary>>)>,
     copies: Vec<Copy>,
 }
 impl Session {
     pub fn new(home: &str) -> Self {
-        let mut s = Self {
-            home: fs::canonicalize(home).unwrap_or_else(|_| PathBuf::from(home)),
+        let home = PathBuf::from(home);
+        let persistence = Persistence::new(home.clone());
+        let error = if persistence.available() {
+            String::new()
+        } else {
+            "Cannot start Notes storage worker".into()
+        };
+        Self {
+            source_home: home.clone(),
+            home,
+            known: BTreeSet::new(),
             list: vec![],
             revision: 1,
-            error: String::new(),
+            error,
             dirty: BTreeMap::new(),
             copies: vec![],
-        };
-        if !s.home.join("Notes").exists() && s.home.join("Notas").exists() {
-            let _ = fs::rename(s.home.join("Notas"), s.home.join("Notes"));
+            persistence,
+            loaded: false,
+            pending: BTreeMap::new(),
+            versions: BTreeMap::new(),
+            save_errors: BTreeMap::new(),
+            summaries: None,
         }
-        let _ = fs::create_dir_all(s.home.join("Notes"));
-        s.load();
-        s
+    }
+    pub fn ready(&self) -> bool {
+        self.loaded
+    }
+    pub fn busy(&self) -> bool {
+        !self.loaded || self.saving() || !self.copies.is_empty()
+    }
+    pub fn saving(&self) -> bool {
+        !self.dirty.is_empty() || !self.pending.is_empty()
+    }
+    fn receive(&mut self, now: i64) {
+        while let Ok(event) = self.persistence.events.try_recv() {
+            match event {
+                Event::Loaded(result) => {
+                    match result {
+                        Ok((home, notes)) => {
+                            self.home = home;
+                            self.known.extend(notes.iter().map(|n| n.slug.clone()));
+                            self.list = notes;
+                        }
+                        Err(error) => self.error = error,
+                    }
+                    self.loaded = true;
+                    self.revision += 1;
+                }
+                Event::Saved {
+                    slug,
+                    revision,
+                    result,
+                } => {
+                    if self.pending.get(&slug) != Some(&revision) {
+                        continue;
+                    }
+                    self.pending.remove(&slug);
+                    if let Err(error) = result {
+                        if self.get(&slug).is_some() && self.versions.get(&slug) == Some(&revision)
+                        {
+                            self.save_errors.insert(slug.clone(), error.clone());
+                            self.error = error;
+                            self.dirty
+                                .insert(slug, (now.saturating_add(1000), revision));
+                            self.revision += 1;
+                        }
+                    } else if let Some(old) = self.save_errors.remove(&slug) {
+                        if self.error == old {
+                            self.error = self
+                                .save_errors
+                                .values()
+                                .next()
+                                .cloned()
+                                .unwrap_or_default();
+                        }
+                        self.revision += 1;
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(test)]
+    pub fn pause_storage(&self, paused: bool) {
+        self.persistence.pause(paused);
+    }
+    #[cfg(test)]
+    pub fn queued_saves(&self) -> usize {
+        self.persistence.queued()
     }
     pub fn root(&self) -> PathBuf {
         self.home.join("Notes")
     }
     pub fn path(&self, slug: &str) -> io::Result<PathBuf> {
-        if !segment(slug) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Invalid note folder",
-            ));
-        }
-        let root = fs::canonicalize(self.root())?;
-        if !root.starts_with(&self.home) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Notes is outside home",
-            ));
-        }
-        let path = root.join(slug);
-        if path.exists() && !fs::canonicalize(&path)?.starts_with(&root) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Note is outside Notes",
-            ));
-        }
-        Ok(path)
+        note_path(&self.home, slug)
     }
-    fn load(&mut self) {
-        let Ok(entries) = fs::read_dir(self.root()) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let slug = entry.file_name().to_string_lossy().to_string();
-            if !segment(&slug) {
-                continue;
+    pub fn sidebar(&mut self, query: &str) -> Rc<Vec<Summary>> {
+        let query = query.trim().to_lowercase();
+        if let Some((rev, cached_query, rows)) = &self.summaries {
+            if *rev == self.revision && *cached_query == query {
+                return rows.clone();
             }
-            let Ok(path) = self.path(&slug) else {
-                continue;
-            };
-            let Ok(file) = fs::canonicalize(path.join("nota.md")) else {
-                continue;
-            };
-            if !file.starts_with(&self.home) {
-                continue;
-            }
-            let Ok(text) = fs::read_to_string(file) else {
-                continue;
-            };
-            let (m, body) = parse(&text);
-            let modified = entry
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_millis() as i64);
-            let number = |k: &str, f: f64| m[k].as_f64().filter(|n| n.is_finite()).unwrap_or(f);
-            let title = m["title"]
-                .as_str()
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned)
-                .unwrap_or_else(|| title(&body));
-            self.list.push(Note {
-                slug,
-                body,
-                title,
-                color: m["color"]
-                    .as_str()
-                    .filter(|c| COLORS.contains(c))
-                    .unwrap_or("yellow")
-                    .into(),
-                x: number("x", 80.),
-                y: number("y", 80.),
-                w: number("w", 260.).max(160.),
-                h: number("h", 240.).max(110.),
-                desktop: m["desktop"] == true,
-                pinned: m["pinned"] == true,
-                created: m["created"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| iso(modified)),
-                updated: m["updated"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| iso(modified)),
-            });
         }
-        self.list.sort_by(|a, b| b.updated.cmp(&a.updated));
+        let rows = Rc::new(
+            self.list
+                .iter()
+                .filter(|n| {
+                    query.is_empty()
+                        || n.title.to_lowercase().contains(&query)
+                        || n.body.to_lowercase().contains(&query)
+                })
+                .map(|n| Summary {
+                    slug: n.slug.clone(),
+                    title: n.title.clone(),
+                    preview: n.preview.clone(),
+                    color: n.color.clone(),
+                    updated: n.updated.clone(),
+                    desktop: n.desktop,
+                })
+                .collect(),
+        );
+        self.summaries = Some((self.revision, query, Rc::clone(&rows)));
+        rows
     }
     pub fn get(&self, slug: &str) -> Option<&Note> {
         self.list.iter().find(|n| n.slug == slug)
@@ -255,6 +291,7 @@ impl Session {
         if let Some(n) = self.list.iter_mut().find(|n| n.slug == slug) {
             if let Some(body) = patch["body"].as_str() {
                 n.body = body.into();
+                n.preview = preview(body);
                 let t = title(body);
                 if !t.is_empty() {
                     n.title = t;
@@ -282,8 +319,9 @@ impl Session {
             if touch {
                 n.updated = iso(now);
             }
-            self.dirty.insert(slug.into(), now + 600);
             self.revision += 1;
+            self.versions.insert(slug.into(), self.revision);
+            self.dirty.insert(slug.into(), (now + 600, self.revision));
         }
     }
     pub fn create(
@@ -293,6 +331,9 @@ impl Session {
         desktop: bool,
         now: i64,
     ) -> Result<String, String> {
+        if !self.loaded {
+            return Err("Notes are still loading".into());
+        }
         let base = format!(
             "note-{}",
             iso(now)
@@ -309,6 +350,10 @@ impl Session {
             } else {
                 format!("{base}-{i}")
             };
+            if self.known.contains(&s) {
+                i += 1;
+                continue;
+            }
             let path = self.path(&s).map_err(|e| e.to_string())?;
             match fs::create_dir(path) {
                 Ok(_) => break s,
@@ -320,6 +365,7 @@ impl Session {
         let n = Note {
             slug: slug.clone(),
             title: title(&body),
+            preview: preview(&body),
             body,
             color: if COLORS.contains(&color) {
                 color
@@ -336,45 +382,36 @@ impl Session {
             created: iso(now),
             updated: iso(now),
         };
+        self.known.insert(slug.clone());
         self.list.insert(0, n);
-        self.dirty.insert(slug.clone(), 0);
-        self.flush(now, true);
         self.revision += 1;
+        self.versions.insert(slug.clone(), self.revision);
+        self.dirty.insert(slug.clone(), (0, self.revision));
+        self.flush(now, true);
         Ok(slug)
     }
     pub fn flush(&mut self, now: i64, force: bool) {
+        self.receive(now);
+        self.enqueue(now, force, false);
+    }
+    fn enqueue(&mut self, now: i64, force: bool, wait: bool) {
         let slugs: Vec<_> = self
             .dirty
             .iter()
-            .filter(|(_, t)| force || now >= **t)
-            .map(|(s, _)| s.clone())
+            .filter(|(_, (at, _))| force || now >= *at)
+            .map(|(slug, (_, revision))| (slug.clone(), *revision))
             .collect();
-        for slug in slugs {
-            if let Some(n) = self.get(&slug) {
-                let result = (|| -> io::Result<()> {
-                    static SEQ: AtomicU64 = AtomicU64::new(0);
-                    let dir = self.path(&slug)?;
-                    let tmp = dir.join(format!(
-                        ".nota-{}-{}.tmp",
-                        std::process::id(),
-                        SEQ.fetch_add(1, Ordering::Relaxed)
-                    ));
-                    let mut f = fs::OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .open(&tmp)?;
-                    f.write_all(serialize(n).as_bytes())?;
-                    f.sync_data()?;
-                    fs::rename(tmp, dir.join("nota.md"))
-                })();
-                match result {
-                    Ok(_) => {
-                        self.dirty.remove(&slug);
-                    }
-                    Err(e) => {
-                        self.error = e.to_string();
-                    }
-                }
+        for (slug, revision) in slugs {
+            if !wait && !self.persistence.can_submit(&slug) {
+                continue;
+            }
+            let Some(note) = self.get(&slug).cloned() else {
+                self.dirty.remove(&slug);
+                continue;
+            };
+            if self.persistence.submit(Save { note, revision }, wait) {
+                self.dirty.remove(&slug);
+                self.pending.insert(slug, revision);
             }
         }
     }
@@ -392,6 +429,8 @@ impl Session {
             fs::rename(path, target).map_err(|e| e.to_string())?;
         }
         self.dirty.remove(slug);
+        self.pending.remove(slug);
+        self.versions.remove(slug);
         self.list.retain(|n| n.slug != slug);
         self.revision += 1;
         Ok(())
@@ -524,6 +563,7 @@ impl Session {
         Ok(copy)
     }
     pub fn tick(&mut self, now: i64) {
+        self.receive(now);
         let mut pending = vec![];
         for c in std::mem::take(&mut self.copies) {
             match c.rx.try_recv() {
@@ -553,8 +593,8 @@ thread_local! {static SESSION:RefCell<Option<Session>>=const{RefCell::new(None)}
 pub fn with<R>(home: &str, f: impl FnOnce(&mut Session) -> R) -> R {
     SESSION.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let root = fs::canonicalize(home).unwrap_or_else(|_| PathBuf::from(home));
-        if slot.as_ref().is_none_or(|s| s.home != root) {
+        let root = PathBuf::from(home);
+        if slot.as_ref().is_none_or(|s| s.source_home != root) {
             *slot = Some(Session::new(home));
         }
         f(slot.as_mut().unwrap())
@@ -569,7 +609,11 @@ pub fn try_with<R>(home: &str, f: impl FnOnce(&mut Session) -> R) -> Option<R> {
 impl Drop for Session {
     fn drop(&mut self) {
         // pending edits reach the disk when the session goes away (thread exit, another home)
-        self.flush(i64::MAX, true);
+        self.receive(i64::MAX);
+        self.enqueue(i64::MAX, true, true);
+        // Only session/process teardown joins disk I/O. Closing one window merely
+        // queues its final revision, so the shared compositor remains responsive.
+        self.persistence.finish();
     }
 }
 pub fn background(input: &Value) -> Value {
@@ -585,4 +629,94 @@ pub fn background(input: &Value) -> Value {
             json!({"revision":s.revision,"widgets":s.widgets(input["screen"]["width"].as_f64().unwrap_or(1920.),input["screen"]["height"].as_f64().unwrap_or(1080.))})
         }
     })
+}
+
+pub(super) fn note_path(home: &Path, slug: &str) -> io::Result<PathBuf> {
+    if !segment(slug) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Invalid note folder",
+        ));
+    }
+    let root = fs::canonicalize(home.join("Notes"))?;
+    if !root.starts_with(home) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Notes is outside home",
+        ));
+    }
+    let path = root.join(slug);
+    if path.exists() && !fs::canonicalize(&path)?.starts_with(&root) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Note is outside Notes",
+        ));
+    }
+    Ok(path)
+}
+
+pub(super) fn load(home: &Path) -> io::Result<Vec<Note>> {
+    let entries = fs::read_dir(home.join("Notes"))?;
+    let mut list = Vec::new();
+    for entry in entries.flatten() {
+        let slug = entry.file_name().to_string_lossy().to_string();
+        if !segment(&slug) {
+            continue;
+        }
+        let Ok(path) = note_path(home, &slug) else {
+            continue;
+        };
+        let Ok(file) = fs::canonicalize(path.join("nota.md")) else {
+            continue;
+        };
+        if !file.starts_with(home) {
+            continue;
+        }
+        if !fs::metadata(&file).is_ok_and(|m| m.is_file()) {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(file) else {
+            continue;
+        };
+        let (m, body) = parse(&text);
+        let modified = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_millis() as i64);
+        let number = |k: &str, f: f64| m[k].as_f64().filter(|n| n.is_finite()).unwrap_or(f);
+        let title = m["title"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| title(&body));
+        list.push(Note {
+            slug,
+            preview: preview(&body),
+            body,
+            title,
+            color: m["color"]
+                .as_str()
+                .filter(|c| COLORS.contains(c))
+                .unwrap_or("yellow")
+                .into(),
+            x: number("x", 80.),
+            y: number("y", 80.),
+            w: number("w", 260.).max(160.),
+            h: number("h", 240.).max(110.),
+            desktop: m["desktop"] == true,
+            pinned: m["pinned"] == true,
+            created: m["created"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| iso(modified)),
+            updated: m["updated"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| iso(modified)),
+        });
+    }
+    list.sort_by(|a, b| b.updated.cmp(&a.updated));
+    Ok(list)
 }

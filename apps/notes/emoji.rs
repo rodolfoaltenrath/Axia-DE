@@ -283,7 +283,7 @@ pub fn search(q: &str) -> Vec<Emoji> {
     start
 }
 pub fn expand(source: &str) -> String {
-    let re = regex::Regex::new(r":([a-zA-Z0-9_+-]+):").unwrap();
+    let re = pattern!(r":([a-zA-Z0-9_+-]+):");
     re.replace_all(source, |c: &regex::Captures| {
         get(&c[1]).unwrap_or(&c[0]).to_owned()
     })

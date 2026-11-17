@@ -16,6 +16,8 @@ pub struct Row {
 #[derive(Default)]
 pub struct Editor {
     pub body: String,
+    revision: u64,
+    layout_key: Option<(u64, u64, u64, u64)>,
     pub a: usize,
     pub b: usize,
     pub scroll: f64,
@@ -41,9 +43,6 @@ fn chars(s: &str) -> Vec<char> {
 }
 fn slice(s: &str, a: usize, b: usize) -> String {
     s.chars().skip(a).take(b.saturating_sub(a)).collect()
-}
-fn regex(s: &str) -> regex::Regex {
-    regex::Regex::new(s).unwrap()
 }
 pub fn advance(c: char, size: f64) -> f64 {
     let mut encoded = [0; 4];
@@ -117,11 +116,11 @@ impl Editor {
         self.layout();
     }
     pub fn layout(&mut self) {
-        self.rows = wrap(
-            &self.body,
-            (self.width - self.padding * 2. - 6.).max(40.),
-            self.size,
-        );
+        let key = (self.revision, self.width.to_bits(), self.padding.to_bits(), self.size.to_bits());
+        if self.layout_key != Some(key) {
+            self.rows = wrap(&self.body, (self.width - self.padding * 2. - 6.).max(40.), self.size);
+            self.layout_key = Some(key);
+        }
         self.scroll = self.scroll.clamp(0., self.max_scroll());
     }
     pub fn lh(&self) -> f64 {
@@ -202,12 +201,13 @@ impl Editor {
         self.last = now;
         self.kind = kind.into();
         self.body = body;
+        self.revision = self.revision.wrapping_add(1);
         self.a = a;
         self.b = b;
         self.layout();
         self.visible();
         let before = slice(&self.body, self.b.saturating_sub(26), self.b);
-        self.suggestion = regex(r"(^|[\s(])(:[a-z0-9_+\-]{2,24})$")
+        self.suggestion = pattern!(r"(^|[\s(])(:[a-z0-9_+\-]{2,24})$")
             .captures(&before)
             .and_then(|c| {
                 let list = emoji::search(&c[2][1..])
@@ -291,7 +291,7 @@ impl Editor {
         let a = self.line_start(a);
         let b = self.line_end(b);
         let inner = slice(&self.body, a, b);
-        let strip = regex(r"^(\s*)(#{1,6}\s+|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)?");
+        let strip = pattern!(r"^(\s*)(#{1,6}\s+|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)?");
         let out = inner
             .split('\n')
             .enumerate()
@@ -300,7 +300,7 @@ impl Editor {
                     return format!("  {l}");
                 }
                 if kind == "outdent" {
-                    return regex(r"^ {1,2}").replace(l, "").into_owned();
+                    return pattern!(r"^ {1,2}").replace(l, "").into_owned();
                 }
                 let m = strip.captures(l).unwrap();
                 let prefix = m.get(2).map_or("", |m| m.as_str());
@@ -315,9 +315,9 @@ impl Editor {
                     };
                 }
                 let same = match kind {
-                    "task" => regex(r"\[[ xX]\]").is_match(prefix),
+                    "task" => pattern!(r"\[[ xX]\]").is_match(prefix),
                     "num" => prefix.starts_with(|c: char| c.is_ascii_digit()),
-                    _ => regex(r"^[-*+]\s+$").is_match(prefix),
+                    _ => pattern!(r"^[-*+]\s+$").is_match(prefix),
                 };
                 let mark = if same {
                     String::new()
@@ -402,19 +402,19 @@ impl Editor {
         let start = self.line_start(a);
         let line = slice(&self.body, start, a);
         if let Some(c) =
-            regex(r"^(\s*)([-*+]\s+\[[ xX]\]\s+|[-*+]\s+|(\d+)([.)])\s+|>\s?)").captures(&line)
+            pattern!(r"^(\s*)([-*+]\s+\[[ xX]\]\s+|[-*+]\s+|(\d+)([.)])\s+|>\s?)").captures(&line)
         {
             if line.trim() == c[0].trim() && a == b && self.line_end(a) == a {
                 self.replace(start, a, "", "edit", None, now);
                 return;
             }
-            let mut mark = regex(r"\[[xX]\]").replace(&c[2], "[ ]").into_owned();
+            let mut mark = pattern!(r"\[[xX]\]").replace(&c[2], "[ ]").into_owned();
             if let Some(n) = c.get(3) {
                 mark = format!("{}{} ", n.as_str().parse::<u64>().unwrap_or(0) + 1, &c[4]);
             }
             self.insert(&format!("\n{}{mark}", &c[1]), now);
         } else {
-            let indent = regex(r"^\s*").find(&line).unwrap().as_str();
+            let indent = pattern!(r"^\s*").find(&line).unwrap().as_str();
             self.insert(&format!("\n{indent}"), now);
         }
     }
@@ -478,6 +478,7 @@ impl Editor {
                             self.redo.push(current);
                         }
                         self.body = s.body;
+                        self.revision = self.revision.wrapping_add(1);
                         self.a = s.a;
                         self.b = s.b;
                         self.last = 0;
@@ -625,7 +626,7 @@ impl Editor {
             "Enter" => self.newline(now),
             "Tab" => {
                 let line = slice(&self.body, self.line_start(a), self.line_end(a));
-                if regex(r"^\s*([-*+]|\d+[.)])\s").is_match(&line) || a < b {
+                if pattern!(r"^\s*([-*+]|\d+[.)])\s").is_match(&line) || a < b {
                     self.lines(if shift { "outdent" } else { "indent" }, now);
                 } else {
                     self.insert("  ", now);
@@ -708,7 +709,7 @@ impl Editor {
             .body
             .split('\n')
             .map(|l| {
-                let fence = regex(r"^(`{3,}|~{3,})").is_match(l);
+                let fence = pattern!(r"^(`{3,}|~{3,})").is_match(l);
                 let code = fenced || fence;
                 if fence {
                     fenced = !fenced;
@@ -734,7 +735,7 @@ impl Editor {
                 }
             }
             let (line, code) = lines.get(row.line).copied().unwrap_or(("", false));
-            let heading = regex(r"^#{1,6}\s").is_match(line);
+            let heading = pattern!(r"^#{1,6}\s").is_match(line);
             nodes.push(json!({"kind":"text","label":cs,"style":{"position":"absolute","left":self.padding,"top":y+(self.lh()-self.size*1.3)/2.,"fontFamily":"monospace","fontSize":self.size,"fontWeight":if heading{700}else{400},"color":if code{"#5b3fa0"}else if heading{"#151515"}else if line.trim_start().starts_with('>'){"#6b6b6b"}else{"#2a2a2a"},"whiteSpace":"nowrap"}}));
         }
         if self.focused && (now / 530) % 2 == 0 {

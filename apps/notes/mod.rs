@@ -1,4 +1,12 @@
 //! Notes is entirely native: session storage, editor, Markdown and desktop cards.
+// Each literal owns one compiled pattern. No parsing, locks or allocations on hits.
+macro_rules! pattern {
+    ($source:literal) => {{
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| regex::Regex::new($source).unwrap())
+    }};
+}
+mod persistence;
 mod editor;
 mod emoji;
 #[path = "../help/markdown.rs"]
@@ -46,6 +54,8 @@ pub struct App {
     widget_slug: String,
     sel: Option<String>,
     query: String,
+    sidebar_offset: f64,
+    sidebar_drag: Option<(f64, f64)>,
     mode: String,
     toc: bool,
     panel: String,
@@ -87,6 +97,8 @@ impl Default for App {
             widget_slug: String::new(),
             sel: None,
             query: String::new(),
+            sidebar_offset: 0.,
+            sidebar_drag: None,
             mode: "read".into(),
             toc: true,
             panel: String::new(),
@@ -124,20 +136,21 @@ impl NativeApp for App {
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.booted
-            .then_some(if self.mode == "edit" || self.jobs.busy() {
+            .then(|| if self.mode == "edit" || self.jobs.busy() || store::with(&self.home, |s| s.busy()) {
                 50.
             } else {
                 200.
             })
     }
     fn background_refresh_ms(&self) -> Option<f64> {
-        self.jobs.busy().then_some(100.)
+        (self.jobs.busy() || !self.home.is_empty() && store::with(&self.home, |s| s.busy())).then_some(100.)
     }
     fn text_input(&self) -> bool {
         self.foreground && self.mode == "edit" && self.editor.focused && self.panel.is_empty()
     }
     fn blur(&mut self) {
         self.editor.focused = false;
+        self.sidebar_drag = None;
         if self.widget {
             self.mode = "read".into();
         }
@@ -210,18 +223,9 @@ impl App {
                 .sel
                 .as_deref()
                 .filter(|slug| s.get(slug).is_some())
-                .or_else(|| {
-                    s.list
-                        .iter()
-                        .find(|n| {
-                            self.query.trim().is_empty()
-                                || format!("{}\n{}", n.title, n.body)
-                                    .to_lowercase()
-                                    .contains(&self.query.trim().to_lowercase())
-                        })
-                        .map(|n| n.slug.as_str())
-                });
-            slug.and_then(|slug| s.get(slug).cloned())
+                .map(str::to_owned)
+                .or_else(|| s.sidebar(&self.query).first().map(|n| n.slug.clone()));
+            slug.and_then(|slug| s.get(&slug).cloned())
         })
     }
     fn save_editor(&mut self) {
@@ -261,6 +265,7 @@ impl App {
         match store::with(&self.home, |s| s.create(body, "yellow", false, now)) {
             Ok(slug) => {
                 self.sel = Some(slug);
+                self.sidebar_offset = 0.;
                 self.mode = "read".into();
                 self.set_mode("edit");
             }
@@ -289,7 +294,7 @@ impl App {
         if !self.effects.is_empty() {
             out["effects"] = json!(std::mem::take(&mut self.effects));
         }
-        out["capture"] = json!(self.drag.is_some() || self.editor.drag.is_some());
+        out["capture"] = json!(self.drag.is_some() || self.editor.drag.is_some() || self.sidebar_drag.is_some());
         out
     }
     fn clipboard(&mut self) {
@@ -323,8 +328,7 @@ impl App {
                 if name.starts_with('.')
                     || (!dir
                         && self.panel == "image"
-                        && !regex::Regex::new(r"(?i)\.(png|jpe?g|gif|bmp|webp)$")
-                            .unwrap()
+                        && !pattern!(r"(?i)\.(png|jpe?g|gif|bmp|webp)$")
                             .is_match(&name))
                 {
                     continue;
@@ -491,7 +495,11 @@ impl App {
                     self.editor.focused = false;
                 }
             }
-            "query" => self.query = input["value"].as_str().unwrap_or(arg).into(),
+            "query" => { self.query = input["value"].as_str().unwrap_or(arg).into(); self.sidebar_offset = 0.; }
+            "sidebarWheel" => {
+                self.sidebar_offset = (self.sidebar_offset + input["deltaY"].as_f64().unwrap_or(0.)).max(0.);
+            }
+            "sidebarDrag" => self.sidebar_drag = Some((input["y"].as_f64().unwrap_or(0.), self.sidebar_offset)),
             "mode" => {
                 if ["read", "edit"].contains(&arg) {
                     self.set_mode(arg);
@@ -641,7 +649,7 @@ impl App {
                 if let (Some(n), Some(line)) = (self.note(), input["key"].as_u64()) {
                     let mut lines = n.body.split('\n').map(str::to_owned).collect::<Vec<_>>();
                     if let Some(l) = lines.get_mut(line as usize) {
-                        let r = regex::Regex::new(r"\[([ xX])\]").unwrap();
+                        let r = pattern!(r"\[([ xX])\]");
                         if let Some(c) = r.captures(l) {
                             let m = c.get(1).unwrap();
                             let (a, b) = (m.start(), m.end());
@@ -668,7 +676,7 @@ impl App {
                         };
                         if let Ok(path) = std::fs::canonicalize(path) {
                             if path.starts_with(&self.home) {
-                                let edit=regex::Regex::new(r"(?i)\.(txt|md|js|jsx|ts|json|c|h|py|sh|css|html|ya?ml|toml|ini|csv|log)$").unwrap().is_match(&path.to_string_lossy());
+                                let edit=pattern!(r"(?i)\.(txt|md|js|jsx|ts|json|c|h|py|sh|css|html|ya?ml|toml|ini|csv|log)$").is_match(&path.to_string_lossy());
                                 let path = if edit {
                                     path
                                 } else {
@@ -718,7 +726,14 @@ impl App {
                 });
             }
             "pointerMove" => {
-                if let Some(d) = &self.drag {
+                if let Some((y, offset)) = self.sidebar_drag {
+                    let count = store::with(&self.home, |s| s.sidebar(&self.query).len());
+                    let height = ui::sidebar_height(self);
+                    let full = count as f64 * ui::SIDEBAR_ROW;
+                    let thumb = (height * height / full.max(1.)).max(24.).min(height);
+                    self.sidebar_offset = (offset + (input["y"].as_f64().unwrap_or(y) - y)
+                        * (full - height).max(0.) / (height - thumb).max(1.)).clamp(0., (full - height).max(0.));
+                } else if let Some(d) = &self.drag {
                     let dx = input["x"].as_f64().unwrap_or(0.) + self.mount_geometry.0 - d.point.0;
                     let dy = input["y"].as_f64().unwrap_or(0.) + self.mount_geometry.1 - d.point.1;
                     let (x, y, w, h) = d.rect;
@@ -739,6 +754,7 @@ impl App {
                 }
             }
             "dragEnd" => {
+                self.sidebar_drag = None;
                 self.drag = None;
                 self.editor.drag = None;
                 store::with(&self.home, |s| s.flush(now, true));
