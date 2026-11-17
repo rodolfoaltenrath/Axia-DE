@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""gen-lbfonts.py - the fonts of LordBench's shaping workload (server/src/bench/lbui.c, docs/BENCHMARK.md).
+"""gen-lbfonts.py - the fonts of LordBench's shaping workload (server/src/bench/ui.rs, docs/BENCHMARK.md).
 
-axia-bench opens no files, so the fonts it shapes with are built into it (build/gen/lb_fonts.h, made by the
-Makefile from server/src/bench/fonts). The Latin one is LordOS's own Inter (assets/fonts); the others are
-Debian 13's Noto fonts subset to exactly the characters of the paragraphs in server/src/bench/lbtext.h,
+axia-bench opens no files, so the fonts it shapes with are built into it (Rust include_bytes!, from the
+files in server/src/bench/fonts). The Latin one is LordOS's own Inter (assets/fonts); the others are
+Debian 13's Noto fonts subset to exactly the characters of the paragraphs in server/src/bench/paragraphs.rs,
 keeping every OpenType layout feature and lookup those characters can reach, so the shaper gives the same
 glyphs and positions it gives with the full font on that text. It is not the same work: the subsets have
 smaller coverage tables and fewer lookups, and shape about 12 % faster than the full fonts (VM 116), so the
@@ -26,7 +26,7 @@ from fontTools import subset
 from fontTools.ttLib import TTFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEXT = os.path.join(ROOT, 'server', 'src', 'bench', 'lbtext.h')
+TEXT = os.path.join(ROOT, 'server', 'src', 'bench', 'paragraphs.rs')
 OUT = os.path.join(ROOT, 'server', 'src', 'bench', 'fonts')
 
 # (output, source relative to --fonts, face index in a collection)
@@ -40,8 +40,8 @@ FONTS = [
 
 def paragraphs():
     src = open(TEXT, encoding='utf-8').read()
-    body = src[src.index('lb_paragraphs'):]
-    body = body[body.index('{') + 1:body.index('};')]
+    body = src[src.index('PARAGRAPHS'):]
+    body = body[body.index('= [') + 3:body.index('];')]
     out = re.findall(r'"([^"\\]*)"', body)
     if len(out) != 5:
         sys.exit(f'gen-lbfonts: expected 5 paragraphs in {TEXT}, found {len(out)}')

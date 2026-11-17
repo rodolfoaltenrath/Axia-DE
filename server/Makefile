@@ -244,7 +244,7 @@ build/wayland-input-ffi-test: tests/wayland_input_ffi_test.c tests/wayland_input
 build/text-input-ffi-test: tests/text_input_ffi_test.c src/wl/wl_input.h $(RUST_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -o $@ tests/text_input_ffi_test.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
 	./$@ || { rm -f $@; exit 1; }
-BENCH_INPUTS := ../rust/axia-bench/Cargo.toml $(wildcard src/bench/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
+BENCH_INPUTS := ../rust/axia-bench/Cargo.toml ../rust/axia-bench/build.rs $(wildcard src/bench/*.rs src/bench/fonts/*) src/bench/corpus.xz ../assets/fonts/Inter-Regular.ttf ../package.json $(CODEC_INPUTS) ../rust/axia-shell/src/runtime/types.rs $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
 $(BENCH_LIB): $(BENCH_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --lib --target-dir $(abspath build/bench-rust) --release --locked --offline
 $(RUST_LIB): $(RUST_INPUTS)

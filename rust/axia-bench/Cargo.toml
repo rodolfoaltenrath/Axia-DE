@@ -8,6 +8,13 @@ description = "Native desktop benchmark measurements, workloads and isolated hel
 [dependencies]
 libc = "0.2"
 serde_json = "1"
+axia-crypto = { path = "../axia-crypto" }
+axia-shell = { path = "../axia-shell", optional = true }
+regex = "1"
+
+[features]
+gpu = []
+native-host = ["dep:axia-shell"]
 
 [lib]
 path = "../../server/src/bench/mod.rs"
@@ -16,3 +23,17 @@ crate-type = ["staticlib", "rlib"]
 [[bin]]
 name = "lbcorpus"
 path = "../../server/src/bench/corpus.rs"
+
+[[bin]]
+name = "axia-bench"
+path = "../../server/src/bench/main.rs"
+required-features = ["native-host"]
+
+[[bin]]
+name = "lordbench-cli"
+path = "../../server/src/bench/cli.rs"
+
+[[test]]
+name = "lordbench-native"
+path = "../../server/tests/lordbench.rs"
+required-features = ["native-host"]

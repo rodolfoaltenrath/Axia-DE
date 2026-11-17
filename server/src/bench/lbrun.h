@@ -1,5 +1,5 @@
 /* lbrun.h — LordBench in axia-server (docs/BENCHMARK.md, "0.8.6 — LordBench"): one run at a time, on
- * its own thread. It records the conditions, waits for a quiet system, launches axia-bench (lbmain.c)
+ * its own thread. It records the conditions, waits for a quiet system, launches axia-bench (helper.rs)
  * with the render node and, for Full, a scratch file it opened itself, checks every record that comes
  * back, watches temperatures and throttling, and saves the result as
  * ~/.local/state/axia/lordbench.json (the previous one becomes lordbench-prev.json). Exposed to JS
@@ -7,9 +7,9 @@
 #ifndef LORD_BENCH_LBRUN_H
 #define LORD_BENCH_LBRUN_H
 
-/* mode: "quick" or "full" (peak performance; then video in axia-media, lbvideo.c), or "desktop" (the
+/* mode: "quick" or "full" (peak performance; then video in axia-media, video.rs), or "desktop" (the
  * compositor's frame times while the app animates a scene, alone and then with axia-bench loading every core
- * at the lowest priority; lbframes.c). sustained_s: Full's sustained test (0 = none, 20–1800); extra: JSON
+ * at the lowest priority; frames.rs). sustained_s: Full's sustained test (0 = none, 20–1800); extra: JSON
  * the caller adds as "session" (displays, composition), produced by axia-server itself. 0 started,
  * -1 refused (another run, a bad argument, no helper). Desktop results are kept apart, in
  * lordbench-desktop.json. */

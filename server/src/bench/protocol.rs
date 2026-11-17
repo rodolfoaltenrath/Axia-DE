@@ -1,7 +1,7 @@
-//! Fixed-size helper wire records. IDs, units and acceptance ranges preserve LBN1.
+//! Fixed-size LBN2 records. Version 2 identifies native Rust workloads.
 use libc::{c_char, c_int};
-pub const LB_MAGIC: u32 = 0x4c424e31;
-pub const LB_VERSION: i32 = 1;
+pub const LB_MAGIC: u32 = 0x4c424e32;
+pub const LB_VERSION: i32 = 2;
 pub const LB_MODE_QUICK: i32 = 1;
 pub const LB_MODE_FULL: i32 = 2;
 pub const LB_MODE_LOAD: i32 = 3;
@@ -14,8 +14,8 @@ pub const LB_CPU_MAT1: i32 = 2;
 pub const LB_CPU_MATN: i32 = 3;
 pub const LB_CPU_XZ1: i32 = 4;
 pub const LB_CPU_XZN: i32 = 5;
-pub const LB_CPU_JS1: i32 = 6;
-pub const LB_CPU_JSN: i32 = 7;
+pub const LB_CPU_DATA1: i32 = 6;
+pub const LB_CPU_DATAN: i32 = 7;
 pub const LB_CPU_UI1: i32 = 8;
 pub const LB_CPU_UIN: i32 = 9;
 pub const LB_CPU_SHAPE1: i32 = 10;
@@ -86,8 +86,8 @@ const MEASUREMENTS: [(&[u8], &[u8]); LB_COUNT as usize] = [
     (b"cpu.matmul.n\0", b"GFLOP/s\0"),
     (b"cpu.xz.1\0", b"MB/s\0"),
     (b"cpu.xz.n\0", b"MB/s\0"),
-    (b"cpu.js.1\0", b"runs/s\0"),
-    (b"cpu.js.n\0", b"runs/s\0"),
+    (b"cpu.data.1\0", b"runs/s\0"),
+    (b"cpu.data.n\0", b"runs/s\0"),
     (b"cpu.ui.1\0", b"fps\0"),
     (b"cpu.ui.n\0", b"fps\0"),
     (b"cpu.shape.1\0", b"runs/s\0"),

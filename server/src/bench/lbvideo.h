@@ -1,7 +1,7 @@
 /* lbvideo.h — LordBench's video measurement from axia-server's side (docs/BENCHMARK.md, "Workloads"). It
  * launches axia-media (the only binary that links FFmpeg) from axia-server's folder, as media.c does, with
  * no fds and one MK_VBENCH job, and checks every MM_BENCH record before passing it on with LordBench's own
- * ids (lbproto.h, LB_VID_*). Blocking: lbrun.c calls it on its own thread. */
+ * ids (lbproto.h, LB_VID_*). Blocking: run.rs calls it on its own thread. */
 #ifndef LORD_BENCH_LBVIDEO_H
 #define LORD_BENCH_LBVIDEO_H
 

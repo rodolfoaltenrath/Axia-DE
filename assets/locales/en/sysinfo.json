@@ -365,6 +365,8 @@
   "perf.m.comp_p99": "Time to build a frame, slowest 1 %",
   "perf.m.cpu_js_1": "JavaScript, one core",
   "perf.m.cpu_js_n": "JavaScript, all cores",
+  "perf.m.cpu_data_1": "Rust data processing, one core",
+  "perf.m.cpu_data_n": "Rust data processing, all cores",
   "perf.m.cpu_matmul_1": "Matrix multiply, one core",
   "perf.m.cpu_matmul_n": "Matrix multiply, all cores",
   "perf.m.cpu_sha256_1": "SHA-256, one core",

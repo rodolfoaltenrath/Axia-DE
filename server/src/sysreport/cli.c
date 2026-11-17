@@ -9,7 +9,7 @@
  * axia-fetch is a link to this binary. --root <dir> reads a fake tree instead of this machine
  * (tests and fixtures only).
  *
- * bench runs LordBench through axia-server's own code (bench/lbrun.c): the same sandboxed axia-bench
+ * bench runs LordBench through axia-server's own code (bench/run.rs): the same sandboxed axia-bench
  * and axia-media, which must be next to this binary (it is installed in the LordOS folder; /usr/bin has
  * links), the same guards and the same result file as System Information → Performance. Without a session
  * the helper gets no cgroup scope and the desktop test can't run. */

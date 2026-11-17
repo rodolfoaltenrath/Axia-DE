@@ -112,7 +112,7 @@ int text_init(const char *dir) {
     return cache ? 0 : -1;
 }
 
-/* LordBench's helper (bench/lbui.c), which opens no files: one interface font built into the binary
+/* LordBench's helper (bench/ui.rs), which opens no files: one interface font built into the binary
  * fills the four Inter slots; there is no monospace or brand font (they would be opened by path). */
 int text_init_mem(const unsigned char *data, size_t size) {
     for (int i = 0; i < NFONTS; i++)

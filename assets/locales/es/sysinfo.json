@@ -365,6 +365,8 @@
   "perf.m.comp_p99": "Tiempo para armar un cuadro, el 1 % más lento",
   "perf.m.cpu_js_1": "JavaScript, un núcleo",
   "perf.m.cpu_js_n": "JavaScript, todos los núcleos",
+  "perf.m.cpu_data_1": "Procesamiento de datos en Rust, un núcleo",
+  "perf.m.cpu_data_n": "Procesamiento de datos en Rust, todos los núcleos",
   "perf.m.cpu_matmul_1": "Producto de matrices, un núcleo",
   "perf.m.cpu_matmul_n": "Producto de matrices, todos los núcleos",
   "perf.m.cpu_sha256_1": "SHA-256, un núcleo",

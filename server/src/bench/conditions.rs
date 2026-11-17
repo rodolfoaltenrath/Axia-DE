@@ -1,5 +1,4 @@
-//! Read-only machine conditions and thermal/power guards. Shared firmware
-//! discovery remains supplied by the hardware subsystem through its existing ABI.
+//! Native read-only machine conditions, firmware discovery and thermal/power guards.
 use libc::{c_char, c_int, c_uint, c_ulong};
 use std::{
     ffi::{CStr, CString, OsStr},
@@ -73,8 +72,72 @@ struct RpiFw {
     uv_alarm: c_int,
     throttled: c_int,
 }
-extern "C" {
-    fn rpifw_read(root: *const c_char, fw: *mut RpiFw);
+unsafe fn rpifw_read(root: *const c_char, fw: *mut RpiFw) {
+    let raw = super::bytes(root);
+    let root = Root(if raw.is_empty() {
+        Path::new("/")
+    } else {
+        Path::new(OsStr::from_bytes(raw))
+    });
+    fn strict_line(root: &Root<'_>, path: &str, max: usize) -> Option<Vec<u8>> {
+        let f = std::fs::File::open(root.path(path)).ok()?;
+        let mut b = Vec::new();
+        f.take(max as u64).read_to_end(&mut b).ok()?;
+        if b.len() >= max {
+            return None;
+        }
+        if b.last() == Some(&b'\n') {
+            b.pop();
+        }
+        Some(b)
+    }
+    let mut out = RpiFw {
+        hwmon: 0,
+        uv_alarm: -1,
+        throttled: -1,
+    };
+    for name in root.entries("sys/class/hwmon") {
+        if !name.starts_with("hwmon") || name.len() > 10 {
+            continue;
+        }
+        let base = format!("sys/class/hwmon/{name}");
+        if strict_line(&root, &format!("{base}/name"), 32).as_deref() == Some(b"rpi_volt") {
+            out.hwmon = 1;
+            out.uv_alarm =
+                match strict_line(&root, &format!("{base}/in0_lcrit_alarm"), 8).as_deref() {
+                    Some(b"0") => 0,
+                    Some(b"1") => 1,
+                    _ => -1,
+                };
+            break;
+        }
+    }
+    for name in root.entries("sys/devices/platform") {
+        if name.starts_with('.') || name.len() > 64 {
+            continue;
+        }
+        for path in [
+            format!("sys/devices/platform/{name}/get_throttled"),
+            format!("sys/devices/platform/{name}/{name}:firmware/get_throttled"),
+        ] {
+            if let Some(b) = strict_line(&root, &path, 32) {
+                let b = b
+                    .strip_prefix(b"0x")
+                    .or_else(|| b.strip_prefix(b"0X"))
+                    .unwrap_or(&b);
+                if !b.is_empty() && b.len() <= 8 && b.iter().all(u8::is_ascii_hexdigit) {
+                    if let Ok(n) = u32::from_str_radix(std::str::from_utf8(b).unwrap(), 16) {
+                        out.throttled = (n & 0xf000f) as i32;
+                        break;
+                    }
+                }
+            }
+        }
+        if out.throttled >= 0 {
+            break;
+        }
+    }
+    *fw = out;
 }
 
 struct Root<'a>(&'a Path);
@@ -560,6 +623,34 @@ pub unsafe extern "C" fn lb_cond_battery_low(c: *const LbCond) -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_firmware_reader_checks_full_lines() {
+        let f = Fixture::new();
+        f.put("/sys/class/hwmon/hwmon0/name", "rpi_volt\n");
+        f.put("/sys/class/hwmon/hwmon0/in0_lcrit_alarm", "1\n");
+        f.put(
+            "/sys/devices/platform/soc/soc:firmware/get_throttled",
+            "0x50005\n",
+        );
+        let root = CString::new(f.0.as_os_str().as_bytes()).unwrap();
+        let mut fw = RpiFw::default();
+        unsafe { rpifw_read(root.as_ptr(), &mut fw) };
+        assert_eq!((fw.hwmon, fw.uv_alarm, fw.throttled), (1, 1, 0x50005));
+        for s in [
+            "50005 junk\n",
+            "50005\ntrailing",
+            "0x\n",
+            "100000000\n",
+            "-1\n",
+        ] {
+            f.put("/sys/devices/platform/soc/soc:firmware/get_throttled", s);
+            unsafe { rpifw_read(root.as_ptr(), &mut fw) };
+            assert_eq!(fw.throttled, -1, "{s:?}");
+        }
+        f.put("/sys/class/hwmon/hwmon0/in0_lcrit_alarm", "1\ntrailing");
+        unsafe { rpifw_read(root.as_ptr(), &mut fw) };
+        assert_eq!(fw.uv_alarm, -1);
+    }
     struct Fixture(PathBuf);
     impl Fixture {
         fn new() -> Self {

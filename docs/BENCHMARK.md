@@ -34,17 +34,18 @@ server/src/bench/            LordBench workloads (library)
   a machine without a session (a headless Pi, a VM over SSH, CI).
 - **Shared with the Test Bench.** `axia-testbench` (0.8.5, `src/testbench`, a Wayland client that checks
   the display server from the outside) and LordBench keep their own names and jobs, but the measurement
-  pieces live once, in `server/src/bench/`, and both link them: `bench.c` (the clock; frame times with
+  pieces live once, in `server/src/bench/`, and both link them: `core.rs` (the clock; frame times with
   average, p50, p99 and frames that missed the refresh budget; presentation accounting with vblanks skipped
   and zero-copy frames; input-to-screen latency; the GL renderer's kind; JSON strings; the report written
-  atomically to `~/.local/state/axia/<name>.json`) and `glscene.c` (the fixed 3D scene, drawn with GLES2
+  atomically to `~/.local/state/axia/<name>.json`) and `glscene.rs` (the fixed 3D scene, drawn with GLES2
   in whatever context is current: the bench's wayland-egl window, LordBench's offscreen context). Tested by
-  `build/bench-test`. LordBench's workloads go next to them.
+  `make bench-test`. LordBench's workloads go next to them.
 - **`axia-bench`** is the helper the app starts for workloads, launched like `axia-doc` and
   `axia-media`: fixed path (`<axia-server dir>/axia-bench`), no arguments, minimal environment,
   channel on fd 3, `sandbox_apply_helper()` before any work; it gets only the render node and a
   temporary file as fds. It links libc, Mesa's GBM/EGL/GLES (already used by the GPU path) and the
-  vendored QuickJS (one of its workloads), nothing new. The CLI links the same library directly.
+  shared renderer/shaper through their transitional ABI. Its workloads, coordinator and tests are Rust;
+  the native data workload replaces the old QuickJS workload in benchmark version 2. The CLI uses the same Rust library.
 
 ## 0.8.5 — System Information
 
@@ -230,8 +231,8 @@ in an isolated headless session through System Information → Performance, and 
 maintainer's own session on a 1920×1080 60 Hz monitor (HDMI-A-1 and HDMI-A-2 both tried), with a 0.8.6
 development package.
 
-- **`axia-bench`** (`server/src/bench/lbmain.c`, `mk/lordbench.mk`): launched by axia-server
-  (`bench/lbrun.c`) from its own folder only (owned by root or the user, not writable by others), no
+- **`axia-bench`** (`server/src/bench/helper.rs`, `mk/lordbench.mk`): launched by axia-server
+  (`bench/run.rs`) from its own folder only (owned by root or the user, not writable by others), no
   arguments, `LANG` only (and `LORDOS_SESSIOND` in a lord-sessiond session), the channel on fd 3. It
   receives one fixed-size request (`LbGo`, `bench/lbproto.h`) with at most two fds axia-server opened: the
   GPU's render node (`/dev/dri/renderD128…`) and, for Full, an unnamed scratch file (`O_TMPFILE` in
@@ -243,17 +244,35 @@ development package.
   it got the render node, no sockets, no exec, threads only). It answers only with fixed-size records
   (`LbMsg`: a measurement id, a value and its spread); axia-server checks each one (`lb_msg_valid`: the
   magic, a known kind and id, finite values in range) and writes the JSON itself. Stopping is a SIGKILL.
-- **Workloads** (`bench/lbwork.c`, `bench/lbui.c`, `bench/lbgpu.c`), each repeated three times and reported as the
+- **Rust migration (LordBench version 2).** All implementations in `server/src/bench`, the helper entry point,
+  coordinator, CLI and benchmark test drivers are Rust. Shared renderer/shaper and sandbox services outside
+  this directory still use their transitional ABI while the rest of the desktop is migrated. The helper
+  no longer links QuickJS. Version 1 reference measurements remain historical data and are not compared
+  with version 2 results; the reference machines must be measured again.
+  - `make -C server bench-test` runs the Rust measurement, protocol, workload, persistence and worker tests.
+    `make -C server GPU=1 lordbench-test` runs `server/tests/lordbench.rs` against the real engine and helper:
+    scene size/styles, serial/parallel pixel equality, all five fonts, cancellation/restart, six sandbox
+    denials and a real surfaceless EGL scene. The EGL test also works with Mesa software rendering;
+    it does not establish performance or correctness on every hardware driver.
+  - Local migration validation (2026-11-17, Fedora WSL): 39 library tests, two corpus tests and all four
+    native integration tests passed. The shared codecs/crypto regressions passed 95/15 Rust tests;
+    the existing system-report suite passed 1,912 checks. `axia-sysreport`, `lordbench-cli` and
+    `axia-testbench` linked successfully. A Quick run completed and persisted version 2 results in
+    63 seconds (19 results, 13 explicit skips, software GPU, all six sandbox probes denied).
+    The copied `build/lordbench-test` harness also passed all four integration tests. The broader
+    `engine-test` rebuild was interrupted to prevent the Windows host disk from filling again.
+    A full graphical desktop session and physical GPU hardware were not validated in this environment.
+- **Workloads** (`bench/work.rs`, `bench/ui.rs`, `bench/gpu.rs`), each repeated three times and reported as the
   median with its spread (max − min), on one core and on all of them:
-  - CPU: SHA-256 (`pkg/crypto.c`, with the CPU's SHA instructions when present); a 256×256
+  - CPU: native Rust SHA-256 (`axia-crypto::vcrypto::sha256_digest`); a 256×256
     double-precision matrix product; decompressing a fixed 2 MB text with the package engine's own xz
-    decoder (`rust/axia-codecs/src/xz.rs`; the text is generated at build time by `bench/lbcorpus.c` and compressed with
-    `xz -9`), instead of the deflate in the design above; QuickJS running a fixed script (strings, JSON,
-    sorting, objects, a regular expression), one runtime per thread.
-  - LordOS's own interface work (`bench/lbui.c`), with the engine's real code linked into `axia-bench`
+    decoder (`rust/axia-codecs/src/xz_core.rs`; the committed `bench/corpus.xz` is generated reproducibly by
+    `lbcorpus text | xz -9 -T1 --check=crc64`); Rust strings, JSON, sorting, regular expressions and maps
+    (`cpu.data.1` and `cpu.data.n`, replacing the historical `cpu.js.*` workload).
+  - LordOS's own interface work (`bench/ui.rs`), with the engine's real code linked into `axia-bench`
     (Rust scene graph/styles/layout, `paint.c`, `text.c`, `canvas.c`, the shaper `otf.c`, `shape*.c`,
     `bidi.c`; the Wayland, terminal, media and GPU hooks of `paint.c` are stubs, as in `tests/engine_test.c`):
-    - **Layout and paint** (`cpu.ui.1`, `cpu.ui.n`, frames per second): a fixed 1920×1080 scene built in C,
+    - **Layout and paint** (`cpu.ui.1`, `cpu.ui.n`, frames per second): a fixed 1920×1080 scene built in Rust,
       529 nodes: a translucent top bar with backdrop blur, a file manager (title bar, a 14-item sidebar, a
       toolbar, a 40-row list with ellipsized names), a settings window with a wrapped paragraph and ten rows of
       fields and switches, a notification with backdrop blur, a half-transparent card, a rotated badge and the
@@ -265,21 +284,21 @@ development package.
       priority), so it measures what the compositor's own threads gain, not N independent copies: the engine
       keeps one tree per process.
     - **Shaping** (`cpu.shape.1`, `cpu.shape.n`, runs per second, summed over the threads): one run shapes five
-      fixed paragraphs (`bench/lbtext.h`: Latin with kerning, ligatures and accents; Arabic with marks, `lam-alef`
+      fixed paragraphs (`bench/paragraphs.rs`: Latin with kerning, ligatures and accents; Arabic with marks, `lam-alef`
       and embedded left-to-right words and numbers; Devanagari with conjuncts, reph and reordered vowel signs; Thai
       with stacked marks and SARA AM; Chinese with kana and full-width punctuation), each as the first step of the
       engine's text layout (`textlayout.c`): bidi levels, scripts with the common characters joining their
       neighbours, each character's font (Inter if it has the character, else its script's), each run of one
       font, script and direction through `shape_run` (GSUB, the Arabic, Indic and Thai shapers, GPOS), then the
       visual order of the paragraph as one line. Each thread has its own shaper and font tables.
-    - **No files.** The scene is fixed data and the fonts are bytes inside the binary (`build/gen/lb_fonts.h`,
-      made at build time by `bench/lbcorpus.c`): LordOS's Inter Regular (the scene draws every weight with it and
+    - **No files.** The scene is fixed data and the fonts are bytes inside the binary (`include_bytes!`):
+      LordOS's Inter Regular (the scene draws every weight with it and
       uses only characters it covers, so the engine never looks for a fallback font), and Debian 13's Noto Sans Arabic,
       Devanagari, Thai and CJK SC subset to exactly the characters of those paragraphs and their decompositions,
       with every layout feature and lookup they reach (`tools/gen-lbfonts.py`, run by hand when a paragraph
       changes; the results are committed in `server/src/bench/fonts` with their OFL licence, so every build shapes
-      with the same bytes; Inter is pinned by its SHA-256 in `mk/lordbench.mk`, `LB_INTER_SHA256`, and a new Inter
-      fails the build until the references are measured again). With each subset `build/shape-test` gives the
+      with the same bytes; the Rust tests pin Inter's SHA-256, and a new Inter requires updating the pin
+      and measuring the references again). With each subset `build/shape-test` gives the
       same glyph positions as with the full system font, but it is not the same work: the subsets shape about
       12 % faster than the full fonts (fewer lookups, smaller coverage tables; VM 116, 587–631 against 514–560
       runs/s on one core), so the workload is comparable only with itself. Line breaking is not part of the run: the engine's Thai word breaker reads libthai's dictionary
@@ -295,7 +314,7 @@ development package.
     latency of a dependent pointer chase over 64 MB.
   - GPU: OpenGL ES 2 offscreen on the render node (GBM + EGL, a surfaceless context, a 1920×1080
     framebuffer object; every frame ends with `glFinish`): the 3D scene of the Test Bench
-    (`bench/glscene.c`), fill rate with 16 blended full-screen quads, 1920×1080 RGBA texture uploads and
+    (`bench/glscene.rs`), fill rate with 16 blended full-screen quads, 1920×1080 RGBA texture uploads and
     8 blended screen-size layers.
   - Storage (Full only): sequential write with `fdatasync`, sequential read after dropping the page
     cache for that file, random 4 KiB reads for 3 s; the file is emptied at the end and, being unnamed,
@@ -303,7 +322,7 @@ development package.
   - Sustained (Full only, 3 minutes from the app): the matrix product on every core, a sample every
     10 s with the temperature axia-server read at that moment.
 - **Video** (after the helper's measurements, Quick and Full): a `axia-media` job (`MK_VBENCH`,
-  `media/helper/lm_vbench.c`, launched from axia-server's folder by `bench/lbvideo.c`, no fds at all). It makes its
+  `media/helper/lm_vbench.c`, launched from axia-server's folder by `bench/video.rs`, no fds at all). It makes its
   own test clips in memory from a synthetic picture (gradients, moving blocks and a little noise, the same every
   time) with this system's FFmpeg: H.264 (libx264 `veryfast`, 8 Mbit/s), HEVC (libx265 `ultrafast`), VP9 (libvpx
   realtime) and AV1 (SVT-AV1 preset 12, else libaom or rav1e) at 1080p, and H.264 and HEVC at 4K. Each clip is
@@ -321,7 +340,7 @@ development package.
   doesn't have and stood still, so desktop results from before that change measured a lighter scene and aren't
   comparable) and axia-server moves that window along a figure of eight through the drag's own path
   (`lord.wm.script`, `grab_script_begin` in `ui/grab.c`: painted once into a layer, one step per frame, no JS per
-  frame). axia-server records every frame it builds and every frame the main display shows (`bench/lbframes.c`,
+  frame). axia-server records every frame it builds and every frame the main display shows (`bench/frames.rs`,
   from `render()` and the page flips; one atomic read per frame when off): 10 s alone, then 10 s while `axia-bench`
   loads every core at the lowest priority (`LB_MODE_LOAD`: nice 19, idle I/O class) after 2 s of warm-up. Each
   phase gives the frames shown per second, the time to build a frame (median and 99th percentile) and the share of
@@ -334,7 +353,7 @@ development package.
   clock when it is made, goes into a ring and is announced on an eventfd the main loop polls like an input device;
   the main loop takes the newest position once per frame, as it does with a real mouse's motion, and moves the
   window through the drag's path. Each event's latency ends at the presentation of the first frame that shows it or
-  a later position (`lbf_input`, `lbf_built`, `lbf_presented` in `bench/lbframes.c`); the results are the median and
+  a later position (`lbf_input`, `lbf_built`, `lbf_presented` in `bench/frames.rs`); the results are the median and
   the 99th percentile (`comp.in50/in99`, `desk.in50/in99`), and the verdict warns when the 99th percentile passes
   three refresh periods. It measures axia-server's part (waking up, the frame, the flip), not the mouse, USB or the
   kernel's; the positions only move LordBench's own window. Without the thread the scene moves by the clock and the
@@ -358,7 +377,7 @@ development package.
   tests stops when the throttle counters grow or the Pi firmware slowed the processor during the run (below);
   in the sustained test throttling is recorded with its time and temperature instead. The kind of disk under
   the scratch file is recorded (NVMe, SD/eMMC, SSD, HDD, USB, virtual, or RAM in the live session). Unit tests
-  on fake sysfs trees (`tests/lordbench_test.c`): an x86 laptop on battery, a Raspberry Pi 5 with the kernel
+  on fake sysfs trees (`tests/lordbench.rs`): an x86 laptop on battery, a Raspberry Pi 5 with the kernel
   LordOS ships, a Pi known only from its device tree, and an older Pi kernel with `get_throttled`.
 - **The Raspberry Pi firmware's throttling** (0.8.6, 2026-10-28; `bench/lbcond.c`; run on the Pi 5
   on 2026-10-29, below). On a Pi the firmware itself lowers the ARM clock on under-voltage, at its temperature limit
@@ -421,7 +440,7 @@ development package.
   a Pi); on the Pi 5 the shared reader gave LordBench the values above, while System Information's rows themselves
   were not looked at there.
 - **Helper-sandbox self-test** (`sec.helper-sandbox`, repeated inside `axia-bench`, `sandbox_tries` in
-  `bench/lbmain.c`): right after `sandbox_apply_helper` and before any work, in every mode, `axia-bench` tries six
+  `bench/helper.rs`): right after `sandbox_apply_helper` and before any work, in every mode, `axia-bench` tries six
   things that must fail: the Sandbox Probe's helper tries (`app/probe.c`) with its own versions of the data-folder
   one, plus an internet socket and a system file. A unix socket (`helperSocket`), an internet socket
   (`helperInet`), `execve` of `/usr/bin/true` (`helperExec`), `fork` (`helperFork`), a new unnamed file in `/tmp`
@@ -726,7 +745,7 @@ Without the frame pipeline a frame is started only after the last flip completed
 frame whose whole chain (the work before `render()`, the build, the GPU's own part, the flip) takes more than one
 period is shown a vblank late, and the rate locks at half the refresh. The build time alone (`desk.p50`/`p99`) can't
 tell which part was too long. So axia-server also records, for every frame the main display shows, while LordBench
-records or while a scripted move runs (`bench/lbframes.c`: `lbf_phase_built` when the frame is submitted, at the
+records or while a scripted move runs (`bench/frames.rs`: `lbf_phase_built` when the frame is submitted, at the
 end of `render()` or, for a frame the pipeline prepared, right after its submission; `lbf_phase_shown` at that
 frame's flip; all of it measured by axia-server itself, never by a helper):
 
@@ -822,7 +841,7 @@ session, the variables set in the session's environment; the results above):
 
 Boot: the Pi 5 reaches the login screen on its monitor 5.99 s after the kernel starts (lord-sessiond's record;
 systemd-analyze gives 2.1 s kernel + 4.2 s userspace). Boots where the monitor was connected late took 61 and
-103 s, which is the wait for the monitor, not the boot. The N-boot test has its unit tests (`tests/lordbench_test.c`: the state file's format, parsing, ownership, staleness
+103 s, which is the wait for the monitor, not the boot. The N-boot test has its unit tests (`tests/lordbench.rs`: the state file's format, parsing, ownership, staleness
 and countdown) and one run on the Pi 5 (2026-10-30, 3 boots with autologin: 7.66, 7.71 and 7.63 s, restarting and
 removing its state file on its own). That run was started by writing the state file, so the app's button and the
 login screen's countdown and Stop were not exercised.
@@ -834,7 +853,7 @@ screenshot predates the video and desktop parts):
 ![System Information → Performance](sysinfo-performance.png)
 
 **`axia-sysreport bench [--quick | --full] [--json]`** (`sysreport/cli.c`): LordBench from a terminal, over SSH or
-in CI, through axia-server's own code (`bench/lbrun.c`, the same guards, helpers and result file as the app, which
+in CI, through axia-server's own code (`bench/run.rs`, the same guards, helpers and result file as the app, which
 then shows it). It is installed as `/usr/lib/lordos/bin/axia-sysreport` with `/usr/bin/axia-sysreport` and
 `axia-fetch` as links, because `lbrun` only starts the `axia-bench` and `axia-media` next to its own binary
 (`/proc/self/exe`; a group- or world-writable helper is refused, so a build tree made with umask 002 needs `chmod

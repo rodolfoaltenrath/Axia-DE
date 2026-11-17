@@ -31,25 +31,127 @@ struct MediaMsg {
     len: u32,
     pad: u32,
 }
-extern "C" {
-    fn mp_send(
-        sock: c_int,
-        kind: u32,
-        id: u32,
-        v: *const i64,
-        payload: *const c_void,
-        len: usize,
-        fds: *const c_int,
-        nfds: c_int,
-    ) -> c_int;
-    fn mp_recv(
-        sock: c_int,
-        m: *mut MediaMsg,
-        payload: *mut c_char,
-        cap: usize,
-        fds: *mut c_int,
-        block: c_int,
-    ) -> c_int;
+// The benchmark needs only this bounded wire transport, implemented natively.
+unsafe fn mp_send(
+    sock: c_int,
+    kind: u32,
+    id: u32,
+    v: *const i64,
+    payload: *const c_void,
+    len: usize,
+    fds: *const c_int,
+    nfds: c_int,
+) -> c_int {
+    if sock < 0 || len > PAYLOAD_MAX || nfds != 0 {
+        return -1;
+    }
+    let _ = fds;
+    let mut m = MediaMsg {
+        kind,
+        id,
+        len: len as u32,
+        ..Default::default()
+    };
+    if !v.is_null() {
+        m.v.copy_from_slice(std::slice::from_raw_parts(v, 6));
+    }
+    let mut iov = [
+        libc::iovec {
+            iov_base: (&mut m as *mut MediaMsg).cast(),
+            iov_len: std::mem::size_of::<MediaMsg>(),
+        },
+        libc::iovec {
+            iov_base: payload.cast_mut(),
+            iov_len: len,
+        },
+    ];
+    let mut h: libc::msghdr = std::mem::zeroed();
+    h.msg_iov = iov.as_mut_ptr();
+    h.msg_iovlen = if len == 0 { 1 } else { 2 };
+    loop {
+        let n = libc::sendmsg(sock, &h, libc::MSG_DONTWAIT | libc::MSG_NOSIGNAL);
+        if n < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+            continue;
+        }
+        return if n == (std::mem::size_of::<MediaMsg>() + len) as isize {
+            0
+        } else {
+            -1
+        };
+    }
+}
+unsafe fn mp_recv(
+    sock: c_int,
+    m: *mut MediaMsg,
+    payload: *mut c_char,
+    cap: usize,
+    fds: *mut c_int,
+    block: c_int,
+) -> c_int {
+    for i in 0..4 {
+        *fds.add(i) = -1;
+    }
+    if cap < PAYLOAD_MAX + 1 {
+        return -2;
+    }
+    let mut iov = [
+        libc::iovec {
+            iov_base: m.cast(),
+            iov_len: std::mem::size_of::<MediaMsg>(),
+        },
+        libc::iovec {
+            iov_base: payload.cast(),
+            iov_len: PAYLOAD_MAX,
+        },
+    ];
+    let mut control = [0usize; 16];
+    let mut h: libc::msghdr = std::mem::zeroed();
+    h.msg_iov = iov.as_mut_ptr();
+    h.msg_iovlen = 2;
+    h.msg_control = control.as_mut_ptr().cast();
+    h.msg_controllen = std::mem::size_of_val(&control);
+    let n = loop {
+        let n = libc::recvmsg(
+            sock,
+            &mut h,
+            (if block != 0 { 0 } else { libc::MSG_DONTWAIT })
+                | libc::MSG_CMSG_CLOEXEC
+                | libc::MSG_TRUNC,
+        );
+        if n < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+            continue;
+        }
+        break n;
+    };
+    if n <= 0 {
+        return if n < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EAGAIN) {
+            -1
+        } else {
+            0
+        };
+    }
+    let mut c = libc::CMSG_FIRSTHDR(&h);
+    let mut received = Vec::new();
+    while !c.is_null() {
+        if (*c).cmsg_level == libc::SOL_SOCKET && (*c).cmsg_type == libc::SCM_RIGHTS {
+            let count = ((*c).cmsg_len - libc::CMSG_LEN(0) as usize) / std::mem::size_of::<i32>();
+            for i in 0..count {
+                received.push(OwnedFd::from_raw_fd(std::ptr::read_unaligned(
+                    libc::CMSG_DATA(c).cast::<i32>().add(i),
+                )));
+            }
+        }
+        c = libc::CMSG_NXTHDR(&h, c);
+    }
+    if !received.is_empty()
+        || h.msg_flags & (libc::MSG_TRUNC | libc::MSG_CTRUNC) != 0
+        || (*m).len as usize > PAYLOAD_MAX
+        || n as usize != std::mem::size_of::<MediaMsg>() + (*m).len as usize
+    {
+        return -2;
+    }
+    *payload.add((*m).len as usize) = 0;
+    1
 }
 pub type LbvOn = Option<unsafe extern "C" fn(*mut c_void, c_int, c_int, f64, f64)>;
 pub type LbvTick = Option<unsafe extern "C" fn(*mut c_void) -> c_int>;
@@ -63,7 +165,7 @@ pub extern "C" fn lbv_record_valid(id: u32, kind: i64, fps: i64, spread: i64, wh
             _ => false,
         }) as c_int
 }
-fn trusted(path: &Path) -> bool {
+pub(crate) fn trusted(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|m| {
         m.is_file()
             && m.mode() & 0o100 != 0

@@ -42,7 +42,7 @@
  *                                               trusts and well formed (sysreport/hwsnap.c); no arguments, no path
  *                                               from JS; state 'ok' | 'missing' | 'unsigned' | 'bad-signature' | 'invalid'
  *   lord.sysinfo.bench.start(mode, sustainedS) / poll() / cancel() / saved(which) / boots()
- *                                               LordBench (bench/lbrun.c, the axia-bench helper): mode
+ *                                               LordBench (bench/run.rs, the axia-bench helper): mode
  *                                               'quick' | 'full' (then video in axia-media) | 'desktop'
  *                                               (the compositor's frame times, alone and under load);
  *                                               poll() → {state, step, progress, result}; saved(0|1) the

@@ -1,70 +1,47 @@
-# LordBench (0.8.6, src/bench, docs/BENCHMARK.md "0.8.6 — LordBench"): axia-bench, the sandboxed helper
-# that runs the workloads (CPU, memory, GPU offscreen on a render node fd, storage on a scratch fd,
-# sustained load), and axia-server's side (lbrun.c: conditions, the quiet wait, thermal and throttle
-# guards, the result file; lord.sysinfo.bench in ui/js_hw.c). The helper links libc, QuickJS (one of
-# its workloads), the UI engine and the shaper (ENGINE_SRC: the layout, paint and shaping workloads,
-# bench/lbui.c, with their fonts built in), the Rust glass renderer, and, with GPU=1,
-# Mesa (GBM, EGL, GLESv2).
-LB_SRV_SRC := src/bench/lbrun.c
-LB_SRV_OBJ := $(LB_SRV_SRC:src/%.c=build/obj/%.o)
-$(LB_SRV_OBJ): $(wildcard src/bench/*.h) src/hw/rpifw.h src/media/proto.h build/gen/lord_version.h
+# LordBench implementations, entry points and tests are Rust. The archive keeps
+# the ABI used by the compositor and sysreport during their migration.
 build/obj/main.o: src/bench/lbframes.h src/bench/lbinput.h
 build/obj/ui/grab.o: src/bench/lbinput.h
-build/axia-server: $(LB_SRV_OBJ)
 build/obj/ui/js_hw.o: src/bench/lbrun.h
 
-# the xz workload's input: a fixed text, compressed at build time
-build/lbcorpus: $(BENCH_INPUTS)
+# Shared engine and sandbox subsystems still undergoing their own migration.
+# No benchmark C implementation or QuickJS is linked into the helper.
+LB_HOST_SRC := src/sec/sandbox.c src/sec/cgroup.c $(ENGINE_SRC)
+LB_HOST_OBJ := $(LB_HOST_SRC:src/%.c=build/bench-host/%.o)
+build/bench-host/%.o: src/%.c $(HDR) mk/lordbench.mk build/bench-features
+	@mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -fPIC -ffunction-sections -fdata-sections -c $< -o $@
+build/bench-host/libbench_host.a: $(LB_HOST_OBJ)
+	$(AR) rcs $@ $^
+comma := ,
+LB_FEATURES := native-host$(if $(filter 1,$(GPU)),$(comma)gpu)
+.PHONY: bench-features-force
+build/bench-features: bench-features-force
 	@mkdir -p build
+	@printf '%s\n' '$(LB_FEATURES)' > $@.new
+	@cmp -s $@ $@.new && rm $@.new || mv $@.new $@
+LB_NATIVE_ENV := AXIA_BENCH_HOST_DIR=$(abspath build/bench-host)
+# Keep native-host's archive (which bundles the shared engine) separate from
+# BENCH_LIB, used by the existing C compositor and testbench.
+LB_TARGET_DIR := $(abspath build/bench-native)
+all: build/axia-bench
+build/axia-bench: $(BENCH_INPUTS) $(RUST_INPUTS) build/bench-host/libbench_host.a build/bench-features
+	$(LB_NATIVE_ENV) $(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --bin axia-bench --features $(LB_FEATURES) --target-dir $(LB_TARGET_DIR) --release --locked --offline
+	cp build/bench-native/release/axia-bench $@
+
+.PHONY: lordbench-test
+test: lordbench-test
+lordbench-test: build/axia-bench
+	$(LB_NATIVE_ENV) $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-bench --features $(LB_FEATURES) --test lordbench-native --target-dir $(LB_TARGET_DIR) --release --locked --offline -- --test-threads=1
+	find build/bench-native/release/deps -maxdepth 1 -type f -executable -name 'lordbench_native-*' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2- | xargs -r -d '\n' -I{} cp '{}' build/lordbench-test
+# Existing build callers keep an alias to the Rust harness.
+build/lordbench-test: lordbench-test
+
+build/lordbench-cli: $(BENCH_INPUTS) build/axia-bench
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --bin lordbench-cli --target-dir $(abspath build/bench-rust) --release --locked --offline
+	cp build/bench-rust/release/lordbench-cli $@
+
+# Optional reproducibility tool. The committed corpus is embedded by Rust.
+build/lbcorpus: $(BENCH_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --bin lbcorpus --target-dir $(abspath build/bench-rust) --release --locked --offline
 	cp build/bench-rust/release/lbcorpus $@
-build/gen/lb_corpus.h: build/lbcorpus
-	@mkdir -p build/gen
-	./build/lbcorpus text | xz -9 -T1 --check=crc64 -c | ./build/lbcorpus header > $@.new && mv $@.new $@
-
-# the layout, paint and shaping workloads' fonts (bench/lbui.c), built into axia-bench: it opens no files.
-# LordOS's Inter, and the Noto fonts subset to the paragraphs of src/bench/lbtext.h (tools/gen-lbfonts.py)
-LB_FONTS := ../assets/fonts/Inter-Regular.ttf src/bench/fonts/NotoSansArabic-LB.ttf src/bench/fonts/NotoSansDevanagari-LB.ttf \
-            src/bench/fonts/NotoSansThai-LB.ttf src/bench/fonts/NotoSansCJKsc-LB.otf
-# Inter is pinned by its SHA-256: the workloads time the shaper and paint with these exact bytes, and the
-# references (apps/sysinfo/references.js) were measured with them. A new Inter fails the build here until
-# LB_INTER_SHA256 is updated and the references' interface numbers are measured again (docs/BENCHMARK.md).
-LB_INTER_SHA256 := 40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82
-build/gen/lb_fonts.h: build/lbcorpus $(LB_FONTS)
-	@mkdir -p build/gen
-	@h=$$( (sha256sum 2>/dev/null || shasum -a 256) < ../assets/fonts/Inter-Regular.ttf | cut -c1-64); \
-	  [ "$$h" = "$(LB_INTER_SHA256)" ] || { echo "axia-bench: assets/fonts/Inter-Regular.ttf changed ($$h): update LB_INTER_SHA256 in mk/lordbench.mk and measure the references' cpu.ui/cpu.shape again" >&2; exit 1; }
-	{ echo '/* generated from the fonts in mk/lordbench.mk (LB_FONTS) by src/bench/corpus.rs */' && \
-	  ./build/lbcorpus embed lb_font_inter < ../assets/fonts/Inter-Regular.ttf && \
-	  ./build/lbcorpus embed lb_font_arabic < src/bench/fonts/NotoSansArabic-LB.ttf && \
-	  ./build/lbcorpus embed lb_font_devanagari < src/bench/fonts/NotoSansDevanagari-LB.ttf && \
-	  ./build/lbcorpus embed lb_font_thai < src/bench/fonts/NotoSansThai-LB.ttf && \
-	  ./build/lbcorpus embed lb_font_cjk < src/bench/fonts/NotoSansCJKsc-LB.otf; } > $@.new && mv $@.new $@
-
-LB_SRC := src/bench/lbmain.c src/bench/lbwork.c src/bench/lbui.c src/pkg/crypto.c \
-          src/sec/sandbox.c src/sec/cgroup.c $(ENGINE_SRC)
-LB_GL_SRC := $(if $(filter 1,$(GPU)),src/bench/lbgpu.c src/bench/glscene.c)
-LB_GL_FLAGS := $(if $(filter 1,$(GPU)),-DLORD_GPU $(shell pkg-config --cflags gbm egl glesv2))
-LB_GL_LIBS := $(if $(filter 1,$(GPU)),$(shell pkg-config --libs gbm egl glesv2))
-all: build/axia-bench
-build/axia-bench: $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) build/gen/lb_corpus.h build/gen/lb_fonts.h $(wildcard src/bench/*.h) src/sec/sandbox.h src/sec/cgroup.h $(HDR) $(RUST_LIB) $(BENCH_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LB_GL_FLAGS) $(WARN) -std=c11 -o $@ $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) $(LB_GL_LIBS) -ldl -lm -lpthread
-
-# the workloads (short; the UI scene and every paragraph's glyphs too), the record checks (the sandbox
-# self-test's included), the thermal guard on fake sysfs trees and the boot history
-test: build/lordbench-test
-build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbrun.c \
-                       src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
-                      build/gen/lb_fonts.h build/gen/lord_version.h $(wildcard src/bench/*.h) src/hw/rpifw.h $(ENGINE_SRC) $(HDR) $(RUST_LIB) $(BENCH_LIB)
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c \
-	    src/bench/lbrun.c  src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
-	    $(ENGINE_SRC) $(QJS_OBJ) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
-	./$@ || { rm -f $@; exit 1; }
-# from a terminal, without a session: build/lordbench-cli quick|full [sustained_s] (needs build/axia-bench, and build/axia-media
-# for the video measurements; desktop mode needs a session: without one its frame results are skipped)
-LB_CLI_SRC := tests/lordbench_cli.c src/bench/lbrun.c \
-               src/media/proto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
-build/lordbench-cli: $(LB_CLI_SRC) \
-                     build/gen/lord_version.h $(wildcard src/bench/*.h) build/axia-bench $(BENCH_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LB_CLI_SRC) $(BENCH_LIB) -Wl,--gc-sections -ldl -lm -lpthread

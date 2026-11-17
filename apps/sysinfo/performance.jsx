@@ -1,6 +1,6 @@
 // System Information → Performance (0.8.6, docs/BENCHMARK.md "0.8.6 — LordBench"). Quick (about a minute)
 // or Full (storage on a scratch file, a sustained load and every video codec too) runs of the axia-bench
-// helper and of axia-media's video measurement through lord.sysinfo.bench (server/src/bench/lbrun.c), and
+// helper and of axia-media's video measurement through lord.sysinfo.bench (server/src/bench/run.rs), and
 // Desktop impact: the compositor's frame times while a test window moves (scene.jsx), alone and with every
 // core loaded at the lowest priority. While a run goes on this view polls every 500 ms. A peak result is
 // shown by category as "×N" of each reference machine (perf.js, references.js), with the three verdicts;

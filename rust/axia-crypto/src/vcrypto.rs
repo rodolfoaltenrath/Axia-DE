@@ -315,6 +315,15 @@ pub unsafe extern "C" fn pkcs7_unpad(buf: *const u8, len: usize) -> c_long {
     }
 }
 
+/// Native SHA-256 entry point shared with Rust benchmark workloads.
+pub fn sha256_digest(data: &[u8]) -> [u8; 32] {
+    let mut out = [0; 32];
+    let mut h = Md::<[u32; 8]>::new();
+    h.update(data);
+    h.finish(&mut out);
+    out
+}
+
 // ================= SHA-1 / SHA-256 / SHA-512 =================
 
 const K256: [u32; 64] = [

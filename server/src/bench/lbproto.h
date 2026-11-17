@@ -1,4 +1,4 @@
-/* lbproto.h — the channel between axia-server (lbrun.c) and axia-bench (lbmain.c), LordBench's
+/* lbproto.h — the channel between axia-server (run.rs) and axia-bench (helper.rs), LordBench's
  * sandboxed helper (docs/BENCHMARK.md, "0.8.6 — LordBench").
  *
  * A SOCK_SEQPACKET pair on fd 3. axia-server sends one LbGo (with up to two fds: the GPU's render node
@@ -10,8 +10,8 @@
 
 #include <stdint.h>
 
-#define LB_MAGIC   0x4c424e31u          /* "LBN1" */
-#define LB_VERSION 1                    /* LordBench's version: results compare only with the same one */
+#define LB_MAGIC   0x4c424e32u          /* "LBN2": native Rust workloads */
+#define LB_VERSION 2                    /* LordBench's version: results compare only with the same one */
 
 /* what to run */
 enum { LB_MODE_QUICK = 1, LB_MODE_FULL = 2,
@@ -37,11 +37,11 @@ enum {
     LB_CPU_MATN,                        /* matrix multiply, all cores, GFLOP/s */
     LB_CPU_XZ1,                         /* xz decompression (the package engine's decoder), one core, MB/s */
     LB_CPU_XZN,                         /* the same on all cores, MB/s */
-    LB_CPU_JS1,                         /* QuickJS running a fixed script, one core, runs/s */
-    LB_CPU_JSN,                         /* the same on all cores, runs/s */
-    LB_CPU_UI1,                         /* the UI engine's layout and paint of a fixed 1920×1080 scene, one core, frames/s (lbui.h) */
+    LB_CPU_DATA1,                         /* Rust strings/JSON/sort/regex/maps, one core, runs/s */
+    LB_CPU_DATAN,                         /* the same on all cores, runs/s */
+    LB_CPU_UI1,                         /* the UI engine's layout and paint of a fixed 1920×1080 scene, one core, frames/s (ui.rs) */
     LB_CPU_UIN,                         /* the same with the paint's row bands on up to 8 threads (as axia-server's paint threads), frames/s */
-    LB_CPU_SHAPE1,                      /* shaping fixed paragraphs in five scripts (lbtext.h), one core, runs/s */
+    LB_CPU_SHAPE1,                      /* shaping fixed paragraphs in five scripts (paragraphs.rs), one core, runs/s */
     LB_CPU_SHAPEN,                      /* the same on all cores, runs/s */
     LB_MEM_COPY,                        /* memory bandwidth, copy, GB/s */
     LB_MEM_TRIAD,                       /* memory bandwidth, triad, GB/s */
@@ -55,7 +55,7 @@ enum {
     LB_DISK_RAND,                       /* storage, random 4 KiB reads, IOPS */
     LB_SUS_START,                       /* sustained: all-core matrix multiply, first 10 s, GFLOP/s */
     LB_SUS_END,                         /* sustained: last 10 s, GFLOP/s */
-    /* measured by axia-media (bench/lbvideo.c, media/helper/lm_vbench.c), never by axia-bench */
+    /* measured by axia-media (bench/video.rs, media/helper/lm_vbench.c), never by axia-bench */
     LB_VID_H264_1080,                   /* software decoding of a generated clip, frames/s */
     LB_VID_HEVC_1080,
     LB_VID_VP9_1080,
@@ -64,7 +64,7 @@ enum {
     LB_VID_HEVC_2160,
     LB_VENC_H264,                       /* software H.264 and VP8 encoders (low latency), 1920×1080, frames/s */
     LB_VENC_VP8,
-    /* measured by axia-server itself (bench/lbframes.c), desktop mode only */
+    /* measured by axia-server itself (bench/frames.rs), desktop mode only */
     LB_COMP_FPS,                        /* the compositor, a scripted scene, nothing else running: frames shown per second */
     LB_COMP_P50,                        /* ms to build a frame, median */
     LB_COMP_P99,                        /* ms to build a frame, 99th percentile */

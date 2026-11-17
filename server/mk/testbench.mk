@@ -8,7 +8,6 @@ all: build/axia-testbench
 # the 3D view needs EGL, GLESv2 and wayland-egl (Mesa); without them the bench builds and says so
 TB_GL := $(shell pkg-config --exists egl glesv2 wayland-egl 2>/dev/null && echo 1)
 TB_GL_FLAGS := $(if $(TB_GL),-DTB_GL $(shell pkg-config --cflags egl glesv2 wayland-egl))
-TESTBENCH_SRC += $(if $(TB_GL),src/bench/glscene.c)
 TB_GL_LIBS := $(if $(TB_GL),$(shell pkg-config --libs egl glesv2 wayland-egl))
 build/axia-testbench: $(TESTBENCH_SRC) $(wildcard src/testbench/*.h src/bench/*.h) $(CLIENT_GEN) $(BENCH_LIB)
 	@mkdir -p build
