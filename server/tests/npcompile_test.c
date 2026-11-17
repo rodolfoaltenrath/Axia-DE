@@ -1,4 +1,4 @@
-/* npcompile_test.c — from rules to BPF maps (src/netperm/npcompile.c), without a kernel.
+/* npcompile_test.c — from rules to BPF maps (src/netperm/compile.rs), without a kernel.
  *
  * Builds random stores (domains, wildcards, nested v4/v6 networks, lan/internet/any, ports,
  * protocols, directions, trusted, restricted, modes) and names learned from the resolver,
@@ -13,6 +13,23 @@
 #include "netperm/npdns.h"
 
 #include <arpa/inet.h>
+#include <linux/bpf.h>
+#include <linux/inet_diag.h>
+#include <stddef.h>
+
+/* Keep the Rust kernel context layouts and hook ids in sync with the Linux UAPI. */
+_Static_assert(INET_DIAG_CGROUP_ID == 21 && sizeof(struct inet_diag_msg) == 72, "sock_diag layout");
+_Static_assert(offsetof(struct bpf_sock_addr, user_port) == 24, "sock_addr port");
+_Static_assert(offsetof(struct bpf_sock_addr, protocol) == 36, "sock_addr protocol");
+_Static_assert(offsetof(struct bpf_sock, state) == 72, "sock state");
+_Static_assert(offsetof(struct bpf_sock, dst_port) == 48, "sock remote port");
+_Static_assert(offsetof(struct __sk_buff, ifindex) == 40, "skb interface");
+_Static_assert(offsetof(struct __sk_buff, sk) == 168, "skb full socket");
+_Static_assert(BPF_LSM_CGROUP == 43 && BPF_PROG_TYPE_LSM == 29, "LSM hook");
+_Static_assert(BPF_CGROUP_UDP4_SENDMSG == 14 && BPF_CGROUP_UDP6_SENDMSG == 15, "UDP hooks");
+_Static_assert(BPF_CGROUP_INET4_CONNECT == 10 && BPF_CGROUP_INET6_CONNECT == 11, "connect hooks");
+_Static_assert(BPF_CGROUP_INET4_BIND == 8 && BPF_CGROUP_INET6_BIND == 9, "bind hooks");
+_Static_assert(BPF_PROG_TYPE_CGROUP_SOCK_ADDR == 18 && BPF_CGROUP_DEVICE == 6, "cgroup hooks");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,7 +62,7 @@ static const NpList *lpm(const NpCompiled *c, int fam, const uint8_t *addr) {
 /* 1: the destination is in a subscribed blocklist (np_blk4/np_blk6 hit; FwQuery.listed) */
 static int g_listed;
 
-/* What the BPF program does with a connection (np.bpf.c), with the app already compiled. */
+/* What the BPF program does with a connection (kernel.rs), with the app already compiled. */
 static NpRes kernel(const NpCompiled *c, int dir, int proto, int fam, const uint8_t *in, int port) {
     uint8_t addr[16] = { 0 };
     static const uint8_t mapped[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
@@ -240,7 +257,7 @@ static void fixed_cases(void) {
     fw_store_free(s);
 }
 
-/* ---- where the names come from (npdns.c) ----------------------------------------------------- */
+/* ---- where the names come from (dns.rs) ----------------------------------------------------- */
 
 static DnsMap *learn_into;
 static int learned;

@@ -567,19 +567,27 @@ with gcc 14 on Linux.
 ## Step 2: `axia-netperm`, the rules in the kernel
 
 ```
-server/src/netperm/np_shared.h   map types and the decision (np_decide), identical in BPF and C
-server/src/netperm/np.bpf.c      the cgroup BPF programs (restricted C, clang -target bpf)
-server/src/netperm/bpf2c.c       build tool: clang's .o → build/gen/np_bpf.h
-server/src/netperm/bpfsys.{c,h}  direct bpf() syscall: maps, load, bpf_link, ring
-server/src/netperm/npcompile.{c,h}  rules → map entries (pure C, with a test)
-server/src/netperm/npdns.{c,h}   names from the system resolver
-server/src/netperm/npproto.h     the socket between axia-server and axia-netperm
-server/src/netperm/netperm.c     the service
-server/src/ui/js_fw.c            lord.fw (axia-server)
-tests/npcompile_test.c           build/npcompile-test (in make test)
-tests/netperm_integration.sh     test against the kernel (on the VM)
-tests/netperm_bench.c, netperm_measure.sh   measurements
+server/src/netperm/shared.rs     map ABI and decision shared by host and kernel
+server/src/netperm/kernel.rs     the 11 cgroup eBPF programs, written in Rust
+server/src/netperm/elf.rs        build-time ELF validation and Rust embedding
+server/src/netperm/bpf.rs        direct bpf() syscall, maps, links, BTF, ring
+server/src/netperm/compile.rs    firewall rules → bounded map entries
+server/src/netperm/dns.rs        resolved monitor and receive-only resolver packets
+server/src/netperm/diag.rs       sock_diag enumeration and cookie-checked destruction
+server/src/netperm/policy.rs     strict policy files and existing Rust firewall modules
+server/src/netperm/service.rs    root service, cgroups, Unix protocol and accounting
+server/src/netperm/npproto.h     ABI for the compositor's existing C client
+rust/axia-netperm/               Cargo package and Rust eBPF build script
+server/tests/npcompile_test.c    C ABI regression against fw_decide (480,000 connections)
+server/src/netperm/vm_tests.rs   actual eBPF bytecode with simulated kernel helpers
+server/src/netperm/verify.rs     real kernel verifier, no attachment (requires root)
+server/tests/netperm_integration.sh   live service integration (test VM only)
 ```
+
+The implementation is entirely Rust, including the kernel programs and build tool.
+The remaining `.h` files declare compatibility types and functions only; they contain
+no C implementation. See [RUST-NETPERM.md](RUST-NETPERM.md) for build and validation.
+
 
 ### The service
 
@@ -592,11 +600,12 @@ tests/netperm_bench.c, netperm_measure.sh   measurements
   the sockets of a connection a rule now denies) and leaves it only `CAP_BPF CAP_NET_ADMIN CAP_PERFMON
   CAP_DAC_READ_SEARCH CAP_NET_RAW`. It has `ProtectSystem=strict`, `ProtectHome=read-only` and the
   rest listed in the unit (`VM-SETUP.md`, step 20).
-- **The programs are inside the binary.** `clang -target bpf` compiles `np.bpf.c` and `build/bpf2c`
-  turns it into a C header with the instructions and the map relocations, by name. `bpf2c` rejects
-  everything the loader can't resolve: non-inlined functions, global data and relocations that
-  aren't maps. No ELF file is read at run time. Neither libbpf nor bcc is used. Without clang
-  (`BPF=0`) it still builds, and the service reports "BPF not available" and does nothing.
+- **The programs are inside the binary.** With `BPF=1`, rustc compiles `kernel.rs` to
+  a self-contained eBPF ELF object. The Rust build script validates and embeds its instructions
+  and map relocations as Rust constants. Non-inlined functions, global data and relocations that
+  aren't maps are rejected during the build. No ELF file is read at run time. No Clang, libbpf,
+  bcc or external BPF linker is used. This build needs the matching `rust-src` component.
+  With `BPF=0`, the service still builds and reports `fw.bpfNotBuilt` without enforcing rules.
 - **Where it attaches.** To the cgroup of `lordos.service`, with `bpf_link`, which contains the
   subtree of every session. A single attachment covers all users: each scope has its own id.
   - systemd deletes and recreates that cgroup every time `lordos.service` restarts. That's why the
@@ -634,7 +643,7 @@ Each program does the following:
 1. It finds the app by its cgroup's ancestor at the scope level
    (`bpf_get_current_ancestor_cgroup_id`). This way, a cgroup the app creates inside its scope is
    still the same app.
-2. It decides with `np_decide` (`np_shared.h`).
+2. It decides with `np_decide` (`shared.rs`).
 3. It returns 1, or 0. With 0 the app gets `EPERM` ("Operation not permitted").
 
 Anything that isn't a session app passes right away: `lord-sessiond`, the login screen and the rest
@@ -652,7 +661,7 @@ internet from there.
 
 **Chosen fix (option a): attach to `user@<uid>.service` + a per-user restriction union.** For each
 LordOS session user, `axia-netperm` attaches the same cgroup programs a second time to that user's
-`user@<uid>.service`. There the process is not in any app scope, so `find_app` (`np.bpf.c`) falls
+`user@<uid>.service`. There the process is not in any app scope, so `app` (`kernel.rs`) falls
 back to `np_union`, keyed by the `user@<uid>` cgroup id (the ancestor at `cfg->user_level`). Its
 value is the **strictest union** of the restrictions (the `NP_R_*` bits ORed) of all of that user's
 currently-running restricted apps, with `trusted=1` so anything the union does not forbid is
@@ -667,7 +676,7 @@ Why this and not the alternatives:
   by the app, so its process lineage no longer reaches the restricted app. Carrying the app
   identity in BPF task-local storage and inheriting it across `fork` (option c) therefore cannot
   cover the service case — and it would also need a `BPF_PROG_TYPE_TRACING`/raw-tracepoint program
-  plus a BTF-typed task-storage map, which our own `bpf()` loader (`bpfsys.c`) does not build.
+  plus a BTF-typed task-storage map, which our own `bpf()` loader (`bpf.rs`) does not build.
   Kernel 6.12 has BTF and `bpf` LSM, but the loader would have to grow that machinery.
 - Denying the app access to the user bus / `$XDG_RUNTIME_DIR/systemd/private` (option b) can't be
   enforced for unsandboxed Linux apps (Landlock is not applied to them).
@@ -829,7 +838,7 @@ again afterwards):
 - The CPU columns are the client's system CPU (% of one core over 15 s, `iperf3 -J`), two runs each.
 - `axia-netperm` itself only works on a reload (one sock_diag dump) and on a cut socket.
 
-### From rules to maps (`npcompile.c`)
+### From rules to maps (`compile.rs`)
 
 There's no time in the kernel for the full precedence of `fw_decide`, so it is precomputed:
 

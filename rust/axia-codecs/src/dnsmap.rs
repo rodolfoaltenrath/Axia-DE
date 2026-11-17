@@ -428,6 +428,16 @@ unsafe fn addr16<'a>(fam: c_int, a: *const u8) -> &'a [u8] {
     std::slice::from_raw_parts(a, if fam == 6 { 16 } else { 4 })
 }
 
+/// Addresses present in a validated DNS response. Consumers must still look them
+/// up in the learned cache: unrelated answer records do not acquire trusted names.
+pub fn response_addresses(pkt: &[u8]) -> Option<Vec<(i32, [u8; 16])>> {
+    let mut response = new_response();
+    if !parse(pkt, &mut response) {
+        return None;
+    }
+    Some(response.addr[..response.naddr as usize].iter().map(|r| (r.fam, r.addr)).collect())
+}
+
 /// # Safety
 /// `pkt` covers `len` bytes; `out` is a DnsResponse.
 #[no_mangle]

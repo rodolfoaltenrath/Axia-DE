@@ -274,43 +274,35 @@ DOCHELPER ?= $(shell pkg-config --exists poppler-glib libarchive cairo-pdf cairo
 ifeq ($(DOCHELPER),1)
 ALL += build/axia-doc
 endif
-# axia-netperm (src/netperm, docs/FIREWALL.md step 2): the root service that applies per-app network
-# permissions with cgroup BPF programs. The programs are compiled with clang -target bpf (BPF=1,
-# if clang is available) and go inside the binary (build/bpf2c → build/gen/np_bpf.h). Without clang it still
-# builds and the service warns that it has no BPF. No libbpf or bcc. Not part of `all`: no unit
-# installs it on a host distribution yet.
+# Rust-only privileged network permissions service. BPF=1 builds its Rust
+# kernel programs with the matching rust-src component; no clang/libbpf/linker.
 .DEFAULT_GOAL := all
 BPF ?= 0
-NP_SRC := src/netperm/netperm.c src/netperm/bpfsys.c src/netperm/npcompile.c src/netperm/npdns.c src/netperm/npdiag.c \
-          src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
-ifeq ($(BPF),1)
-NP_GEN := build/gen/np_bpf.h
-NP_CPP := -DNP_HAVE_BPF
-endif
-build/bpf2c: src/netperm/bpf2c.c
-	@mkdir -p build
-	$(CC) $(CFLAGS) $(WARN) -std=c11 -o $@ $<
-build/np.bpf.o: src/netperm/np.bpf.c src/netperm/np_shared.h
-	@mkdir -p build
-	clang -target bpf -O2 -Wall -Wextra -Isrc -I/usr/include/$(shell $(CC) -dumpmachine) -c -o $@ $<
-build/gen/np_bpf.h: build/np.bpf.o build/bpf2c
-	@mkdir -p build/gen
-	build/bpf2c $< $@
-build/axia-netperm: $(NP_SRC) $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) src/sec/json.h $(NP_GEN) $(CODEC_LIB)
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(NP_CPP) $(CFLAGS) $(WARN) -std=c11 -o $@ $(NP_SRC) $(FW_LINK)
-# tests/npverify_test.c: the BTF reader, and (as root) every program through the kernel verifier
+NP_INPUTS := $(wildcard src/netperm/*.rs src/netperm/*.h) ../rust/axia-netperm/Cargo.toml ../rust/axia-netperm/build.rs $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
+NP_INPUTS += ../rust/axia-codecs/src/fwrules.rs ../rust/axia-codecs/src/fwlists.rs ../rust/axia-codecs/src/dnsmap.rs
+NP_FEATURES := $(if $(filter 1,$(BPF)),--features bpf,)
+# Separate outputs prevent switching BPF=0/1 from reusing the wrong executable.
+NP_TARGET := build/netperm-$(BPF)
+NP_LIB := $(NP_TARGET)/release/libaxia_netperm.a
+$(NP_LIB): $(NP_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-netperm --release --locked --offline --target-dir $(NP_TARGET) $(NP_FEATURES)
+.PHONY: build/axia-netperm
+build/axia-netperm: $(NP_LIB)
+	cp $(NP_TARGET)/release/axia-netperm $@
 ifeq ($(BPF),1)
 test: build/npverify-test
-build/npverify-test: tests/npverify_test.c src/netperm/bpfsys.c $(wildcard src/netperm/*.h) $(NP_GEN)
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npverify_test.c src/netperm/bpfsys.c
-	./$@ || { rm -f $@; exit 1; }
+.PHONY: build/npverify-test
+build/npverify-test: $(NP_LIB)
+	cp $(NP_TARGET)/release/npverify-test $@
+	./$@
 endif
-test: build/npcompile-test
-build/npcompile-test: tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/netperm/*.h) $(wildcard src/fw/*.h) $(CODEC_LIB)
+.PHONY: netperm-rust-test
+test: build/npcompile-test netperm-rust-test
+netperm-rust-test:
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-netperm --locked --offline --target-dir $(NP_TARGET) $(NP_FEATURES)
+build/npcompile-test: tests/npcompile_test.c src/fw/rules_json.c src/sec/json.c $(wildcard src/fw/*.h) $(NP_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/netperm/npcompile.c src/netperm/npdns.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/fw/rules_json.c src/sec/json.c $(NP_LIB) $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # axia-fand (src/fan, docs/FANS.md): the root service that drives the fans by temperature. libc
 # only; it executes nothing and has no network. tests/fan_test.c: curves, fan.json, requests and a

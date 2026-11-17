@@ -19,15 +19,6 @@
 #include <stdint.h>
 
 typedef void (*NpDnsCb)(void *u, const uint8_t *pkt, size_t len);
-typedef struct NpDns NpDns;
-
-NpDns      *npdns_new(NpDnsCb cb, void *u);
-void        npdns_free(NpDns *d);
-int         npdns_fd(const NpDns *d);           /* the fd to wait on (-1 if none) */
-void        npdns_ready(NpDns *d);              /* the fd has data */
-void        npdns_tick(NpDns *d);               /* every second: reconnect, pick a source */
-const char *npdns_source(const NpDns *d);       /* "resolved", "packet" or "none" */
-
 /* A response from resolved's monitor (varlink JSON, without the trailing 0) → one DNS message per
  * question, to cb. Returns how many it built, 0 if it wasn't a successful response, -1 if invalid.
  * Kept separate to test it without resolved (tests/npcompile_test.c). */

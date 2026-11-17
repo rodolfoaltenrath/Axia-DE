@@ -1,10 +1,9 @@
-/* np_shared.h — what axia-netperm's BPF programs (np.bpf.c), the compiler of rules into maps
- * (npcompile.c) and its test (tests/npcompile_test.c) share. See docs/FIREWALL.md, step 2.
+/* np_shared.h — what axia-netperm's BPF programs (kernel.rs), the compiler of rules into maps
+ * (compile.rs) and its test (tests/npcompile_test.c) share. See docs/FIREWALL.md, step 2.
  *
- * It compiles the same with `clang -target bpf` (no libc) and with the system compiler: only
- * fixed-width types and inline functions without calls. The kernel's decision (np_decide) is this
- * very function, so the kernel-less test compares exactly what will run inside against
- * fw_decide (the step 1 reference).
+ * ABI declarations for C clients and regression fixtures. The shared Rust
+ * implementation is compiled for both userspace and the kernel; no inline C
+ * implementation remains here.
  *
  * Maps (created by axia-netperm; the programs see them by name):
  *   np_cfg     ARRAY  [0] → NpCfg                   level of the apps' scope, enabled
@@ -33,20 +32,11 @@
 #ifndef LORD_NP_SHARED_H
 #define LORD_NP_SHARED_H
 
-#ifdef NP_BPF
-typedef unsigned char      np_u8;
-typedef unsigned short     np_u16;
-typedef unsigned int       np_u32;
-typedef unsigned long long np_u64;
-#define NP_INLINE static inline __attribute__((always_inline))
-#else
 #include <stdint.h>
-typedef uint8_t  np_u8;
+typedef uint8_t np_u8;
 typedef uint16_t np_u16;
 typedef uint32_t np_u32;
 typedef uint64_t np_u64;
-#define NP_INLINE static inline
-#endif
 
 #define NP_LIST_MAX   16        /* rules per address or network (including those of the networks that contain it) */
 #define NP_GEN_MAX    16        /* an app's lan / internet / any rules */
@@ -193,106 +183,14 @@ typedef struct {
     np_u32 rule_id, flag;
 } NpRes;
 
-/* Which restriction covers opening a character device (cgroup/dev): NP_R_NO_CAMERA for video
- * devices, NP_R_NO_SCREEN for the framebuffer device, NP_R_NO_USB for raw USB, hidraw and USB
- * serial; 0 for everything else (always
- * allowed: the program only takes away what the user restricted). */
-NP_INLINE np_u32 np_dev_restriction(np_u32 type, np_u32 major, np_u32 hidraw_major) {
-    if (type != NP_DEV_CHAR) return 0;
-    if (major == NP_MAJOR_V4L) return NP_R_NO_CAMERA;
-    if (major == NP_MAJOR_FB) return NP_R_NO_SCREEN;
-    if (major == NP_MAJOR_USBDEV || major == NP_MAJOR_TTYACM || major == NP_MAJOR_TTYUSB) return NP_R_NO_USB;
-    if (hidraw_major && major == hidraw_major) return NP_R_NO_USB;
-    return 0;
-}
-
-/* LAN, same as fw_addr_is_lan (addresses are in network order). */
-NP_INLINE int np_is_lan4(const np_u8 *a) {
-    np_u8 b0 = a[0], b1 = a[1];
-    if (b0 == 0 || b0 == 10 || b0 == 127) return 1;
-    if (b0 == 100 && (b1 & 0xc0) == 64) return 1;
-    if (b0 == 169 && b1 == 254) return 1;
-    if (b0 == 172 && (b1 & 0xf0) == 16) return 1;
-    if (b0 == 192 && b1 == 168) return 1;
-    if ((b0 & 0xf0) == 224) return 1;
-    if (b0 == 255 && b1 == 255 && a[2] == 255 && a[3] == 255) return 1;
-    return 0;
-}
-
-NP_INLINE int np_is_lan6(const np_u8 *a) {
-    int zero = 1;
-    for (int i = 0; i < 15; i++) if (a[i]) zero = 0;
-    if (zero && (a[15] == 0 || a[15] == 1)) return 1;           /* :: and ::1 */
-    if ((a[0] & 0xfe) == 0xfc) return 1;                         /* fc00::/7 */
-    if (a[0] == 0xfe && (a[1] & 0xc0) == 0x80) return 1;         /* fe80::/10 */
-    if (a[0] == 0xff) return 1;                                  /* ff00::/8 */
-    return 0;
-}
-
-/* Loopback, same as fw_addr_is_loopback (IPv4-mapped addresses already come as IPv4). */
-NP_INLINE int np_is_loop(int fam, const np_u8 *a) {
-    if (fam == 4) return a[0] == 127;
-    if (fam != 6) return 0;
-    np_u32 any = 0;                     /* without early exits: fewer paths for the verifier */
-    for (int i = 0; i < 15; i++) any |= a[i];
-    return (any | (np_u32)(a[15] ^ 1)) == 0;
-}
-
-NP_INLINE int np_ent_match(const NpEnt *e, int dir, int proto, int port) {
-    if (e->dir != dir) return 0;
-    if (e->proto != NP_P_ANY && e->proto != proto) return 0;
-    if (port < e->port_lo || port > e->port_hi) return 0;
-    return 1;
-}
-
-/* The decision, in the same order as fw_decide: restrictions, rules (first the trie's list,
- * which already has domains and networks ordered), a subscribed blocklist, then lan/internet/any,
- * trusted and mode.
- *   lan: 1 LAN, 0 internet, -1 unknown address (bind to an address that isn't local).
- *   listed: 1 if the address is in the app's blocklist set (np_blk4/np_blk6).
- *   loop: 1 for a loopback address (127/8, ::1): the deny mode lets it through. */
-NP_INLINE void np_decide(const NpApp *a, const NpList *l, int dir, int proto, int port, int lan, int listed, int loop, NpRes *r) {
-    r->verdict = NP_V_DENY; r->reason = NP_BY_RESTRICTED; r->record = 1; r->rule_id = 0; r->flag = 0;
-    np_u32 f = a->flags;
-    if (f & NP_R_NO_NETWORK) { r->flag = NP_R_NO_NETWORK; return; }
-    if (dir == NP_D_IN && (f & NP_R_NO_INCOMING)) { r->flag = NP_R_NO_INCOMING; return; }
-    if ((f & NP_R_NO_INTERNET) && lan != 1) { r->flag = NP_R_NO_INTERNET; return; }
-    if ((f & NP_R_NO_LAN) && lan == 1) { r->flag = NP_R_NO_LAN; return; }
-    r->record = 0;
-    if (l) {
-        np_u32 n = l->n;
-        for (int i = 0; i < NP_LIST_MAX; i++) {
-            if ((np_u32)i >= n) break;
-            const NpEnt *e = &l->e[i];
-            if (np_ent_match(e, dir, proto, port)) {
-                r->verdict = e->verdict; r->reason = NP_BY_RULE; r->rule_id = e->rule_id;
-                return;
-            }
-        }
-    }
-    if (listed) { r->reason = NP_BY_LIST; r->record = 1; return; }
-    np_u32 ng = a->ngen;
-    for (int i = 0; i < NP_GEN_MAX; i++) {
-        if ((np_u32)i >= ng) break;
-        const NpEnt *e = &a->gen[i];
-        if (e->kind == NP_K_LAN && lan != 1) continue;
-        if (e->kind == NP_K_INET && lan != 0) continue;
-        if (np_ent_match(e, dir, proto, port)) {
-            r->verdict = e->verdict; r->reason = NP_BY_RULE; r->rule_id = e->rule_id;
-            return;
-        }
-    }
-    r->verdict = NP_V_ALLOW;
-    if (a->trusted) { r->reason = NP_BY_TRUSTED; return; }
-    r->reason = NP_BY_MODE;
-    r->record = a->mode == NP_M_SILENT || a->mode == NP_M_DENY;
-    if (a->mode == NP_M_DENY && !loop) r->verdict = NP_V_DENY;
-}
-
-/* Does a list of entries deny anything? (NpApp.can_deny, computed by userspace.) */
-NP_INLINE int np_ents_deny(const NpEnt *e, np_u32 n) {
-    for (np_u32 i = 0; i < n; i++) if (e[i].verdict == NP_V_DENY) return 1;
-    return 0;
-}
-
+/* Compatibility declarations only. All implementations, including the kernel's
+ * decision function, live in shared.rs. */
+np_u32 np_dev_restriction(np_u32 type, np_u32 major, np_u32 hidraw_major);
+int np_is_lan4(const np_u8 *a);
+int np_is_lan6(const np_u8 *a);
+int np_is_loop(int fam, const np_u8 *a);
+int np_ent_match(const NpEnt *e, int dir, int proto, int port);
+void np_decide(const NpApp *a, const NpList *l, int dir, int proto, int port,
+               int lan, int listed, int loop, NpRes *r);
+int np_ents_deny(const NpEnt *e, np_u32 n);
 #endif

@@ -1,5 +1,5 @@
 /* npcompile.h — from the rule store (fw/rules.h, rust/axia-codecs/src/fwrules.rs) to the entries of axia-netperm's BPF maps
- * (np_shared.h). It's pure C, no kernel: tests/npcompile_test.c tests it against
+ * (np_shared.h). The implementation is compile.rs, with no kernel: tests/npcompile_test.c tests it against
  * fw_decide. See docs/FIREWALL.md, "Step 2", "From rules to maps".
  *
  * Per app it produces:

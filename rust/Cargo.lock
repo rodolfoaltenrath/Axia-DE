@@ -80,6 +80,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-netperm"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-shell"
 version = "0.1.0"
 dependencies = [
