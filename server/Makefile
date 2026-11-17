@@ -246,7 +246,7 @@ build/text-input-ffi-test: tests/text_input_ffi_test.c src/wl/wl_input.h $(RUST_
 	./$@ || { rm -f $@; exit 1; }
 BENCH_INPUTS := ../rust/axia-bench/Cargo.toml $(wildcard src/bench/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
 $(BENCH_LIB): $(BENCH_INPUTS)
-	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --target-dir $(abspath build/bench-rust) --release --locked --offline
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --lib --target-dir $(abspath build/bench-rust) --release --locked --offline
 $(RUST_LIB): $(RUST_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
 build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
@@ -502,15 +502,15 @@ ENGINE_SRC := src/gpu/gcontend.c src/ui/text.c src/ui/textlayout.c \
               src/ui/paint.c src/ui/otf.c src/ui/fonts.c src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c \
               src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/canvas.c
 test: build/engine-test
-build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+build/engine-test: tests/engine_test.c $(ENGINE_SRC) src/outputs.c $(HDR) tests/drag_golden_cpu.txt tests/drag_golden_gpu.txt $(RUST_LIB) $(BENCH_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/engine_test.c $(ENGINE_SRC) src/outputs.c $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # wlroots proof of concept (poc/axia-wlr.c, docs/WLROOTS.md): the UI engine on wlroots 0.20, with
 # wlroots doing the backend, protocols and input. Built on request only, never installed.
 WLR_PKGS := wlroots-0.20 wayland-server xkbcommon pixman-1 libdrm
-build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) $(RUST_LIB)
+build/axia-wlr: poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c $(HDR) $(RUST_LIB) $(BENCH_LIB)
 	$(CC) $(CPPFLAGS) -DWLR_USE_UNSTABLE $(shell pkg-config --cflags $(WLR_PKGS)) $(CFLAGS) $(WARN) -std=c11 -o $@ \
-	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+	    poc/axia-wlr.c $(ENGINE_SRC) src/outputs.c $(shell pkg-config --libs $(WLR_PKGS)) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 # the frame pipeline's decisions (Rust frame_pipeline.rs, docs/GPU.md "The frame pipeline"): LORD_PIPELINE, the auto
 # mode, what a display does next, when input waits, and a display on a vblank grid with and without it
 test: build/fpipe-test
@@ -521,8 +521,8 @@ build/fpipe-test: tests/fpipe_test.c src/fpipe.h $(RUST_LIB)
 # Re-record only after an intentional rasterizer change has been reviewed and
 # independent damage/composition checks pass. Never use this to mask a regression.
 # The Rust font migration baseline is documented in docs/RUST-CODECS.md.
-drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c src/bench/lbinput.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
+drag-golden: tests/engine_test.c $(ENGINE_SRC) src/outputs.c $(HDR) $(RUST_LIB) $(BENCH_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o build/engine-golden tests/engine_test.c $(ENGINE_SRC) src/outputs.c $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./build/engine-golden drag-golden
 build/shadow-ffi-test: tests/shadow_ffi_test.c src/canvas.c src/canvas.h src/shadow_ffi.h $(RUST_LIB)
 	@mkdir -p build

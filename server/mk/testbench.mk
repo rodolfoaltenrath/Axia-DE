@@ -12,7 +12,7 @@ TESTBENCH_SRC += $(if $(TB_GL),src/bench/glscene.c)
 TB_GL_LIBS := $(if $(TB_GL),$(shell pkg-config --libs egl glesv2 wayland-egl))
 build/axia-testbench: $(TESTBENCH_SRC) $(wildcard src/testbench/*.h src/bench/*.h) $(CLIENT_GEN) $(BENCH_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(TB_GL_FLAGS) -Ibuild/gen $(WARN) -std=c11 -o $@ $(TESTBENCH_SRC) $(filter %.c,$(CLIENT_GEN)) $(BENCH_LIB) -lwayland-client -lxkbcommon -ldl -lpthread -lm $(TB_GL_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TB_GL_FLAGS) -Ibuild/gen $(WARN) -std=c11 -o $@ $(TESTBENCH_SRC) $(filter %.c,$(CLIENT_GEN)) $(BENCH_LIB) -Wl,--gc-sections -lwayland-client -lxkbcommon -ldl -lpthread -lm $(TB_GL_LIBS)
 .PHONY: bench-test
 # Rust owns measurement, protocol and boot-state tests, including persistence failures.
 test: bench-test

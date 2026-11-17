@@ -5,7 +5,7 @@
 # its workloads), the UI engine and the shaper (ENGINE_SRC: the layout, paint and shaping workloads,
 # bench/lbui.c, with their fonts built in), the Rust glass renderer, and, with GPU=1,
 # Mesa (GBM, EGL, GLESv2).
-LB_SRV_SRC := src/bench/lbrun.c src/bench/lbcond.c src/bench/lbframes.c src/bench/lbvideo.c src/bench/lbinput.c
+LB_SRV_SRC := src/bench/lbrun.c
 LB_SRV_OBJ := $(LB_SRV_SRC:src/%.c=build/obj/%.o)
 $(LB_SRV_OBJ): $(wildcard src/bench/*.h) src/hw/rpifw.h src/media/proto.h build/gen/lord_version.h
 build/obj/main.o: src/bench/lbframes.h src/bench/lbinput.h
@@ -13,10 +13,11 @@ build/obj/ui/grab.o: src/bench/lbinput.h
 build/axia-server: $(LB_SRV_OBJ)
 build/obj/ui/js_hw.o: src/bench/lbrun.h
 
-# the xz workload's input: a fixed text (src/bench/lbcorpus.c), compressed at build time
-build/lbcorpus: src/bench/lbcorpus.c
+# the xz workload's input: a fixed text, compressed at build time
+build/lbcorpus: $(BENCH_INPUTS)
 	@mkdir -p build
-	$(CC) $(CFLAGS) $(WARN) -std=c11 -o $@ $<
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --bin lbcorpus --target-dir $(abspath build/bench-rust) --release --locked --offline
+	cp build/bench-rust/release/lbcorpus $@
 build/gen/lb_corpus.h: build/lbcorpus
 	@mkdir -p build/gen
 	./build/lbcorpus text | xz -9 -T1 --check=crc64 -c | ./build/lbcorpus header > $@.new && mv $@.new $@
@@ -33,7 +34,7 @@ build/gen/lb_fonts.h: build/lbcorpus $(LB_FONTS)
 	@mkdir -p build/gen
 	@h=$$( (sha256sum 2>/dev/null || shasum -a 256) < ../assets/fonts/Inter-Regular.ttf | cut -c1-64); \
 	  [ "$$h" = "$(LB_INTER_SHA256)" ] || { echo "axia-bench: assets/fonts/Inter-Regular.ttf changed ($$h): update LB_INTER_SHA256 in mk/lordbench.mk and measure the references' cpu.ui/cpu.shape again" >&2; exit 1; }
-	{ echo '/* generated from the fonts in mk/lordbench.mk (LB_FONTS) by src/bench/lbcorpus.c */' && \
+	{ echo '/* generated from the fonts in mk/lordbench.mk (LB_FONTS) by src/bench/corpus.rs */' && \
 	  ./build/lbcorpus embed lb_font_inter < ../assets/fonts/Inter-Regular.ttf && \
 	  ./build/lbcorpus embed lb_font_arabic < src/bench/fonts/NotoSansArabic-LB.ttf && \
 	  ./build/lbcorpus embed lb_font_devanagari < src/bench/fonts/NotoSansDevanagari-LB.ttf && \
@@ -52,18 +53,18 @@ build/axia-bench: $(LB_SRC) $(LB_GL_SRC) $(QJS_OBJ) build/gen/lb_corpus.h build/
 # the workloads (short; the UI scene and every paragraph's glyphs too), the record checks (the sandbox
 # self-test's included), the thermal guard on fake sysfs trees and the boot history
 test: build/lordbench-test
-build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbcond.c src/bench/lbrun.c \
-                      src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
+build/lordbench-test: tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbrun.c \
+                       src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c $(QJS_OBJ) build/gen/lb_corpus.h \
                       build/gen/lb_fonts.h build/gen/lord_version.h $(wildcard src/bench/*.h) src/hw/rpifw.h $(ENGINE_SRC) $(HDR) $(RUST_LIB) $(BENCH_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c src/bench/lbcond.c \
-	    src/bench/lbrun.c src/bench/lbframes.c src/bench/lbinput.c src/bench/lbvideo.c src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lordbench_test.c src/bench/lbwork.c src/bench/lbui.c \
+	    src/bench/lbrun.c  src/media/proto.c src/pkg/crypto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c \
 	    $(ENGINE_SRC) $(QJS_OBJ) $(RUST_LIB) $(BENCH_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # from a terminal, without a session: build/lordbench-cli quick|full [sustained_s] (needs build/axia-bench, and build/axia-media
 # for the video measurements; desktop mode needs a session: without one its frame results are skipped)
-LB_CLI_SRC := tests/lordbench_cli.c src/bench/lbrun.c src/bench/lbcond.c src/bench/lbframes.c \
-              src/bench/lbvideo.c src/media/proto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
+LB_CLI_SRC := tests/lordbench_cli.c src/bench/lbrun.c \
+               src/media/proto.c src/hw/rpifw.c src/hw/jbuf.c src/sec/json.c
 build/lordbench-cli: $(LB_CLI_SRC) \
                      build/gen/lord_version.h $(wildcard src/bench/*.h) build/axia-bench $(BENCH_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LB_CLI_SRC) $(BENCH_LIB) -ldl -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LB_CLI_SRC) $(BENCH_LIB) -Wl,--gc-sections -ldl -lm -lpthread

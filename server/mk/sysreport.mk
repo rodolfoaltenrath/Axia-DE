@@ -7,8 +7,8 @@ all: build/axia-sysreport build/axia-fetch
 build/axia-fetch: build/axia-sysreport
 	ln -sf axia-sysreport $@
 # `axia-sysreport bench` links LordBench's axia-server side (mk/lordbench.mk), libc only too
-SYSREPORT_BENCH_SRC := src/bench/lbrun.c src/bench/lbcond.c src/bench/lbframes.c \
-                       src/bench/lbvideo.c src/media/proto.c
+SYSREPORT_BENCH_SRC := src/bench/lbrun.c \
+                        src/media/proto.c
 build/axia-sysreport: src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_HDR) $(SYSREPORT_BENCH_SRC) $(wildcard src/bench/*.h) build/gen/lord_version.h $(CODEC_LIB) $(BENCH_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -Ibuild/gen $(CFLAGS) $(WARN) -std=c11 -o $@ src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_BENCH_SRC) $(CODEC_LIB) $(BENCH_LIB) -lm -lpthread $(CODEC_NATIVE_LIBS)

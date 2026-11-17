@@ -12,3 +12,7 @@ serde_json = "1"
 [lib]
 path = "../../server/src/bench/mod.rs"
 crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "lbcorpus"
+path = "../../server/src/bench/corpus.rs"

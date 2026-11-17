@@ -1,11 +1,19 @@
 //! LordBench and Testbench share these native measurements and wire contracts.
 //! C consumers retain their ABI while implementation and verification use Rust.
 mod boot;
+mod conditions;
 mod core;
+mod frames;
+mod input;
 mod protocol;
+mod video;
 pub use boot::*;
+pub use conditions::*;
 pub use core::*;
+pub use frames::*;
+pub use input::*;
 pub use protocol::*;
+pub use video::*;
 
 use libc::{c_char, c_int};
 use std::ffi::CStr;
