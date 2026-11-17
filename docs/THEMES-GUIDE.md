@@ -58,7 +58,7 @@ as a small starting point (a bottom bar, an apps menu and a plain frame):
 
 **Switching.** The user switches themes live from **Settings → Appearance → Desktop style**, which
 since 0.8.5 lists every installed theme (the only place to choose one; `StylePicker` in
-`apps/settings/index.jsx`; it shows only when there is more than one). Lord Flow comes first, the
+`apps/settings/mod.rs`; it shows only when there is more than one). Lord Flow comes first, the
 others by name; a theme with `"hidden": true` in its `theme.json` is not listed. Switching discards the JavaScript context and
 loads the new bundle (`themes.use` in `sdk/index.js`, `lord.themes.use` in `server/src/ui/js_sys.c`,
 `switch_theme` in `server/src/main.c`): the LordOS app windows that were open (up to 8) reopen in

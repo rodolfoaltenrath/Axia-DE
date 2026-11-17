@@ -1,5 +1,8 @@
 # Rust na Axia DE
 
+Settings mantém manifesto, páginas, controles e testes em Rust, sem arquivos
+legados na pasta do app; veja [RUST-SETTINGS.md](RUST-SETTINGS.md).
+
 O primeiro módulo Rust da DE é o modelo do alternador de aplicativos em
 `rust/axia-shell`. Ele é compilado como biblioteca estática e ligado ao
 mesmo executável `axia-server` em C. Não há serviço Rust separado.

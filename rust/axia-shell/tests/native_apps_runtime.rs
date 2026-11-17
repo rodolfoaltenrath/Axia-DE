@@ -60,12 +60,20 @@ fn real_compiled_app_widgets_and_effects() {
         }
     }
     let photo = pictures.join("native-photo.png");
-    image::RgbaImage::from_fn(64, 48, |x, y| image::Rgba([(x * 4) as u8, (y * 5) as u8, 100, 255]))
-        .save(&photo).unwrap();
+    image::RgbaImage::from_fn(64, 48, |x, y| {
+        image::Rgba([(x * 4) as u8, (y * 5) as u8, 100, 255])
+    })
+    .save(&photo)
+    .unwrap();
     fs::set_permissions(&photo, fs::Permissions::from_mode(0o644)).unwrap();
     let driver = scratch.0.join("probe.jsx");
-    fs::write(&driver, DRIVER.replace("@ROOT@", repo.to_str().unwrap())
-        .replace("@PHOTOS_PATH@", photo.to_str().unwrap())).unwrap();
+    fs::write(
+        &driver,
+        DRIVER
+            .replace("@ROOT@", repo.to_str().unwrap())
+            .replace("@PHOTOS_PATH@", photo.to_str().unwrap()),
+    )
+    .unwrap();
     let bundle = scratch.0.join("probe.bundle.js");
     let output = Command::new(repo.join("node_modules/.bin/esbuild"))
         .arg(&driver)
@@ -169,8 +177,14 @@ fn real_compiled_app_widgets_and_effects() {
             .find(|v| v["name"] == name)
             .unwrap_or_else(|| panic!("missing {name}: {log}"))
     };
-    assert_eq!(get("native-files-media")["result"],json!({"kind":"mediaPreview","generation":7,"result":991}));
-    assert_eq!(get("native-files-media")["args"],json!(["files","/preview.mp4",{"audio":1}]));
+    assert_eq!(
+        get("native-files-media")["result"],
+        json!({"kind":"mediaPreview","generation":7,"result":991})
+    );
+    assert_eq!(
+        get("native-files-media")["args"],
+        json!(["files","/preview.mp4",{"audio":1}])
+    );
     assert_eq!(
         get("catalog")["ids"],
         json!([
@@ -193,11 +207,26 @@ fn real_compiled_app_widgets_and_effects() {
             "photos",
             "notes",
             "sysprobe",
-            "reminders"
+            "reminders",
+            "settings"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);
     assert_eq!(get("app-models")["settings"], "appearance");
+    assert!(get("settings-general")["text"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("About this computer")));
+    assert!(get("settings-general")["text"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("Software")));
+    assert_eq!(get("settings-appearance")["mode"], "light");
+    assert_eq!(get("settings-appearance")["react"], 0);
+    assert!(get("settings-clipboard")["text"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("Maximum items")));
     assert_eq!(get("app-models")["schemes"], 16);
     assert_eq!(get("app-models")["profile"], 13);
     assert_eq!(get("app-models")["categories"], 16);
@@ -217,21 +246,30 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("help-service")["invalid"], true);
     assert_eq!(get("help-service")["link"], true);
     assert_eq!(get("help-service")["external"], false);
-    assert_eq!(get("clock-service")["alarms"][0]["label"], "Native clock test");
+    assert_eq!(
+        get("clock-service")["alarms"][0]["label"],
+        "Native clock test"
+    );
     assert_eq!(get("clock-service")["timer"]["state"], "paused");
     assert_eq!(get("clock-service")["timer"]["duration"], 30000);
     assert_eq!(get("clock-service")["stopwatch"]["running"], false);
-    assert_eq!(get("clock-service")["stopwatch"]["laps"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        get("clock-service")["stopwatch"]["laps"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     assert_eq!(get("external-activation")["focused"], true);
     assert_eq!(get("external-activation")["minimized"], false);
     assert_eq!(get("empty")["groups"], 0);
-    assert_eq!(get("empty")["react"],0);
+    assert_eq!(get("empty")["react"], 0);
     assert!(get("empty")["text"]
         .as_array()
         .unwrap()
         .iter()
         .any(|s| s == "No app is open"));
-    assert_eq!(get("closed")["windows"], 0,"{}",get("closed"));
+    assert_eq!(get("closed")["windows"], 0, "{}", get("closed"));
     assert_eq!(get("closed")["guards"], 0);
     assert_eq!(get("closed")["calls"], json!([]));
     assert_eq!(get("retry")["error"], "app.forceQuitRefused");
@@ -260,14 +298,26 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("clock-native-alarms", "No alarms yet."));
     assert!(has_text("clock-native-stopwatch", "00:00.00"));
     assert!(has_text("help-native-article", "Open Clock"));
-    assert_eq!(get("help-native-article")["react"],0,"{}",get("help-native-article"));
+    assert_eq!(
+        get("help-native-article")["react"],
+        0,
+        "{}",
+        get("help-native-article")
+    );
     assert!(has_text("help-native-tour", "Next"));
     assert!(has_text("help-native-tour", "Skip"));
-    assert!(has_text("help-native-missing", "That article was not found."));
+    assert!(has_text(
+        "help-native-missing",
+        "That article was not found."
+    ));
     assert!(has_text("characters", "Emoji"));
     assert!(has_text("characters", "Symbols"));
     assert!(has_text("characters", "Choose a character"));
-    assert_eq!(get("characters")["react"], 0, "Characters content bypasses React");
+    assert_eq!(
+        get("characters")["react"],
+        0,
+        "Characters content bypasses React"
+    );
     assert!(has_text("calculator-precedence", "14"));
     assert_eq!(
         get("calculator-precedence")["react"],
@@ -278,8 +328,8 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("calculator-keyboard", "3"));
     assert!(has_text("calculator-remount", "0"));
     assert_eq!(get("appabout")["title"], "About Calculator");
-    assert_eq!(get("appabout")["react"],0);
-    assert_eq!(get("appabout-missing")["react"],0);
+    assert_eq!(get("appabout")["react"], 0);
+    assert_eq!(get("appabout-missing")["react"], 0);
     assert!(has_text("appabout", "Version 0.9.0"));
     assert_eq!(get("appabout-missing")["title"], "About missing");
     assert!(!has_text("appabout-missing", "Version 0.9.0"));
@@ -295,7 +345,7 @@ fn real_compiled_app_widgets_and_effects() {
         "rasters reach the scene from Rust"
     );
     assert_eq!(get("monitor-memory")["title"], "Monitor");
-    assert!(get("monitor-memory")["handle"].as_u64().unwrap_or(0)>0);
+    assert!(get("monitor-memory")["handle"].as_u64().unwrap_or(0) > 0);
     assert!(has_text("monitor-overview", "SUMMARY"));
     assert_eq!(
         get("monitor-unmounted")["texts"],
@@ -331,14 +381,14 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    assert!(has_text("photos-library","Library"));
-    assert!(has_text("photos-viewer","native-photo.png"));
-    assert!(has_text("photos-viewer","64 × 48"));
-    assert_eq!(get("photos-viewer")["react"],0);
-    assert_eq!(get("photos-viewer")["pixels"],0);
-    assert_eq!(get("photos-viewer")["mediaCalls"],0);
-    assert!(has_text("photos-restored","64 × 48"));
-    assert!(has_text("photos-edit","Save as copy"));
+    assert!(has_text("photos-library", "Library"));
+    assert!(has_text("photos-viewer", "native-photo.png"));
+    assert!(has_text("photos-viewer", "64 × 48"));
+    assert_eq!(get("photos-viewer")["react"], 0);
+    assert_eq!(get("photos-viewer")["pixels"], 0);
+    assert_eq!(get("photos-viewer")["mediaCalls"], 0);
+    assert!(has_text("photos-restored", "64 × 48"));
+    assert!(has_text("photos-edit", "Save as copy"));
     assert!(
         has_text("photos-copy", "native-photo (edited).png"),
         "{}",
@@ -355,6 +405,7 @@ import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
 import { nativeApp as asyncNativeApp } from '@ROOT@/runtime/nativeapps.js';
 import { filesEffect } from '@ROOT@/sdk/nativefiles.js';
 import { media } from '@ROOT@/sdk/media.js';
+import { settings } from '@ROOT@/sdk/settings.js';
 import { help } from '@ROOT@/sdk/help.js';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import '@ROOT@/sdk/wayland.js';
@@ -365,7 +416,7 @@ import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { AppWindowContext } from '@ROOT@/sdk/components.jsx';
 locale.set({...locale.get(),lang:'en'});
 const catalog=lord.nativeApps.request(JSON.stringify({cmd:'catalog'}));
-const compiled=catalog.map(m=>m.id==='photos'?asyncNativeApp(m):nativeApp(m)), force=compiled.find(app=>app.id==='forcequit');
+const compiled=catalog.map(m=>['photos','settings'].includes(m.id)?asyncNativeApp(m):nativeApp(m)), force=compiled.find(app=>app.id==='forcequit');
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 configureWindows({apps:[...compiled,{id:'demo',name:'Demo',Component:()=>null,Icon},{id:'isolated',name:'Isolated',isolated:true,Component:()=>null,Icon}]});
 registerBuiltinApp({id:'linux',name:'Linux',builtin:true,Component:()=>null,Icon});
@@ -408,7 +459,7 @@ const click=label=>{
 const pause=()=>new Promise(resolve=>setTimeout(resolve,90));
 const record=(name,extra={})=>console.log('native-app-observation '+JSON.stringify({name,...extra}));
 const tokens={mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3584e4',separator:'#555',control:'#333',controlRadius:6};
-function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:mode==='help'?860:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
+function Harness(){const[instance,setInstance]=useState(0),[mode,setMode]=useState('forcequit'),[args,setArgs]=useState({});control={setInstance,setMode,setArgs};const app=compiled.find(app=>app.id===mode);return h(ThemeProvider,{tokens},h(AppWindowContext.Provider,{value:{id:mode,focused:true,args}},h(View,{style:{width:mode==='monitor'?1000:mode==='settings'?880:mode==='help'?860:420,height:mode==='monitor'?700:460}},h(app.Component,{key:mode+':'+instance}))));}
 render(h(Harness));
 async function run(){
   await pause(); record('catalog',{ids:catalog.map(app=>app.id)});
@@ -531,6 +582,14 @@ async function run(){
   click('Save as copy');await pause();await pause();await pause();record('photos-copy',{text:nativeTexts()});
   lord.media.view=oldImageView;
 
+  wm.open('settings');control.setArgs({section:'general'});control.setMode('settings');
+  for(let i=0;i<30&&!nativeTexts().includes('Software');i++)await pause();
+  record('settings-general',{text:nativeTexts()});
+  control.setArgs({section:'appearance',nonce:1});await pause();await pause();
+  click('Light');await pause();await pause();
+  record('settings-appearance',{text:nativeTexts(),mode:settings.get().mode,react:texts().filter(n=>n.text==='Light'||n.text==='Dark').length});
+  click('Dark');control.setArgs({section:'clipboard',nonce:2});await pause();await pause();
+  record('settings-clipboard',{text:nativeTexts()});
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);

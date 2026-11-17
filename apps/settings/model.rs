@@ -1,5 +1,5 @@
 //! Settings navigation policy. The section order, capabilities, search and
-//! remembered selection belong to Rust; the transitional JSX only draws them.
+//! remembered selection and Dock actions belong to Rust.
 use serde_json::{json, Value};
 
 const GROUPS: &[&[(&str, &str, &str)]] = &[
@@ -79,6 +79,10 @@ impl Model {
                 json!(self.section)
             }
             "current" => json!(self.section),
+            "dockActions"=>{
+                let capabilities=json!({"standalone":input["standalone"],"hasPad":input["services"]["input"]["devices"].as_array().is_some_and(|devices|devices.iter().any(|d|d["kind"]=="touchpad")),"pi5":input["services"]["system"]["info"]["board"]=="pi5"});
+                json!(GROUPS.iter().flat_map(|group|group.iter()).filter(|(id,_,_)|shown(id,&capabilities)).map(|(id,_,_)|json!({"id":id,"label":format!("settings.section.{id}"),"args":{"section":id}})).collect::<Vec<_>>())
+            },
             "groups" => {
                 let q = input["query"].as_str().unwrap_or("").trim().to_lowercase();
                 json!(GROUPS

@@ -383,7 +383,7 @@ Permissions: `files`, `clipboard`, `notifications`, `network`, `camera`, `microp
 ### Settings → Privacy
 
 A page in the TangoOS-style groups, "Privacy & Security": it lists each permission
-with its apps and an Allow / Ask / Deny control (`apps/settings/Privacy.jsx`). The **Monitor** adds
+with its apps and an Allow / Ask / Deny control (`apps/settings/privacy.rs`). The **Monitor** adds
 its own section (see connections per app, locate them on the map) through
 `registerPrivacySection({ id, order, Component })` from `@lordos/sdk`, without touching the page.
 
@@ -437,7 +437,7 @@ through `globalThis.__lordos.monitorDevices`.
 | `server/src/sec/brokercam.c`, `broker_int.h` | the camera of isolated apps, server side (ring, ACK validation, powerbox saves, revoke) |
 | `server/src/ui/js_brokercam.c` | `lord.media` (camera) inside the app process |
 | `tests/lpk-legit` | also: camera, photo/video through the powerbox, «New window» |
-| `apps/settings/Privacy.jsx` | Settings → Privacy |
+| `apps/settings/privacy.rs` | Settings → Privacy |
 | `tests/lpk-evil`, `tests/lpk-legit` | test apps (malicious and legitimate) |
 | `server/tests/sandbox_test.c` | sandbox tests (app, network, helper) |
 | `server/src/sec/brokermail.c`, `server/src/ui/js_brokermail.c` | axia-maild for the isolated Mail, Calendar, Contacts and Reminders (`BOP_MAIL`, `BOP_SYS_OPEN`) |

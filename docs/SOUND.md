@@ -254,7 +254,7 @@ The input level meter in Settings → Sound used pavucontrol's 25 Hz `PEAK_DETEC
 PipeWire is a node at rate 25 with a quantum of 1; on the VMware machine PipeWire was seen at
 ~36 % CPU while the page was open. It is now a plain 48 kHz mono stream read in blocks of 2048
 samples (~23 levels a second), opened only while the Sound page is open and closed when it
-closes (`apps/settings/Sound.jsx`, `snd_meter` in `server/src/sound/snd.c`). The Voice Recorder computes its level from
+closes (`apps/settings/hardware.rs`, `snd_meter` in `server/src/sound/snd.c`). The Voice Recorder computes its level from
 its own recording stream and has no extra one.
 
 **Tested (VM 123, Proxmox, live ISO, emulated HD Audio with `driver=none`, SeaBIOS):** the sink

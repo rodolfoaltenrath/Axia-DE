@@ -20,6 +20,8 @@ mod calculator;
 mod appabout;
 #[path = "../../../apps/settings/model.rs"]
 mod settings_model;
+#[path = "../../../apps/settings/mod.rs"]
+mod settings_app;
 #[path = "../../../apps/terminal/model.rs"]
 mod terminal_model;
 #[path = "../../../apps/passwords/model.rs"]

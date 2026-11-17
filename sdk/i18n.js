@@ -237,5 +237,5 @@ export const setLanguage = (lang) => settings.set({ language: lang });
 export function reloadCatalogs() {
   cache.clear();
   metas.clear();
-  locale.set((l) => ({ ...l }));
+  locale.set((l) => ({ ...l, revision: (l.revision || 0) + 1 }));
 }

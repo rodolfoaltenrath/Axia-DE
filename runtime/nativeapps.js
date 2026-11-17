@@ -1,6 +1,7 @@
 // Common mount for compiled apps that use asynchronous SDK services. No app UI
 // is implemented here. Lease a window before mounting Rust; release it on close.
-import { createElement as h, useLayoutEffect, useState } from 'react';
+import { createElement as h, Fragment, useLayoutEffect, useState } from 'react';
+import { pickFile, NativeFilePicker } from './native_file_picker.js';
 import { View } from '@lordos/runtime';
 import { nativeApp as baseNativeApp } from '../sdk/nativeapps.js';
 import { NativeView } from '../sdk/nativeview.js';
@@ -23,6 +24,7 @@ import { windowServices } from './native_window_services.js';
 import { wm } from '../sdk/windows.js';
 import { settings } from '../sdk/settings.js';
 import { settingsServices } from './native_settings_services.js';
+import { systemServices } from './native_system_services.js';
 import { clipboardServices } from './native_clipboard_services.js';
 import { inputServices } from './native_input_services.js';
 import { startNativeSession } from './native_session_widgets.js';
@@ -46,6 +48,7 @@ function stopWatch(id) {
   if (--followers === 0) logs.follow(false);
 }
 const methods = {
+  'files.pick': { run: ([options], owner) => pickFile(options, owner) },
   // PIM protocol transport only: filtering, dates and mutations belong to Rust.
   'pim.request': { run: ([op, args]) => mailRequest(op, args) },
   'pim.watch': { run(args, owner) { owner.cleanup(onMailEvent(event => owner.emit(event))); return null; } },
@@ -57,6 +60,7 @@ const methods = {
   ...scanServices(print),
   ...mediaServices({ media, userDirs, soundState, thumbRev, events: owner => bridge.events(owner) }),
   ...settingsServices(settings),
+  ...systemServices(owner => bridge.events(owner)),
   ...backupServices({ backup, backupStatus, events: owner => bridge.events(owner) }),
   ...windowServices(wm, owner => bridge.events(owner)),
   ...inputServices(),
@@ -109,6 +113,7 @@ function NativeAsyncMount({ manifest, args, window }) {
     setReady(true);
     return () => bridge.close(owner);
   }, [owner]);
-  return ready ? h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window,
-    ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }) : h(View, { style: { flex: 1 } });
+  return ready ? h(Fragment, null, h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window,
+    ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }),
+    manifest.asyncServices.includes('files.pick') ? h(NativeFilePicker, { owner }) : null) : h(View, { style: { flex: 1 } });
 }

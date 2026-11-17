@@ -6,12 +6,25 @@ import { RustFiles, RustFileIcon, RustTransfers } from './rustfiles.js';
 import { registerPrivacySection } from './privacy.js';
 import { NativeView } from './nativeview.js';
 import { useSettings } from './settings.js';
+import { registerDockActions } from './dock.js';
+import { standaloneDesktop } from './platform.js';
 
 // The manifest of a native Files window: its facts (the installed apps, the settings of Files), all the
 // theme tokens, the keyboard, and the browser mode.
 const NATIVE_FILES = { id: 'files', nativeView: 'rust', facts: 'apps', settings: true, keyboard: true, fullTheme: true, defaultArgs: { mode: 'browser' }, size: [960, 600] };
 
 export function nativeApp(manifest) {
+  if (manifest.dockActionsModel) {
+    const model=lord.nativeApps.create(manifest.id);
+    registerDockActions(manifest.id, () => {
+      const services={};
+      for (const [service, methods] of Object.entries(manifest.dockServices || {})) {
+        services[service]={};
+        for (const method of methods) { try { services[service][method]=lord[service]?.[method]?.() ?? null; } catch (_) { services[service][method]=null; } }
+      }
+      return model.request(JSON.stringify({ cmd: manifest.dockActionsModel, services, standalone: standaloneDesktop }));
+    });
+  }
   if (manifest.nativeView === 'files') {
     return { ...manifest, system: true, native: true,
       Component: function FilesHost() {

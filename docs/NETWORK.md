@@ -139,7 +139,7 @@ enabled. `lordos.service` now has `DelegateSubgroup=supervisor`.
 ## The UI: Settings → Network
 
 It isn't a separate app: it's in Settings, as on popular desktop systems. At the top it has a row with each
-connection, Wi-Fi and VPN (`apps/settings/Network.jsx`). Control Center shows the main connection
+connection, Wi-Fi and VPN (`apps/settings/network.rs`). Control Center shows the main connection
 and whether there are active VPNs, and opens that section.
 
 | | |

@@ -86,7 +86,7 @@ The answer (`lord.media.hwDecode()`):
 
 Stored per user in `settings.json` as `video: { mode, autoLower }` (`sdk/video.js`). The browsers'
 files are system-wide, so the setting applies to every user of the computer; the last session to
-log in or change it wins. Code: `apps/settings/Video.jsx`.
+log in or change it wins. Code: `apps/settings/displays.rs`.
 
 ### The admin action `video-optimize`
 

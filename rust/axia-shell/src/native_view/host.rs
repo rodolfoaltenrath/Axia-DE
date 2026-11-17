@@ -361,6 +361,9 @@ impl Host {
         })
     }
     pub fn facts(&mut self, facts: Value) {
+        if facts["context"]["localeRevision"] != self.facts["context"]["localeRevision"] {
+            self.i18n.invalidate();
+        }
         if facts == self.facts {
             return;
         }

@@ -131,7 +131,7 @@ the Recorder draw their empty-state icons. `↻ ⤮ ♪ ◫ ▣ ☺ ≡` render 
   `SidebarItem` rows 12 px apart with 20 px colored badges: a soft vertical gradient and a white
   glyph, or a drawn shape where the glyph is a color emoji), a 48 px title bar over the page with a
   hairline, and the page in a scroll view (20 px from the top, 24 px side insets, at most 680 px wide,
-  centered). Pages are built only from `apps/settings/ui.jsx`: `Stack` (sections 20 px apart),
+  centered). Pages are built only from `apps/settings/ui.rs`: `Stack` (sections 20 px apart),
   `Section` (13/600 header, an inset `GroupBox`, an 11 px footer), `SettingRow` (28 px of content
   with 4 px above and below, so 36 px between hairlines; the control at the trailing edge),
   `ValueRow` (value right-aligned in `textDim`), `FieldRow` (a field of a fixed width at the trailing

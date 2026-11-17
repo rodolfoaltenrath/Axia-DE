@@ -307,7 +307,7 @@ own profiles, only when the switch is turned (never by itself at login):
 *Switch off: the same Chromium profile with the LordOS frame.*
 
 - **Who writes:** `axia-server`, as the user, in C (`server/src/hw/brframe.c`, exposed as
-  `lord.browserFrame` in `ui/js_hw.c`; the page is `apps/settings/BrowserFrame.jsx`, the logic
+  `lord.browserFrame` in `ui/js_hw.c`; the page is `apps/settings/displays.rs`, the logic
   `sdk/browserframe.js`). No program is run and JS passes no path: only `on`/`off` and which
   browser. The folders are fixed (`$XDG_CONFIG_HOME` or `~/.config`, and `~`); every file is opened
   without following links, must be a regular file owned by the user and is size-capped.

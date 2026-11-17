@@ -591,7 +591,7 @@ impl Panel {
         view(json!({"gap":10}), content)
     }
 }
-fn request(v: Value) -> Result<Value> {
+pub(crate) fn request(v: Value) -> Result<Value> {
     let op = v["op"].as_str().unwrap_or("");
     if op == "icon" {
         // The always-visible icon needs only connection type and signal strength,

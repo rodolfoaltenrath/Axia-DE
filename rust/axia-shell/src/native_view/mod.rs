@@ -74,6 +74,7 @@ pub trait NativeApp {
 }
 pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     match id {
+        crate::native_apps::settings::ID=>Some(Box::new(crate::settings_app::App::default())),
         crate::native_apps::sysprobe::ID => Some(Box::new(crate::sysprobe_app::App)),
         crate::native_apps::reminders::ID => Some(Box::new(crate::reminders_app::App::default())),
         crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),

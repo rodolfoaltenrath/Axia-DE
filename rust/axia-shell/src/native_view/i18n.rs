@@ -23,6 +23,9 @@ fn valid(id: &str) -> bool {
         && !id.contains("..")
 }
 impl I18n {
+    pub(crate) fn invalidate(&mut self) {
+        self.cache.clear();
+    }
     pub fn new(assets: &str, home: Option<&str>) -> Self {
         let mut roots = Vec::new();
         if let Some(home) = home.filter(|h| !h.is_empty()) {
@@ -66,7 +69,16 @@ impl I18n {
     }
     fn lookup(&mut self, lang: &str, key: &str) -> Option<Value> {
         let (ns, id) = key.split_once('.')?;
-        self.catalog(lang, ns)?.get(id).cloned()
+        let catalog = self.catalog(lang, ns)?;
+        if let Some(value) = catalog.get(id) {
+            return Some(value.clone());
+        }
+        let mut parts = id.split('.');
+        let mut value = catalog.get(parts.next()?)?;
+        for part in parts {
+            value = value.get(part)?;
+        }
+        Some(value.clone())
     }
     fn plural_rule(&mut self, n: u64) -> &'static str {
         let lang = self.lang.clone();
@@ -155,6 +167,12 @@ impl I18n {
     }
     /// `errorText`: "ns.code key=value…" lines become their translation in `errors`.
     pub fn error(&mut self, line: &str) -> String {
+        self.code_line("errors", line)
+    }
+    pub(crate) fn status(&mut self, line: &str) -> String {
+        self.code_line("status", line)
+    }
+    fn code_line(&mut self, namespace: &str, line: &str) -> String {
         let Some((code, rest)) = parse_code(line) else {
             return line.to_owned();
         };
@@ -179,11 +197,11 @@ impl I18n {
         {
             params.insert("reason".into(), Value::from(self.error(&r)));
         }
-        self.optional(&format!("errors.{code}"), &params)
+        self.optional(&format!("{namespace}.{code}"), &params)
             .unwrap_or_else(|| line.to_owned())
     }
     /// A number with at most `digits` decimals, no trailing zeros, in the region's separators.
-    fn number(&self, value: f64, digits: usize) -> String {
+    pub(crate) fn number(&self, value: f64, digits: usize) -> String {
         let fixed = format!("{value:.digits$}");
         let n: f64 = fixed.parse().unwrap_or(value);
         if n.abs() >= 1e15 || (n != 0. && n.abs() < 1e-9) {
@@ -200,7 +218,14 @@ impl I18n {
         }
         let tail = frac.trim_end_matches('0');
         let sign = if sign == "-" && n == 0. { "" } else { sign };
-        format!("{sign}{grouped}{}{tail}", if tail.is_empty() { "" } else { self.decimal.as_str() })
+        format!(
+            "{sign}{grouped}{}{tail}",
+            if tail.is_empty() {
+                ""
+            } else {
+                self.decimal.as_str()
+            }
+        )
     }
     /// `caption(value)` of rustwidgets.js: text, a number, `{key, params}` or `{error}`.
     pub fn caption(&mut self, value: &Value) -> String {
@@ -224,18 +249,26 @@ impl I18n {
                     return self.caption(upper).to_uppercase();
                 }
                 if let Some(n) = o.get("number").and_then(Value::as_f64) {
-                    return self.number(n, o.get("digits").and_then(Value::as_u64).unwrap_or(0).min(15) as usize);
+                    return self.number(
+                        n,
+                        o.get("digits").and_then(Value::as_u64).unwrap_or(0).min(15) as usize,
+                    );
                 }
                 // sdk/system.js formatBytes: one fixed decimal below 10 units,
                 // otherwise a plain rounded integer, through terabytes.
                 if let Some(mut n) = o.get("bytes").and_then(Value::as_f64) {
-                    let units=["B","KB","MB","GB","TB"];
-                    let mut unit=0;
-                    while n>=1024. && unit<units.len()-1 { n/=1024.;unit+=1; }
-                    let number=if n<10. && unit>0 {
-                        format!("{:.1}",(n*10.).round()/10.).replace('.',&self.decimal)
-                    } else { format!("{:.0}",(n+0.5).floor()) };
-                    return format!("{number} {}",units[unit]);
+                    let units = ["B", "KB", "MB", "GB", "TB"];
+                    let mut unit = 0;
+                    while n >= 1024. && unit < units.len() - 1 {
+                        n /= 1024.;
+                        unit += 1;
+                    }
+                    let number = if n < 10. && unit > 0 {
+                        format!("{:.1}", (n * 10.).round() / 10.).replace('.', &self.decimal)
+                    } else {
+                        format!("{:.0}", (n + 0.5).floor())
+                    };
+                    return format!("{number} {}", units[unit]);
                 }
                 if let Some(n) = o.get("size").and_then(Value::as_f64) {
                     return match n {

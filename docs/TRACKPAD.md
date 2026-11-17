@@ -50,7 +50,7 @@ but badly.
 | `server/src/ui/js_input.c` | `lord.input.devices()`, `config()`, `configure(obj)` |
 | `runtime/events.js` | `__lordGesture` → fine `onWheel`, `onPinch`, `onSwipe` |
 | `sdk/trackpad.js` | Applies settings live, and the desktop actions on swipe |
-| `apps/settings/Trackpad.jsx` | Settings → Trackpad |
+| `apps/settings/trackpad.rs` | Settings → Trackpad |
 | `tests/touchpad-sim/` | Touchpad simulated with uinput, and the scripted gestures |
 
 ## Detection

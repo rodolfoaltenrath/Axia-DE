@@ -150,6 +150,13 @@ export function useIndicators() {
   const own = useStore(brokerDevices);
   const md = monitorDeviceStore();
   const ext = md ? useStore(md) : [];
+  return collectIndicators(own, ext);
+}
+// Serializable snapshot for native consumers of the same device indicators.
+export function indicatorFacts() {
+  return collectIndicators(brokerDevices.get(), monitorDeviceStore()?.get() || []);
+}
+function collectIndicators(own, ext) {
   const all = [...own, ...(Array.isArray(ext) ? ext : [])];
   const byKind = {};
   for (const d of all) {

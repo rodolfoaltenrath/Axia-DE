@@ -520,7 +520,7 @@ session. Everything that changes something goes through closed `admin.c` actions
 | `/run/lordos/netd.sock`, `netd.pid`, `netd.enabled` | the system network (NETWORK.md)                 |
 | `server/src/sec/cgroup.c`              | per-session cgroup subtree and per-app scopes (`Delegate=yes`) |
 | `themes/greeter/`                      | the login screen                                          |
-| `apps/settings/Users.jsx`              | Settings → Users                                          |
+| `apps/settings/users.rs`              | Settings → Users                                          |
 | `/run/lordos/status.json`              | sessions, who's on the monitor and who's connected over the network |
 | `/run/lordos/first-frame`              | the first session frame of this boot is on the monitor (boot splash hand-off) |
 | `/run/lordos/no-display`               | no usable display: the boot splash ends without keeping its frame |

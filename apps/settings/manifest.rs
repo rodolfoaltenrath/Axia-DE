@@ -1,0 +1,4 @@
+pub const ID: &str = "settings";
+pub fn manifest() -> serde_json::Value {
+    serde_json::json!({"id":ID,"version":"0.8.6","name":"Settings","description":"General, appearance, network, sound, language, keyboard, updates and themes","size":[880,600],"minSize":[700,460],"dock":true,"permissions":["network:configure","packages:update","session:quit","settings:write","themes:switch"],"category":"Settings","nativeView":"rust","settings":true,"fullTheme":true,"themeCatalogs":true,"keyboard":true,"facts":"apps","asyncServices":["desktop.read","desktop.call","desktop.watch","desktop.events","files.pick"],"calls":{"nativeAsync":["start"],"fw":["setAppRule","setTrusted","setRestricted","setMode","removeRule","removeList","updateLists","setList","addRule","updateRule","addList"]},"reads":{"nativeAsync":["take"],"fw":["rules"]},"dockActionsModel":"dockActions","dockServices":{"input":["devices"],"system":["info"]}})
+}

@@ -1,5 +1,9 @@
 # Settings: Displays, Bluetooth, Energy, Cooling, Notifications, Date & Time, Default Apps
 
+Settings now uses the compiled Rust native view. Its manifest, all pages,
+controls and tests live in `apps/settings/*.rs`; see [RUST-SETTINGS.md](RUST-SETTINGS.md).
+The service architecture below describes the existing shared shell APIs.
+
 ## Axia on Fedora: live battery status
 
 The battery uses the existing unprivileged `/sys/class/power_supply` reader. A
@@ -27,17 +31,17 @@ pairing, Sound with a Bluetooth headset, a Linux app's notification and Files' "
 
 | Page | Sidebar group | Code |
 |---|---|---|
-| Displays | with Appearance, Wallpaper, Desktop & Dock | `apps/settings/Displays.jsx`, `hw/display.c`, `rust/axia-codecs/src/edid.rs` (EDID and modes), `rust/axia-codecs/src/night.rs`, `kms.c` |
-| Bluetooth | with Network and Sound | `apps/settings/Bluetooth.jsx`, `hw/bt.c`, `hw/sysbus.c` |
-| Notifications | with Sound | `apps/settings/Notifications.jsx`, `sdk/notify.js`, `hw/notifyd.c` |
-| Date & Time | with Language & Region | `apps/settings/DateTime.jsx`, `hw/hw.c` (timedated) |
-| Default Apps | with Keyboard and Trackpad | `apps/settings/DefaultApps.jsx`, `sdk/defaults.js`, `hw/defaults.c`, `hw/mimeapps.c` |
-| Energy (Battery) | with Privacy | `apps/settings/Power.jsx`, `hw/power.c`, `hw/ppd.c` |
-| Cooling | after Energy | `apps/settings/Cooling.jsx`, `sdk/cooling.jsx`, `ui/js_fan.c` → `axia-fand` (`server/src/fan/`); see `FANS.md` |
-| Board firmware | after Cooling, only on a Raspberry Pi 5 (BCM2712: Pi 5, Pi 500, CM5) | `apps/settings/Firmware.jsx`, `hw/hw_admin.c` (`rpi-eeprom-status`, `rpi-eeprom-update`) |
+| Displays | with Appearance, Wallpaper, Desktop & Dock | `apps/settings/displays.rs`, `hw/display.c`, `rust/axia-codecs/src/edid.rs` (EDID and modes), `rust/axia-codecs/src/night.rs`, `kms.c` |
+| Bluetooth | with Network and Sound | `apps/settings/hardware.rs`, `hw/bt.c`, `hw/sysbus.c` |
+| Notifications | with Sound | `apps/settings/personal.rs`, `sdk/notify.js`, `hw/notifyd.c` |
+| Date & Time | with Language & Region | `apps/settings/hardware.rs`, `hw/hw.c` (timedated) |
+| Default Apps | with Keyboard and Trackpad | `apps/settings/privacy.rs`, `sdk/defaults.js`, `hw/defaults.c`, `hw/mimeapps.c` |
+| Energy (Battery) | with Privacy | `apps/settings/hardware.rs`, `hw/power.c`, `hw/ppd.c` |
+| Cooling | after Energy | `apps/settings/cooling.rs`, `sdk/cooling.jsx`, `ui/js_fan.c` → `axia-fand` (`server/src/fan/`); see `FANS.md` |
+| Board firmware | after Cooling, only on a Raspberry Pi 5 (BCM2712: Pi 5, Pi 500, CM5) | `apps/settings/system.rs`, `hw/hw_admin.c` (`rpi-eeprom-status`, `rpi-eeprom-update`) |
 
-Shared pieces: `apps/settings/ui.jsx` (a row with a hint, a pop-up button, the page header) on top of
-the SDK's `GroupBox` (`docs/DESIGN.md`). All text goes through `t()` in the `prefs` namespace
+Shared pieces: `apps/settings/ui.rs` (a row with a hint, a pop-up button, the page header),
+drawn directly in the Rust scene with the existing grouped styling (`docs/DESIGN.md`). Text uses the existing locale namespaces
 (`assets/locales/{en,es,pt}/prefs.json`); `node tools/i18n-check.mjs` passes. Pages use
 `textAlign: 'start'` and leading/trailing layout, so they mirror in Arabic and Hebrew; sliders and
 the time fields keep `direction: 'ltr'`.
@@ -45,7 +49,7 @@ the time fields keep `direction: 'ltr'`.
 ## How it fits together
 
 ```
- apps/settings/*.jsx ── sdk/hardware.jsx (stores, Night Light timer, idle, system dialogs)
+ apps/settings/*.rs ── runtime/native_system_services.js ── shared SDK services
         │                    ▲ __lordHw(kind, data): "display" "idle" "power" "bt" "bt-prompt"
         ▼                    │  "bt-result" "ppd" "ppd-result" "timedate" "notify" "notify-close"
  lord.display / power / bt / mime / timedate / notifyd   (server/src/ui/js_hw.c, validated)
@@ -425,7 +429,7 @@ since freedesktop has no category for them).
 
 Not a hardware page, but its native side lives here too: `hw/brframe.c`, exposed as
 `lord.browserFrame.apply(on, 'all'|'chromium'|'firefox')`, `.state()`, `.tidy()` and
-`.chromiumRunning()` in `ui/js_hw.c`; the page is `apps/settings/BrowserFrame.jsx` (strings in
+`.chromiumRunning()` in `ui/js_hw.c`; the page is `apps/settings/displays.rs` (strings in
 `settings.json`, `browserTabs.*`) and the logic `sdk/browserframe.js`. It writes one preference in the
 user's own Chromium and Firefox profiles; see `WAYLAND.md`, "The switch in Settings".
 
