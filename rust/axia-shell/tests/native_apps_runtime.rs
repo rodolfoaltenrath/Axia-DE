@@ -192,7 +192,8 @@ fn real_compiled_app_widgets_and_effects() {
             "camera",
             "photos",
             "notes",
-            "sysprobe"
+            "sysprobe",
+            "reminders"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);

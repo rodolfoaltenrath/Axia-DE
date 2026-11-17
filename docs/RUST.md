@@ -11,6 +11,11 @@ inventário e as validações por etapa estão em [SERVER-RUST-MIGRATION.md](SER
 O Photos foi migrado para nós, gestos e processamento de imagem em Rust; veja
 [RUST-PHOTOS.md](RUST-PHOTOS.md) para arquitetura, limites e validação.
 
+Reminders mantém interface, regras e testes em Rust, incluindo seletores e
+edição no processo isolado; veja [RUST-REMINDERS.md](RUST-REMINDERS.md).
+O fallback e o ícone do Sandbox Probe também são nós Rust; seus testes de
+sandbox continuam no módulo Rust `server/src/app/probe.rs`.
+
 ## Responsabilidades
 
 - Rust mantém o histórico de foco, ordena os candidatos e controla a seleção,

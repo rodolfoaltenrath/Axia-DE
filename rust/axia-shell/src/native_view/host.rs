@@ -224,6 +224,7 @@ pub struct Host {
     buttons: HashMap<i32, i32>,
     /// The nodes of the layered views (see `Mounted::layer`), for `owns`.
     portals: Vec<i32>,
+    fit_popovers: bool,
     /// While a view that is hovered is being updated: its texts with a `hoverStyle` take it.
     lit: bool,
     /// When the bubble of the hovered view shows, and the bubble while it does.
@@ -294,6 +295,7 @@ impl Host {
             targets: HashMap::new(),
             buttons: HashMap::new(),
             portals: Vec::new(),
+            fit_popovers: false,
             lit: false,
             tip_due: None,
             tip_view: Vec::new(),
@@ -663,12 +665,13 @@ impl Host {
                 };
                 // "anchorKey": left and top count from where the view with that key is (a pop-up list
                 // under its button, drawn at the window's root so no scroll or sheet clips it)
-                let style = match spec["anchorKey"].as_str().and_then(|k| self.anchors.get(k)) {
+                let style = match spec["anchorKey"].as_str().filter(|_| spec["fitPopover"] != true).and_then(|k| self.anchors.get(k)) {
                     Some(&(ax, ay)) if m.layer == 0 => offset_origin(style, ax, ay),
                     _ => style,
                 };
                 // "hoverStyle": merged over the style while the pointer is on the view.
                 let hover = spec.get("hoverStyle").filter(|h| h.is_object()).cloned();
+                let popover_style = (spec["fitPopover"] == true).then(|| style.clone());
                 m.base = if hover.is_some() { style.clone() } else { Value::Null };
                 m.style(0, match &hover {
                     Some(h) if self.hover == m.node => json!([style, h]),
@@ -677,6 +680,10 @@ impl Host {
                 // Views only need their event map (and hover style) after reconciliation. Avoid
                 // retaining another copy of the entire descendant tree.
                 let mut keep = Map::new();
+                if let Some(style) = popover_style {
+                    keep.insert("popoverStyle".into(), style);
+                    keep.insert("anchorKey".into(), spec["anchorKey"].clone());
+                }
                 if let Some(events) = spec.get("events") {
                     keep.insert("events".into(), events.clone());
                 }
@@ -762,6 +769,10 @@ impl Host {
                 }
             }
             Kind::Scroll => {
+                if m.spec.is_null() {
+                    m.offset = spec["initialOffset"].as_f64().filter(|v| v.is_finite()).unwrap_or(0.).max(0.);
+                    m.spec = json!({"initialized":true});
+                }
                 m.style(
                     0,
                     json!([{"overflow":"hidden","flex":1,"position":"relative"}, style]),
@@ -844,8 +855,9 @@ impl Host {
         };
         let accent = self.theme("accent", "#0a84ff");
         let border = if focused { accent.clone() } else { self.theme("separator", "#555555") };
+        let size = m.spec["size"].as_f64().filter(|s| s.is_finite()).unwrap_or(13.).clamp(1.,256.);
         let base = json!({
-            "height":28,"paddingHorizontal":10,"borderRadius":self.theme("controlRadius","6"),
+            "height":(size+15.).max(28.),"paddingHorizontal":10,"borderRadius":self.theme("controlRadius","6"),
             "flexDirection":"row","alignItems":"center","overflow":"hidden","cursor":"text",
             "backgroundColor":self.theme("inputBg", if self.dark() {"#1e1e22"} else {"#ffffff"}),
             "borderWidth":1,"borderColor":border,
@@ -853,15 +865,15 @@ impl Host {
         m.style(0, json!([base, m.spec["style"]]));
         let text = self.theme("text", "#ffffff");
         let shown = |on: bool| if on { "flex" } else { "none" };
-        let plain = |on: bool| json!({"fontSize":13,"color":text,"whiteSpace":"nowrap","display":shown(on)});
+        let plain = |on: bool| json!({"fontSize":size,"color":text,"whiteSpace":"nowrap","display":shown(on)});
         let blink = if self.caret_on { accent.clone() } else { json!("transparent") };
-        let caret_node = |on: bool| json!({"width":1.5,"height":16,"marginLeft":1,"backgroundColor":blink,"display":shown(on)});
+        let caret_node = |on: bool| json!({"width":1.5,"height":size+3.,"marginLeft":1,"backgroundColor":blink,"display":shown(on)});
         m.style(1, plain(!before.is_empty()));
         m.style(2, caret_node(focused && caret == a));
-        m.style(3, json!({"fontSize":13,"color":"#ffffff","backgroundColor":accent,"whiteSpace":"nowrap","display":shown(!sel.is_empty())}));
+        m.style(3, json!({"fontSize":size,"color":"#ffffff","backgroundColor":accent,"whiteSpace":"nowrap","display":shown(!sel.is_empty())}));
         m.style(4, caret_node(focused && b > a && caret == b));
         m.style(5, plain(!after.is_empty()));
-        m.style(6, json!({"fontSize":13,"color":self.theme("textDim","#999999"),"whiteSpace":"nowrap","display":shown(value.is_empty())}));
+        m.style(6, json!({"fontSize":size,"color":self.theme("textDim","#999999"),"whiteSpace":"nowrap","display":shown(value.is_empty())}));
         for (slot, text) in [(0, before), (1, sel), (2, after)] {
             if m.parts_text[slot] != text {
                 scene::set_label(m.parts[slot * 2], &text);
@@ -1012,6 +1024,10 @@ impl Host {
         }
         self.portals.clear();
         layered(&self.root, &mut self.portals);
+        fn fitted(list: &[Mounted]) -> bool {
+            list.iter().any(|m| m.spec["popoverStyle"].is_object() || fitted(&m.children))
+        }
+        self.fit_popovers = fitted(&self.root);
         fn walk(list: &[Mounted], t: &mut HashMap<i32, Target>, b: &mut HashMap<i32, i32>, ev: &mut HashMap<i32, Value>, drops: &mut HashMap<u32,(Value,bool)>) {
             for m in list {
                 if m.drop.0!=0 { drops.insert(m.drop.0,(m.drop.1.clone(),m.drop.2)); }
@@ -1172,6 +1188,14 @@ impl Host {
     fn blur(&mut self) {
         self.focus(0);
     }
+    /// Pointer focus changes may commit an inline editor. Submit/cancel retain
+    /// their own actions and do not also commit the cancelled field.
+    fn pointer_focus(&mut self, node: i32) -> bool {
+        let action = (node != self.field).then(|| find(&mut self.root, self.field)
+            .map(|m| m.spec["blur"].clone()).filter(Value::is_array)).flatten();
+        self.focus(node);
+        if let Some(action) = action { self.send(&action, Map::new()); true } else { false }
+    }
     /// Runs a widget action like the React host's `send([cmd, key], extra)`.
     fn dispatch(&mut self, action: &Value, extra: Map<String, Value>) {
         self.send(action, extra);
@@ -1325,7 +1349,7 @@ impl Host {
                     } else {
                         0
                     };
-                    self.focus(field);
+                    if self.pointer_focus(field) { self.sync(); }
                     return inside.then_some(self.mount);
                 }
                 self.double_press = if inside {
@@ -1337,7 +1361,7 @@ impl Host {
                 }
                 let mut changed = self.pointer_action(old, "onMouseUp");
                 if !inside {
-                    self.blur();
+                    changed |= self.pointer_focus(0);
                     if changed {
                         self.sync();
                     }
@@ -1366,7 +1390,7 @@ impl Host {
                     .map_or(0, |(n, _)| n);
                 let editor_blurred = field != 0 && self.app.text_input();
                 if editor_blurred { self.app.blur(); }
-                self.focus(field);
+                changed |= self.pointer_focus(field);
                 if changed || editor_blurred {
                     self.sync();
                 }
@@ -1576,9 +1600,10 @@ impl Host {
                 self.dispatch(&action, Map::new());
             }
         } else if out.submit {
+            let keep = find(&mut self.root, self.field).is_some_and(|m| m.spec["keepFocus"] == true);
             let submit = find(&mut self.root, self.field).map(|m| m.spec["submit"].clone()).filter(Value::is_array);
             if let Some(action) = submit {
-                self.blur();
+                if !keep { self.blur(); }
                 self.dispatch(&action, Map::new());
             }
         } else if out.changed {
@@ -1611,6 +1636,41 @@ impl Host {
             }
         }
     }
+    /// Use measured geometry after layout, as PopBox did: keep a dropdown in
+    /// the window, align its trailing edge in RTL and flip it above its anchor.
+    fn position_popovers(&mut self) {
+        if !self.fit_popovers { return; }
+        fn collect(list: &[Mounted], out: &mut Vec<(i32, String, Value)>) {
+            for m in list {
+                if m.spec["popoverStyle"].is_object() {
+                    out.push((m.node, m.spec["anchorKey"].as_str().unwrap_or("").into(), m.spec["popoverStyle"].clone()));
+                }
+                collect(&m.children, out);
+            }
+        }
+        fn named(list: &[Mounted], key: &str) -> Option<i32> {
+            list.iter().find_map(|m| if m.key == key { Some(m.node) } else { named(&m.children, key) })
+        }
+        let Some((fx, fy, fw, fh)) = scene::frame(self.mount).filter(|f| f.2 > 16. && f.3 > 0.) else { return; };
+        let mut popovers = vec![];
+        collect(&self.root, &mut popovers);
+        if popovers.is_empty() { return; }
+        let lang = self.i18n.lang.clone();
+        let rtl = self.facts["context"]["direction"].as_str().map(|d|d=="rtl")
+            .unwrap_or_else(||self.i18n.entry(&lang,"meta","direction")==Some(json!("rtl")));
+        for (node, anchor, style) in popovers {
+            let Some((ax, ay, aw, ah)) = named(&self.root, &anchor).and_then(scene::frame) else { continue; };
+            let w = style["width"].as_f64().unwrap_or(240.).min(fw as f64 - 16.);
+            let h = scene::frame(node).map_or(0., |f| f.3 as f64);
+            let x = (ax-fx) as f64 + if rtl { aw as f64-w } else { 0. };
+            let below = (ay-fy+ah) as f64 + 4.;
+            let above = (ay-fy) as f64 - h - 4.;
+            let top = if below+h > fh as f64-6. && above>6. { above } else { below };
+            if let Some(m) = find(&mut self.root,node) {
+                m.style(0,json!([style,{"left":x.clamp(8.,(fw as f64-w-8.).max(8.)),"top":top,"width":w}]));
+            }
+        }
+    }
     pub fn tick(&mut self, now: f64) {
         // Icons depend on the explicit size in facts(), not the mount's
         // layout. Their sync path never measures context/width; checking it
@@ -1625,6 +1685,7 @@ impl Host {
         if resized || self.next_sync.is_some_and(|t| now >= t) {
             self.sync();
         }
+        self.position_popovers();
         if self.tip_due.is_some_and(|t| now >= t) {
             self.tip_due = None;
             self.show_tip();

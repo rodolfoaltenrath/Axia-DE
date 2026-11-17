@@ -2,8 +2,9 @@
 
 LordOS ships four native apps for personal information: **Mail** (a three-pane client in the
 spirit of classic desktop mail clients), **Calendar**, **Contacts** and **Reminders**. They are
-ordinary LordOS apps (React on our engine, `apps/mail`, `apps/calendar`, `apps/contacts`,
-`apps/reminders`). All the network protocols and every parser of data that comes from outside
+ordinary LordOS apps (`apps/mail`, `apps/calendar` and `apps/contacts` still use
+React on our engine; `apps/reminders` now owns its UI and model in Rust — see
+[RUST-REMINDERS.md](RUST-REMINDERS.md)). All the network protocols and every parser of data that comes from outside
 run in one sandboxed helper process, **`axia-maild`**.
 
 | Piece | Status |

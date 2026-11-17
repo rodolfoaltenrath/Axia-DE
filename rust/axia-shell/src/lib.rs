@@ -30,6 +30,8 @@ mod passwords_app;
 mod sysinfo_model;
 #[path = "../../../apps/sysprobe/mod.rs"]
 mod sysprobe_app;
+#[path = "../../../apps/reminders/mod.rs"]
+mod reminders_app;
 mod native_apps_host;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;

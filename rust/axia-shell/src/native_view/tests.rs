@@ -13,6 +13,40 @@ use std::{cell::RefCell, rc::Rc};
 mod pdf_sidebar;
 
 #[test]
+fn measured_popovers_flip_clamp_and_follow_the_interface_direction() {
+    struct Popup;
+    impl NativeApp for Popup {
+        fn request(&mut self,input:&Value)->Value {
+            if input["cmd"]!="sync" {return json!({});}
+            json!({"tree":{"kind":"view","children":[
+                {"kind":"view","key":"anchor","children":[{"kind":"text","label":"anchor"}]},
+                {"kind":"view","key":"popup","anchorKey":"anchor","fitPopover":true,"style":{"position":"absolute","width":340,"top":0,"left":0},"children":[{"kind":"text","label":"popup"}]}
+            ]}})
+        }
+    }
+    let mount=scene::create(scene::VIEW);
+    unsafe{let n=crate::runtime::node_get(mount);(*n).w=640.;(*n).h=400.;}
+    let mut host=Host::new(mount,Box::new(Popup),"",None);
+    host.facts(json!({"context":{"direction":"ltr"}}));
+    let anchor=scene::parent(host.find_text("anchor"));
+    let popup=scene::parent(host.find_text("popup"));
+    unsafe {
+        let a=crate::runtime::node_get(anchor);(*a).ax=600.;(*a).ay=330.;(*a).w=20.;(*a).h=20.;
+        (*crate::runtime::node_get(popup)).h=100.;
+    }
+    host.tick(1000.);
+    unsafe{let s=(*crate::runtime::node_get(popup)).s;assert_eq!(s.pos[0].v,292.);assert_eq!(s.pos[1].v,226.);}
+    host.facts(json!({"context":{"direction":"rtl"}}));
+    unsafe{let a=crate::runtime::node_get(anchor);(*a).ax=400.;(*a).ay=10.;}
+    host.tick(2000.);
+    unsafe{let s=(*crate::runtime::node_get(popup)).s;assert_eq!(s.pos[0].v,80.);assert_eq!(s.pos[1].v,34.);}
+    unsafe{(*crate::runtime::node_get(mount)).w=300.;}
+    host.tick(3000.);
+    unsafe{let s=(*crate::runtime::node_get(popup)).s;assert_eq!(s.width.v,284.);assert_eq!(s.pos[0].v,8.);}
+    drop(host);scene::destroy(mount);
+}
+
+#[test]
 fn idle_native_views_receive_height_only_resizes_without_a_polling_timer(){
     struct Size(Rc<RefCell<Vec<f64>>>);
     impl NativeApp for Size {

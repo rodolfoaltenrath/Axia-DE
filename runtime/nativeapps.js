@@ -27,6 +27,15 @@ import { clipboardServices } from './native_clipboard_services.js';
 import { inputServices } from './native_input_services.js';
 import { startNativeSession } from './native_session_widgets.js';
 import { isolatedApp } from '../sdk/packages.js';
+import { mailRequest, onMailEvent } from '../sdk/mail.js';
+import { windows } from '../sdk/windows.js';
+
+// Opaque per-window snapshots chosen by Rust, with the lifetime of useWindowState.
+const nativeWindowStates = new Map();
+windows.subscribe(() => {
+  const live = new Set(windows.get().map(w => w.id));
+  for (const id of nativeWindowStates.keys()) if (!live.has(id)) nativeWindowStates.delete(id);
+});
 
 let followers = 0;
 const watches = new Map();
@@ -37,6 +46,11 @@ function stopWatch(id) {
   if (--followers === 0) logs.follow(false);
 }
 const methods = {
+  // PIM protocol transport only: filtering, dates and mutations belong to Rust.
+  'pim.request': { run: ([op, args]) => mailRequest(op, args) },
+  'pim.watch': { run(args, owner) { owner.cleanup(onMailEvent(event => owner.emit(event))); return null; } },
+  'pim.events': { run: (args, owner) => bridge.events(owner.id) },
+  'windows.state': { run([window, state]) { nativeWindowStates.set(window, state); return null; } },
   ...fontServices({ fontInfo, fontSample, fontGrid, releaseImage, list: options => lord.fonts.list(options) }),
   ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),
   ...fileServices(fs),
@@ -95,5 +109,6 @@ function NativeAsyncMount({ manifest, args, window }) {
     setReady(true);
     return () => bridge.close(owner);
   }, [owner]);
-  return ready ? h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window } }) : h(View, { style: { flex: 1 } });
+  return ready ? h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window,
+    ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }) : h(View, { style: { flex: 1 } });
 }

@@ -159,7 +159,7 @@ export function NativeView(props) { return props.icon ? h(NativeIcon, props) : h
 // args: the window's (or a Settings section's).
 function NativeApp({ manifest, args, icon, style, mountRef }) {
   const theme = useTheme(), win = useAppWindow() || {}, catalog = useLauncherApps();
-  const { lang } = useLocale();
+  const { lang, region, dir } = useLocale();
   useWindows();
   const [preferences] = useSettings();
   const clock = useStore(manifest.facts === 'clock' && !icon ? clockState : emptyClock);
@@ -187,7 +187,7 @@ function NativeApp({ manifest, args, icon, style, mountRef }) {
     ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
       registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
     // Files reads many more tokens than the other native apps: all of them (not the catalogs of wallpapers and accents)
-    context: { windowMode: win.mode, theme: manifest.fullTheme ? (({ wallpapers, accents, ...tokens }) => tokens)(theme)
+    context: { windowMode: win.mode, region: region || '', direction: dir, theme: manifest.fullTheme ? (({ wallpapers, accents, ...tokens }) => tokens)(theme)
         : { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },
       scale: typeScale, decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3),
       ...(manifest.facts === 'system' ? { screen: { width: screen.width, height: screen.height }, reactVersion, version: lord.version } : {}) },

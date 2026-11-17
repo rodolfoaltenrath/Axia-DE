@@ -37,6 +37,8 @@ pub mod notes;
 pub mod photos;
 #[path = "../apps/sysprobe/manifest.rs"]
 pub mod sysprobe;
+#[path = "../apps/reminders/manifest.rs"]
+pub mod reminders;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -57,7 +59,8 @@ pub fn manifests() -> serde_json::Value {
         camera::manifest(),
         photos::manifest(),
         notes::manifest(),
-        sysprobe::manifest()
+        sysprobe::manifest(),
+        reminders::manifest()
     ])
 }
 #[cfg(test)]
