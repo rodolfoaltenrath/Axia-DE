@@ -43,6 +43,8 @@ pub mod reminders;
 pub mod settings;
 #[path = "../apps/contacts/manifest.rs"]
 pub mod contacts;
+#[path = "../apps/calendar/manifest.rs"]
+pub mod calendar;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -66,7 +68,8 @@ pub fn manifests() -> serde_json::Value {
         sysprobe::manifest(),
         reminders::manifest(),
         settings::manifest(),
-        contacts::manifest()
+        contacts::manifest(),
+        calendar::manifest()
     ])
 }
 #[cfg(test)]

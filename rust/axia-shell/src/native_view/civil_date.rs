@@ -1,4 +1,6 @@
-//! Local civil dates for birthdays. Yearless leap days use the leap year 2000.
+//! Local civil dates shared by native PIM windows. Calendar arithmetic uses
+//! local calendar fields, so moving by one day is safe across DST changes.
+//! Yearless birthdays use the leap year 2000.
 pub fn timestamp(mut t: libc::tm) -> i64 {
     t.tm_isdst = -1;
     unsafe { libc::mktime(&mut t) as i64 * 1000 }
@@ -14,6 +16,20 @@ pub fn add_days(ms: i64, n: i32) -> i64 {
     let mut t = crate::clock::local(day(ms));
     t.tm_mday += n;
     timestamp(t)
+}
+pub fn at_minutes(ms: i64, minutes: i32) -> i64 {
+    let mut t = crate::clock::local(day(ms));
+    t.tm_hour = minutes / 60;
+    t.tm_min = minutes % 60;
+    timestamp(t)
+}
+pub fn minutes(ms: i64) -> i32 {
+    let t = crate::clock::local(ms);
+    t.tm_hour * 60 + t.tm_min
+}
+pub fn week(ms: i64) -> i64 {
+    let d = day(ms);
+    add_days(d, -((crate::clock::local(d).tm_wday + 6) % 7))
 }
 pub fn month(ms: i64, n: i32) -> i64 {
     let mut t = crate::clock::local(day(ms));

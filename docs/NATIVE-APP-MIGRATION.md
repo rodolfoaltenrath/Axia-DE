@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts and Settings have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts, Calendar and Settings have compiled
 Rust implementations. Files still has a compatibility mount controlled by
 `filesNativeView`; its native implementation and shared dialogs need to remain
 part of the final integration audit.
@@ -15,7 +15,7 @@ PDF: geometry, navigation, cache, search/selection, annotation/form state and th
 sidebar are Rust. The sidebar mounts native widgets. The main window, page
 overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
 
-Remaining apps (all remain in scope): calendar, disks,
+Remaining apps (all remain in scope): disks,
 editor, mail, passwords, player, screenshots, sysinfo and terminal, plus PDF above. Existing Rust
 models in some of these apps do not count as native-window completion.
 
@@ -31,12 +31,26 @@ so unrelated mail traffic does not fill its bounded subscription queue.
 The shared PIM I/O adapter keeps selected files and returned images in their
 window lease; it validates file ownership and releases cancelled/late results.
 Native photo nodes bind through the existing sandboxed mail image service.
-All 40 Contacts Rust tests pass, including real native-host field editing,
+The 38 Contacts Rust tests and shared civil-date tests pass, including real native-host field editing,
 default-book/group creation, membership, Mail composition, photo binding,
 import errors and file release. The full `axia-shell` library suite passes
 924 tests (13 ignored). Theme, app-host and isolated-app bundles build, with
 Contacts generated from the compiled registry. CardDAV/device and graphical
 validation remain part of the final desktop check.
+
+Calendar now has only Rust sources, including its manifest and complete native
+day/week/month window. Rust owns calendar visibility and colors, local calendar
+creation/editing/deletion, date navigation, overlapping timed events, all-day
+events, responsive sidebars, keyboard shortcuts and persisted window state.
+The event editor handles recurrence and occurrence/series deletion, alarms,
+time zones, attendees, organizer, URL/status and Unicode notes. Failed saves
+retain the draft; request generations prevent late results from replacing a
+newer editor or visible range. Civil-date arithmetic is shared with Contacts.
+All 27 Calendar Rust tests pass, including native-host editing, saving, alarm
+opening, failure recovery and recurring-event deletion. The full `axia-shell`
+library suite passes 951 tests (13 ignored). Theme, app-host and isolated-app
+bundles build; Calendar is generated from the compiled Rust registry.
+CalDAV/device and graphical validation remain part of the final desktop check.
 
 The asynchronous service lease in `runtime/nativeapps.js` is shared transport,
 with no application UI. Rust chooses jobs; existing SDK APIs perform I/O. Jobs

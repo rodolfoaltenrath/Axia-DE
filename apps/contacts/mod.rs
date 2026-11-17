@@ -1,5 +1,5 @@
 //! Native Contacts: window, editor, list, groups and PIM scheduling in Rust.
-mod date;
+use crate::native_view::civil_date as date;
 mod model;
 mod state;
 #[cfg(test)]
