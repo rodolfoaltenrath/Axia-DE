@@ -30,6 +30,7 @@ import { inputServices } from './native_input_services.js';
 import { startNativeSession } from './native_session_widgets.js';
 import { isolatedApp } from '../sdk/packages.js';
 import { mailRequest, onMailEvent } from '../sdk/mail.js';
+import { pimServices } from './native_pim_services.js';
 import { windows } from '../sdk/windows.js';
 
 // Opaque per-window snapshots chosen by Rust, with the lifetime of useWindowState.
@@ -49,10 +50,9 @@ function stopWatch(id) {
 }
 const methods = {
   'files.pick': { run: ([options], owner) => pickFile(options, owner) },
-  // PIM protocol transport only: filtering, dates and mutations belong to Rust.
-  'pim.request': { run: ([op, args]) => mailRequest(op, args) },
-  'pim.watch': { run(args, owner) { owner.cleanup(onMailEvent(event => owner.emit(event))); return null; } },
-  'pim.events': { run: (args, owner) => bridge.events(owner.id) },
+  ...pimServices({ request: mailRequest, onEvent: onMailEvent, pick: () => lord.broker?.pick(false, ''),
+    close: fd => lord.broker.fdClose(fd), releaseImage: image => lord.mail.release(image),
+    events: owner => bridge.events(owner) }),
   'windows.state': { run([window, state]) { nativeWindowStates.set(window, state); return null; } },
   ...fontServices({ fontInfo, fontSample, fontGrid, releaseImage, list: options => lord.fonts.list(options) }),
   ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),

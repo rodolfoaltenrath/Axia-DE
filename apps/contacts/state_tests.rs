@@ -28,6 +28,48 @@ fn ready() -> State {
     s
 }
 #[test]
+fn late_contact_photo_is_released_and_current_photo_reloads_on_revision() {
+    let mut s = ready();
+    s.booted = true;
+    s.contacts[0]["photo"] = json!(true);
+    s.selected = "a/1".into();
+    s.update_photo();
+    let epoch = s.epoch;
+    complete(
+        &mut s,
+        Tag::Image(epoch, "a/1".into()),
+        Ok(json!({"image":101})),
+    );
+    assert_eq!(s.photo_handle, 101);
+    s.selected = "b/1".into();
+    s.update_photo();
+    assert_eq!(s.photo_handle, 0);
+    complete(
+        &mut s,
+        Tag::Image(epoch, "a/1".into()),
+        Ok(json!({"image":102})),
+    );
+    assert_eq!(s.photo_handle, 0);
+    let next = s.jobs.pump(0).unwrap();
+    assert_eq!(next["args"][1], "pim.imageRelease");
+    assert_eq!(next["args"][2], json!([101]));
+}
+#[test]
+fn clipboard_reply_is_scoped_to_the_editor_and_focus() {
+    let mut s = ready();
+    s.edit(card("a", "1", "Ada"));
+    let seq = s.draft.as_ref().unwrap().sequence;
+    s.notes_focus = true;
+    s.edit(card("b", "1", "Grace"));
+    s.notes_focus = true;
+    complete(&mut s, Tag::Paste(seq), Ok(json!({"text":"old secret"})));
+    assert!(s.draft.as_ref().unwrap().value["notes"].is_null());
+    let seq = s.draft.as_ref().unwrap().sequence;
+    s.notes_focus = false;
+    complete(&mut s, Tag::Paste(seq), Ok(json!({"text":"late"})));
+    assert!(s.draft.as_ref().unwrap().value["notes"].is_null());
+}
+#[test]
 fn old_reload_cannot_overwrite_newer_data_or_error_state() {
     let mut s = ready();
     s.reload();

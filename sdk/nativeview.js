@@ -80,6 +80,7 @@ function runner(handle, manifest, winId, node = () => 0) {
         else if (effect.kind === 'fullscreen' && winId) wm.setFullscreen(winId, !!effect.on);
         else if (effect.kind === 'paste') lord.nativeViews.paste(handle, String(lord.clipboard.get() ?? ''));
         else if (effect.kind === 'copy') lord.clipboard.set(String(effect.text ?? ''));
+        else if (effect.kind === 'mailImage') lord.mail.bind(effect.node, effect.image);
         else if (effect.kind === 'launchApp') launchApp(String(effect.app));
         else if (effect.kind === 'refreshPackages') refreshPackages();
         else if (effect.kind === 'clock') arm();

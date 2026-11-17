@@ -40,6 +40,8 @@ enum Tag {
     Import(Value),
     PickPhoto(u64),
     PickImport(String),
+    Image(u64, String),
+    Paste(u64),
 }
 pub(super) struct Draft {
     pub value: Value,
@@ -62,6 +64,9 @@ pub(super) struct State {
     pub default_book: String,
     pub unavailable: bool,
     pub booted: bool,
+    pub notes_focus: bool,
+    pub photo_handle: i64,
+    photo_target: (u64, String),
     window: String,
     epoch: u64,
     sequence: u64,
@@ -90,6 +95,9 @@ impl Default for State {
             default_book: String::new(),
             unavailable: false,
             booted: false,
+            notes_focus: false,
+            photo_handle: 0,
+            photo_target: (0, String::new()),
             window: String::new(),
             epoch: 0,
             sequence: 0,
@@ -106,6 +114,14 @@ impl Default for State {
     }
 }
 impl State {
+    pub fn open_mail(&mut self, name: String, email: String, now: i64) -> Value {
+        self.jobs.enqueue(
+            Tag::Ignore,
+            "windows.open",
+            json!(["mail",{"new":true,"args":{"compose":{"to":[{"name":name,"email":email}]}}}]),
+        );
+        self.request(&json!({"cmd":"noop"}), now)
+    }
     pub fn busy(&self) -> bool {
         self.jobs.busy()
     }
@@ -150,6 +166,7 @@ impl State {
         }
     }
     fn cancel_draft(&mut self) {
+        self.notes_focus = false;
         self.sequence += 1;
         if let Some(d) = self.draft.take() {
             self.release(d.photo);
@@ -176,6 +193,9 @@ impl State {
     fn run_pending(&mut self, pending: Pending) {
         match pending {
             Pending::Write(mut w) => {
+                // A deleted address book may cause target selection to fall
+                // back to another book. Membership never crosses that boundary.
+                w.group = w.group.filter(|g| g["book"] == w.book);
                 let file = w.photo.clone();
                 let args = json!({"book":w.book,"contact":w.contact,"photo":if file.is_u64(){json!("new")}else{file.clone()}});
                 w.contact["book"] = json!(w.book);
@@ -242,6 +262,12 @@ impl State {
         d.busy = true;
         d.error.clear();
         let new = d.value["_new"] == true;
+        if new {
+            // Creating a group while the contact editor is open changes its
+            // destination. Capture membership at save time, then retain it for
+            // retries after the card itself has already been written.
+            d.join_group = source_group(&self.contacts, &self.source).cloned();
+        }
         let w = Write {
             sequence: d.sequence,
             contact: clean,
@@ -276,6 +302,33 @@ impl State {
     }
     fn apply(&mut self, done: Completed<Tag>, now: i64) {
         match done.tag {
+            Tag::Image(epoch, id) => {
+                let image = done
+                    .result
+                    .ok()
+                    .and_then(|v| v["image"].as_i64())
+                    .unwrap_or(0);
+                if (epoch, id) == self.photo_target {
+                    self.photo_handle = image.max(0);
+                } else if image > 0 {
+                    self.jobs
+                        .enqueue(Tag::Ignore, "pim.imageRelease", json!([image]));
+                }
+            }
+            Tag::Paste(seq) => {
+                if self.notes_focus {
+                    if let (Some(d), Ok(v)) = (
+                        self.draft.as_mut().filter(|d| d.sequence == seq && !d.busy),
+                        done.result,
+                    ) {
+                        d.value["notes"] = json!(format!(
+                            "{}{}",
+                            string(&d.value["notes"]),
+                            string(&v["text"])
+                        ));
+                    }
+                }
+            }
             Tag::Books(e) if e == self.epoch => {
                 match done.result {
                     Ok(v) => {
@@ -473,7 +526,11 @@ impl State {
                         .unwrap_or("all")
                         .into();
                     self.selected = string(&v["args"]["__nativeState"]["cur"]).into();
-                    self.jobs.enqueue(Tag::Watch, "pim.watch", json!([]));
+                    self.jobs.enqueue(
+                        Tag::Watch,
+                        "pim.watch",
+                        json!([["pim-changed", "ready", "crash"]]),
+                    );
                     self.reload();
                 }
             }
@@ -581,6 +638,13 @@ impl State {
                 }
             }
             "save" => self.save(),
+            "notesFocus" => self.notes_focus = self.draft.as_ref().is_some_and(|d| !d.busy),
+            "notesPaste" => {
+                if let Some(d) = self.draft.as_ref().filter(|d| !d.busy && self.notes_focus) {
+                    self.jobs
+                        .enqueue(Tag::Paste(d.sequence), "clipboard.read", json!([]));
+                }
+            }
             "photoRemove" => {
                 if let Some(d) = self.draft.as_mut().filter(|d| !d.busy) {
                     let old = std::mem::replace(&mut d.photo, json!("remove"));
@@ -599,6 +663,21 @@ impl State {
                     .enqueue(Tag::PickImport(book), "pim.filePick", json!([{}]));
             }
             "groupNew" => self.set_sheet(json!({"group":null,"name":""})),
+            "groupDelete" => {
+                if let Some(g) = self
+                    .contacts
+                    .iter()
+                    .find(|c| c["kind"] == "group" && key(c) == k)
+                    .cloned()
+                {
+                    self.call(
+                        Tag::Delete(key(&g), self.sheet_sequence),
+                        "contact-delete",
+                        json!({"book":g["book"],"uid":g["uid"]}),
+                    );
+                }
+                self.menu.clear();
+            }
             "groupEdit" => {
                 if let Some(g) = self
                     .contacts
@@ -678,6 +757,9 @@ impl State {
             self.reload_at = None;
             self.reload();
         }
+        if self.booted {
+            self.update_photo();
+        }
         if self.booted && !self.events_pending && now >= self.events_at {
             self.events_pending = true;
             self.jobs.enqueue(Tag::Events, "pim.events", json!([]));
@@ -685,6 +767,40 @@ impl State {
         self.jobs
             .pump(now)
             .map_or_else(|| json!({}), |effect| json!({"effect":effect}))
+    }
+    fn update_photo(&mut self) {
+        let c = self
+            .draft
+            .as_ref()
+            .map(|d| &d.value)
+            .or_else(|| self.selected_contact());
+        let wanted = c
+            .filter(|c| {
+                c["photo"] == true
+                    && !string(&c["uid"]).is_empty()
+                    && !string(&c["book"]).is_empty()
+            })
+            .filter(|_| self.draft.as_ref().is_none_or(|d| d.photo != "remove"))
+            .cloned();
+        let id = wanted.as_ref().map(key).unwrap_or_default();
+        let target = (self.epoch, id);
+        if target == self.photo_target {
+            return;
+        }
+        self.photo_target = target.clone();
+        self.jobs.cancel(|tag| matches!(tag, Tag::Image(_, _)));
+        if self.photo_handle > 0 {
+            self.jobs
+                .enqueue(Tag::Ignore, "pim.imageRelease", json!([self.photo_handle]));
+            self.photo_handle = 0;
+        }
+        if let Some(c) = wanted {
+            self.jobs.enqueue(
+                Tag::Image(target.0, target.1),
+                "pim.image",
+                json!(["contact-photo",{"book":c["book"],"uid":c["uid"],"size":192}]),
+            );
+        }
     }
 }
 

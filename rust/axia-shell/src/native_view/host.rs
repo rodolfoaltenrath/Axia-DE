@@ -32,6 +32,7 @@ enum Kind {
     Image,
     Media,
     DocumentImage,
+    MailImage,
     Raster,
     Icon,
     Button,
@@ -47,6 +48,7 @@ fn kind_of(v: &Value) -> Kind {
         Some("image") => Kind::Image,
         Some("media") => Kind::Media,
         Some("documentImage") => Kind::DocumentImage,
+        Some("mailImage") => Kind::MailImage,
         Some("raster") => Kind::Raster,
         Some("appIcon" | "windowIcon") => Kind::Icon,
         Some("button") => Kind::Button,
@@ -610,7 +612,7 @@ impl Host {
         let mut m = Mounted::new(kind, key);
         let node_kind = match kind {
             Kind::Text => scene::TEXT,
-            Kind::Image | Kind::Raster | Kind::DocumentImage => scene::IMAGE,
+            Kind::Image | Kind::Raster | Kind::DocumentImage | Kind::MailImage => scene::IMAGE,
             Kind::Media => scene::MEDIA,
             _ => scene::VIEW,
         };
@@ -753,6 +755,14 @@ impl Host {
                 if handle!=m.bound {
                     if m.kind==Kind::Media { scene::set_media_source(m.node,handle); }
                     else { scene::set_document_image(m.node,handle); }
+                    m.bound=handle;
+                }
+            }
+            Kind::MailImage => {
+                m.style(0, style);
+                let handle=spec["image"].as_i64().and_then(|id|i32::try_from(id).ok()).unwrap_or(0).max(0);
+                if handle!=m.bound {
+                    self.effects.push_back(json!({"host":true,"kind":"mailImage","node":m.node,"image":handle}));
                     m.bound=handle;
                 }
             }

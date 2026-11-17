@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders and Settings have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts and Settings have compiled
 Rust implementations. Files still has a compatibility mount controlled by
 `filesNativeView`; its native implementation and shared dialogs need to remain
 part of the final integration audit.
@@ -15,22 +15,28 @@ PDF: geometry, navigation, cache, search/selection, annotation/form state and th
 sidebar are Rust. The sidebar mounts native widgets. The main window, page
 overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
 
-Remaining apps (all remain in scope): calendar, contacts, disks,
+Remaining apps (all remain in scope): calendar, disks,
 editor, mail, passwords, player, screenshots, sysinfo and terminal, plus PDF above. Existing Rust
 models in some of these apps do not count as native-window completion.
 
-Contacts now has Rust card policy and a per-window PIM controller under
-`apps/contacts/`. Rust owns names, multiword search, book-scoped groups, target
-book selection, lossless vCard edits, bounded list layout, reload epochs, save
-and group-join sequencing, import completion and photo-ticket lifetime decisions.
-Controller tests cover stale results, editor replacement, failed writes,
-file release and a simulated mount that checks polling stays bounded. Its file
-jobs specify opaque per-window PIM tickets; the runtime adapter for those tickets
-still needs to be connected. The native scene, contact-photo binding, calendar
-picker and host integration remain pending. Contacts still starts its existing
-JSX entry point, so this is an intermediate stage, not a completed migration.
-Validation: `cargo test --manifest-path rust/Cargo.toml -p axia-shell --lib
-contacts_app:: --locked --offline` passes all 26 Contacts tests on Fedora WSL.
+Contacts now has only Rust sources, including its manifest, full three-column
+window and icon. Rust owns names, multiword search, book-scoped groups, target
+book selection, lossless vCard edits, virtualized rows and RTL scrollbar capture,
+contact cards, repeated fields/custom types, photos, birthday calendar, Unicode
+notes, keyboard navigation, confirmations, localized captions and window state.
+The controller owns reload epochs, save/group-join sequencing, imports and
+photo-ticket lifetime decisions. A failed group join retries the saved UID;
+late results cannot replace a newer editor. Rust selects the PIM event topics
+so unrelated mail traffic does not fill its bounded subscription queue.
+The shared PIM I/O adapter keeps selected files and returned images in their
+window lease; it validates file ownership and releases cancelled/late results.
+Native photo nodes bind through the existing sandboxed mail image service.
+All 40 Contacts Rust tests pass, including real native-host field editing,
+default-book/group creation, membership, Mail composition, photo binding,
+import errors and file release. The full `axia-shell` library suite passes
+924 tests (13 ignored). Theme, app-host and isolated-app bundles build, with
+Contacts generated from the compiled registry. CardDAV/device and graphical
+validation remain part of the final desktop check.
 
 The asynchronous service lease in `runtime/nativeapps.js` is shared transport,
 with no application UI. Rust chooses jobs; existing SDK APIs perform I/O. Jobs
