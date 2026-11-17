@@ -34,6 +34,8 @@ mod sysinfo_model;
 mod sysprobe_app;
 #[path = "../../../apps/reminders/mod.rs"]
 mod reminders_app;
+#[path = "../../../apps/contacts/mod.rs"]
+mod contacts_app;
 mod native_apps_host;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;
