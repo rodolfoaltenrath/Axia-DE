@@ -146,5 +146,6 @@ async function run() {
   console.log('dock parts integration: passed');
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
-settings.set({ menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true, menuNativeView: true });
+// The assertions use English captions, regardless of the developer's system locale.
+settings.set({ language: 'en', menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true, menuNativeView: true });
 render(h(Harness));
