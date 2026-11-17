@@ -43,11 +43,14 @@ fn real_compiled_app_widgets_and_effects() {
     fs::create_dir(&scratch.0).unwrap();
     fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o755)).unwrap();
     let home = scratch.0.join("home");
+    let pictures = home.join("Pictures");
     for path in [
         &home,
         &home.join("runtime"),
         &home.join(".config"),
         &home.join(".config/axia"),
+        // The compositor drops to nobody in CI and must be able to save copies.
+        &pictures,
     ] {
         fs::create_dir(path).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -56,9 +59,6 @@ fn real_compiled_app_widgets_and_effects() {
             assert_eq!(unsafe { libc::chown(name.as_ptr(), 65534, 65534) }, 0);
         }
     }
-    let pictures = home.join("Pictures");
-    fs::create_dir(&pictures).unwrap();
-    fs::set_permissions(&pictures, fs::Permissions::from_mode(0o755)).unwrap();
     let photo = pictures.join("native-photo.png");
     image::RgbaImage::from_fn(64, 48, |x, y| image::Rgba([(x * 4) as u8, (y * 5) as u8, 100, 255]))
         .save(&photo).unwrap();
@@ -337,7 +337,11 @@ fn real_compiled_app_widgets_and_effects() {
     assert_eq!(get("photos-viewer")["mediaCalls"],0);
     assert!(has_text("photos-restored","64 × 48"));
     assert!(has_text("photos-edit","Save as copy"));
-    assert!(has_text("photos-copy","native-photo (edited).png"));
+    assert!(
+        has_text("photos-copy", "native-photo (edited).png"),
+        "{}",
+        get("photos-copy")
+    );
     assert!(home.join("Pictures/native-photo (edited).png").is_file());
     println!("native Rust apps: catalog, Force Quit, Calculator, About, Characters, Clock, Help article/tour/fallback and content bridge, Monitor, Store and Photos library/viewer/edit/remount passed");
 }
