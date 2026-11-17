@@ -95,22 +95,26 @@ async function buildSysApps() {
   const sharedPlugin = {
     name: 'lordos-shared',
     setup(b) {
-      b.onResolve({ filter: /^(react|react\/jsx-runtime|@lordos\/sdk|@lordos\/runtime)$/ }, (a) => ({ path: a.path, namespace: 'lordos-shared' }));
+      b.onResolve({ filter: /^(react|react\/jsx-runtime|@lordos\/sdk|@lordos\/runtime|@lordos\/nativeapps)$/ }, (a) => ({ path: a.path, namespace: 'lordos-shared' }));
       b.onLoad({ filter: /.*/, namespace: 'lordos-shared' }, (a) => ({
         contents: `module.exports = globalThis.__lordos.require(${JSON.stringify(a.path)});`, loader: 'js',
       }));
     },
   };
-  for (const id of fs.readdirSync(dir).sort()) {
+  const compiled = new Map(nativeApps.filter(app => app.process === 'isolated').map(app => [app.id, app]));
+  for (const id of [...new Set([...fs.readdirSync(dir), ...compiled.keys()])].sort()) {
     const mf = path.join(dir, id, 'manifest.json');
-    if (!fs.existsSync(mf)) continue;
-    const manifest = JSON.parse(fs.readFileSync(mf, 'utf8'));
+    if (!fs.existsSync(mf) && !compiled.has(id)) continue;
+    const manifest = compiled.get(id) || JSON.parse(fs.readFileSync(mf, 'utf8'));
     if (manifest.process !== 'isolated') continue;
     const t0 = Date.now();
     const out = path.join(root, 'assets', 'sysapps', id);
     fs.mkdirSync(out, { recursive: true });
     const result = await build({
-      entryPoints: [path.join(dir, id, 'index.jsx')],
+      ...(compiled.has(id) ? { stdin: {
+        contents: `import { nativeApp } from '@lordos/nativeapps'; const app=nativeApp(${JSON.stringify(manifest)}); export default app.Component; export const Icon=app.Icon;`,
+        resolveDir: root, sourcefile: `compiled-${id}.js`, loader: 'js',
+      } } : { entryPoints: [path.join(dir, id, 'index.jsx')] }),
       bundle: true, write: false, format: 'iife', globalName: '__lordosApp', target: 'es2020', minify: true,
       jsx: 'automatic', plugins: [sharedPlugin], define: defines, logLevel: 'warning',
     });

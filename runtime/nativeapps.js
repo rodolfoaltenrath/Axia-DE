@@ -26,6 +26,7 @@ import { settingsServices } from './native_settings_services.js';
 import { clipboardServices } from './native_clipboard_services.js';
 import { inputServices } from './native_input_services.js';
 import { startNativeSession } from './native_session_widgets.js';
+import { isolatedApp } from '../sdk/packages.js';
 
 let followers = 0;
 const watches = new Map();
@@ -71,6 +72,11 @@ lord.nativeAsync = {
   events: (...args) => bridge.events(...args),
 };
 export function nativeApp(manifest) {
+  const app = localNativeApp(manifest);
+  return manifest.process === 'isolated' && lord.appId !== manifest.id
+    ? { ...app, isolated: true, Component: isolatedApp(manifest.id, app.Component) } : app;
+}
+function localNativeApp(manifest) {
   const app = baseNativeApp(manifest);
   startNativeSession(manifest, NativeAsyncMount);
   if (!manifest.asyncServices?.length) return app;

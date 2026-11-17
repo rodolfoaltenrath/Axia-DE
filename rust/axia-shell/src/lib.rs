@@ -28,6 +28,8 @@ mod passwords_model;
 mod passwords_app;
 #[path = "../../../apps/sysinfo/model.rs"]
 mod sysinfo_model;
+#[path = "../../../apps/sysprobe/mod.rs"]
+mod sysprobe_app;
 mod native_apps_host;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;
