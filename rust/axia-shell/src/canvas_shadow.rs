@@ -11,6 +11,7 @@
 use std::cell::RefCell;
 
 const CACHE: usize = 32;
+const CACHE_BYTES: usize = 16 * 1024 * 1024;
 
 /// The mask as C sees it (server/src/shadow_ffi.h). `spans` has four numbers per row:
 /// coverage only in [a0, a1) and [b0, b1) (columns of the mask; a1 <= b0).
@@ -40,6 +41,16 @@ struct Entry {
 struct Cache {
     entries: Vec<Entry>,
     stamp: u64,
+    /// A single unusually large mask is borrowed for one draw, never retained
+    /// as part of the reusable cache. The ABI promises validity until next call.
+    scratch: Option<Entry>,
+    clock: f64,
+    accessed: f64,
+}
+impl Entry {
+    fn bytes(&self) -> usize {
+        self.a.capacity().saturating_add(self.spans.capacity().saturating_mul(4))
+    }
 }
 
 thread_local! {
@@ -149,16 +160,29 @@ fn mask(w: i32, h: i32, r: i32, blur: i32, dx: i32, dy: i32) -> *const ShadowMas
     let key = (w, h, r, blur, dx, dy);
     SHADOWS.with(|cell| {
         let mut c = cell.borrow_mut();
+        c.scratch = None;
+        c.accessed = c.clock;
         c.stamp += 1;
         let stamp = c.stamp;
         let i = match c.entries.iter().position(|e| e.key == key) {
             Some(i) => i,
             None => {
+                let needed = (w + dx.abs() + 2 * blur) as usize
+                    * (h + dy.abs() + 2 * blur) as usize
+                    + (h + dy.abs() + 2 * blur) as usize * 16;
+                while !c.entries.is_empty() && (c.entries.len() >= CACHE
+                    || c.entries.iter().map(Entry::bytes).sum::<usize>().saturating_add(needed) > CACHE_BYTES) {
+                    let i = (0..c.entries.len()).min_by_key(|&i| c.entries[i].used).unwrap();
+                    c.entries.swap_remove(i);
+                }
                 let (x0, y0, mw, mh, a) = build(w, h, r, blur, dx, dy);
                 let spans = spans(&a, mw.max(0) as usize, mh.max(0) as usize);
                 let view = ShadowMask { x0, y0, mw, mh, a: a.as_ptr(), spans: spans.as_ptr() };
                 let e = Entry { key, x0, y0, mw, mh, a, spans, used: 0, view };
-                if c.entries.len() < CACHE {
+                if e.bytes() > CACHE_BYTES {
+                    c.scratch = Some(e);
+                    return &c.scratch.as_ref().unwrap().view as *const ShadowMask;
+                } else if c.entries.len() < CACHE {
                     c.entries.push(e);
                     c.entries.len() - 1
                 } else {
@@ -173,6 +197,29 @@ fn mask(w: i32, h: i32, r: i32, blur: i32, dx: i32, dy: i32) -> *const ShadowMas
         // the Vecs never move inside an entry: the pointers stay valid until it is evicted
         e.view = ShadowMask { x0: e.x0, y0: e.y0, mw: e.mw, mh: e.mh, a: e.a.as_ptr(), spans: e.spans.as_ptr() };
         &e.view as *const ShadowMask
+    })
+}
+
+/// Called only between synchronous paints, after all row workers have joined.
+#[no_mangle]
+pub extern "C" fn axia_shadow_cache_clear() {
+    SHADOWS.with(|c| *c.borrow_mut() = Cache::default());
+}
+
+#[no_mangle]
+pub extern "C" fn axia_shadow_cache_bytes() -> usize {
+    SHADOWS.with(|c| c.borrow().entries.iter().map(Entry::bytes).sum())
+}
+
+#[no_mangle]
+pub extern "C" fn axia_shadow_cache_tick(now: f64) -> f64 {
+    SHADOWS.with(|c| {
+        let mut c = c.borrow_mut();
+        c.clock = now;
+        c.scratch = None;
+        if c.entries.is_empty() { return -1.; }
+        let wait = c.accessed + 10_000. - now;
+        if wait <= 0. { c.entries.clear(); -1. } else { wait }
     })
 }
 
@@ -273,7 +320,7 @@ fn blend_span(dst: &mut [u32], cov: &[u8], argb: u32, ca: u32) {
 /// empty box. Valid until the next call. UI thread only.
 #[no_mangle]
 pub extern "C" fn axia_shadow_mask(w: i32, h: i32, r: i32, blur: i32, dx: i32, dy: i32) -> *const ShadowMask {
-    if w <= 0 || h <= 0 || blur < 1 || w > 16384 || h > 16384 || blur > 1024 || dx.abs() > 4096 || dy.abs() > 4096 {
+    if w <= 0 || h <= 0 || blur < 1 || w > 16384 || h > 16384 || blur > 1024 || dx.unsigned_abs() > 4096 || dy.unsigned_abs() > 4096 {
         return std::ptr::null();
     }
     mask(w, h, r, blur, dx, dy)
@@ -397,4 +444,18 @@ mod tests {
         assert!(axia_shadow_mask(10, 10, 0, 0, 0, 0).is_null());
         unsafe { axia_shadow_blend(std::ptr::null_mut(), 10, 0, 0, 1, 1, 0, 0, m, 0xff00_0000) };
     }
+    #[test]
+    #[cfg_attr(miri, ignore = "native cache pressure with multi-megapixel masks")]
+    fn byte_budget_and_idle_expiry_bound_large_masks() {
+        axia_shadow_cache_clear();
+        axia_shadow_cache_tick(0.);
+        for w in 1000..1025 {
+            assert!(!axia_shadow_mask(w, 1000, 8, 10, 0, 4).is_null());
+            assert!(axia_shadow_cache_bytes() <= CACHE_BYTES);
+        }
+        assert!(axia_shadow_cache_tick(1.) > 0.);
+        assert_eq!(axia_shadow_cache_tick(10_001.), -1.);
+        assert_eq!(axia_shadow_cache_bytes(), 0);
+    }
+
 }

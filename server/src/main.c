@@ -2385,6 +2385,8 @@ int main(int argc, char **argv) {
         paint_glass_tick(now_ms());
         double gpd = paint_glass_timeout(now_ms());
         if (gpd >= 0 && (delay < 0 || gpd < delay)) delay = gpd;
+        double cache_wait = paint_cache_tick(now_ms());
+        if (cache_wait >= 0 && (delay < 0 || cache_wait < delay)) delay = cache_wait;
         js_native_view_notify();
         double tpd = tp_timeout(now_ms());
         if (tpd >= 0 && (delay < 0 || tpd < delay)) delay = tpd;

@@ -2,11 +2,16 @@
 #define AXIA_SHADOW_FFI_H
 /* Box shadows of the canvas (rust/axia-shell/src/canvas_shadow.rs). */
 #include <stdint.h>
+#include <stddef.h>
 /* A cached coverage mask: mw×mh bytes whose (0, 0) is (x0, y0) from the box's corner; per row,
  * spans[4j..4j+4] = a0, a1, b0, b1: coverage only in [a0, a1) and [b0, b1). */
 typedef struct { int32_t x0, y0, mw, mh; const uint8_t *a; const int32_t *spans; } AxiaShadowMask;
 /* UI thread. NULL for an empty box or blur < 1. Valid until the next call. */
 const AxiaShadowMask *axia_shadow_mask(int32_t w, int32_t h, int32_t r, int32_t blur, int32_t dx, int32_t dy);
+/* Between paints, after synchronous workers joined. Returns next idle expiry, or -1. */
+double axia_shadow_cache_tick(double now);
+size_t axia_shadow_cache_bytes(void);
+void axia_shadow_cache_clear(void);
 /* Blends it with its corner at (x, y) into the rows of px inside [cx0, cx1) × [cy0, cy1); any thread
  * while the mask is valid (the canvas' row bands). */
 void axia_shadow_blend(uint32_t *px, int32_t stride, int32_t cx0, int32_t cy0, int32_t cx1, int32_t cy1,

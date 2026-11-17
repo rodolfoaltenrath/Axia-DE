@@ -1,6 +1,7 @@
 /* js.c — embedded QuickJS. Exposes the global `lord` object (create/modify nodes) and
  * provides setTimeout, requestAnimationFrame, console and performance, which React needs. */
 #include "../app/apphost_bc.h"
+#include "../shadow_ffi.h"
 #include <unistd.h>
 #include "js.h"
 #include "../ime.h"
@@ -313,6 +314,10 @@ static JSValue f_stats(JSContext *c, JSValueConst this_val, int argc, JSValueCon
     JS_SetPropertyStr(c, o, "jsKB", JS_NewInt64(c, (int64_t)(JS_GetMallocSize(rt) / 1024)));
     JS_SetPropertyStr(c, o, "nodes", JS_NewInt32(c, node_count()));
     JS_SetPropertyStr(c, o, "managedImageKB", JS_NewInt64(c, (int64_t)(image_managed_bytes() / 1024)));
+    JS_SetPropertyStr(c, o, "imageCacheKB", JS_NewInt64(c, (int64_t)(image_cache_bytes() / 1024)));
+    JS_SetPropertyStr(c, o, "glyphCacheKB", JS_NewInt64(c, (int64_t)(text_cache_bytes() / 1024)));
+    JS_SetPropertyStr(c, o, "shadowCacheKB", JS_NewInt64(c, (int64_t)(axia_shadow_cache_bytes() / 1024)));
+    JS_SetPropertyStr(c, o, "transformCacheKB", JS_NewInt64(c, (int64_t)(paint_transform_cache_bytes() / 1024)));
     JS_SetPropertyStr(c, o, "layoutMs", JS_NewFloat64(c, ui.layout_ms));
     JS_SetPropertyStr(c, o, "paintMs", JS_NewFloat64(c, ui.paint_ms));
     return o;

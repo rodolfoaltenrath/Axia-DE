@@ -210,9 +210,12 @@ typedef struct {
     float adv;
     uint8_t *bmp;
     uint32_t *argb;             /* color glyphs (emoji): premultiplied ARGB */
+    uint64_t stamp;             /* recent use; cache eviction never changes glyph metrics */
 } Glyph;
 /* The pointer is valid until the next call (the cache may grow). */
 const Glyph *text_glyph(uint32_t cp, int font, float size);
+size_t text_cache_bytes(void);
+double text_cache_tick(double now); /* between paints; next idle expiry or -1 */
 int   text_font_add(const char *path);
 int   text_drew_inexact(void);                    /* text drawn since the last call may not move exactly; resets */
 int   text_font_load(const char *path, int index);
@@ -287,6 +290,7 @@ Image *image_pixels(Image *img, int w, int h, const uint8_t *rgba);
 Image *image_argb(Image *img, int w, int h, const uint32_t *argb);   /* premultiplied ARGB (doc/doc.c) */
 void   image_release(Image *img);
 uint64_t image_managed_bytes(void); /* live generated images, including scaled buffers */
+uint64_t image_cache_bytes(void);   /* all cached source/scaled capacity and entry metadata */
 void   image_draw(Canvas *c, Image *img, float x, float y, float w, float h, float r, int fit, float opacity);
 
 /* paint.c */
@@ -309,6 +313,8 @@ extern int paint_tf_nocache;        /* tests: a reference paint that neither rea
 void  paint_root(Canvas *c, Node *root);
 void  paint_root_clear(Canvas *c, Node *root, uint32_t rgb);   /* canvas_clear + paint_root */
 void  paint_root_full(Canvas *c, Node *root);  /* everything, no drag layer or skipped nodes (checks only) */
+double paint_cache_tick(double now); /* between paints, including an idle session */
+size_t paint_transform_cache_bytes(void);
 /* The copy of what is below a dragged window (paint.c, docs/WINDOWS.md). paint_below_switch (1 by
  * default): a frame may use it where 001633b's rule painted everything, when that gives the same
  * pixels. paint_below_verify (tests): each such frame is painted again the old way and the pixels that

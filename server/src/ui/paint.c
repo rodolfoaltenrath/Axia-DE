@@ -6,6 +6,7 @@
 #include "grab.h"
 #include "../gpu/gpu.h"
 #include "../glass_pacing_ffi.h"
+#include "../shadow_ffi.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -260,6 +261,8 @@ static int box_eq(Box a, Box b) {
  * rasterized at the display's scale and never cached. */
 #define TF_CACHE 16
 #define TF_MAX_PX (2048 * 2048)
+#define TF_CACHE_BYTES (32u * 1024u * 1024u)
+#define CACHE_IDLE_MS 10000.
 typedef struct {
     int node;
     float kr;                   /* raster px per logical px */
@@ -269,6 +272,7 @@ typedef struct {
     float ox, oy;               /* raster origin relative to the node (logical px, padding included) */
     int valid;
     unsigned used;
+    double used_at;
     uint64_t sig;               /* the subtree's geometry when it was rasterized (damage_walk) */
     Style st;                   /* the node's style without transform and opacity (tf_norm) */
     StyleExt xst;
@@ -366,6 +370,7 @@ static int tf_paint(Canvas *c, Node *n, float opacity) {
     TfLayer *e = paint_tf_nocache ? &scratch[depth] : tf_slot(n->id, kr);
     if (paint_tf_nocache) e->valid = 0;
     e->used = ++tf_tick;
+    e->used_at = clk();
     float ox = (gx0 - pad) / kr, oy = (gy0 - pad) / kr;
     if (!e->valid || live || e->w != w || e->h != h || fabsf(e->ox - ox) > 0.01f || fabsf(e->oy - oy) > 0.01f) {
         if ((size_t)w * h > e->cap) {
@@ -469,12 +474,44 @@ static void tf_check(Node *n, const TfSig *g) {
 }
 
 /* Rasters not used for a while give their memory back. */
-static void tf_gc(void) {
-    for (int i = 0; i < TF_CACHE; i++)
-        if (tfl[i].px && tf_tick - tfl[i].used > 600) {
+static void tf_gc(double now) {
+    size_t bytes = 0;
+    for (int i = 0; i < TF_CACHE; i++) {
+        if (tfl[i].px && now - tfl[i].used_at >= CACHE_IDLE_MS) {
             free(tfl[i].px);
             memset(&tfl[i], 0, sizeof tfl[i]);
         }
+        bytes += tfl[i].cap * 4;
+    }
+    while (bytes > TF_CACHE_BYTES) {
+        TfLayer *old = NULL;
+        for (int i = 0; i < TF_CACHE; i++)
+            if (tfl[i].px && (!old || tfl[i].used < old->used)) old = &tfl[i];
+        if (!old) break;
+        bytes -= old->cap * 4;
+        free(old->px);
+        memset(old, 0, sizeof *old);
+    }
+}
+
+size_t paint_transform_cache_bytes(void) {
+    size_t bytes = 0;
+    for (int i = 0; i < TF_CACHE; i++) bytes += tfl[i].cap * 4;
+    return bytes;
+}
+
+/* This runs even when no frame is being painted. No worker or raster borrow
+ * may remain live here. Keep the poll deadline so an idle desktop returns RAM. */
+double paint_cache_tick(double now) {
+    tf_gc(now);
+    double wait = text_cache_tick(now);
+    double shadow = axia_shadow_cache_tick(now);
+    if (shadow >= 0 && (wait < 0 || shadow < wait)) wait = shadow;
+    for (int i = 0; i < TF_CACHE; i++) if (tfl[i].px) {
+        double d = fmax(0., tfl[i].used_at + CACHE_IDLE_MS - now);
+        if (wait < 0 || d < wait) wait = d;
+    }
+    return wait;
 }
 
 /* ---- capa de la ventana que se mueve (grab.h) ----
@@ -2128,7 +2165,7 @@ static int paint_root_body(Canvas *c, Node *root, int clear, uint32_t rgb, GpuDr
     else if (pre) below_verify(c, root, pre);
     skip_until = 0;
     paint_cull = 0;
-    tf_gc();
+    tf_gc(clk());
     wl_paint_popups(c);                     /* menús de las apps Wayland, encima de todo */
     if (paint_profile) {
         fprintf(stderr, "  paint:");

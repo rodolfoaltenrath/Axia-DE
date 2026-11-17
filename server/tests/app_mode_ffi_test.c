@@ -141,6 +141,7 @@ Node *node_get(int id) { return id==1?&root_node:id==2?&second_node:NULL; }
 int layout_root(Node *root,float w,float h) {assert(root);if(!firstw){firstw=(int)w;firsth=(int)h;}return 1;}
 void canvas_init(Canvas *c,uint32_t *pixels,int w,int h,int stride) { assert(pixels);*c=(Canvas){.px=pixels,.w=w,.h=h,.stride=stride}; }
 void paint_root_clear(Canvas *c,Node *root,uint32_t color) {assert(root&&color==0&&ui.damage.x1==0&&ui.damage.y1==0);c->px[0]=0xff123456;paints++;}
+double paint_cache_tick(double now) { assert(now >= 0); return -1; }
 Node *hit_test(Node *root,float x,float y) {assert(x>=0&&y>=0);return root;}
 int text_init(const char *path) {assert(!strcmp(path,fonts)&&!sandboxed);return 0;}
 void js_sys_set_assets(const char *path) {assert(strstr(path,"fonts/.."));}

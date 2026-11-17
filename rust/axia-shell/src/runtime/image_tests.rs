@@ -412,3 +412,43 @@ fn photos_owned_frame_failure_leaves_previous_image_alive(){unsafe{
     assert_eq!(owned_argb(image,1,1,vec![0xff010203]),image);
     drop(fail);assert_eq!((*image).refs,2);image_release(image);image_release(image);
 }}
+
+#[test]
+fn cache_budget_evicts_unused_lru_entries_and_counts_scaled_capacity() {
+    let mut cache = Cache { budget: 4096, ..Cache::default() };
+    let a = cache.get(c"/theme/a.png", || Some(solid(8, 8, 0xff123456)));
+    let b = cache.get(c"/theme/b.png", || Some(solid(8, 8, 0xffabcdef)));
+    unsafe { cache.release(a); cache.release(b); }
+    // Touch a again: b must be the first victim, independently of hash order.
+    let a = cache.get(c"/theme/a.png", || unreachable!());
+    unsafe { (*a).scaled(24, 24, 1).unwrap(); cache.release(a); }
+    cache.budget = cache.bytes() - 1;
+    cache.trim();
+    assert!(cache.paths.contains_key(c"/theme/a.png"));
+    assert!(!cache.paths.contains_key(c"/theme/b.png"));
+    assert!(cache.bytes() <= cache.budget);
+    unsafe { (*a).scaled(32, 32, 1).unwrap(); }
+    cache.trim();
+    assert!(cache.paths.is_empty());
+}
+
+#[test]
+fn cache_pressure_never_invalidates_live_handles_even_above_the_budget() {
+    let mut cache = Cache { budget: 1024, ..Cache::default() };
+    let a = cache.get(c"/theme/live.png", || Some(solid(32, 32, 0xff123456)));
+    let again = cache.get(c"/theme/live.png", || unreachable!());
+    assert_eq!(a, again);
+    for i in 0..20 {
+        let path = CString::new(format!("/theme/unused-{i}.png")).unwrap();
+        let p = cache.get(&path, || Some(solid(8, 8, 0xffffffff)));
+        unsafe { cache.release(p); }
+    }
+    assert_eq!(cache.paths.len(), 1);
+    unsafe {
+        assert_eq!((*a).pixels.data, vec![0xff123456; 1024]);
+        cache.release(a);
+        assert_eq!((*again).refs, 1);
+        cache.release(again);
+    }
+    assert!(cache.paths.is_empty());
+}

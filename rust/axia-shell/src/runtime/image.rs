@@ -15,6 +15,9 @@ struct Scaled {
     pixels: Pixels,
     fit: i32,
 }
+// Live scene references may exceed the budget; only unused entries are evictable.
+const CACHE_BYTES: u64 = 16 * 1024 * 1024;
+const CACHE_ENTRIES: usize = 2048;
 pub struct Image {
     pixels: Pixels,
     scales: [Option<Scaled>; 2],
@@ -22,6 +25,7 @@ pub struct Image {
     refs: usize,
     cached: bool,
     managed: bool,
+    used: u64,
 }
 impl Image {
     fn new(pixels: Pixels) -> Self {
@@ -32,6 +36,7 @@ impl Image {
             refs: 1,
             cached: false,
             managed: false,
+            used: 0,
         }
     }
     fn scaled(&mut self, w: i32, h: i32, fit: i32) -> Option<&Pixels> {
@@ -94,18 +99,50 @@ impl Drop for Cached {
         }
     }
 }
-#[derive(Default)]
 struct Cache {
     paths: HashMap<CString, Cached>,
+    stamp: u64,
+    budget: u64,
+}
+impl Default for Cache {
+    fn default() -> Self {
+        Self { paths: HashMap::new(), stamp: 0, budget: CACHE_BYTES }
+    }
 }
 impl Cache {
+    fn bytes(&self) -> u64 {
+        self.paths.iter().fold(0u64, |n, (path, entry)| {
+            let image = unsafe { entry.0.as_ref() };
+            n.saturating_add(image.bytes())
+                .saturating_add((std::mem::size_of::<Image>() + 2 * path.to_bytes_with_nul().len()) as u64)
+        })
+    }
+    fn trim(&mut self) {
+        let mut bytes = self.bytes();
+        while bytes > self.budget || self.paths.len() > CACHE_ENTRIES {
+            let Some(pointer) = self.paths.values()
+                .filter(|e| unsafe { e.0.as_ref().refs == 0 })
+                .min_by_key(|e| unsafe { e.0.as_ref().used })
+                .map(|e| e.0) else { break };
+            // No key allocation, including during allocation-failure recovery.
+            self.paths.retain(|path, entry| {
+                if entry.0 != pointer { return true; }
+                let image = unsafe { entry.0.as_ref() };
+                bytes = bytes.saturating_sub(image.bytes()
+                    + (std::mem::size_of::<Image>() + 2 * path.to_bytes_with_nul().len()) as u64);
+                false
+            });
+        }
+    }
     fn get(&mut self, path: &CStr, decode: impl FnOnce() -> Option<Pixels>) -> *mut Image {
+        self.stamp = self.stamp.saturating_add(1);
         if let Some(entry) = self.paths.get_mut(path) {
             let image = unsafe { entry.0.as_mut() };
             let Some(refs) = image.refs.checked_add(1) else {
                 return ptr::null_mut();
             };
             image.refs = refs;
+            image.used = self.stamp;
             return entry.0.as_ptr();
         }
         if !memory::try_reserve_map(&mut self.paths) {
@@ -129,12 +166,14 @@ impl Cache {
         .iter()
         .any(|part| path.to_bytes().windows(part.len()).any(|p| p == *part));
         image.cached = true;
+        image.used = self.stamp;
         image.path = Some(owned_path);
         let Some(image) = memory::try_box(image) else {
             return ptr::null_mut();
         };
         let pointer = NonNull::new(Box::into_raw(image)).unwrap();
         self.paths.insert(key, Cached(pointer));
+        self.trim();
         pointer.as_ptr()
     }
     fn managed_bytes(&self) -> u64 {
@@ -153,6 +192,8 @@ impl Cache {
         if image.refs != 0 {
             return;
         }
+        self.stamp = self.stamp.saturating_add(1);
+        image.used = self.stamp;
         if !image.cached {
             drop(Box::from_raw(pointer));
         } else if image.managed {
@@ -163,6 +204,7 @@ impl Cache {
             debug_assert!(entry.is_some());
             drop(entry);
         }
+        self.trim();
     }
 }
 thread_local! { static IMAGES: RefCell<Cache> = RefCell::new(Cache::default()); }
@@ -197,6 +239,10 @@ pub unsafe extern "C" fn image_size(image: *const Image, w: *mut i32, h: *mut i3
 #[no_mangle]
 pub extern "C" fn image_managed_bytes() -> u64 {
     IMAGES.with(|cache| cache.borrow().managed_bytes())
+}
+#[no_mangle]
+pub extern "C" fn image_cache_bytes() -> u64 {
+    IMAGES.with(|cache| cache.borrow().bytes())
 }
 
 enum Input<'a> {
@@ -428,6 +474,7 @@ pub unsafe extern "C" fn image_draw(
         return;
     };
     let image = &mut *image;
+    let before = image.bytes();
     let pixels = if draw.w == image.pixels.w && draw.h == image.pixels.h {
         &image.pixels
     } else {
@@ -451,6 +498,11 @@ pub unsafe extern "C" fn image_draw(
         opacity.clamp(0., 1.),
         i32::from(pixels.opaque),
     );
+    // Scaling can grow entries after insertion. Trim only when storage changed,
+    // after canvas_blit has finished borrowing the pixels.
+    if image.cached && image.bytes() != before {
+        IMAGES.with(|cache| cache.borrow_mut().trim());
+    }
 }
 
 #[cfg(test)]

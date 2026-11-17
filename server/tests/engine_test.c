@@ -3166,6 +3166,45 @@ static void bench_glass_refresh(void) {
     canvas_set_clip(&frame, (Rect){ 0, 0, W, H });
 }
 
+#ifndef ENGINE_BEFORE
+static void test_cache_budgets(void) {
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    double now = t.tv_sec * 1e3 + t.tv_nsec / 1e6;
+    text_cache_tick(now);
+    Glyph expected = *text_glyph('M', 0, 18);
+    size_t expected_bytes = (size_t)expected.w * expected.h;
+    uint8_t *expected_pixels = malloc(expected_bytes);
+    CHECK(expected_pixels != NULL, "glyph reference pixels allocated");
+    if (expected_pixels) memcpy(expected_pixels, expected.bmp, expected_bytes);
+    for (int size = 12; size <= 512; size += 11)
+        for (int cp = 33; cp <= 126; cp++) text_glyph((uint32_t)cp, 0, (float)size);
+    text_cache_tick(now + 1);
+    CHECK(text_cache_bytes() <= 8u * 1024u * 1024u, "glyph cache is bounded: %zu", text_cache_bytes());
+    const Glyph *again = text_glyph('M', 0, 18);
+    CHECK(again->w == expected.w && again->h == expected.h && again->adv == expected.adv,
+          "glyph eviction preserves dimensions and advance");
+    CHECK(expected_pixels && again->bmp && !memcmp(expected_pixels, again->bmp, expected_bytes),
+          "glyph eviction preserves raster pixels");
+    free(expected_pixels);
+    text_cache_tick(now + 10002);
+    CHECK(text_cache_bytes() <= 4096 * sizeof(Glyph), "idle glyph cache returned raster memory");
+    Node *root = view(NULL);
+    for (int i = 0; i < 16; i++) {
+        Node *n = box_in(root, 0, 0, 1000 + i, 1000, 0xff405060);
+        sn(n, "scaleX", 0.9f); sn(n, "scaleY", 0.9f);
+    }
+    render(root, 256, 256);
+    CHECK(paint_transform_cache_bytes() > 0, "transform pressure populated the raster cache");
+    CHECK(paint_transform_cache_bytes() <= 32u * 1024u * 1024u,
+          "transform cache is bounded: %zu", paint_transform_cache_bytes());
+    clock_gettime(CLOCK_MONOTONIC, &t); now = t.tv_sec * 1e3 + t.tv_nsec / 1e6;
+    paint_cache_tick(now + 10001);
+    CHECK(paint_transform_cache_bytes() == 0, "transforms expire without more painted frames");
+    node_destroy(root);
+}
+
+#endif
+
 int main(int argc, char **argv) {
     const char *dir = getenv("LORD_FONTS") ? getenv("LORD_FONTS") : "../assets/fonts";
     fonts_set_builtin_dir(dir);
@@ -3209,6 +3248,7 @@ int main(int argc, char **argv) {
     test_grow_wrap_height();
     test_overlay_scrollbar();
     test_transform_restyle();
+    test_cache_budgets();
     printf("engine-test: %d checks, %d failures\n", checks, fails);
     return fails ? 1 : 0;
 #endif

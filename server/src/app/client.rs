@@ -8,6 +8,7 @@ extern "C" {
     fn axia_app_hit(node: i32, main: i32, x: f32, y: f32) -> i32;
     fn axia_app_node_valid(node: i32) -> i32;
     fn axia_app_dirty() -> i32;
+    fn paint_cache_tick(now: f64) -> f64;
     fn axia_app_quit() -> i32;
     fn text_init(fonts: *const c_char) -> i32;
     fn js_broker_set_pkgdir(dir: *const c_char, system: i32);
@@ -907,6 +908,10 @@ unsafe fn run(id: &CStr, bundle: &CStr, fonts: &CStr) -> i32 {
             if delay != 0. {
                 break;
             }
+        }
+        let cache_wait = paint_cache_tick(now());
+        if cache_wait >= 0. && (delay < 0. || cache_wait < delay) {
+            delay = cache_wait;
         }
         if js_frame_ready(now(), frames_waiting(), (*s).epoch) != 0 {
             js_frame(now());

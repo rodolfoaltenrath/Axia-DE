@@ -41,6 +41,12 @@ static int brand_font[2] = { -2, -2 };  /* Plus Jakarta Sans Medium and ExtraBol
 
 static Glyph *cache;
 static size_t cache_cap, cache_used;
+static size_t cache_pixels;
+static uint64_t cache_stamp;
+static double cache_clock, cache_accessed;
+#define GLYPH_CACHE_BYTES (8u * 1024u * 1024u)
+#define GLYPH_CACHE_ENTRIES 16384
+#define GLYPH_IDLE_MS 10000.
 
 static unsigned char *map_file(const char *path, size_t *size) {
     int fd = open(path, O_RDONLY | O_CLOEXEC);
@@ -209,20 +215,85 @@ static Glyph *glyph_slot(uint32_t cp, int font, int size_q) {
     return &cache[i];
 }
 
-static void cache_grow(void) {
+static size_t glyph_bytes(const Glyph *g) {
+    return (size_t)g->w * (size_t)g->h * ((g->bmp != NULL) + 4u * (g->argb != NULL));
+}
+
+size_t text_cache_bytes(void) { return cache_cap * sizeof *cache + cache_pixels; }
+
+static void cache_clear(void) {
+    for (size_t i = 0; i < cache_cap; i++) if (cache[i].used) {
+        free(cache[i].bmp);
+        free(cache[i].argb);
+    }
+    if (cache) memset(cache, 0, cache_cap * sizeof *cache);
+    cache_used = cache_pixels = 0;
+}
+
+/* Rehash while removing the cold generation. Pointers are lent only until the
+ * next glyph lookup, exactly as before when cache_grow moved the table. */
+static void cache_prune(void) {
+    while (cache_used && (text_cache_bytes() > GLYPH_CACHE_BYTES || cache_used >= GLYPH_CACHE_ENTRIES)) {
+        Glyph *old = cache, *next = calloc(cache_cap, sizeof *next);
+        if (!next) { cache_clear(); return; }
+        size_t before = cache_used;
+        uint64_t recent = cache_used / 4 + 1;
+        uint64_t cutoff = cache_stamp > recent ? cache_stamp - recent : 0;
+        cache = next;
+        cache_used = cache_pixels = 0;
+        for (size_t i = 0; i < cache_cap; i++) if (old[i].used) {
+            if (old[i].stamp < cutoff) { free(old[i].bmp); free(old[i].argb); }
+            else {
+                *glyph_slot(old[i].cp, old[i].font, old[i].size_q) = old[i];
+                cache_used++; cache_pixels += glyph_bytes(&old[i]);
+            }
+        }
+        free(old);
+        // A single oversized glyph is temporary drawing storage, not a
+        // permanent exception to the reusable cache's byte limit.
+        if (cache_used == before) { cache_clear(); break; }
+    }
+}
+
+double text_cache_tick(double now) {
+    cache_clock = now;
+    cache_prune();
+    if (!cache_used) return -1.;
+    double wait = cache_accessed + GLYPH_IDLE_MS - now;
+    if (wait <= 0) {
+        cache_clear();
+        if (cache_cap > 4096) {
+            Glyph *small = calloc(4096, sizeof *small);
+            if (small) { free(cache); cache = small; cache_cap = 4096; }
+        }
+        return -1.;
+    }
+    return wait;
+}
+
+static int cache_grow(void) {
     Glyph *old = cache;
     size_t old_cap = cache_cap;
+    Glyph *next = calloc(cache_cap * 2, sizeof *next);
+    if (!next) return 0;
     cache_cap *= 2;
-    cache = calloc(cache_cap, sizeof *cache);
+    cache = next;
     cache_used = 0;
     for (size_t i = 0; i < old_cap; i++)
         if (old[i].used) { *glyph_slot(old[i].cp, old[i].font, old[i].size_q) = old[i]; cache_used++; }
     free(old);
+    return 1;
 }
 
 static Glyph *slot_for(uint32_t key, int font, int size_q) {
+    cache_prune();
     Glyph *g = glyph_slot(key, font, size_q);
-    if (!g->used && (cache_used + 1) * 10 > cache_cap * 7) { cache_grow(); g = glyph_slot(key, font, size_q); }
+    if (!g->used && (cache_used + 1) * 10 > cache_cap * 7) {
+        if (!cache_grow()) cache_clear();
+        g = glyph_slot(key, font, size_q);
+    }
+    g->stamp = ++cache_stamp;
+    cache_accessed = cache_clock;
     return g;
 }
 
@@ -236,6 +307,7 @@ const Glyph *text_glyph(uint32_t cp, int font, float size) {
     if (f->color) return g;
     g->bmp = axia_font_raster(f->info, axia_font_glyph(f->info, cp), size_q / 2.0f,
                               &g->w, &g->h, &g->xoff, &g->yoff, &g->adv);
+    cache_pixels += glyph_bytes(g);
     return g;
 }
 
@@ -251,6 +323,7 @@ const Glyph *text_glyph_id(int font, uint32_t gid, float size) {
     if (f->color) return g;
     g->bmp = axia_font_raster(f->info, gid, size_q / 2.0f,
                               &g->w, &g->h, &g->xoff, &g->yoff, &g->adv);
+    cache_pixels += glyph_bytes(g);
     return g;
 }
 
@@ -308,6 +381,7 @@ const Glyph *text_glyph_color(int font, uint32_t gid, int max_w, int max_h) {
         if (g->argb) { g->w = dw; g->h = dh; g->adv = (float)dw; }
     }
     free(rgba);
+    cache_pixels += glyph_bytes(g);
     return g;
 }
 
