@@ -560,6 +560,18 @@ pub fn with<R>(home: &str, f: impl FnOnce(&mut Session) -> R) -> R {
         f(slot.as_mut().unwrap())
     })
 }
+/// Like `with`, but None once the thread's session is gone (at process exit the window hosts are
+/// dropped after thread-locals): nothing is left to flush then, `Drop for Session` did it.
+pub fn try_with<R>(home: &str, f: impl FnOnce(&mut Session) -> R) -> Option<R> {
+    SESSION.try_with(|_| ()).ok()?;
+    Some(with(home, f))
+}
+impl Drop for Session {
+    fn drop(&mut self) {
+        // pending edits reach the disk when the session goes away (thread exit, another home)
+        self.flush(i64::MAX, true);
+    }
+}
 pub fn background(input: &Value) -> Value {
     let home = input["home"].as_str().unwrap_or("");
     if home.is_empty() {

@@ -850,7 +850,10 @@ impl App {
             "close" => {
                 self.editor.focused = false;
                 if !self.home.is_empty() {
-                    store::with(&self.home, |s| s.flush(now, true));
+                    // at process exit the session may be gone already (it flushed in its Drop)
+                    if store::try_with(&self.home, |s| s.flush(now, true)).is_none() {
+                        return json!({});
+                    }
                 }
             }
             _ => self.command(cmd, input, now),

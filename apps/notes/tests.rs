@@ -271,3 +271,39 @@ fn formatting_menu_and_composition_are_native_and_copy_does_not_erase_empty_clip
     app.key("C", "", 2 | 1);
     assert!(app.note().unwrap().body.contains("```"));
 }
+#[test]
+fn closing_after_the_thread_local_session_is_gone_is_a_no_op_and_edits_are_kept() {
+    // A host is dropped at process exit, after the thread's session: its `close` must not touch it.
+    thread_local! { static LATE: std::cell::RefCell<Option<(App, String)>> = const { std::cell::RefCell::new(None) }; }
+    struct Closer;
+    impl Drop for Closer {
+        fn drop(&mut self) {
+            LATE.with(|l| {
+                if let Some((mut app, _)) = l.borrow_mut().take() {
+                    assert_eq!(app.request_at(&json!({"cmd":"close"}), 1), json!({}));
+                }
+            });
+        }
+    }
+    let h = Home::new();
+    let home = h.path().to_string();
+    let slug = std::thread::spawn({
+        let home = home.clone();
+        move || {
+            let mut app = App::default();
+            app.home = home.clone();
+            // the holder is created first, so it is destroyed after the session
+            LATE.with(|l| *l.borrow_mut() = Some((app, home.clone())));
+            thread_local! { static C: Closer = const { Closer }; }
+            C.with(|_| ());
+            let slug = store::with(&home, |s| s.create("# Kept\n".into(), "yellow", false, 1)).unwrap();
+            store::with(&home, |s| s.update(&slug, &json!({"body":"# Kept\nedited"}), true, 2));
+            slug
+        }
+    })
+    .join()
+    .unwrap();
+    // the unflushed edit reached the disk when the session was dropped
+    let text = fs::read_to_string(h.0.join("Notes").join(&slug).join("nota.md")).unwrap();
+    assert!(text.contains("edited"), "{text}");
+}
