@@ -728,7 +728,9 @@ impl Host {
                 let id = spec["image"].as_str().unwrap_or("").to_owned();
                 let generation = spec["generation"].as_u64().unwrap_or(0);
                 if (id.as_str(), generation) != (m.image.0.as_str(), m.image.1) {
-                    if let Some((w, h, data)) = self.app.pixels(&id) {
+                    if let Some((w, h, pixels)) = self.app.take_raster(&id) {
+                        scene::set_owned_image(m.node, w, h, pixels);
+                    } else if let Some((w, h, data)) = self.app.pixels(&id) {
                         scene::set_image_pixels(m.node, w, h, data);
                     }
                     m.image = (id, generation);
@@ -1449,11 +1451,18 @@ impl Host {
         kind: &str,
         phase: &str,
         target: i32,
-        _dx: f64,
+        dx: f64,
         dy: f64,
     ) -> Option<i32> {
         if !self.owns(target) {
             return None;
+        }
+        if let Some((_, action)) = self.ancestor_event(target, "onGesture") {
+            self.dispatch(&action, Map::from_iter([
+                ("kind".into(), json!(kind)), ("phase".into(), json!(phase)),
+                ("dx".into(), json!(dx)), ("dy".into(), json!(dy)),
+            ]));
+            return Some(self.mount);
         }
         if kind == "scroll" && phase != "begin" && self.icon_mode().is_none() {
             if let Some((node, _)) = self.target(target, |t| matches!(t, Target::Scroll)) {

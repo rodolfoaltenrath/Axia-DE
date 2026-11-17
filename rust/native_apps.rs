@@ -33,6 +33,8 @@ pub mod backup;
 pub mod camera;
 #[path = "../apps/notes/manifest.rs"]
 pub mod notes;
+#[path = "../apps/photos/manifest.rs"]
+pub mod photos;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -51,6 +53,7 @@ pub fn manifests() -> serde_json::Value {
         recorder::manifest(),
         backup::manifest(),
         camera::manifest(),
+        photos::manifest(),
         notes::manifest()
     ])
 }

@@ -33,6 +33,8 @@ mod native_apps_host;
 mod isolated_app;
 #[path = "../../../apps/notes/mod.rs"]
 mod notes_app;
+#[path = "../../../apps/photos/mod.rs"]
+mod photos_app;
 mod native_view;
 #[path = "../../../apps/monitor/mod.rs"]
 mod monitor;

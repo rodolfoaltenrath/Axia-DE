@@ -385,3 +385,30 @@ fn very_large_downscales_do_not_overflow_color_accumulators() {
     let scaled = p.rescale(Pixels::default(), 1, 1, 0).ok().unwrap();
     assert_eq!(scaled.data, [0xffffffff]);
 }
+
+#[test]
+fn photos_owned_frames_transfer_without_copy_and_preserve_other_references() {
+    unsafe {
+        let data=vec![0xff123456u32;8];let original=data.as_ptr();
+        let image=owned_argb(ptr::null_mut(),4,2,data);
+        assert!(!image.is_null());assert_eq!((*image).pixels.data.as_ptr(),original);
+        (*image).scaled(8,4,1).unwrap();
+        let data=vec![0xffabcdef;12];let original=data.as_ptr();
+        let resized=owned_argb(image,6,2,data);
+        assert_eq!(resized,image);assert_eq!((*image).pixels.data.as_ptr(),original);
+        assert!((*image).scales.iter().all(Option::is_none));
+        (*image).refs+=1;
+        let other=owned_argb(image,1,1,vec![0xff112233]);
+        assert_ne!(other,image);assert_eq!((*image).refs,1);assert_eq!((&(*image).pixels.data)[0],0xffabcdef);
+        image_release(image);image_release(other);
+    }
+}
+#[test]
+fn photos_owned_frame_failure_leaves_previous_image_alive(){unsafe{
+    let image=owned_argb(ptr::null_mut(),1,1,vec![0xff123456]);
+    assert_eq!(owned_argb(image,2,2,vec![0;1]),image);
+    (*image).refs+=1;
+    let fail=AllocationBudget::new(0);
+    assert_eq!(owned_argb(image,1,1,vec![0xff010203]),image);
+    drop(fail);assert_eq!((*image).refs,2);image_release(image);image_release(image);
+}}

@@ -177,6 +177,16 @@ pub fn set_image_pixels(id: i32, width: usize, height: usize, rgba: &[u8]) {
         super::node_invalidate(n);
     }
 }
+/// Move an opaque premultiplied worker frame into the scene. Opaque is a
+/// contract of the native renderer; transparent renderers use pixels() instead.
+pub fn set_owned_image(id: i32, width: usize, height: usize, pixels: Vec<u32>) {
+    if width == 0 || height == 0 || width > 4096 || height > 4096 || pixels.len() != width * height { return; }
+    unsafe {
+        let Some(n) = super::node_get(id).as_mut().filter(|n| n.kind == IMAGE) else { return; };
+        n.img = super::image::owned_argb(n.img.cast(), width as i32, height as i32, pixels).cast();
+        super::node_invalidate(n);
+    }
+}
 /// Bind the existing source to its compositor node; frames stay in the media
 /// helper/renderer's path and never pass through the view adapter.
 pub fn set_media_source(id: i32, source: i32) -> bool {

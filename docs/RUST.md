@@ -8,6 +8,9 @@ Este documento descreve a integração inicial e os contratos de cada módulo.
 A substituição completa do código próprio do server está em andamento; o
 inventário e as validações por etapa estão em [SERVER-RUST-MIGRATION.md](SERVER-RUST-MIGRATION.md).
 
+O Photos foi migrado para nós, gestos e processamento de imagem em Rust; veja
+[RUST-PHOTOS.md](RUST-PHOTOS.md) para arquitetura, limites e validação.
+
 ## Responsabilidades
 
 - Rust mantém o histórico de foco, ordena os candidatos e controla a seleção,

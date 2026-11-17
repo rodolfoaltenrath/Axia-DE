@@ -61,6 +61,11 @@ pub trait NativeApp {
     fn pixels(&self, _id: &str) -> Option<(usize, usize, &[u8])> {
         None
     }
+    /// Transfer an already rendered opaque premultiplied ARGB frame without a UI-thread
+    /// copy or conversion. The scene becomes its sole owner.
+    fn take_raster(&mut self, _id: &str) -> Option<(usize, usize, Vec<u32>)> {
+        None
+    }
     /// Optional window-level keyboard input (e.g. Calculator). Fields keep
     /// their existing editing path; None leaves the key with the shell.
     fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
@@ -85,6 +90,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::recorder::ID => Some(Box::new(crate::recorder_app::App::default())),
         crate::native_apps::backup::ID => Some(Box::new(crate::backup_app::App::default())),
         crate::native_apps::camera::ID => Some(Box::new(crate::camera_app::App::default())),
+        crate::native_apps::photos::ID => Some(Box::new(crate::photos_app::App::default())),
         crate::native_apps::notes::ID => Some(Box::new(crate::notes_app::App::default())),
         // only in its own isolated process (js_nativeview_register_isolated): not in the shell's registry
         crate::passwords_app::ID => Some(Box::new(crate::passwords_app::App::default())),

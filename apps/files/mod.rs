@@ -18,6 +18,7 @@ mod video_thumbnails;
 mod volumes;
 
 pub(crate) use native_app::FilesView;
+pub(crate) use model::natural_cmp;
 pub(crate) use native_resources::discard_result as discard_native_result;
 
 pub type Result<T> = std::result::Result<T, String>;

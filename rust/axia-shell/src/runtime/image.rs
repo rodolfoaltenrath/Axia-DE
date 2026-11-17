@@ -231,6 +231,21 @@ unsafe fn replace(image: *mut Image, w: i32, h: i32, input: Input<'_>) -> *mut I
     image_release(image);
     new
 }
+/// Adopt an opaque worker-rendered frame in premultiplied ARGB; no
+/// conversion, source clone or image decoding occurs on the scene thread.
+pub(crate) unsafe fn owned_argb(image: *mut Image, w: i32, h: i32, data: Vec<u32>) -> *mut Image {
+    if image_sampling::count(w, h) != Some(data.len()) { return image; }
+    let pixels = Pixels { w, h, data, opaque: true };
+    if let Some(old) = image.as_mut().filter(|i| i.path.is_none() && i.refs == 1) {
+        old.pixels = pixels;
+        old.scales = [None, None];
+        return image;
+    }
+    let Some(new) = memory::try_box(Image::new(pixels)) else { return image; };
+    let new = Box::into_raw(new);
+    image_release(image);
+    new
+}
 #[no_mangle]
 pub unsafe extern "C" fn image_pixels(
     image: *mut Image,

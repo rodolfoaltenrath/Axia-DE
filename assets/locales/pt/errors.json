@@ -369,6 +369,8 @@
   "media.invalidPixels": "Dados de imagem inválidos",
   "media.mapFailed": "Não foi possível ler os dados da imagem",
   "media.noAudio": "O arquivo não tem áudio",
+  "photos.tooLarge": "Esta imagem excede o limite de memória ou de tamanho do Fotos",
+  "photos.codecUnavailable": "O codec do sistema para este formato não está instalado (libheif ou libtiff)",
   "media.noDecoder": "Nenhum decodificador para este formato",
   "media.noEncoder": "Nenhum codificador para este formato",
   "media.noHelper": "O assistente de mídia (axia-media) não está disponível",

@@ -56,8 +56,16 @@ fn real_compiled_app_widgets_and_effects() {
             assert_eq!(unsafe { libc::chown(name.as_ptr(), 65534, 65534) }, 0);
         }
     }
+    let pictures = home.join("Pictures");
+    fs::create_dir(&pictures).unwrap();
+    fs::set_permissions(&pictures, fs::Permissions::from_mode(0o755)).unwrap();
+    let photo = pictures.join("native-photo.png");
+    image::RgbaImage::from_fn(64, 48, |x, y| image::Rgba([(x * 4) as u8, (y * 5) as u8, 100, 255]))
+        .save(&photo).unwrap();
+    fs::set_permissions(&photo, fs::Permissions::from_mode(0o644)).unwrap();
     let driver = scratch.0.join("probe.jsx");
-    fs::write(&driver, DRIVER.replace("@ROOT@", repo.to_str().unwrap())).unwrap();
+    fs::write(&driver, DRIVER.replace("@ROOT@", repo.to_str().unwrap())
+        .replace("@PHOTOS_PATH@", photo.to_str().unwrap())).unwrap();
     let bundle = scratch.0.join("probe.bundle.js");
     let output = Command::new(repo.join("node_modules/.bin/esbuild"))
         .arg(&driver)
@@ -182,6 +190,7 @@ fn real_compiled_app_widgets_and_effects() {
             "recorder",
             "backup",
             "camera",
+            "photos",
             "notes"
         ])
     );
@@ -320,13 +329,24 @@ fn real_compiled_app_widgets_and_effects() {
                 > 0
         );
     }
-    println!("native Rust apps: catalog, Force Quit, Calculator, About, Characters, Clock, Help article/tour/fallback and content bridge, Monitor and Store passed");
+    assert!(has_text("photos-library","Library"));
+    assert!(has_text("photos-viewer","native-photo.png"));
+    assert!(has_text("photos-viewer","64 × 48"));
+    assert_eq!(get("photos-viewer")["react"],0);
+    assert_eq!(get("photos-viewer")["pixels"],0);
+    assert_eq!(get("photos-viewer")["mediaCalls"],0);
+    assert!(has_text("photos-restored","64 × 48"));
+    assert!(has_text("photos-edit","Save as copy"));
+    assert!(has_text("photos-copy","native-photo (edited).png"));
+    assert!(home.join("Pictures/native-photo (edited).png").is_file());
+    println!("native Rust apps: catalog, Force Quit, Calculator, About, Characters, Clock, Help article/tour/fallback and content bridge, Monitor, Store and Photos library/viewer/edit/remount passed");
 }
 
 const DRIVER: &str = r#"
 import { createElement as h, useState } from '@ROOT@/node_modules/react/index.js';
 import { View, render } from '@ROOT@/runtime/index.js';
 import { nativeApp } from '@ROOT@/sdk/nativeapps.js';
+import { nativeApp as asyncNativeApp } from '@ROOT@/runtime/nativeapps.js';
 import { filesEffect } from '@ROOT@/sdk/nativefiles.js';
 import { media } from '@ROOT@/sdk/media.js';
 import { help } from '@ROOT@/sdk/help.js';
@@ -337,8 +357,9 @@ import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/wi
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { AppWindowContext } from '@ROOT@/sdk/components.jsx';
+locale.set({...locale.get(),lang:'en'});
 const catalog=lord.nativeApps.request(JSON.stringify({cmd:'catalog'}));
-const compiled=catalog.map(nativeApp), force=compiled.find(app=>app.id==='forcequit');
+const compiled=catalog.map(m=>m.id==='photos'?asyncNativeApp(m):nativeApp(m)), force=compiled.find(app=>app.id==='forcequit');
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 configureWindows({apps:[...compiled,{id:'demo',name:'Demo',Component:()=>null,Icon},{id:'isolated',name:'Isolated',isolated:true,Component:()=>null,Icon}]});
 registerBuiltinApp({id:'linux',name:'Linux',builtin:true,Component:()=>null,Icon});
@@ -494,6 +515,16 @@ async function run(){
   record('store',{text:nativeTexts(),title:wm.get('store')?.title});
   control.setArgs({page:'categories'});await pause();await pause();
   record('store-categories',{text:nativeTexts()});
+  const oldImageView=lord.media.view;let imageCalls=0;lord.media.view=(...args)=>{imageCalls++;throw new Error('Photos entered legacy media viewer');};
+  wm.open('photos');control.setArgs({});control.setMode('photos');pixelBytes=0;await pause();await pause();
+  record('photos-library',{text:nativeTexts()});
+  wm.setArgs('photos',{path:'@PHOTOS_PATH@',nonce:1});control.setArgs(wm.get('photos').args);await pause();await pause();await pause();
+  record('photos-viewer',{text:nativeTexts(),react:texts().length,pixels:pixelBytes,mediaCalls:imageCalls});
+  click('+');await pause();await pause();control.setArgs(wm.get('photos').args);control.setInstance(n=>n+1);await pause();await pause();await pause();record('photos-restored',{text:nativeTexts()});
+  click('Edit');await pause();record('photos-edit',{text:nativeTexts()});
+  click('Save as copy');await pause();await pause();await pause();record('photos-copy',{text:nativeTexts()});
+  lord.media.view=oldImageView;
+
   lord.quit();
 }
 setTimeout(()=>run().catch(error=>{console.error('native app driver:',error);lord.quit();}),200);
