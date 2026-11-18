@@ -56,7 +56,10 @@ brilho e energia, método de entrada, aparência.
   `screenshots`, `sysinfo`, `terminal`.
 - `sdk/`: 114 arquivos (60 com interface React e 54 só de lógica).
 - `themes/default/` (a montagem da shell) e `runtime/` (reconciler React e eventos).
-- Cerca de 456 funções `lord.*` expostas ao JS em `server/src/ui/js*.c`.
+- A captura da Fase 0 encontrou 386 caminhos `lord.*` distintos na AST do JS
+  e 491 entradas ao incluir wrappers, manifestos e o prelude. São métodos,
+  propriedades e testes de capacidade, não uma nova contagem das funções C
+  expostas. Classificação em [SHELL-RUST-API-INVENTORY.md](SHELL-RUST-API-INVENTORY.md).
 
 O tema Classic já foi removido; resta o `default`.
 
@@ -80,19 +83,46 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
 
 - [x] Decisão 1 (`.lpk`): opção A.
 - [x] Decisão 2 (temas de terceiros): não haverá.
-- [ ] Inventariar as chamadas `lord.*` usadas pelo JS e classificar cada uma como
+- [x] Inventariar as chamadas `lord.*` usadas pelo JS e classificar cada uma como
       *ativa*, *usada pelos `.lpk`*, *compatibilidade*, *indisponível no Fedora*
       ou *retirar*. Registrar a tabela em `docs/` (herança do LordOS: parte já
-      está desligada, como `updates.js` e `smart.js`).
+      está desligada, como `updates.js` e `smart.js`). Tabela e pontos dinâmicos
+      em [SHELL-RUST-API-INVENTORY.md](SHELL-RUST-API-INVENTORY.md); a API de
+      hardware ativa não foi confundida com o antigo motor de pacotes.
 - [ ] Linha de base de desempenho, registrada em tabela neste arquivo:
       despertares por segundo com a sessão parada (`strace -c -e poll` ou `perf`),
       memória residente da sessão, tempo até a primeira janela, tempo de quadro
       (o benchmark do mouse na Dock já existe) e custo do ciclo de janelas.
+      Referência headless inicial registrada abaixo; primeira apresentação e
+      frame completo em hardware seguem pendentes.
 - [ ] Teste que falha se os despertares ociosos passarem de um orçamento.
 - [ ] Opções de compilação do Rust (`lto`, `codegen-units`) em `rust/Cargo.toml`,
       medidas contra a linha de base.
-- [ ] Lista de arquivos do `sdk/` que o host dos `.lpk` (`runtime/app-host.js`)
-      precisa; o restante é "só da shell".
+- [x] Lista de arquivos do `sdk/` que o host dos `.lpk` (`runtime/app-host.js`)
+      precisa: [LPK-SDK-BOUNDARY.md](LPK-SDK-BOUNDARY.md). O grafo atual traz
+      **114/114 arquivos**: nenhum é exclusivamente da shell no bundle de hoje.
+      Separar os exports e efeitos de inicialização antes de remover módulos.
+
+### Referência inicial, 2026-11-18
+
+Fedora 44 no WSL, usuário `nobody`, `nice -n 19`, sem GPU, sem rede, três
+execuções sequenciais. Medianas entre execuções; condições, faixas e evidências
+em [SHELL-RUST-BASELINE.md](SHELL-RUST-BASELINE.md). Nenhuma flag Rust foi alterada.
+
+| Métrica | Referência local | Limite da medição |
+| --- | ---: | --- |
+| Chamadas de poll da thread principal, ociosa | 12,293/s | Indicador do laço; não soma todos os despertares/threads |
+| RSS mediano da sessão ociosa | 101,352 MiB | Não inclui os helpers |
+| Processo → marcador da primeira janela | 747,325 ms | Calculadora + duas callbacks de frame; não mede apresentação física |
+| Layout + pintura médios no fixture da Dock | 3,12 ms/render | Não é frame completo nem p99 |
+| Extra por movimento na Dock | 0,345 / 2,926 ms | Sem/com magnificação; não é tempo de quadro |
+| Ciclo síncrono WM/JSON/espelho, 50 janelas | p50 0,8120 / p99 1,3074 ms | Alteração de título; sem pintura posterior |
+
+O orçamento inicial proposto para o mesmo ambiente é 15 chamadas de poll/s
+e 120 MiB de RSS. Ainda precisa de calibração e implementação no runner:
+**não há teste de orçamento no CI nesta fatia documental**. A comparação de
+`lto`/`codegen-units` também continua aberta. Não marcar a Fase 0 inteira como
+concluída nem remover chaves de transição com base nesses resultados parciais.
 
 **Saída:** decisões fechadas, números registrados, orçamento de ociosidade no CI.
 
@@ -256,3 +286,4 @@ mostraram.
 | Data | Fatia | Commit | Medição |
 | --- | --- | --- | --- |
 | 2026-11-18 | Roadmap criado; decisão 1 (opção A) | | |
+| 2026-11-18 | Fase 0: inventário classificado, dependências do host .lpk e referência headless | Commit desta linha (`git log -- docs/ROADMAP-SHELL-RUST.md`) | 491 entradas; 114/114 módulos no host; 12,293 poll/s; 101,352 MiB; detalhes em `SHELL-RUST-BASELINE.md`. CI, flags e apresentação física pendentes. |
