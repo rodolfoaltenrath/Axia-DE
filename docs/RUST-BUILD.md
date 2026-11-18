@@ -48,11 +48,17 @@ uses two jobs in the RPM and desktop CI. Fedora's optimization, debug informatio
 and hardening flags are preserved; lowering debug information requires measured
 evidence first.
 
-`tools/desktop/build_memory.py` wraps desktop and RPM builds in CI and uploads
+`cargo xtask build-memory --output report.json -- <command> ...` wraps desktop
+and RPM builds in CI and uploads
 JSON reports even on ordinary build failures. It samples process-tree RSS and
 the largest individual `rustc` every 200 ms, warning above 11 GiB total or 5 GiB
 per compiler. RSS may count shared pages multiple times and sampling can miss
 brief spikes; these figures are not an exact runner memory high-water mark.
+The collector and its unit/integration tests are Rust. The measured command's
+exit code is preserved, including the `128 + signal` convention. Spawn failures
+also write a diagnostic report. SIGINT/SIGTERM cancellation terminates the
+private build process group and writes a report; SIGKILL cannot be intercepted.
+The initial compilation of the small `xtask` itself precedes measurement.
 
 Future C migrations should enter a dedicated service crate or an existing codec
 crate. Add an app to its own crate, register it in the shell, and keep its tests
@@ -61,6 +67,25 @@ shell. Review additions above 3,000 lines to the shell for extraction. Split
 remaining platform code only if measured compiler memory still exceeds the
 5 GiB target. Compare Fedora RPM reports over time; local developer builds with
 different flags are not a substitute for those measurements.
+
+## Rust build telemetry, 2026-11-18
+
+The Python collector and its tests were replaced by `rust/xtask/src/build_memory.rs`
+and Rust integration tests. Desktop and RPM CI retain the same artifact paths,
+200 ms interval and warning thresholds. The collector runs from the existing
+lightweight `xtask`; it does not depend on the shell or application crates.
+
+Validation passed 41 Rust tests, including process-tree filtering, `/proc/stat`
+parsing, exit code 7, signal exit 143, missing executables and cancellation with
+descendant cleanup. A real, initially empty `xtask` build target on Fedora WSL,
+with two Cargo jobs and low priority, returned success in 10.11 s and recorded
+564,273,152 bytes (538.133 MiB) for the process tree and 306,081,792 bytes
+(291.902 MiB) for the largest `rustc`. The report is retained locally at
+`build/validation/build-memory-rust/compile.json`. This validates collection;
+it is not a desktop performance comparison or a GitHub runner measurement.
+
+LTO/codegen-unit comparisons remain pending. Changing the collector does not
+justify changing Fedora's release flags or marking that roadmap item complete.
 
 ## Local validation, 2026-11-18
 

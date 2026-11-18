@@ -5,11 +5,13 @@
 //!   cargo xtask srpm --outdir DIR
 //!   cargo xtask desktop-binaries
 //!   cargo xtask native-apps
+//!   cargo xtask build-memory --output report.json -- make -j2 check
 //!
 //! This crate runs on the development or build machine only.
 
 #[path = "../../native_apps.rs"]
 mod native_apps;
+mod build_memory;
 mod deploy;
 mod dist;
 mod install;
@@ -74,11 +76,14 @@ fn options(args: &[String], known: &[&str]) -> Result<HashMap<String, String>> {
     Ok(found)
 }
 
-fn dispatch(args: &[String]) -> Result<()> {
+fn dispatch(args: &[String]) -> Result<ExitCode> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|build-memory>")?;
+    if command == "build-memory" {
+        return build_memory::execute(rest).map(ExitCode::from);
+    }
     match command.as_str() {
         "idle-check" => idle::execute(rest),
         "native-apps" => {
@@ -131,12 +136,13 @@ fn dispatch(args: &[String]) -> Result<()> {
         }
         other => Err(format!("unknown command: {other}")),
     }
+    .map(|()| ExitCode::SUCCESS)
 }
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match dispatch(&args) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(error) => {
             eprintln!("xtask: {error}");
             ExitCode::FAILURE

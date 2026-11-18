@@ -46,7 +46,7 @@ jobs:
         run: |
           node server/tests/shortcut_profile_test.mjs
       - name: Build and test desktop with memory telemetry
-        run: python3 tools/desktop/build_memory.py --output "$RUNNER_TEMP/desktop-memory.json" -- make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
+        run: cargo xtask build-memory --output "$RUNNER_TEMP/desktop-memory.json" -- make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -117,7 +117,7 @@ jobs:
       - name: Build and check the binary RPM
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/rpmbuild"
-          python3 tools/desktop/build_memory.py --output "$RUNNER_TEMP/rpm-memory.json" -- rpmbuild --rebuild --define "_topdir $GITHUB_WORKSPACE/build/rpmbuild" build/srpm/*.src.rpm
+          cargo xtask build-memory --output "$RUNNER_TEMP/rpm-memory.json" -- rpmbuild --rebuild --define "_topdir $GITHUB_WORKSPACE/build/rpmbuild" build/srpm/*.src.rpm
       - uses: actions/upload-artifact@v4
         if: always()
         with:
