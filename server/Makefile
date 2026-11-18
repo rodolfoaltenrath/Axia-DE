@@ -3,7 +3,8 @@
 CC      ?= cc
 CARGO   ?= cargo
 RUST_MANIFEST := ../rust/Cargo.toml
-RUST_LIB := build/rust/release/libaxia_shell.a
+RUST_TARGET_DIR := build/rust
+RUST_LIB := $(RUST_TARGET_DIR)/release/libaxia_shell.a
 BENCH_LIB := build/bench-rust/release/libaxia_bench.a
 CODEC_LIB := build/codecs/release/libaxia_codecs.a
 VAULT_CODEC_LIB := build/vault-codecs/release/libaxia_codecs.a
@@ -167,7 +168,7 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 ifeq ($(SKIP_RUST_TESTS),1)
 	@echo "Rust tests run in desktop CI; keeping RPM platform/ABI checks."
 else
-	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir build/rust --locked --offline --test image_runtime -- --ignored --nocapture
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath $(RUST_TARGET_DIR)) --locked --offline --test image_runtime -- --ignored --nocapture
 endif
 	./build/seat-test
 	./build/platform-admin-test
@@ -214,7 +215,7 @@ build/gpu-round-test: tests/gpu_round_test.c src/gpu/gpu.c $(HDR)
 build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:
-	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --workspace --exclude axia-bench --exclude xtask --locked --offline
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath $(RUST_TARGET_DIR)) --workspace --exclude axia-bench --exclude xtask --locked --offline
 # Isolated app mode: Rust policies/Wayland with a deterministic compositor and real QuickJS.
 test test-platform: build/app-mode-ffi-test
 build/app-mode-ffi-test: tests/app_mode_ffi_test.c src/ui/js_app_host.c src/ui/js_app_host.h src/pkg/crypto.c src/app/app.h src/app/apphost_bc.h $(QJS_OBJ) $(RUST_LIB)
@@ -253,7 +254,7 @@ BENCH_INPUTS := ../rust/axia-bench/Cargo.toml ../rust/axia-bench/build.rs $(wild
 $(BENCH_LIB): $(BENCH_INPUTS)
 	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --lib --target-dir $(abspath build/bench-rust) --release --locked --offline
 $(RUST_LIB): $(RUST_INPUTS)
-	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --release --locked --offline
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) --target-dir $(abspath $(RUST_TARGET_DIR)) --release --locked --offline
 build/switcher-ffi-test: tests/switcher_ffi_test.c src/ui/switcher_ffi.h $(RUST_LIB)
 	$(CC) $(CFLAGS) $(WARN) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/snap-ffi-test: tests/snap_ffi_test.c src/ui/snap_ffi.h $(RUST_LIB)

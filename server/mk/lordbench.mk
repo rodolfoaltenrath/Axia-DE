@@ -21,22 +21,21 @@ build/bench-features: bench-features-force
 	@printf '%s\n' '$(LB_FEATURES)' > $@.new
 	@cmp -s $@ $@.new && rm $@.new || mv $@.new $@
 LB_NATIVE_ENV := AXIA_BENCH_HOST_DIR=$(abspath build/bench-host)
-# Keep native-host's archive (which bundles the shared engine) separate from
-# BENCH_LIB, used by the existing C compositor and testbench.
-LB_TARGET_DIR := $(abspath build/bench-native)
+# Reuse the shell's Cargo artifacts. BENCH_LIB remains in build/bench-rust:
+# the C compositor/testbench must never use native-host's engine/stub archive.
+LB_TARGET_DIR := $(abspath $(RUST_TARGET_DIR))
 all: build/axia-bench
-# Native-host has its own target dir and compiles the shell again. Keep it after
-# the main archive to avoid overlapping large Rust builds on package builders.
-# The order-only prerequisite never forces the main archive to rebuild.
+# Populate the shared shell artifacts before building native-host. Keep the
+# order-only prerequisite so this helper never forces the main archive to rebuild.
 build/axia-bench: $(BENCH_INPUTS) $(RUST_INPUTS) build/bench-host/libbench_host.a build/bench-features | $(RUST_LIB)
 	$(LB_NATIVE_ENV) $(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --bin axia-bench --features $(LB_FEATURES) --target-dir $(LB_TARGET_DIR) --release --locked --offline
-	cp build/bench-native/release/axia-bench $@
+	cp $(LB_TARGET_DIR)/release/axia-bench $@
 
 .PHONY: lordbench-test
 test: lordbench-test
 lordbench-test: build/axia-bench
 	$(LB_NATIVE_ENV) $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-bench --features $(LB_FEATURES) --test lordbench-native --target-dir $(LB_TARGET_DIR) --release --locked --offline -- --test-threads=1
-	find build/bench-native/release/deps -maxdepth 1 -type f -executable -name 'lordbench_native-*' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2- | xargs -r -d '\n' -I{} cp '{}' build/lordbench-test
+	find $(LB_TARGET_DIR)/release/deps -maxdepth 1 -type f -executable -name 'lordbench_native-*' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2- | xargs -r -d '\n' -I{} cp '{}' build/lordbench-test
 # Existing build callers keep an alias to the Rust harness.
 build/lordbench-test: lordbench-test
 

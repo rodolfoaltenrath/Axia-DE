@@ -27,8 +27,18 @@ App unit tests compile in their respective crates. Scene/host integration tests
 live under `axia-shell/src/native_view`; external runtime tests remain in
 `axia-shell/tests`. Run `make check GPU=1` to exercise the apps, shell, platform
 checks and packaging smoke checks. `server/Makefile` rebuild inputs include all
-new crate manifests and recursive Rust source paths. Benchmark host builds wait
-for the compositor archive, preventing two large shell builds at once.
+new crate manifests and recursive Rust source paths. The compositor and native
+benchmark share `server/build/rust` through `RUST_TARGET_DIR`. Benchmark host
+builds wait for the compositor archive and reuse its compiled shell and app
+dependencies with the same Cargo profile, features and Rust flags. This avoids
+compiling the shell twice during desktop and RPM builds.
+
+The benchmark archive linked into the C compositor and testbench stays in
+`server/build/bench-rust`. Keep it separate: the native benchmark enables
+`native-host`, which bundles engine code and stubs that must not enter those
+C consumers. The native benchmark's release integration tests use the shared
+directory too, though Cargo still builds dependencies separately when test
+profile requirements differ (for example, panic unwinding).
 
 The RPM's `test-platform SKIP_RUST_TESTS=1` keeps C and ABI tests. Rust tests,
 including the ignored image runtime test, run in desktop CI before the RPM job.
@@ -80,3 +90,25 @@ before/after timing comparison or a GitHub runner benchmark. The CI target of
 less than 30 minutes still needs verification on the actual runner. Future CI
 artifacts provide the comparable measurements; the local reports and RPMs are
 under the ignored `build/validation/shell-split/` directory.
+
+## Native benchmark artifact reuse, 2026-11-18
+
+A sequential local comparison with the same Fedora release flags and two Cargo
+jobs built the shell once, then built the native benchmark with `native-host,gpu`
+in an empty separate directory and in the populated shell directory:
+
+| Native benchmark build | Elapsed | Compiled artifacts | Reused artifacts |
+| --- | ---: | ---: | ---: |
+| Separate `build/bench-native` | 563.96 s | 110 | 0 |
+| Shared `build/rust` | 21.19 s | 3 | 107 |
+
+The shared build avoided recompiling `axia-shell` and its dependencies. The
+compositor archive's SHA-256 remained unchanged. These are local timings for
+this step, with a warm OS filesystem cache, rather than a total CI duration or
+a GitHub runner measurement. Commands, Cargo artifact records, archive hashes
+and memory reports are under the ignored `build/validation/build-reuse/`.
+
+Validation passed 31 Python tests, the compositor/testbench links, the switcher,
+snap and window-model C/Rust ABI tests, and all four native benchmark integration
+tests with `GPU=1`. The copied `build/lordbench-test` executable also passed all
+four tests. The shell archive remained unchanged after these builds and tests.
