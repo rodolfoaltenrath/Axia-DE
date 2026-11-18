@@ -24,7 +24,7 @@ fronteira. A troca de linguagem sozinha não garante isso: cada fatia é medida.
 | # | Decisão | Escolha | Data |
 | --- | --- | --- | --- |
 | 1 | Apps `.lpk` de terceiros | **A.** Mantêm o host JavaScript, só no processo isolado de cada app. A sessão não carrega QuickJS. Não se reescreve o contrato dos `.lpk` agora. | 2026-11-18 |
-| 2 | Temas de terceiros | **Em aberto.** Opções: tema como dados (cores e medidas) com componentes em Rust, ou tema só do projeto. Recomendação: dados. | |
+| 2 | Temas de terceiros | **Não haverá.** O visual da shell é só do projeto, em Rust. Não se cria uma segunda forma (JS/React ou dados) de terceiros descreverem a interface. Claro/escuro, cor de destaque e papéis de parede seguem como configurações do usuário, não como temas. | 2026-11-18 |
 | 3 | Chaves de transição | Cada fatia nativa fica atrás de uma chave (`...NativeView`) só até passar nos testes; depois o caminho React é apagado. | 2026-11-18 |
 
 Descartado por ora: apps de terceiros como clientes Wayland comuns com um crate
@@ -79,7 +79,7 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
 ## Fase 0: decisões, inventário e linha de base
 
 - [x] Decisão 1 (`.lpk`): opção A.
-- [ ] Decisão 2 (temas de terceiros).
+- [x] Decisão 2 (temas de terceiros): não haverá.
 - [ ] Inventariar as chamadas `lord.*` usadas pelo JS e classificar cada uma como
       *ativa*, *usada pelos `.lpk`*, *compatibilidade*, *indisponível no Fedora*
       ou *retirar*. Registrar a tabela em `docs/` (herança do LordOS: parte já
@@ -164,12 +164,19 @@ Fatias de interface (cada uma completa, com seus chamadores):
 
 ## Fase 4: o tema
 
-- [ ] Decisão 2 aplicada: substituir `themes/default/index.jsx` (papel de parede,
-      janelas, barra de menus, Dock, camadas e modais) por uma view de shell em
-      Rust.
-- [ ] Tokens do tema como dados lidos pelo Rust (`tokens.js`, `theme.json`).
+- [ ] Substituir `themes/default/index.jsx` (papel de parede, janelas, barra de
+      menus, Dock, camadas e modais) por uma view de shell em Rust.
+- [ ] Tokens (cores, medidas, claro/escuro, cor de destaque) como dados internos
+      lidos pelo Rust, no lugar de `tokens.js` e `theme.json`.
+- [ ] Remover o mecanismo de trocar de tema: `lord.themes`, o seletor "Estilo da
+      área de trabalho" nas Configurações, a proteção contra tema quebrado e o
+      carregamento de bundles por `--theme`.
 - [ ] Aposentar `startShell` e o `LocaleRoot` do `sdk/index.js`.
-- [ ] Atualizar `THEMES-GUIDE.md` e `examples/theme-minimal` conforme a decisão 2.
+- [ ] Apagar `examples/theme-minimal`, `themes/README.md` e `THEMES-GUIDE.md`, ou
+      deixá-los marcados como históricos, e ajustar os documentos que os citam
+      (`DESIGN.md`, `LAYERS.md`).
+- [ ] Manter como configurações: modo claro/escuro, cor de destaque e papéis de
+      parede, e tudo o que o usuário já escolhe hoje.
 
 ## Fase 5: os 9 apps que ainda são JSX
 
