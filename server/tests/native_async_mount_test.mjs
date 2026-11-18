@@ -10,9 +10,10 @@ globalThis.lord={screen:{width:960,height:620},version:'test',now:()=>0,stats:()
   createNode:()=>++node,setStyle(){},setProp(){},setText(){},appendChild(){},insertBefore(){},removeChild(){},destroy(){},setRoot(){},
   css:text=>JSON.parse(text),fonts:{list:()=>[]}};
 globalThis.__nativeMountRecords=[];
+globalThis.__nativePickerRecords=[];
 const stubs={
-  // This lease/lifecycle fixture does not exercise the interactive file dialog.
-  'rustfiles.js':'export const RustFileDialog=()=>null;',
+  'rustfiles.js':'export function RustFileDialog(props){globalThis.__nativePickerRecords.push(props);return null;}',
+  'passwords-sdk':`export const View=()=>null,NativeView=()=>null,useAppWindow=()=>({}),useStore=()=>({}),locale={},wm={},vaultAvailable=()=>false,vaultRequest=()=>null,onVaultEvent=()=>()=>{},requestPermission=()=>false,clipboard={};`,
   'widgets.js':'export const registerWidgetType=()=>{};export const setWidgets=()=>{};',
   'ime.js':'export const imeState={get:()=>({}),subscribe:()=>()=>{}};',
   'textfocus.js':'export const textFieldActive=()=>false;',
@@ -40,8 +41,10 @@ const stubs={
 const result=await build({stdin:{resolveDir:root,contents:`
   import React from 'react'; import {render} from '@lordos/runtime';
   import {nativeApp} from './runtime/nativeapps.js';
+  // The theme imports this module for its icon; it must preserve the shell transport.
+  import './apps/passwords/index.jsx';
   const Context=React.createContext(null);globalThis.__nativeWindowContext=Context;
-  const App=nativeApp({id:'logs',asyncServices:['logs.sources']}).Component;
+  const App=nativeApp({id:'logs',asyncServices:['logs.sources','files.pick']}).Component;
   let update;
   function Root(){const [ids,set]=React.useState([]);update=set;return React.createElement(React.Fragment,null,...ids.map(id=>React.createElement(Context.Provider,{key:id,value:{id,args:{}}},React.createElement(App))));}
   render(React.createElement(Root));
@@ -49,6 +52,7 @@ const result=await build({stdin:{resolveDir:root,contents:`
   export async function windows(ids){await flush();update(ids);await flush();}
 `},bundle:true,write:false,format:'esm',platform:'node',define:{'process.env.NODE_ENV':'"production"'},alias:{'@lordos/runtime':path.join(root,'runtime/index.js')},plugins:[{
   name:'native-endpoints',setup(b){
+    b.onResolve({filter:/^@lordos\/sdk$/},()=>({path:'passwords-sdk',namespace:'fake-sdk'}));
     b.onResolve({filter:/native_system_services\.js$/},()=>({path:'native_system_services.js',namespace:'fake-sdk'}));
     b.onResolve({filter:/sdk\/(packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
@@ -60,6 +64,23 @@ const [first,second]=globalThis.__nativeMountRecords;
 assert.equal(first.id,'logs');assert.equal(second.id,'logs#2');
 assert.ok(Number.isSafeInteger(first.owner)&&first.owner>0);assert.notEqual(first.owner,second.owner);
 assert.equal(lord.nativeAsync.take(first.owner,[first.token])[0].value.user,1);
+const options={title:'Choose wallpaper',extensions:['png','jpg','jpeg']};
+const picked=lord.nativeAsync.start(first.owner,'files.pick',[options]);
+await windows(['logs','logs#2']);
+const picker=globalThis.__nativePickerRecords.at(-1);
+assert.ok(picker,'files.pick must mount a dialog for its window');
+assert.equal(picker.mode,'open','wallpapers need a picker, not the browser default');
+for(const name of ['photo.png','photo.JPG','photo.jpeg']) assert.ok(picker.filter.test(name),name);
+for(const name of ['photo.txt','photoXpng','photo.png.exe']) assert.ok(!picker.filter.test(name),name);
+picker.onPick('/home/test/Pictures/photo.png');
+await windows(['logs','logs#2']);
+assert.equal(lord.nativeAsync.take(first.owner,[picked])[0].value,'/home/test/Pictures/photo.png');
+const cancelled=lord.nativeAsync.start(first.owner,'files.pick',[options]);
+await windows(['logs','logs#2']);
+globalThis.__nativePickerRecords.at(-1).onClose();
+await windows(['logs','logs#2']);
+assert.equal(lord.nativeAsync.take(first.owner,[cancelled])[0].value,null);
+
 await windows(['logs#2']);
 assert.throws(()=>lord.nativeAsync.start(first.owner,'logs.sources'),/invalidRequest/);
 const alive=lord.nativeAsync.start(second.owner,'logs.sources');
@@ -68,4 +89,4 @@ assert.deepEqual(lord.nativeAsync.take(second.owner,[alive]),[]);
 await windows(['logs']);
 const reopened=globalThis.__nativeMountRecords.at(-1);assert.notEqual(reopened.owner,first.owner);
 await windows([]);
-console.log('native-async-mount-test: string WM IDs, startup, independent leases, close and reopen passed');
+console.log('native-async-mount-test: Passwords import preserves shell services; picker selection/cancel, leases and window lifecycle passed');

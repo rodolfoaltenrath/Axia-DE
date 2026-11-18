@@ -82,7 +82,9 @@ const methods = {
   'clipboard.text': { run([value]) { clipboard.set(String(value), { origin: APP_ID }); return null; } },
 };
 const bridge = createNativeAsync(methods);
-lord.nativeAsync = {
+// This module is also imported for its icon by the desktop. Publish the vault
+// transport only inside its own process so the shell keeps its service leases.
+if (lord.appId === APP_ID) lord.nativeAsync = {
   start: (...args) => bridge.start(...args),
   take: (...args) => bridge.take(...args),
   events: (...args) => bridge.events(...args),

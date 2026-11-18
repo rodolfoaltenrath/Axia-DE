@@ -18,5 +18,5 @@ export function NativeFilePicker({ owner }) {
   if (!request) return null;
   const { extensions, ...props } = request.options;
   const filter = extensions ? new RegExp('\\.(' + extensions.map(extension => extension.replace(/[^A-Za-z0-9]/g, '')).join('|') + ')$', 'i') : null;
-  return h(RustFileDialog, { ...props, filter, onPick: request.done, onClose: () => request.done(null) });
+  return h(RustFileDialog, { ...props, mode: 'open', filter, onPick: request.done, onClose: () => request.done(null) });
 }
