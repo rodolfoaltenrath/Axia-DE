@@ -6,6 +6,35 @@ license = "MIT"
 description = "Axia desktop policies, embedded in the C compositor"
 
 [dependencies]
+axia-app-pdf = { path = "../axia-app-pdf" }
+axia-app-sysprobe = { path = "../axia-app-sysprobe" }
+axia-app-passwords = { path = "../axia-app-passwords" }
+axia-app-settings = { path = "../axia-app-settings" }
+axia-app-files = { path = "../axia-app-files" }
+axia-app-photos = { path = "../axia-app-photos" }
+axia-app-notes = { path = "../axia-app-notes" }
+axia-app-calendar = { path = "../axia-app-calendar" }
+axia-app-contacts = { path = "../axia-app-contacts" }
+axia-app-reminders = { path = "../axia-app-reminders" }
+axia-app-backup = { path = "../axia-app-backup" }
+axia-app-recorder = { path = "../axia-app-recorder" }
+axia-app-scanner = { path = "../axia-app-scanner" }
+axia-app-fonts = { path = "../axia-app-fonts" }
+axia-app-logs = { path = "../axia-app-logs" }
+axia-app-forcequit = { path = "../axia-app-forcequit" }
+axia-app-appabout = { path = "../axia-app-appabout" }
+axia-clock = { path = "../axia-clock" }
+axia-native = { path = "../axia-native" }
+axia-app-sysinfo = { path = "../axia-app-sysinfo" }
+axia-app-terminal = { path = "../axia-app-terminal" }
+axia-app-camera = { path = "../axia-app-camera" }
+axia-app-store = { path = "../axia-app-store" }
+axia-app-clock = { path = "../axia-app-clock" }
+axia-app-help = { path = "../axia-app-help" }
+axia-app-monitor = { path = "../axia-app-monitor" }
+axia-app-characters = { path = "../axia-app-characters" }
+axia-app-calculator = { path = "../axia-app-calculator" }
+axia-app-about = { path = "../axia-app-about" }
 axia-codecs = { path = "../axia-codecs" }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
@@ -15,3 +44,6 @@ regex = "1"
 
 [lib]
 crate-type = ["staticlib", "rlib"]
+
+[dev-dependencies]
+axia-app-settings = { path = "../axia-app-settings", features = ["host-tests"] }

@@ -323,7 +323,7 @@ fn article(app: &App) -> Value {
     json!({"kind":"scroll","key":"article-scroll","style":{"flex":1},"children":[view(json!({"alignItems":"center","paddingTop":24,"paddingBottom":32}),vec![view(json!({"width":col,"direction":article_direction(&article.body)}),children)])]})
 }
 fn article_direction(source: &str) -> &'static str {
-    if crate::runtime::native::text_rtl(source) {
+    if axia_native::services::text_rtl(source) {
         "rtl"
     } else {
         "ltr"

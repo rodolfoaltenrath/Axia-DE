@@ -278,7 +278,7 @@ pub fn entry(app: &App, t: &Theme, v: &Viewing, pane_w: f64, now: i64) -> Value 
     }
     if let Some(notes) = e["notes"].as_str().filter(|s| !s.is_empty()) {
         let width = (pane_w - 74.).max(160.);
-        let md = crate::help::markdown::render(&crate::help::markdown::parse(notes), width, t.0);
+        let md = axia_native::markdown::render(&axia_native::markdown::parse(notes), width, t.0);
         kids.push(view(json!({"gap":6}), vec![
             label(t, k("field.notes")),
             view(json!({"paddingHorizontal":12,"paddingVertical":10,"borderRadius":10,"border":format!("1px solid {}", t.s(t.sep())),

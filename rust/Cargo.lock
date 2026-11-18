@@ -46,6 +46,247 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "axia-app-about"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "regex",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-appabout"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-backup"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-calculator"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-calendar"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-camera"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-characters"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-clock"
+version = "0.1.0"
+dependencies = [
+ "axia-clock",
+ "axia-native",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-contacts"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-files"
+version = "0.1.0"
+dependencies = [
+ "axia-fs",
+ "axia-native",
+ "image",
+ "libc",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-fonts"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-forcequit"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-help"
+version = "0.1.0"
+dependencies = [
+ "axia-app-about",
+ "axia-native",
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-logs"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-monitor"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-notes"
+version = "0.1.0"
+dependencies = [
+ "axia-fs",
+ "axia-native",
+ "libc",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-passwords"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-pdf"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-photos"
+version = "0.1.0"
+dependencies = [
+ "axia-fs",
+ "axia-native",
+ "image",
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-recorder"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-reminders"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-scanner"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-settings"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-store"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-sysinfo"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-sysprobe"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-app-terminal"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "axia-bench"
 version = "0.1.0"
 dependencies = [
@@ -53,6 +294,15 @@ dependencies = [
  "axia-shell",
  "libc",
  "regex",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-clock"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
  "serde_json",
 ]
 
@@ -84,10 +334,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-fs"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+]
+
+[[package]]
 name = "axia-mail"
 version = "0.1.0"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "axia-native"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "libc",
+ "regex",
+ "serde_json",
 ]
 
 [[package]]
@@ -103,7 +371,36 @@ dependencies = [
 name = "axia-shell"
 version = "0.1.0"
 dependencies = [
+ "axia-app-about",
+ "axia-app-appabout",
+ "axia-app-backup",
+ "axia-app-calculator",
+ "axia-app-calendar",
+ "axia-app-camera",
+ "axia-app-characters",
+ "axia-app-clock",
+ "axia-app-contacts",
+ "axia-app-files",
+ "axia-app-fonts",
+ "axia-app-forcequit",
+ "axia-app-help",
+ "axia-app-logs",
+ "axia-app-monitor",
+ "axia-app-notes",
+ "axia-app-passwords",
+ "axia-app-pdf",
+ "axia-app-photos",
+ "axia-app-recorder",
+ "axia-app-reminders",
+ "axia-app-scanner",
+ "axia-app-settings",
+ "axia-app-store",
+ "axia-app-sysinfo",
+ "axia-app-sysprobe",
+ "axia-app-terminal",
+ "axia-clock",
  "axia-codecs",
+ "axia-native",
  "image",
  "libc",
  "regex",

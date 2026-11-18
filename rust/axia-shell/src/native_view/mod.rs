@@ -6,12 +6,10 @@
 //! clipboard). The compositor delivers pointer events here before JS sees them
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
-pub(crate) mod retained;
-pub(crate) mod async_jobs;
-pub(crate) mod date_format;
-pub(crate) mod civil_date;
-pub mod icons;
-pub mod i18n;
+#[cfg(test)]
+pub(crate) use axia_native::retained;
+pub use axia_native::icons;
+pub use axia_native::i18n;
 mod launcher;
 mod menu;
 pub(crate) use menu::measure as measure_text;
@@ -19,10 +17,11 @@ mod menubar;
 mod shell_icons;
 mod titlebar;
 mod tree;
-pub mod paint;
 pub mod style;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod icon_tests;
 pub use host::Host;
 use serde_json::Value;
 use std::{
@@ -46,38 +45,41 @@ pub(crate) fn deliver_file_drop(token:u32, paths:&Value, internal_move:bool)->bo
     }
     false
 }
-/// What a native view needs from an app: the request interface of compiled apps
-/// and the RGBA pixels of the rasters its trees name.
-pub trait NativeApp {
-    /// Resource roots supplied by the host, including user language packs.
-    fn resources(&mut self, _assets: &str, _home: Option<&str>) {}
-    /// An app may vary its refresh cadence with its current page and state.
-    fn refresh_ms(&self) -> Option<f64> { None }
-    /// Active media may need timely control even when its window loses focus.
-    fn background_refresh_ms(&self) -> Option<f64> { None }
-    fn request(&mut self, input: &Value) -> Value;
-    /// Full specification behind a revisioned marker. Retaining it lets the
-    /// host recover after a conditional unmount or presentation-context change.
-    fn retained_tree(&self, _key: &str) -> Option<&Value> { None }
-    /// Custom native editors share the host's text-focus and paste routing.
-    fn text_input(&self) -> bool { false }
-    fn paste(&mut self, _text: &str) -> Option<Value> { None }
-    fn blur(&mut self) {}
-    fn pixels(&self, _id: &str) -> Option<(usize, usize, &[u8])> {
-        None
+pub use axia_native::NativeApp;
+pub(super) fn install_services() {
+    axia_native::services::install(axia_native::services::Services {
+        release_media, release_image,
+        network: crate::network::request, winmodel: crate::winmodel::call,
+        text_rtl: crate::runtime::native::text_rtl,
+        app, manifests: crate::native_apps::manifests, measure_text,
+        desktop_facts: crate::applications::desktop_facts,
+        desktop_generation: crate::applications::desktop_generation,
+    });
+}
+#[cfg(not(test))]
+fn release_media(id: i32) {
+    extern "C" {
+        fn media_src_get(id: i32) -> *mut std::ffi::c_void;
+        fn media_src_close(source: *mut std::ffi::c_void);
     }
-    /// Transfer an already rendered opaque premultiplied ARGB frame without a UI-thread
-    /// copy or conversion. The scene becomes its sole owner.
-    fn take_raster(&mut self, _id: &str) -> Option<(usize, usize, Vec<u32>)> {
-        None
-    }
-    /// Optional window-level keyboard input (e.g. Calculator). Fields keep
-    /// their existing editing path; None leaves the key with the shell.
-    fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
-        None
+    unsafe {
+        let source = media_src_get(id);
+        if !source.is_null() { media_src_close(source); }
     }
 }
+#[cfg(not(test))]
+fn release_image(id: i32) {
+    extern "C" { fn doc_image_release(id: i32); }
+    unsafe { doc_image_release(id); }
+}
+#[cfg(test)]
+thread_local! { static RELEASED_PREVIEWS: RefCell<Vec<(bool, i32)>> = const { RefCell::new(Vec::new()) }; }
+#[cfg(test)]
+fn release_media(id: i32) { RELEASED_PREVIEWS.with(|r| r.borrow_mut().push((true, id))); }
+#[cfg(test)]
+fn release_image(id: i32) { RELEASED_PREVIEWS.with(|r| r.borrow_mut().push((false, id))); }
 pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
+    install_services();
     match id {
         crate::native_apps::settings::ID=>Some(Box::new(crate::settings_app::App::default())),
         crate::native_apps::sysprobe::ID => Some(Box::new(crate::sysprobe_app::App)),
@@ -114,6 +116,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     }
 }
 /// The icon tree a native-view app draws for itself (another app can show it).
+#[cfg(test)]
 pub fn icon_tree(id: &str, size: f64) -> Option<Value> {
     let mut app = app(id)?;
     let tree = app.request(&serde_json::json!({"cmd":"icon","size":size}));
@@ -337,6 +340,48 @@ pub extern "C" fn axia_view_timeout(now: f64) -> f64 {
 pub extern "C" fn axia_view_pending() -> i32 {
     with(|r| i32::from(r.hosts.values().any(Host::pending)))
 }
+
+#[cfg(test)]
+mod logs_tests;
+
+#[cfg(test)]
+mod fonts_tests;
+
+#[cfg(test)]
+mod scanner_tests;
+
+#[cfg(test)]
+mod recorder_tests;
+
+#[cfg(test)]
+mod backup_tests;
+
+#[cfg(test)]
+mod reminders_tests;
+
+#[cfg(test)]
+mod contacts_tests;
+
+#[cfg(test)]
+mod calendar_tests;
+
+#[cfg(test)]
+mod settings_tests;
+
+#[cfg(test)]
+mod photos_tests;
+
+#[cfg(test)]
+mod files_tests;
+
+#[cfg(test)]
+mod forcequit_tests;
+
+#[cfg(test)]
+mod appabout_tests;
+
+#[cfg(test)]
+mod sysprobe_tests;
 
 #[cfg(test)]
 mod revision_tests;

@@ -40,8 +40,7 @@ fn status_lines_match_frozen_original_header_policy() {
         );
     }
 }
-#[path = "native_tests.rs"]
-mod native;
+
 #[test]
 fn successful_configuration_submits_key_creation_in_order() {
     let mut a = app();

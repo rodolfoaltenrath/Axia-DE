@@ -119,7 +119,7 @@ Korean) and highlighted headings.
 
 ## Markdown
 
-The shared Rust renderer in `apps/help/markdown.rs` supplies the reading view.
+The shared Rust renderer in `rust/axia-native/src/markdown.rs` supplies the reading view.
 Notes resolves local image paths and owns outline jumps and checkbox updates.
 
 - **Blocks:** headings, paragraphs, quotes (nested), lists with levels, numbered lists,

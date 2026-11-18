@@ -7,45 +7,21 @@ mod model;
 mod native;
 mod native_app;
 mod native_resources;
-pub mod operations;
+pub use axia_fs::operations;
 mod pdf_thumbnails;
-pub mod policy;
+pub use axia_fs::policy;
 mod thumbnails;
-pub mod trash;
+pub use axia_fs::trash;
 mod udisks;
 mod ui;
 mod video_thumbnails;
 mod volumes;
 
-pub(crate) use native_app::FilesView;
-pub(crate) use model::natural_cmp;
-pub(crate) use native_resources::discard_result as discard_native_result;
+pub use native_app::FilesView;
+pub use model::natural_cmp;
+pub use native_resources::discard_result as discard_native_result;
 
-pub type Result<T> = std::result::Result<T, String>;
-
-pub fn io_error(e: std::io::Error) -> String {
-    if e.raw_os_error() == Some(libc::ESTALE) {
-        return "fs.sourceChanged".into();
-    }
-    let name = match e.raw_os_error().unwrap_or(libc::EIO) {
-        libc::ENOENT => "ENOENT",
-        libc::EACCES => "EACCES",
-        libc::EPERM => "EPERM",
-        libc::EEXIST => "EEXIST",
-        libc::ENOSPC => "ENOSPC",
-        libc::EROFS => "EROFS",
-        libc::ENOTDIR => "ENOTDIR",
-        libc::EISDIR => "EISDIR",
-        libc::ENOTEMPTY => "ENOTEMPTY",
-        libc::ELOOP => "ELOOP",
-        libc::ECANCELED => "ECANCELED",
-        libc::EXDEV => "EXDEV",
-        libc::EINVAL => "EINVAL",
-        libc::ENAMETOOLONG => "ENAMETOOLONG",
-        _ => "EIO",
-    };
-    format!("sys.errno errno={name}")
-}
+pub use axia_fs::{io_error, Result};
 
 mod network;
 
@@ -53,7 +29,7 @@ mod network;
 mod tests;
 
 /// App icon for the native shell; shares Files' authored geometry.
-pub(crate) fn native_icon(size: f64) -> serde_json::Value {
+pub fn native_icon(size: f64) -> serde_json::Value {
     fn convert(value: &mut serde_json::Value) {
         if let Some(object) = value.as_object_mut() {
             if let Some(kind) = object.remove("type") {

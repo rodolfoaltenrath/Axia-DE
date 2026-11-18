@@ -291,6 +291,7 @@ impl Drop for Host {
 }
 impl Host {
     pub fn new(mount: i32, mut app: Box<dyn NativeApp>, assets: &str, home: Option<&str>) -> Self {
+        super::install_services();
         app.resources(assets, home);
         Self {
             mount,

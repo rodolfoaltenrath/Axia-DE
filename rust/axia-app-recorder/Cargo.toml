@@ -1,0 +1,9 @@
+[package]
+name = "axia-app-recorder"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+axia-native = { path = "../axia-native" }
+serde_json = "1"

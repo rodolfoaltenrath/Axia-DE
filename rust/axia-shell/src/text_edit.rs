@@ -225,16 +225,8 @@ impl Field {
 
 /// The part of a file name a rename selects at first: the name without its extension, so typing
 /// replaces only that ("report.final.pdf" → "report.final"; ".bashrc" and folders: all of it).
-pub fn stem_len(name: &str, folder: bool) -> usize {
-    let n = name.chars().count();
-    if folder {
-        return n;
-    }
-    match name.rfind('.') {
-        Some(i) if i > 0 => name[..i].chars().count(),
-        _ => n,
-    }
-}
+#[cfg(test)]
+use axia_native::filename::stem_len;
 
 fn reply(f: &Field, o: &Outcome) -> Value {
     json!({

@@ -1,67 +1,40 @@
 //! Rust services embedded in the existing C compositor.
 //! Window-system objects and the React UI retain their existing interfaces.
 mod anim;
-mod clock;
-#[path = "../../../apps/help/mod.rs"]
-mod help;
-#[path = "../../../apps/clock/mod.rs"]
-mod clock_app;
-#[path = "../../../apps/characters/mod.rs"]
-mod characters;
-#[path = "../../../apps/about/mod.rs"]
-mod about;
-#[path = "../../../apps/files/mod.rs"]
-mod files;
-#[path = "../../../apps/forcequit/mod.rs"]
-mod forcequit;
-#[path = "../../../apps/calculator/mod.rs"]
-mod calculator;
-#[path = "../../../apps/appabout/mod.rs"]
-mod appabout;
-#[path = "../../../apps/settings/model.rs"]
-mod settings_model;
-#[path = "../../../apps/settings/mod.rs"]
-mod settings_app;
-#[path = "../../../apps/terminal/model.rs"]
-mod terminal_model;
-#[path = "../../../apps/passwords/model.rs"]
-mod passwords_model;
-#[path = "../../../apps/passwords/native/mod.rs"]
-mod passwords_app;
-#[path = "../../../apps/sysinfo/model.rs"]
-mod sysinfo_model;
-#[path = "../../../apps/sysprobe/mod.rs"]
-mod sysprobe_app;
-#[path = "../../../apps/reminders/mod.rs"]
-mod reminders_app;
-#[path = "../../../apps/contacts/mod.rs"]
-mod contacts_app;
-#[path = "../../../apps/calendar/mod.rs"]
-mod calendar_app;
+#[cfg(test)]
+use axia_clock as clock;
+use axia_app_help as help;
+use axia_app_clock as clock_app;
+use axia_app_characters as characters;
+use axia_app_about as about;
+use axia_app_files as files;
+use axia_app_forcequit as forcequit;
+use axia_app_calculator as calculator;
+use axia_app_appabout as appabout;
+use axia_app_settings::settings_model;
+use axia_app_settings as settings_app;
+use axia_app_terminal as terminal_model;
+use axia_app_passwords::passwords_model;
+use axia_app_passwords as passwords_app;
+use axia_app_sysinfo as sysinfo_model;
+use axia_app_sysprobe as sysprobe_app;
+use axia_app_reminders as reminders_app;
+use axia_app_contacts as contacts_app;
+use axia_app_calendar as calendar_app;
 mod native_apps_host;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;
-#[path = "../../../apps/notes/mod.rs"]
-mod notes_app;
-#[path = "../../../apps/photos/mod.rs"]
-mod photos_app;
+use axia_app_notes as notes_app;
+use axia_app_photos as photos_app;
 mod native_view;
-#[path = "../../../apps/monitor/mod.rs"]
-mod monitor;
-#[path = "../../../apps/store/mod.rs"]
-mod store;
-#[path = "../../../apps/logs/mod.rs"]
-mod logs_app;
-#[path = "../../../apps/fonts/mod.rs"]
-mod fonts_app;
-#[path = "../../../apps/scanner/mod.rs"]
-mod scanner_app;
-#[path = "../../../apps/recorder/mod.rs"]
-mod recorder_app;
-#[path = "../../../apps/backup/mod.rs"]
-mod backup_app;
-#[path = "../../../apps/camera/mod.rs"]
-mod camera_app;
+use axia_app_monitor as monitor;
+use axia_app_store as store;
+use axia_app_logs as logs_app;
+use axia_app_fonts as fonts_app;
+use axia_app_scanner as scanner_app;
+use axia_app_recorder as recorder_app;
+use axia_app_backup as backup_app;
+use axia_app_camera as camera_app;
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod flip_pacing;

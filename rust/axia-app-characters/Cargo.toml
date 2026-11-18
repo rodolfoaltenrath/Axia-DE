@@ -1,0 +1,10 @@
+[package]
+name = "axia-app-characters"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+axia-native = { path = "../axia-native" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

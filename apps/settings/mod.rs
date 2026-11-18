@@ -12,6 +12,8 @@ mod privacy;
 mod system;
 #[cfg(test)]
 mod tests;
+#[cfg(any(test, feature = "host-tests"))]
+mod host_fixture;
 mod trackpad;
 mod ui;
 mod users;
@@ -1211,4 +1213,14 @@ impl App {
 }
 fn defaults() -> Value {
     json!({"mode":"dark","effects":true,"reduceMotion":false,"scrollBars":"auto","nativeAppearance":"adwaita","externalWindowStyle":false,"dockPosition":"bottom","dockSize":54,"dockMagnify":false,"dockMagnifySize":86,"dockAutohide":false,"dockRecents":false,"clipboard":{"save":true,"max":500,"maxMB":200,"expireDays":30,"ignoreApps":[],"clearOnLogout":false},"notifications":{"dnd":false,"schedule":{"on":false,"from":1320,"to":420},"grouping":"app","apps":{},"seen":[]},"clock":{"hour24":"auto","date":"short","seconds":false},"night":{"schedule":"off","from":1320,"to":420,"temp":3400,"manual":null},"power":{"offAC":600,"offBattery":180,"lockDelay":0,"sleepAC":0,"sleepBattery":900,"lowBattery":true,"menuPercent":true},"trackpad":{"speed":0.5,"tap":true,"tapDrag":true,"natural":true,"secondary":"bottom-right","threeDrag":false,"dwt":true,"scroll":true,"kinetic":true,"pinch":true,"swipe3":true,"swipe4":false},"video":{"mode":"auto","autoLower":false},"browserTabsInTitlebar":true,"sessionRestore":"ask","sessionBrowsers":true,"desktopArrows":true,"shortcutProfile":"macos"})
+}
+
+/// Fixture shared with shell scene regression tests.
+#[cfg(feature = "host-tests")]
+pub fn host_test_fixture() -> (App, Value) {
+    let mut app = host_fixture::fixture();
+    app.section = "users".into();
+    app.state["userPassword"] = json!({"old":"private-old-password","pass":"private-new-password","pass2":"private-new-password"});
+    let theme = app.theme.clone();
+    (app, theme)
 }

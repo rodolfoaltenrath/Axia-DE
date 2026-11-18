@@ -23,6 +23,7 @@ RUST_NATIVE_LIBS := -Wl,--gc-sections $(shell pkg-config --libs gio-2.0) -lxkbco
 rust_sources = $(wildcard $(1)/*.rs) $(foreach d,$(wildcard $(1)/*/),$(call rust_sources,$(patsubst %/,%,$(d))))
 RUST_INPUTS := $(RUST_MANIFEST) ../rust/Cargo.lock ../rust/axia-shell/Cargo.toml $(call rust_sources,../rust/axia-shell/src) $(call rust_sources,../apps) $(call rust_sources,src/app) ../rust/native_apps.rs ../.cargo/config.toml
 RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-window-controls/*)
+RUST_INPUTS += $(foreach crate,$(wildcard ../rust/axia-native ../rust/axia-fs ../rust/axia-clock ../rust/axia-app-*),$(crate)/Cargo.toml $(call rust_sources,$(crate)/src))
 RUST_INPUTS += $(CODEC_INPUTS)
 RUST_INPUTS += ../assets/emoji.json
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
@@ -150,7 +151,7 @@ build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
 	./$@ || { rm -f $@; exit 1; }
 
-test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/shadow-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test test-rust
+test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/shadow-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test $(if $(filter 1,$(SKIP_RUST_TESTS)),,test-rust)
 	./build/wl-fullscreen-test
 	./build/wl-activation-test
 	./build/ui-damage-test
@@ -163,7 +164,11 @@ test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test b
 	./build/portal-files-test
 	./build/media-preview-test
 	./build/glass-renderer-test
-	cargo test --manifest-path $(RUST_MANIFEST) --target-dir build/rust --locked --offline --test image_runtime -- --ignored --nocapture
+ifeq ($(SKIP_RUST_TESTS),1)
+	@echo "Rust tests run in desktop CI; keeping RPM platform/ABI checks."
+else
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir build/rust --locked --offline --test image_runtime -- --ignored --nocapture
+endif
 	./build/seat-test
 	./build/platform-admin-test
 	./build/switcher-ffi-test
@@ -209,7 +214,7 @@ build/gpu-round-test: tests/gpu_round_test.c src/gpu/gpu.c $(HDR)
 build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
 test-rust:
-	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --locked --offline
+	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath build/rust) --workspace --exclude axia-bench --exclude xtask --locked --offline
 # Isolated app mode: Rust policies/Wayland with a deterministic compositor and real QuickJS.
 test test-platform: build/app-mode-ffi-test
 build/app-mode-ffi-test: tests/app_mode_ffi_test.c src/ui/js_app_host.c src/ui/js_app_host.h src/pkg/crypto.c src/app/app.h src/app/apphost_bc.h $(QJS_OBJ) $(RUST_LIB)

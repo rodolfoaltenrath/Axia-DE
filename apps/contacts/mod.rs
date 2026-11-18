@@ -101,7 +101,7 @@ impl App {
             )
         }
     }
-    fn paste_at(&mut self, text: &str, now: i64) -> Option<Value> {
+    pub fn paste_at(&mut self, text: &str, now: i64) -> Option<Value> {
         if !self.state.notes_focus {
             return None;
         }
@@ -110,7 +110,7 @@ impl App {
         self.notes_since = now;
         Some(self.request_at(&json!({"cmd":"noop"}), now))
     }
-    fn key_at(&mut self, k: &str, c: &str, flags: i32, now: i64) -> Option<Value> {
+    pub fn key_at(&mut self, k: &str, c: &str, flags: i32, now: i64) -> Option<Value> {
         if self.state.notes_focus {
             if k == "Escape" {
                 self.state.notes_focus = false;
@@ -166,7 +166,7 @@ impl App {
         }
         None
     }
-    fn request_at(&mut self, v: &Value, now: i64) -> Value {
+    pub fn request_at(&mut self, v: &Value, now: i64) -> Value {
         let cmd = string(&v["cmd"]);
         if cmd == "icon" {
             return ui::icon(v["size"].as_f64().unwrap_or(32.));

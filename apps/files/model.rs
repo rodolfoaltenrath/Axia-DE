@@ -3077,40 +3077,7 @@ fn writable_dir(policy: &Policy, path: &Path) -> Option<PathBuf> {
     let c = policy::c_name(parent.as_os_str()).ok()?;
     (unsafe { libc::access(c.as_ptr(), libc::W_OK) } == 0).then(|| parent.into())
 }
-pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    natural_lowercase(a.to_lowercase().as_bytes(), b.to_lowercase().as_bytes())
-}
-// Both already lowercase. UTF-8 sorts bytewise in character order, and no byte
-// of a multi-byte character is an ASCII digit.
-fn natural_lowercase(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
-    let run = |s: &[u8]| s.iter().take_while(|c| c.is_ascii_digit()).count();
-    let (mut a, mut b) = (a, b);
-    loop {
-        match (a.first(), b.first()) {
-            (Some(x), Some(y)) if x.is_ascii_digit() && y.is_ascii_digit() => {
-                let (x, rest_a) = a.split_at(run(a));
-                let (y, rest_b) = b.split_at(run(b));
-                let strip = |s: &'_ [u8]| s.iter().take_while(|c| **c == b'0').count();
-                let (x, y) = (&x[strip(x)..], &y[strip(y)..]);
-                let order = x.len().cmp(&y.len()).then_with(|| x.cmp(y));
-                if order != Ordering::Equal {
-                    return order;
-                }
-                (a, b) = (rest_a, rest_b);
-            }
-            (Some(x), Some(y)) => {
-                if x != y {
-                    return x.cmp(y);
-                }
-                (a, b) = (&a[1..], &b[1..]);
-            }
-            (None, None) => return Ordering::Equal,
-            (None, _) => return Ordering::Less,
-            (_, None) => return Ordering::Greater,
-        }
-    }
-}
+pub use axia_fs::{natural_cmp, natural_lowercase};
 
 // Lowercased once per file: a sort compares each name about 15 times.
 struct SortKey {

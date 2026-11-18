@@ -531,7 +531,7 @@ impl App {
             _ => {}
         }
     }
-    fn request_at(&mut self, input: &Value, now: i64) -> Value {
+    pub fn request_at(&mut self, input: &Value, now: i64) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         let arg = string(&input["key"]);
         // A confirmation captures its snapshot/options and blocks background actions.

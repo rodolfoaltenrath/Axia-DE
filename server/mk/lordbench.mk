@@ -25,9 +25,9 @@ LB_NATIVE_ENV := AXIA_BENCH_HOST_DIR=$(abspath build/bench-host)
 # BENCH_LIB, used by the existing C compositor and testbench.
 LB_TARGET_DIR := $(abspath build/bench-native)
 all: build/axia-bench
-# axia-bench compiles axia-shell again (native-host, its own target dir): about 7 GB of rustc each. They
-# must not run side by side under `make -j` (the 16 GB package builders were killed), so this waits for
-# the main archive; order-only, so it never forces that one to rebuild.
+# Native-host has its own target dir and compiles the shell again. Keep it after
+# the main archive to avoid overlapping large Rust builds on package builders.
+# The order-only prerequisite never forces the main archive to rebuild.
 build/axia-bench: $(BENCH_INPUTS) $(RUST_INPUTS) build/bench-host/libbench_host.a build/bench-features | $(RUST_LIB)
 	$(LB_NATIVE_ENV) $(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-bench --bin axia-bench --features $(LB_FEATURES) --target-dir $(LB_TARGET_DIR) --release --locked --offline
 	cp build/bench-native/release/axia-bench $@

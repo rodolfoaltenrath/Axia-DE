@@ -9,9 +9,8 @@ macro_rules! pattern {
 mod persistence;
 mod editor;
 mod emoji;
-#[path = "../help/markdown.rs"]
-mod markdown;
-pub(crate) mod store;
+use axia_native::markdown;
+pub mod store;
 #[cfg(test)]
 mod tests;
 mod ui;

@@ -4,8 +4,7 @@
 //! Quit controller also answers catalog and icon queries for application menus.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
-#[path = "../../../apps/pdf/model.rs"]
-mod pdf_model;
+use axia_app_pdf as pdf_model;
 pub enum NativeApp {
     Control(crate::forcequit::App),
     Settings(crate::settings_model::Model),
@@ -17,6 +16,7 @@ pub enum NativeApp {
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
+        crate::native_view::install_services();
         match id {
             b"forcequit" => Some(Self::Control(Default::default())),
             b"settings" => Some(Self::Settings(Default::default())),

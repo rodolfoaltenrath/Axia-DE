@@ -22,19 +22,8 @@ fn device(value: &Value) -> Option<String> {
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)))
     .then(|| name.into())
 }
-pub fn safe_mount(path: &Path) -> bool {
-    path.is_absolute()
-        && path != Path::new("/")
-        && !path
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        && !["/proc", "/sys", "/dev", "/etc", "/usr", "/var", "/boot"]
-            .iter()
-            .any(|p| path.starts_with(p))
-        && path != Path::new("/home")
-        && path != Path::new("/run")
-        && path != Path::new("/media")
-}
+pub use axia_fs::policy::safe_mount;
+
 pub fn parse(facts: &Value) -> Vec<Volume> {
     let mut result = Vec::new();
     let mut seen = HashSet::new();

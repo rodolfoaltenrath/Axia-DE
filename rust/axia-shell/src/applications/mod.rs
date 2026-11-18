@@ -21,16 +21,7 @@ unsafe fn bytes<'a>(p: *const c_char) -> &'a [u8] {
         CStr::from_ptr(p).to_bytes()
     }
 }
-/// An installed desktop app as other Rust modules see it (the Axia Store).
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DesktopFacts {
-    /// The desktop id; the shell names the app `desktop:<id>`.
-    pub id: String,
-    /// `Categories=` as written (`;`-separated).
-    pub categories: String,
-    /// A PNG path, or empty.
-    pub icon: String,
-}
+pub use axia_native::services::DesktopFacts;
 /// The current catalog of installed desktop apps (UI thread). Only the three
 /// strings are copied out, not the catalog's fixed-size records.
 pub fn desktop_facts() -> Vec<DesktopFacts> {

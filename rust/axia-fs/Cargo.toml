@@ -1,0 +1,9 @@
+[package]
+name = "axia-fs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Filesystem policy, trash and cancellable operations shared by native apps"
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }

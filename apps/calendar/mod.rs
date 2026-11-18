@@ -112,7 +112,7 @@ impl App {
             self.state.sidebar
         }
     }
-    fn paste_at(&mut self, t: &str, now: i64) -> Option<Value> {
+    pub fn paste_at(&mut self, t: &str, now: i64) -> Option<Value> {
         if !self.state.notes_focus {
             return None;
         }
@@ -121,7 +121,7 @@ impl App {
         self.notes_since = now;
         Some(self.request_at(&json!({"cmd":"noop"}), now))
     }
-    fn key_at(&mut self, k: &str, c: &str, f: i32, now: i64) -> Option<Value> {
+    pub fn key_at(&mut self, k: &str, c: &str, f: i32, now: i64) -> Option<Value> {
         if self.state.notes_focus {
             if k == "Escape" {
                 self.state.notes_focus = false;
@@ -176,7 +176,7 @@ impl App {
         };
         Some(self.request_at(&cmd, now))
     }
-    fn request_at(&mut self, v: &Value, now: i64) -> Value {
+    pub fn request_at(&mut self, v: &Value, now: i64) -> Value {
         let cmd = s(&v["cmd"]);
         if cmd == "icon" {
             return ui::icon(v["size"].as_f64().unwrap_or(32.), now);

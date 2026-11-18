@@ -1,5 +1,13 @@
 use super::*;
 fn app() -> App {
+    // The tour requests the authored About artwork through the host registry.
+    axia_native::services::install(axia_native::services::Services {
+        app: |id| match id {
+            "about" => Some(Box::new(axia_app_about::App::default())),
+            _ => None,
+        },
+        ..Default::default()
+    });
     let mut app = App::default();
     app.resources(
         &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -125,17 +133,12 @@ fn selection_theme_reading_width_and_empty_catalog_are_preserved() {
     assert!(reply["tree"].to_string().contains("help.unavailable"));
 }
 #[test]
-fn every_shipped_app_article_and_tour_icon_is_a_native_tree() {
+fn every_shipped_app_article_has_a_document() {
     let mut a = app();
     let list = a.list.clone();
     for meta in list {
         if meta.app.is_empty() || meta.app == "installer" {
             continue;
-        }
-        for size in [18., 48., 84.] {
-            let icon = icons::app_icon(&meta.app, size).unwrap_or_else(|| panic!("{}", meta.app));
-            assert_eq!(icon["kind"], "view");
-            assert_eq!(icon["style"]["width"], size);
         }
         a.set_article(&meta.id);
         assert!(!a.document.is_empty());

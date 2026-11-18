@@ -1,6 +1,5 @@
 use super::*;
-#[path = "native_tests.rs"]
-mod native;
+
 #[test]
 fn rgba_waveforms_match_original_jsx_pixels() {
     let cases: Value = serde_json::from_str(include_str!(

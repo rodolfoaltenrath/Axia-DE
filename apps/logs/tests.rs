@@ -1,6 +1,5 @@
 use super::*;
-#[path = "native_tests.rs"]
-mod native;
+
 fn app() -> App {
     let mut a = App::default();
     a.resources(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"), None);

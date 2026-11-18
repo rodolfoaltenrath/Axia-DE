@@ -1,6 +1,6 @@
 //! Reminders owns its model, scene, editors, calendar and service scheduling in
 //! Rust. axia-maild remains the authoritative local/CalDAV store and alarm source.
-mod model;
+pub mod model;
 #[cfg(test)]
 mod tests;
 mod ui;
@@ -143,7 +143,7 @@ impl NativeApp for App {
     }
 }
 impl App {
-    fn paste_at(&mut self, text: &str, now: i64) -> Option<Value> {
+    pub fn paste_at(&mut self, text: &str, now: i64) -> Option<Value> {
         if !self.notes_focus {
             return None;
         }
@@ -153,7 +153,7 @@ impl App {
         }
         Some(self.output(now))
     }
-    fn key_at(&mut self, key: &str, chr: &str, flags: i32, now: i64) -> Option<Value> {
+    pub fn key_at(&mut self, key: &str, chr: &str, flags: i32, now: i64) -> Option<Value> {
         if self.notes_focus {
             if key == "Escape" {
                 self.notes_focus = false;
@@ -493,7 +493,7 @@ impl App {
         }
         out
     }
-    fn request_at(&mut self, v: &Value, now: i64) -> Value {
+    pub fn request_at(&mut self, v: &Value, now: i64) -> Value {
         let cmd = string(&v["cmd"]);
         let k = string(&v["key"]);
         match cmd {
