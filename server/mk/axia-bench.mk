@@ -1,4 +1,4 @@
-# LordBench implementations, entry points and tests are Rust. The archive keeps
+# Axia benchmark implementations, entry points and tests are Rust. The archive keeps
 # the ABI used by the compositor and sysreport during their migration.
 build/obj/main.o: src/bench/lbframes.h src/bench/lbinput.h
 build/obj/ui/grab.o: src/bench/lbinput.h
@@ -8,7 +8,7 @@ build/obj/ui/js_hw.o: src/bench/lbrun.h
 # No benchmark C implementation or QuickJS is linked into the helper.
 LB_HOST_SRC := src/sec/sandbox.c src/sec/cgroup.c $(ENGINE_SRC)
 LB_HOST_OBJ := $(LB_HOST_SRC:src/%.c=build/bench-host/%.o)
-build/bench-host/%.o: src/%.c $(HDR) mk/lordbench.mk build/bench-features
+build/bench-host/%.o: src/%.c $(HDR) mk/axia-bench.mk build/bench-features
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -fPIC -ffunction-sections -fdata-sections -c $< -o $@
 build/bench-host/libbench_host.a: $(LB_HOST_OBJ)

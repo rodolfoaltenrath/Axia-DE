@@ -35,5 +35,5 @@ path = "../../server/src/bench/cli.rs"
 
 [[test]]
 name = "lordbench-native"
-path = "../../server/tests/lordbench.rs"
+path = "../../server/tests/axia_bench.rs"
 required-features = ["native-host"]

@@ -231,7 +231,7 @@ in an isolated headless session through System Information → Performance, and 
 maintainer's own session on a 1920×1080 60 Hz monitor (HDMI-A-1 and HDMI-A-2 both tried), with a 0.8.6
 development package.
 
-- **`axia-bench`** (`server/src/bench/helper.rs`, `mk/lordbench.mk`): launched by axia-server
+- **`axia-bench`** (`server/src/bench/helper.rs`, `mk/axia-bench.mk`): launched by axia-server
   (`bench/run.rs`) from its own folder only (owned by root or the user, not writable by others), no
   arguments, `LANG` only (and `LORDOS_SESSIOND` in a lord-sessiond session), the channel on fd 3. It
   receives one fixed-size request (`LbGo`, `bench/lbproto.h`) with at most two fds axia-server opened: the
@@ -250,7 +250,7 @@ development package.
   no longer links QuickJS. Version 1 reference measurements remain historical data and are not compared
   with version 2 results; the reference machines must be measured again.
   - `make -C server bench-test` runs the Rust measurement, protocol, workload, persistence and worker tests.
-    `make -C server GPU=1 lordbench-test` runs `server/tests/lordbench.rs` against the real engine and helper:
+    `make -C server GPU=1 lordbench-test` runs `server/tests/axia_bench.rs` against the real engine and helper:
     scene size/styles, serial/parallel pixel equality, all five fonts, cancellation/restart, six sandbox
     denials and a real surfaceless EGL scene. The EGL test also works with Mesa software rendering;
     it does not establish performance or correctness on every hardware driver.
@@ -377,7 +377,7 @@ development package.
   tests stops when the throttle counters grow or the Pi firmware slowed the processor during the run (below);
   in the sustained test throttling is recorded with its time and temperature instead. The kind of disk under
   the scratch file is recorded (NVMe, SD/eMMC, SSD, HDD, USB, virtual, or RAM in the live session). Unit tests
-  on fake sysfs trees (`tests/lordbench.rs`): an x86 laptop on battery, a Raspberry Pi 5 with the kernel
+  on fake sysfs trees (`tests/axia_bench.rs`): an x86 laptop on battery, a Raspberry Pi 5 with the kernel
   LordOS ships, a Pi known only from its device tree, and an older Pi kernel with `get_throttled`.
 - **The Raspberry Pi firmware's throttling** (0.8.6, 2026-10-28; `bench/lbcond.c`; run on the Pi 5
   on 2026-10-29, below). On a Pi the firmware itself lowers the ARM clock on under-voltage, at its temperature limit
@@ -841,7 +841,7 @@ session, the variables set in the session's environment; the results above):
 
 Boot: the Pi 5 reaches the login screen on its monitor 5.99 s after the kernel starts (lord-sessiond's record;
 systemd-analyze gives 2.1 s kernel + 4.2 s userspace). Boots where the monitor was connected late took 61 and
-103 s, which is the wait for the monitor, not the boot. The N-boot test has its unit tests (`tests/lordbench.rs`: the state file's format, parsing, ownership, staleness
+103 s, which is the wait for the monitor, not the boot. The N-boot test has its unit tests (`tests/axia_bench.rs`: the state file's format, parsing, ownership, staleness
 and countdown) and one run on the Pi 5 (2026-10-30, 3 boots with autologin: 7.66, 7.71 and 7.63 s, restarting and
 removing its state file on its own). That run was started by writing the state file, so the app's button and the
 login screen's countdown and Stop were not exercised.

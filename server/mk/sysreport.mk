@@ -6,7 +6,7 @@ SYSREPORT_HDR := $(wildcard src/sysreport/*.h) src/hw/edid.h src/hw/rpifw.h src/
 all: build/axia-sysreport build/axia-fetch
 build/axia-fetch: build/axia-sysreport
 	ln -sf axia-sysreport $@
-# `axia-sysreport bench` links LordBench's axia-server side (mk/lordbench.mk), libc only too
+# `axia-sysreport bench` links the benchmark's axia-server side (mk/axia-bench.mk), libc only too
 SYSREPORT_BENCH_SRC :=
 build/axia-sysreport: src/sysreport/cli.c $(SYSREPORT_SRC) $(SYSREPORT_HDR) $(SYSREPORT_BENCH_SRC) $(wildcard src/bench/*.h) build/gen/lord_version.h $(CODEC_LIB) $(BENCH_LIB)
 	@mkdir -p build

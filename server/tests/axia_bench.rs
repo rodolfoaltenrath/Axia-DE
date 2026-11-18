@@ -1,4 +1,4 @@
-//! Real engine and helper integration, with a Rust test driver.
+//! Axia benchmark engine and helper integration, with a Rust test driver.
 #[path = "../src/bench/host.rs"]
 mod host;
 use axia_bench::*;
