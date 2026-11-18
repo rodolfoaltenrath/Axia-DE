@@ -103,6 +103,9 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
       relatórios do runner, conforme `SHELL-RUST-BASELINE.md`.
 - [ ] Opções de compilação do Rust (`lto`, `codegen-units`) em `rust/Cargo.toml`,
       medidas contra a linha de base.
+      Protocolo e comandos preparados em
+      [RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md); comparação
+      interrompida para desligamento, sem resultado completo ou mudança de flags.
 - [x] Lista de arquivos do `sdk/` que o host dos `.lpk` (`runtime/app-host.js`)
       precisa: [LPK-SDK-BOUNDARY.md](LPK-SDK-BOUNDARY.md). O grafo atual traz
       **114/114 arquivos**: nenhum é exclusivamente da shell no bundle de hoje.
@@ -131,6 +134,39 @@ o coletor já está no CI em modo de calibração e só impõe limites quando
 concluída nem remover chaves de transição com base nesses resultados parciais.
 
 **Saída:** decisões fechadas, números registrados, orçamento de ociosidade no CI.
+
+### Ponto de retomada — 2026-11-18
+
+Trabalho interrompido a pedido do usuário para desligar o computador. Continuamos
+na **Fase 0**; nenhuma chave nativa foi removida e a Fase 1 não começou.
+
+- Preparado `cargo xtask profile-check` para três builds sequenciais da shell:
+  flags Fedora atuais (`fedora`), Thin LTO (`thin`) e oito unidades (`cgu8`).
+  Registra versões, flags, tempo, RSS, tamanho do arquivo estático e reutilização
+  de artefatos. Não altera o perfil de produção nem roda automaticamente no CI.
+- Preparado o driver de integração Rust `profile_runtime`: vincula cada variante
+  ao compositor e mede três sessões privadas. O driver compilou, mas **a execução
+  real dessa comparação ainda não foi realizada**.
+- A primeira compilação `fedora` foi cancelada antes de terminar. Seus registros
+  parciais não são uma linha de base válida; `thin` e `cgu8` não foram executadas.
+- Validação antes da parada: **43 testes Rust passaram**, com duas integrações
+  manuais ignoradas por padrão. Não foi executado um novo RPM completo.
+
+Para retomar, seguir [RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md).
+Executar novamente as três variantes, em diretórios de artefatos novos, depois
+a integração real, registrar resultados e só então decidir sobre as flags.
+O clone descartável local é `/var/tmp/axia-profile-20261118` no Fedora WSL;
+os relatórios parciais estão em `build/validation/profile-compare/`.
+Esses diretórios **não acompanham o push** e podem ser recriados pelo protocolo.
+
+Continuam pendentes também:
+
+- Calibrar os limites com os artifacts do GitHub Actions e ativar a imposição
+  somente após confirmar os números do runner.
+- Medir primeira apresentação e frame completo em hardware real.
+- Migrar os testes Python antigos restantes; novos testes e coletores são Rust.
+- Iniciar a Fase 1 depois dos critérios da Fase 0, começando por uma fatia
+  completa com remoção do React, testes Rust, capturas e comparação de métricas.
 
 ## Fase 1: terminar o que já começou
 
@@ -296,3 +332,4 @@ mostraram.
 | 2026-11-18 | Fase 0: coletor de orçamento ocioso e calibração no CI | Commit desta linha | 40 testes Python; sessão real: 12,400 poll/s e 102,539 MiB; regressão forçada recusada com relatório. Calibração do runner e imposição obrigatória pendentes. |
 | 2026-11-18 | Fase 0: coletor e testes migrados para Rust (`cargo xtask idle-check`) | Commit desta linha | 30 testes automáticos e integração real Rust; 13,050 poll/s e 102,547 MiB. Regressão forçada verificada com imposição e em calibração; removidos o coletor e os testes Python desta fatia. |
 | 2026-11-18 | Fase 0: telemetria de compilação e seus testes em Rust (`cargo xtask build-memory`) | Commit desta linha | 41 testes Rust; coleta validada em compilação real do xtask com dois jobs. Desktop/RPM usam o coletor Rust; comparação de LTO/codegen-units permanece pendente. |
+| 2026-11-18 | Fase 0: protocolo e ferramentas para comparar perfis; ponto de parada | Commit desta linha | 43 testes Rust passaram; primeira compilação cancelada para desligamento. Thin LTO, cgu8 e integração comparativa não executados. Nenhuma flag alterada. |
