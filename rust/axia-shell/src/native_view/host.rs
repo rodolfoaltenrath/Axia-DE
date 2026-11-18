@@ -25,7 +25,7 @@ pub fn now_ms() -> f64 {
 /// The facts a sync request carries (lent from `Host::facts`). `lang`: for strings the app picks
 /// itself (localized package manifests).
 const SYNC_FACTS: [&str; 7] = ["args", "settings", "services", "catalog", "windows", "registry", "lang"];
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Kind {
     View,
     Text,
@@ -86,6 +86,8 @@ struct Mounted {
     parts_text: [String; 3],
     offset: f64,
     children: Vec<Mounted>,
+    revision: Option<u64>,
+    epoch: u64,
 }
 impl Mounted {
     fn new(kind: Kind, key: String) -> Self {
@@ -109,6 +111,8 @@ impl Mounted {
             parts_text: Default::default(),
             offset: 0.,
             children: Vec::new(),
+            revision: None,
+            epoch: 0,
         }
     }
     /// Sets the style of `node` (0) or a part (1-3), only when its source changed.
@@ -221,6 +225,7 @@ pub struct Host {
     i18n: I18n,
     assets: String,
     facts: Value,
+    render_epoch: u64,
     root: Vec<Mounted>,
     targets: HashMap<i32, Target>,
     buttons: HashMap<i32, i32>,
@@ -293,6 +298,7 @@ impl Host {
             i18n: I18n::new(assets, home),
             assets: assets.into(),
             facts: Value::Null,
+            render_epoch: 0,
             root: Vec::new(),
             targets: HashMap::new(),
             buttons: HashMap::new(),
@@ -369,6 +375,7 @@ impl Host {
         if facts == self.facts {
             return;
         }
+        self.render_epoch = self.render_epoch.wrapping_add(1);
         self.facts = facts;
         self.i18n.lang = self.facts["lang"].as_str().unwrap_or("en").to_owned();
         self.i18n.group = self.facts["context"]["group"].as_str().unwrap_or(",").to_owned();
@@ -382,7 +389,9 @@ impl Host {
         self.sync();
     }
     pub fn window_focus(&mut self, focused: bool) {
-        if self.change_window_focus(focused) {
+        let changed = self.window_focused != focused;
+        self.change_window_focus(focused);
+        if changed {
             self.sync();
         }
     }
@@ -393,6 +402,7 @@ impl Host {
             return false;
         }
         self.window_focused = focused;
+        self.render_epoch = self.render_epoch.wrapping_add(1);
         let mut changed = false;
         if !focused {
             self.app.blur();
@@ -485,8 +495,12 @@ impl Host {
             .map(|f| f.2)
             .filter(|w| *w > 1.)
             .unwrap_or_else(|| self.facts["width"].as_f64().unwrap_or(1000.) as f32);
+        let height = scene::frame(self.mount).map_or(0., |f| f.3);
+        if width != self.width || height != self.height {
+            self.render_epoch = self.render_epoch.wrapping_add(1);
+        }
         self.width = width;
-        self.height = scene::frame(self.mount).map_or(0., |f| f.3);
+        self.height = height;
         let mut context = self.facts["context"].clone();
         if !context.is_object() {
             context = json!({});
@@ -494,6 +508,7 @@ impl Host {
         context["width"] = json!(width);
         context["height"] = json!(self.height);
         context["focused"] = json!(self.window_focused);
+        context["renderEpoch"] = json!(self.render_epoch);
         context
     }
     /// Asks the app for its tree and reconciles it into the scene.
@@ -551,6 +566,11 @@ impl Host {
     fn reconcile(&mut self, parent: i32, old: Vec<Mounted>, new: &[Value]) -> Vec<Mounted> {
         let mut old: Vec<Option<Mounted>> = old.into_iter().map(Some).collect();
         let mut out = Vec::with_capacity(new.len());
+        let mut cursor = 0;
+        // Ordered siblings need no hash table. On the first insertion/reorder,
+        // index the remaining slots once; reverse vectors preserve the original
+        // first-match rule even for duplicate keys of the same widget kind.
+        let mut keyed: Option<HashMap<(Kind, String), Vec<usize>>> = None;
         for (i, spec) in new.iter().enumerate() {
             // a "menu" is drawn by views (native_view/menu.rs)
             let expanded;
@@ -565,10 +585,28 @@ impl Host {
                 continue;
             }
             let key = Self::key_of(spec, i);
-            let reuse = old
-                .iter()
-                .position(|m| m.as_ref().is_some_and(|m| m.key == key && m.kind == kind))
-                .and_then(|p| old[p].take());
+            while cursor < old.len() && old[cursor].is_none() { cursor += 1; }
+            let position = if old.get(cursor).and_then(Option::as_ref)
+                .is_some_and(|m| m.kind == kind && m.key == key) {
+                Some(cursor)
+            } else {
+                let index = keyed.get_or_insert_with(|| {
+                    let mut index: HashMap<(Kind, String), Vec<usize>> = HashMap::with_capacity(old.len() - cursor);
+                    for i in (cursor..old.len()).rev() {
+                        if let Some(m) = &old[i] {
+                            index.entry((m.kind, m.key.clone())).or_default().push(i);
+                        }
+                    }
+                    index
+                });
+                index.get_mut(&(kind, key.clone())).and_then(|positions| {
+                    while let Some(i) = positions.pop() {
+                        if old[i].is_some() { return Some(i); }
+                    }
+                    None
+                })
+            };
+            let reuse = position.and_then(|p| old[p].take());
             let mut m = match reuse {
                 Some(m) => m,
                 None => match self.create(kind, key) {
@@ -576,7 +614,24 @@ impl Host {
                     None => continue,
                 },
             };
+            let revision = spec["revision"].as_u64();
+            if revision.is_some() && m.revision == revision && m.epoch == self.render_epoch {
+                out.push(m);
+                continue;
+            }
+            let retained;
+            let spec = if spec["retained"] == true {
+                retained = self.app.retained_tree(&m.key).cloned();
+                match retained.as_ref().filter(|tree| tree["kind"] == spec["kind"] && tree["revision"] == spec["revision"]) {
+                    Some(tree) => tree,
+                    // Invalid markers cannot replace an existing widget with
+                    // an empty/incomplete specification.
+                    None => { out.push(m); continue; }
+                }
+            } else { spec };
             self.update(&mut m, spec);
+            m.revision = revision;
+            m.epoch = self.render_epoch;
             out.push(m);
         }
         for m in old.into_iter().flatten() {

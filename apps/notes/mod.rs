@@ -75,6 +75,10 @@ pub struct App {
     menus: Value,
     effects: Vec<Value>,
     last_tree: Value,
+    presentation: Value,
+    ui_revision: u64,
+    sidebar_tree: crate::native_view::retained::RetainedTree,
+    reader_tree: crate::native_view::retained::RetainedTree,
     input_context: bool,
     foreground: bool,
     composition: Value,
@@ -118,6 +122,10 @@ impl Default for App {
             menus: Value::Null,
             effects: vec![],
             last_tree: Value::Null,
+            presentation: Value::Null,
+            ui_revision: 0,
+            sidebar_tree: Default::default(),
+            reader_tree: Default::default(),
             input_context: false,
             foreground: true,
             composition: Value::Null,
@@ -127,6 +135,9 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn retained_tree(&self, key: &str) -> Option<&Value> {
+        self.sidebar_tree.tree(key).or_else(|| self.reader_tree.tree(key))
+    }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.home = home
@@ -768,6 +779,11 @@ impl App {
         match cmd {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
+                let presentation = json!([input["context"], input["lang"], input["settings"]["region"]]);
+                if presentation != self.presentation {
+                    self.presentation = presentation;
+                    self.ui_revision = self.ui_revision.wrapping_add(1);
+                }
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
                 self.theme = input["context"]["theme"].clone();
                 self.foreground = input["context"]["focused"].as_bool().unwrap_or(true);

@@ -6,6 +6,7 @@
 //! clipboard). The compositor delivers pointer events here before JS sees them
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
+pub(crate) mod retained;
 pub(crate) mod async_jobs;
 pub(crate) mod date_format;
 pub(crate) mod civil_date;
@@ -55,6 +56,9 @@ pub trait NativeApp {
     /// Active media may need timely control even when its window loses focus.
     fn background_refresh_ms(&self) -> Option<f64> { None }
     fn request(&mut self, input: &Value) -> Value;
+    /// Full specification behind a revisioned marker. Retaining it lets the
+    /// host recover after a conditional unmount or presentation-context change.
+    fn retained_tree(&self, _key: &str) -> Option<&Value> { None }
     /// Custom native editors share the host's text-focus and paste routing.
     fn text_input(&self) -> bool { false }
     fn paste(&mut self, _text: &str) -> Option<Value> { None }
@@ -333,3 +337,6 @@ pub extern "C" fn axia_view_timeout(now: f64) -> f64 {
 pub extern "C" fn axia_view_pending() -> i32 {
     with(|r| i32::from(r.hosts.values().any(Host::pending)))
 }
+
+#[cfg(test)]
+mod revision_tests;

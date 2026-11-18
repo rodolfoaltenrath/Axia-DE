@@ -81,7 +81,7 @@ export function launcherRequest(args) {
 
 // This store mirrors Rust's reply so React can subscribe and bind callable icon
 // components. Catalog assembly, Unicode, categories and ordering belong to Rust.
-const launcherCatalog = createStore({ apps: [], byId: new Map() });
+export const launcherCatalog = createStore({ apps: [], byId: new Map() });
 export const launcherApp = (id) => launcherCatalog.get().byId.get(id);
 function syncLauncher() {
   const catalogText = (language) => typeof lord.locale?.catalog === 'function' ? lord.locale.catalog(language, 'apps') || '' : '';

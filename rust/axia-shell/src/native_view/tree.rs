@@ -14,7 +14,8 @@ use serde_json::{json, Map, Value};
 const KEYS: [&str; 4] = ["ArrowDown", "ArrowUp", "Enter", "Tab"];
 
 pub struct Tree {
-    last: Value,
+    source: Value,
+    menu_state: Option<(i64, i64, i64)>,
     /// Who the shell gave the view to (several can be mounted): sent back with every effect.
     owner: Value,
     /// The items of the menu node the tree has (a context menu), and the row under the pointer or
@@ -26,7 +27,7 @@ pub struct Tree {
 }
 impl Default for Tree {
     fn default() -> Self {
-        Self { last: Value::Null, owner: Value::Null, items: Vec::new(), row: -1, sub: -1, sub_row: -1 }
+        Self { source: Value::Null, menu_state: None, owner: Value::Null, items: Vec::new(), row: -1, sub: -1, sub_row: -1 }
     }
 }
 
@@ -73,7 +74,13 @@ fn convert(node: &Value, menu: (i64, i64, i64)) -> Value {
             out
         }
         _ => {
-            let mut out = node.clone();
+            // Clone each widget's own fields once, rather than cloning its
+            // entire descendant tree before recursively replacing children.
+            let mut out = match node.as_object() {
+                Some(fields) => Value::Object(fields.iter().filter(|(k, _)| k.as_str() != "children" || !node["children"].is_array())
+                    .map(|(k, v)| (k.clone(), v.clone())).collect()),
+                None => return node.clone(),
+            };
             if let Some(children) = node["children"].as_array() {
                 out["children"] = Value::Array(children.iter().map(|c| convert(c, menu)).collect());
             }
@@ -93,16 +100,18 @@ impl NativeApp for Tree {
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
                 self.owner = input["args"]["owner"].clone();
+                let state = (self.row, self.sub, self.sub_row);
+                if self.menu_state == Some(state) && input["args"]["tree"] == self.source {
+                    return json!({"same":true});
+                }
                 let items = menu_items(&input["args"]["tree"]).unwrap_or_default();
                 if items != self.items {
                     self.items = items;
                     (self.row, self.sub, self.sub_row) = (-1, -1, -1);
                 }
                 let tree = if input["args"]["tree"].is_object() { convert(&input["args"]["tree"], (self.row, self.sub, self.sub_row)) } else { Value::Null };
-                if tree == self.last {
-                    return json!({"same":true});
-                }
-                self.last = tree.clone();
+                self.source = input["args"]["tree"].clone();
+                self.menu_state = Some((self.row, self.sub, self.sub_row));
                 json!({"tree":tree})
             }
             "menuHover" => {

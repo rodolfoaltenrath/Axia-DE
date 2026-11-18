@@ -27,6 +27,8 @@ pub struct Note {
     pub updated: String,
     #[serde(skip)]
     pub preview: String,
+    #[serde(skip)]
+    pub body_revision: u64,
 }
 pub fn title(body: &str) -> String {
     let line = body
@@ -291,6 +293,7 @@ impl Session {
         if let Some(n) = self.list.iter_mut().find(|n| n.slug == slug) {
             if let Some(body) = patch["body"].as_str() {
                 n.body = body.into();
+                n.body_revision = n.body_revision.wrapping_add(1);
                 n.preview = preview(body);
                 let t = title(body);
                 if !t.is_empty() {
@@ -366,6 +369,7 @@ impl Session {
             slug: slug.clone(),
             title: title(&body),
             preview: preview(&body),
+            body_revision: 0,
             body,
             color: if COLORS.contains(&color) {
                 color
@@ -694,6 +698,7 @@ pub(super) fn load(home: &Path) -> io::Result<Vec<Note>> {
         list.push(Note {
             slug,
             preview: preview(&body),
+            body_revision: 0,
             body,
             title,
             color: m["color"]

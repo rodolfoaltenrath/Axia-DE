@@ -4,6 +4,21 @@ use std::{
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
 };
+// Inspect the complete retained specifications, as the native host does on mount.
+fn expanded(app: &App, value: &Value) -> Value {
+    if value["retained"] == true {
+        return expanded(app, app.retained_tree(value["key"].as_str().unwrap()).unwrap());
+    }
+    let mut out = value.clone();
+    if let Some(children) = value["children"].as_array() {
+        out["children"] = Value::Array(children.iter().map(|v| expanded(app, v)).collect());
+    }
+    out
+}
+fn full_tree(app: &mut App, now: i64) -> Value {
+    let marker = ui::tree(app, now);
+    expanded(app, &marker)
+}
 struct Home(PathBuf);
 impl Home {
     fn new() -> Self {
@@ -288,7 +303,7 @@ fn formatting_menu_and_composition_are_native_and_copy_does_not_erase_empty_clip
         json!(["format", "bold"])
     );
     app.composition = json!({"preedit":"にほん","candidates":["日本","二本"],"selected":0});
-    let tree = ui::tree(&mut app, 1002).to_string();
+    let tree = full_tree(&mut app, 1002).to_string();
     assert!(tree.contains("にほん") && tree.contains("日本"));
     app.editor.reset("code");
     app.editor.focused = true;
@@ -427,14 +442,63 @@ fn summaries_are_reused_and_sidebar_mounts_only_visible_rows() {
         if v["key"] == key { return Some(v); }
         v["children"].as_array()?.iter().find_map(|c| find(c, key))
     }
-    let tree = ui::tree(&mut app, 1000);
+    let tree = full_tree(&mut app, 1000);
     let first = find(&tree, "notes-list").unwrap();
     assert!(first["children"].as_array().unwrap().len() < 15);
     app.command("sidebarWheel", &json!({"deltaY":6000}), 1001);
-    let tree = ui::tree(&mut app, 1001);
+    let tree = full_tree(&mut app, 1001);
     let next = find(&tree, "notes-list").unwrap();
     assert_ne!(first["children"][0]["key"], next["children"][0]["key"]);
     app.command("query", &json!({"value":"new preview"}), 1002);
     assert_eq!(app.sidebar_offset, 0.);
-    assert!(ui::tree(&mut app, 1002).to_string().contains("Changed"));
+    assert!(full_tree(&mut app, 1002).to_string().contains("Changed"));
+}
+
+#[test]
+fn retained_notes_regions_track_content_selection_query_and_presentation() {
+    let home = Home::new();
+    let mut app = app_at(&home);
+    app.command("new", &json!({}), 1000);
+    let slug = app.note().unwrap().slug;
+    store::with(home.path(), |s| s.update(&slug, &json!({"body":"# First\n\n## Section\nBody"}), true, 1001));
+    app.mode = "read".into();
+    full_tree(&mut app, 1002);
+    let reader = app.reader_tree.tree("notes-reader").unwrap().clone();
+    let sidebar = app.sidebar_tree.tree("sidebar").unwrap().clone();
+    full_tree(&mut app, 1003);
+    assert_eq!(app.reader_tree.tree("notes-reader"), Some(&reader));
+    assert_eq!(app.sidebar_tree.tree("sidebar"), Some(&sidebar));
+    // Unrelated chrome changes keep Markdown and sidebar trees intact.
+    app.panel = "more".into(); full_tree(&mut app, 1004);
+    assert_eq!(app.reader_tree.tree("notes-reader"), Some(&reader));
+    assert_eq!(app.sidebar_tree.tree("sidebar"), Some(&sidebar));
+    store::with(home.path(), |s| s.update(&slug, &json!({"body":"# Replacement\n\n## Section\nUpdated"}), true, 1005));
+    let tree = full_tree(&mut app, 1006);
+    assert!(tree.to_string().contains("Replacement"));
+    assert_ne!(app.reader_tree.tree("notes-reader").unwrap()["revision"], reader["revision"]);
+    assert_ne!(app.sidebar_tree.tree("sidebar").unwrap()["revision"], sidebar["revision"]);
+    app.query = "no matches".into(); full_tree(&mut app, 1007);
+    let sidebar = app.sidebar_tree.tree("sidebar").unwrap().clone();
+    assert!(!sidebar.to_string().contains("Replacement"));
+    app.query.clear(); full_tree(&mut app, 1008);
+    assert!(app.sidebar_tree.tree("sidebar").unwrap().to_string().contains("Replacement"));
+    let reader_revision=app.reader_tree.tree("notes-reader").unwrap()["revision"].clone();
+    app.mode="edit".into(); full_tree(&mut app, 1009);
+    assert!(app.reader_tree.tree("notes-reader").is_none());
+    app.mode="read".into();full_tree(&mut app,1010);
+    assert_ne!(app.reader_tree.tree("notes-reader").unwrap()["revision"],reader_revision);
+    let mut facts=json!({"cmd":"sync","lang":"en","args":{},"context":{"width":860,"height":560,"theme":{"text":"#222"}}});
+    app.request_at(&facts,1011);
+    let old=app.reader_tree.tree("notes-reader").unwrap()["revision"].clone();
+    for (key,value) in [("width",json!(980)),("height",json!(640)),("theme",json!({"text":"#fff"}))] {
+        facts["context"][key]=value; app.request_at(&facts,1012);
+        assert_ne!(app.reader_tree.tree("notes-reader").unwrap()["revision"],old);
+    }
+    let old=app.sidebar_tree.tree("sidebar").unwrap()["revision"].clone();
+    facts["lang"]=json!("pt");facts["settings"]=json!({"region":"BR"});app.request_at(&facts,1013);
+    assert_ne!(app.sidebar_tree.tree("sidebar").unwrap()["revision"],old);
+    // Another note has its own body revision even when both start at zero.
+    app.command("new",&json!({}),1014);app.mode="read".into();full_tree(&mut app,1015);
+    assert_ne!(app.note().unwrap().slug,slug);
+    assert!(!app.reader_tree.tree("notes-reader").unwrap().to_string().contains("Replacement"));
 }

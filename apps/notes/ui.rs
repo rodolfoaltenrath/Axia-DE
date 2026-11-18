@@ -395,9 +395,14 @@ pub(super) fn tree(app: &mut App, now: i64) -> Value {
     }
     let content = if let Some(n) = &note {
         let body = if app.mode == "edit" {
+            app.reader_tree.clear();
             app.editor.render(now)
         } else {
-            read(app, n, body_width)
+            let mut cache = std::mem::take(&mut app.reader_tree);
+            let body = cache.render("notes-reader", json!([app.ui_revision, n.slug, n.body_revision, body_width, app.widget, app.toc]), ||
+                v("notes-reader", json!({"flex":1}), vec![read(app, n, body_width)]));
+            app.reader_tree = cache;
+            body
         };
         let toolbar = if app.widget {
             let mut bar = store::COLORS
@@ -488,42 +493,16 @@ pub(super) fn tree(app: &mut App, now: i64) -> Value {
     };
     let mut children = vec![];
     if !app.widget {
-        let notes = store::with(&app.home, |s| s.sidebar(&app.query));
-        let height = sidebar_height(app);
-        let full = notes.len() as f64 * SIDEBAR_ROW;
-        app.sidebar_offset = app.sidebar_offset.clamp(0., (full - height).max(0.));
-        let first = (app.sidebar_offset / SIDEBAR_ROW).floor() as usize;
-        let count = (height / SIDEBAR_ROW).ceil() as usize + 2;
-        let mut rows = Vec::new();
-        for (i, n) in notes.iter().enumerate().skip(first).take(count) {
-            let selected = note.as_ref().is_some_and(|x| x.slug == n.slug);
-            let date = note_date(app, &n.updated);
-            let mut colors = t.clone();
-            if selected { colors["text"] = json!("#fff"); colors["textDim"] = json!("rgba(255,255,255,0.75)"); }
-            let caption = if n.title.is_empty() { key("notes.untitled") } else { json!(n.title) };
-            let mut title = label(caption, &colors, false);
-            title["style"]["whiteSpace"] = json!("nowrap");
-            title["style"]["textOverflow"] = json!("ellipsis");
-            let mut detail = label(json!(format!("{date} {}", if n.desktop { app.i18n.caption(&key("notes.onDesktop")) } else { n.preview.clone() })), &colors, true);
-            detail["style"]["whiteSpace"] = json!("nowrap");
-            detail["style"]["textOverflow"] = json!("ellipsis");
-            let mut row = click(v(&n.slug, json!({"position":"absolute","left":0,"right":8,"top":i as f64*SIDEBAR_ROW-app.sidebar_offset,"height":SIDEBAR_ROW-2.,"flexDirection":"row","gap":10,"paddingVertical":9,"paddingHorizontal":10,"borderRadius":8,"backgroundColor":if selected{t["accent"].clone()}else{json!("transparent")}}), vec![
-                dot(&n.color, false, 8.), v("summary", json!({"flex":1,"minWidth":0,"gap":2}), vec![title, detail])]), json!(["select",n.slug]));
-            row["tooltip"] = json!(n.title);
-            rows.push(row);
-        }
-        if full > height {
-            let thumb = (height * height / full).max(24.).min(height);
-            let mut bar = v("notes-scrollbar", json!({"position":"absolute","right":0,"top":app.sidebar_offset/(full-height)*(height-thumb),"width":6,"height":thumb,"borderRadius":3,"backgroundColor":t["textDim"]}), vec![]);
-            bar["events"]["onMouseDown"] = json!(["sidebarDrag"]);
-            rows.push(bar);
-        }
-        let mut list = v("notes-list", json!({"flex":1,"minHeight":0,"overflow":"hidden"}), rows);
-        list["events"]["onWheel"] = json!(["sidebarWheel"]);
-        let mut add = button(json!("✎"), "new", Value::Null, false);
-        add["disabled"] = json!(!store::with(&app.home, |s| s.ready()));
-        children.push(v("sidebar",json!({"width":side,"backgroundColor":t["sidebarBg"],"paddingTop":12,"paddingHorizontal":10,"gap":10,"borderEndWidth":1,"borderEndColor":t["separator"]}),vec![row("search",vec![input("query",&app.query,key("notes.search")),add]),list]));
-    }
+        let (revision, count) = store::with(&app.home, |s| (s.revision, s.sidebar(&app.query).len()));
+        app.sidebar_offset = app.sidebar_offset.clamp(0., (count as f64 * SIDEBAR_ROW - sidebar_height(app)).max(0.));
+        let signature = json!([app.ui_revision, revision, app.query, app.sidebar_offset,
+            app.width, app.height, note.as_ref().map(|n| n.slug.as_str())]);
+        let mut cache = std::mem::take(&mut app.sidebar_tree);
+        let sidebar = cache.render("sidebar", signature, || sidebar(app, &t, note.as_ref(), side));
+        app.sidebar_tree = cache;
+        children.push(sidebar);
+    } else { app.sidebar_tree.clear(); }
+
     children.push(content);
     let error = store::with(&app.home, |s| s.error.clone());
     if !app.error.is_empty() || !error.is_empty() {
@@ -547,6 +526,44 @@ pub(super) fn tree(app: &mut App, now: i64) -> Value {
         root["events"]["onMouseLeave"] = json!(["hover", "off"]);
     }
     root
+}
+
+fn sidebar(app: &mut App, t: &Value, note: Option<&store::Note>, side: f64) -> Value {
+    let notes = store::with(&app.home, |s| s.sidebar(&app.query));
+    let height = sidebar_height(app);
+    let full = notes.len() as f64 * SIDEBAR_ROW;
+    app.sidebar_offset = app.sidebar_offset.clamp(0., (full - height).max(0.));
+    let first = (app.sidebar_offset / SIDEBAR_ROW).floor() as usize;
+    let count = (height / SIDEBAR_ROW).ceil() as usize + 2;
+    let mut rows = Vec::new();
+    for (i, n) in notes.iter().enumerate().skip(first).take(count) {
+        let selected = note.as_ref().is_some_and(|x| x.slug == n.slug);
+        let date = note_date(app, &n.updated);
+        let mut colors = t.clone();
+        if selected { colors["text"] = json!("#fff"); colors["textDim"] = json!("rgba(255,255,255,0.75)"); }
+        let caption = if n.title.is_empty() { key("notes.untitled") } else { json!(n.title) };
+        let mut title = label(caption, &colors, false);
+        title["style"]["whiteSpace"] = json!("nowrap");
+        title["style"]["textOverflow"] = json!("ellipsis");
+        let mut detail = label(json!(format!("{date} {}", if n.desktop { app.i18n.caption(&key("notes.onDesktop")) } else { n.preview.clone() })), &colors, true);
+        detail["style"]["whiteSpace"] = json!("nowrap");
+        detail["style"]["textOverflow"] = json!("ellipsis");
+        let mut row = click(v(&n.slug, json!({"position":"absolute","left":0,"right":8,"top":i as f64*SIDEBAR_ROW-app.sidebar_offset,"height":SIDEBAR_ROW-2.,"flexDirection":"row","gap":10,"paddingVertical":9,"paddingHorizontal":10,"borderRadius":8,"backgroundColor":if selected{t["accent"].clone()}else{json!("transparent")}}), vec![
+            dot(&n.color, false, 8.), v("summary", json!({"flex":1,"minWidth":0,"gap":2}), vec![title, detail])]), json!(["select",n.slug]));
+        row["tooltip"] = json!(n.title);
+        rows.push(row);
+    }
+    if full > height {
+        let thumb = (height * height / full).max(24.).min(height);
+        let mut bar = v("notes-scrollbar", json!({"position":"absolute","right":0,"top":app.sidebar_offset/(full-height)*(height-thumb),"width":6,"height":thumb,"borderRadius":3,"backgroundColor":t["textDim"]}), vec![]);
+        bar["events"]["onMouseDown"] = json!(["sidebarDrag"]);
+        rows.push(bar);
+    }
+    let mut list = v("notes-list", json!({"flex":1,"minHeight":0,"overflow":"hidden"}), rows);
+    list["events"]["onWheel"] = json!(["sidebarWheel"]);
+    let mut add = button(json!("✎"), "new", Value::Null, false);
+    add["disabled"] = json!(!store::with(&app.home, |s| s.ready()));
+    v("sidebar",json!({"width":side,"backgroundColor":t["sidebarBg"],"paddingTop":12,"paddingHorizontal":10,"gap":10,"borderEndWidth":1,"borderEndColor":t["separator"]}),vec![row("search",vec![input("query",&app.query,key("notes.search")),add]),list])
 }
 
 fn direction(body: &str) -> &'static str {

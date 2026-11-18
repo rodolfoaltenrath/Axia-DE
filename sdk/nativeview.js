@@ -4,8 +4,8 @@
 // module only gives the view a mount node inside the window manager's frame, sends it the facts it
 // reads (settings, theme, services, catalog, focus) and runs the effects that belong to the shell:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
-import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { View, screen, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
+import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState, useMemo, memo } from 'react';
+import { View, screen, onScreenChange, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
 import { LAYERS, shellLayers } from './layers.js';
 import { filesEffect } from './nativefiles.js';
 import { barEffect } from './nativemenubar.js';
@@ -15,17 +15,18 @@ import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
-import { useLocale, formatNumber } from './i18n.js';
-import { useWindows, wm, appCatalogSource } from './windows.js';
-import { useLauncherApps, launchApp, appIconFacts } from './apps.js';
+import { locale, useLocale, formatNumber } from './i18n.js';
+import { windows, appRegistry, wm, appCatalogSource } from './windows.js';
+import { launcherCatalog, launchApp, appIconFacts } from './apps.js';
 import { refreshPackages } from './packages.js';
-import { useSettings, settings } from './settings.js';
+import { settings } from './settings.js';
 import { appName } from './i18n.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { appControlFacts, forceQuit } from './appcontrol.js';
 import { executeNativeEffect } from './nativeappmodel.js';
 import { disks } from './disks.js';
+import { createFactsStore, createFactsEncoder, emptyFactsStore, sameFacts, sameRecord, nativeTheme } from './nativeviewfacts.js';
 // The nodes of the shell layers a native view may put its menus and popovers in ("layer": "popover").
 // Only when the shell has layers; otherwise the views stay in their window.
 const LAYER_NAMES = ['popover', 'modal', 'tooltip'];
@@ -35,7 +36,10 @@ function layerFacts() {
   for (const name of LAYER_NAMES) { const id = layerContainer(LAYERS[name])?.id; if (id) out[name] = id; }
   return out;
 }
-const emptyClock = { get: () => null, subscribe: () => () => {} };
+const screenFacts = {
+  get: () => `${screen.width}:${screen.height}`,
+  subscribe: fn => onScreenChange(fn),
+};
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
@@ -45,6 +49,17 @@ export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, ve
   package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
   iconData: appIconFacts(app),
   category: typeof app.category === 'string' ? app.category : undefined });
+
+// Only consumers of these facts subscribe. Geometry/focus changes do not
+// prepare Force Quit's app metadata; catalogs are shared across all mounts.
+const preferenceFacts = createFactsStore([settings], () => settings.get(), () => settings.get());
+const catalogFacts = createFactsStore([launcherCatalog, appRegistry, locale],
+  () => [launcherCatalog.get(), appRegistry.get(), locale.get()],
+  () => ({ catalog: launcherCatalog.get().apps.map(appFacts),
+    registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) }));
+const windowFacts = createFactsStore([windows, launcherCatalog, appRegistry, locale],
+  () => [windows.get().map(w => [w.id, w.app, w.title, w.args?.appId, w.args?.surface, w.args?.x11, w.args?.pkg]),
+    launcherCatalog.get(), appRegistry.get(), locale.get()], appControlFacts);
 
 const runners = new Map();          // handle → runs one effect
 // A shell component that runs the effects of its own view (the title bar): returns the way to stop.
@@ -127,7 +142,7 @@ function services(manifest, previous = {}, sampled = {}) {
       try { value[service][method] = source?.[method]?.() ?? null; } catch (_) { value[service][method] = null; }
     }
   }
-  return value;
+  return sameFacts(previous, value) ? previous : value;
 }
 
 // An app's icon (`icon` points): all the view needs is its size and its args. It subscribes to nothing
@@ -158,58 +173,77 @@ function NativeIcon({ manifest, args, icon }) {
 export function NativeView(props) { return props.icon ? h(NativeIcon, props) : h(NativeApp, props); }
 
 // args: the window's (or a Settings section's).
-function NativeApp({ manifest, args, icon, style, mountRef }) {
-  const theme = useTheme(), win = useAppWindow() || {}, catalog = useLauncherApps();
+function NativeApp(props) {
+  const source = useTheme(), win = useAppWindow() || {};
   const { lang, region, dir, revision: localeRevision = 0 } = useLocale();
-  useWindows();
-  const [preferences] = useSettings();
-  const clock = useStore(manifest.facts === 'clock' && !icon ? clockState : emptyClock);
+  const theme = nativeTheme(source, props.manifest), previous = useRef(null), previousArgs = useRef(null);
+  if (!sameRecord(previous.current, theme)) previous.current = theme;
+  const args = props.args || null;
+  if (!sameRecord(previousArgs.current, args)) previousArgs.current = args;
+  // Window context objects may be recreated by their parent frame. Only facts
+  // actually read by this mount cross the memo boundary.
+  return h(NativeBridge, { ...props, args: previousArgs.current, theme: previous.current, lang, region: region || '', dir,
+    localeRevision, winId: win.id, focused: win.focused !== false, windowMode: win.mode });
+}
+const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, theme, lang, region, dir, localeRevision, winId, focused, windowMode }) {
+  const preferences = useStore(manifest.settings ? preferenceFacts : emptyFactsStore);
+  const apps = useStore(manifest.facts === 'apps' ? catalogFacts : emptyFactsStore);
+  const appWindows = useStore(manifest.facts === 'windows' ? windowFacts : emptyFactsStore);
+  const clock = useStore(manifest.facts === 'clock' ? clockState : emptyFactsStore);
+  useStore(manifest.facts === 'system' ? screenFacts : emptyFactsStore);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
+  const [encoder] = useState(createFactsEncoder);
   const owner = useRef(null);
-  useLayoutEffect(() => { if (mountRef) mountRef.current = ref.current; });      // for a shell view that asks where it is
-  // a shell view (the menu bar) is in no window: the context's default says unfocused
-  owner.current = { focused: !!manifest.shell || win.focused !== false, shell: !!manifest.shell };
+  useLayoutEffect(() => { if (mountRef) mountRef.current = ref.current; });
+  owner.current = { focused: !!manifest.shell || focused, shell: !!manifest.shell };
   const ownsKeyboard = () => owner.current.focused && !textFieldActive()
     && (owner.current.shell || !shellHasKeyboard());
   const [sampled] = useState(() => ({}));
-  const [polled, setPolled] = useState(() => (manifest.services && !icon ? services(manifest, {}, sampled) : {}));
+  const [polled, setPolled] = useState(() => (manifest.services ? services(manifest, {}, sampled) : {}));
   useEffect(() => {
-    if (!manifest.services || icon) return undefined;
+    if (!manifest.services) return undefined;
     const id = setInterval(() => setPolled(previous => services(manifest, previous, sampled)), 1000);
     return () => clearInterval(id);
-  }, [manifest, icon]);
-  const { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection } = theme;
-  const facts = icon ? { icon, args: args || {} } : {
-    args: { ...(args || {}), ...(manifest.defaultArgs || {}) }, keyboard: !!manifest.keyboard, lang, focused: ownsKeyboard(), layers: layerFacts(), refreshMs: manifest.refreshMs || 0,
-    width: manifest.size?.[0] || 1000,
-    settings: manifest.settings ? preferences : undefined,
-    services: { ...polled, ...(clock ? { $clock: clock } : {}) },
-    ...(manifest.facts === 'windows' ? { windows: appControlFacts() } : {}),
-    ...(manifest.facts === 'apps' ? { catalog: catalog.map(appFacts),
-      registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) } : {}),
-    // Files reads many more tokens than the other native apps: all of them (not the catalogs of wallpapers and accents)
-    context: { windowMode: win.mode, region: region || '', direction: dir, localeRevision, theme: manifest.themeCatalogs ? theme : manifest.fullTheme ? (({ wallpapers, accents, ...tokens }) => tokens)(theme)
-        : { text, textDim, accent, separator, mode, nativeStyle, windowBg, inputBg, control, controlRadius, controlRadiusSmall, buttonBorder, sidebarBg, hover, selection },
-      scale: typeScale, decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3),
-      ...(manifest.facts === 'system' ? { screen: { width: screen.width, height: screen.height }, reactVersion, version: lord.version } : {}) },
-  };
-  const json = JSON.stringify(facts);
+  }, [manifest]);
+  const windowArgs = useMemo(() => ({ ...(args || {}), ...(manifest.defaultArgs || {}) }), [args, manifest.defaultArgs]);
+  const liveServices = useMemo(() => ({ ...polled, ...(clock ? { $clock: clock } : {}) }), [polled, clock]);
+  const formats = useMemo(() => ({ decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3) }), [lang, region, localeRevision]);
+  // Each block has its own revision/encoding. Focusing a window reuses the
+  // theme/settings/catalog strings rather than stringifying the complete facts.
+  const block = (name, value) => encoder.block(name, value);
+  const contextFields = { theme: block('theme', theme), windowMode: block('windowMode', windowMode),
+    region: block('region', region), direction: block('direction', dir), localeRevision: block('localeRevision', localeRevision),
+    scale: block('scale', typeScale), decimal: block('decimal', formats.decimal), group: block('group', formats.group),
+    ...(manifest.facts === 'system' ? { screen: block('screen', { width: screen.width, height: screen.height }),
+      reactVersion: block('reactVersion', reactVersion), version: block('version', lord.version) } : {}) };
+  const context = `{${Object.entries(contextFields).filter(([, value]) => value !== undefined).map(([key, value]) => `"${key}":${value}`).join(',')}}`;
+  const parts = [
+    `"args":${block('args', windowArgs)}`, `"keyboard":${block('keyboard', !!manifest.keyboard)}`,
+    `"lang":${block('lang', lang)}`, `"focused":${block('focused', ownsKeyboard())}`,
+    `"refreshMs":${block('refreshMs', manifest.refreshMs || 0)}`, `"width":${block('width', manifest.size?.[0] || 1000)}`,
+    `"services":${block('services', liveServices)}`, `"context":${context}`,
+  ];
+  const layers = block('layers', layerFacts());
+  if (layers !== undefined) parts.push(`"layers":${layers}`);
+  if (manifest.settings) parts.push(`"settings":${block('settings', preferences)}`);
+  if (appWindows) parts.push(`"windows":${block('windows', appWindows)}`);
+  if (apps) parts.push(`"catalog":${block('catalog', apps.catalog)}`, `"registry":${block('registry', apps.registry)}`);
+  const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {
     const m = mounted.current;
     m.handle = ref.current ? lord.nativeViews.mount(ref.current.id, manifest.id, json) : 0;
     m.sent = json;
     if (!m.handle) return undefined;
-    runners.set(m.handle, runner(m.handle, manifest, win.id, () => ref.current?.id || 0));
-    // Event bridge only: Rust owns volumes, mount policy and sidebar updates.
+    runners.set(m.handle, runner(m.handle, manifest, winId, () => ref.current?.id || 0));
     const sendDisks = () => lord.nativeViews.action(m.handle, { action: ['disks'], extra: { disks: disks.list() } });
-    const stopDisks = manifest.id === 'files' && !icon ? disks.watch(sendDisks) : null;
+    const stopDisks = manifest.id === 'files' ? disks.watch(sendDisks) : null;
     if (stopDisks) sendDisks();
-    const syncFocus = () => { if (!icon) lord.nativeViews.focus(m.handle, ownsKeyboard()); };
+    const syncFocus = () => lord.nativeViews.focus(m.handle, ownsKeyboard());
     const stopText = onTextField(syncFocus), stopShell = onShellKeyboard(syncFocus);
     syncFocus();
     globalThis.__lordNativeView();
     return () => { stopDisks?.(); stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
-  }, [manifest.id, icon]);
+  }, [manifest.id]);
   useEffect(() => {
     const m = mounted.current;
     if (!m.handle || m.sent === json) return;
@@ -217,5 +251,5 @@ function NativeApp({ manifest, args, icon, style, mountRef }) {
     lord.nativeViews.facts(m.handle, json);
     globalThis.__lordNativeView();
   });
-  return h(View, { ref, style: icon ? { width: icon, height: icon } : [{ flex: 1 }, style] });
-}
+  return h(View, { ref, style: [{ flex: 1 }, style] });
+});

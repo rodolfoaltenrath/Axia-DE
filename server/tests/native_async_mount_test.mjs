@@ -11,6 +11,8 @@ globalThis.lord={screen:{width:960,height:620},version:'test',now:()=>0,stats:()
   css:text=>JSON.parse(text),fonts:{list:()=>[]}};
 globalThis.__nativeMountRecords=[];
 const stubs={
+  // This lease/lifecycle fixture does not exercise the interactive file dialog.
+  'rustfiles.js':'export const RustFileDialog=()=>null;',
   'widgets.js':'export const registerWidgetType=()=>{};export const setWidgets=()=>{};',
   'ime.js':'export const imeState={get:()=>({}),subscribe:()=>()=>{}};',
   'textfocus.js':'export const textFieldActive=()=>false;',
@@ -30,7 +32,10 @@ const stubs={
   'settings.js':`export const settings={get:()=>({}),set(){}};export const useSettings=()=>[{},()=>{}];`,
   'sound.js':`export const soundState={get:()=>({sources:[]}),subscribe:()=>()=>{}};`,
   'backup.js':`export const backup={};export const backupStatus={get:()=>null,subscribe:()=>()=>{}};`,
-  'windows.js':`export const wm={open:()=>null};`,
+  'windows.js':`export const wm={open:()=>null};export const windows={get:()=>[],subscribe:()=>()=>{}};`,
+  'packages.js':`export const isolatedApp=(id,App)=>App;`,
+  'mail.js':`export const mailRequest=()=>null;export const onMailEvent=()=>()=>{};`,
+  'native_system_services.js':`export const systemServices=()=>({});`,
 };
 const result=await build({stdin:{resolveDir:root,contents:`
   import React from 'react'; import {render} from '@lordos/runtime';
@@ -44,7 +49,8 @@ const result=await build({stdin:{resolveDir:root,contents:`
   export async function windows(ids){await flush();update(ids);await flush();}
 `},bundle:true,write:false,format:'esm',platform:'node',define:{'process.env.NODE_ENV':'"production"'},alias:{'@lordos/runtime':path.join(root,'runtime/index.js')},plugins:[{
   name:'native-endpoints',setup(b){
-    b.onResolve({filter:/sdk\/(widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
+    b.onResolve({filter:/native_system_services\.js$/},()=>({path:'native_system_services.js',namespace:'fake-sdk'}));
+    b.onResolve({filter:/sdk\/(packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
   },
 }]});
