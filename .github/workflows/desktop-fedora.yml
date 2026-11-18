@@ -27,6 +27,8 @@ jobs:
         run: |
           cargo +nightly-2026-11-09 miri test --manifest-path rust/Cargo.toml --target-dir '${{ runner.temp }}/axia-runtime-miri' --locked --offline --lib runtime::
   desktop:
+    env:
+      CARGO_BUILD_JOBS: '2'
     strategy:
       matrix:
         gpu: [0, 1]
@@ -43,7 +45,14 @@ jobs:
       - name: Desktop model regression tests
         run: |
           node server/tests/shortcut_profile_test.mjs
-      - run: make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
+      - name: Build and test desktop with memory telemetry
+        run: python3 tools/desktop/build_memory.py --output "$RUNNER_TEMP/desktop-memory.json" -- make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-memory-${{ matrix.gpu }}
+          path: ${{ runner.temp }}/desktop-memory.json
+          if-no-files-found: warn
       - name: Rust runtime ABI and renderer regressions
         if: matrix.gpu == 1
         run: |
@@ -94,7 +103,13 @@ jobs:
       - name: Build and check the binary RPM
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/rpmbuild"
-          rpmbuild --rebuild --define "_topdir $GITHUB_WORKSPACE/build/rpmbuild" build/srpm/*.src.rpm
+          python3 tools/desktop/build_memory.py --output "$RUNNER_TEMP/rpm-memory.json" -- rpmbuild --rebuild --define "_topdir $GITHUB_WORKSPACE/build/rpmbuild" build/srpm/*.src.rpm
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpm-memory
+          path: ${{ runner.temp }}/rpm-memory.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: axia-de-fedora-44

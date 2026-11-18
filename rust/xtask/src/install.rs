@@ -44,11 +44,12 @@ const REQUIRED: [&str; 5] = [
     "code-manifest.json",
 ];
 
-const DOCS: [&str; 9] = [
+const DOCS: [&str; 10] = [
     "STANDALONE.md",
     "COPR-UPDATES.md",
     "REPOSITORY.md",
     "RUST.md",
+    "RUST-BUILD.md",
     "FEDORA-NETWORK-TRAY.md",
     "DOCK-PREVIEWS.md",
     "FILES.md",

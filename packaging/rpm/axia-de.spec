@@ -72,6 +72,8 @@ It does not replace the display manager or enable system services.
 # cargo xtask dist includes the frontend built from package-lock.json. No network access
 # or Node.js runtime is needed to compile or run this local RPM.
 %set_build_flags
+# Bound concurrent app crates as well as the main shell/benchmark builds.
+export CARGO_BUILD_JOBS=2
 # Include the accelerated compositor; runtime detection retains CPU fallback.
 %make_build -C server GPU=1
 test -x server/build/axia-media
@@ -83,10 +85,9 @@ install -Dpm 644 packaging/systemd/axia-update.service %{buildroot}%{_unitdir}/a
 install -Dpm 644 packaging/systemd/axia-update.timer %{buildroot}%{_unitdir}/axia-update.timer
 
 %check
-# cargo test compiles axia-shell twice (the library and its tests), about 7-8 GB of rustc each with
-# the Fedora flags (debuginfo, one codegen unit); together they killed 16 GB builders. One job at a time.
-export CARGO_BUILD_JOBS=1
-%make_build -C server GPU=1 test-platform
+# Rust unit/integration tests run in desktop CI before the RPM job.
+# Keep platform tests here without rebuilding Rust in its test profile.
+CARGO_BUILD_JOBS=1 %make_build -C server GPU=1 test-platform SKIP_RUST_TESTS=1
 %make_build -C server GPU=1 build/tp-test
 server/build/tp-test
 python3 tools/desktop/check.py --require-gpu

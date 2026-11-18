@@ -711,7 +711,7 @@ A cópia é um efeito do host para a área de transferência do sistema.
 
 ## Serviço de alarmes, temporizador e cronômetro
 
-`rust/axia-shell/src/clock/` é o modelo de sessão do Relógio. Ele conserva os
+`rust/axia-clock/src/` é o modelo de sessão do Relógio. Ele conserva os
 formatos de `settings.clock`, a soneca de 9 minutos, a janela de atraso de
 10 minutos, a duração para repetir o temporizador e as 200 voltas mais recentes.
 A recorrência usa o calendário local, incluindo mudanças de horário de verão;
@@ -976,3 +976,5 @@ struct `Term` e as que ela contém são `#[repr(C)]`, campo a campo, porque
 `term.c`, `term_paint.c` e `js_term.c` as leem e escrevem diretamente. Detalhes,
 o defeito corrigido na migração e a validação em [RUST-VT.md](RUST-VT.md).
 
+
+Native app crate boundaries and build memory policy: [RUST-BUILD.md](RUST-BUILD.md).
