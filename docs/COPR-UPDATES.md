@@ -23,6 +23,24 @@ uma falha deixa o job vermelho. Sem as variáveis de integração, a CI produz o
 artefatos e pula a publicação. Não configure um webhook paralelo se usar esse
 fluxo: ele produziria builds duplicadas sem o mesmo bloqueio pelos testes.
 
+O envio e o acompanhamento são separados em `tools/desktop/copr_publish.py`.
+O upload acontece uma vez; depois, somente as consultas de status são repetidas
+em caso de conexão interrompida, timeout, HTTP 429 ou erro HTTP 5xx. A espera
+entre tentativas cresce de 15 até 120 segundos. O acompanhamento termina após
+oito erros consecutivos ou duas horas, sem presumir que o build remoto falhou.
+Falhas reais do build e erros permanentes da API continuam deixando o job vermelho.
+
+Assim que o Copr aceita o SRPM, o ID e o link aparecem no resumo do job e no
+artefato `copr-build` (`build.json`), inclusive se o acompanhamento falhar depois.
+Para consultar um build já enviado, sem credenciais e sem enviar outro pacote:
+
+```sh
+python3 tools/desktop/copr_publish.py --build-id 11350158
+```
+
+Uma falha de conexão no Actions não cancela o build no Copr. Confira esse ID
+antes de reexecutar o job inteiro de publicação, que faria um novo envio.
+
 Cada SRPM recebe `Release: 3.<data UTC com microssegundos>.git<commit>.fc44`
 (o número inicial vem do spec). Isso é mais novo que o `0.8.7-2.fc44` instalado,
 e builds posteriores recebem releases crescentes pelo relógio do builder.

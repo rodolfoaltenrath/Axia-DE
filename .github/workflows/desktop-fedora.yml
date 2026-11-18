@@ -133,7 +133,10 @@ jobs:
       group: copr-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - run: dnf install -y copr-cli
+      - run: dnf install -y git copr-cli
+      - uses: actions/checkout@v4
+      - name: Copr submission and polling regression tests
+        run: python3 -m unittest discover -s tools/desktop/tests -p test_copr_publish.py -v
       - uses: actions/download-artifact@v4
         with:
           name: axia-de-fedora-44
@@ -142,34 +145,10 @@ jobs:
         env:
           COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
           COPR_PROJECT: ${{ vars.COPR_PROJECT }}
-        run: |
-          python3 - <<'PY'
-          import configparser
-          import os
-          from pathlib import Path
-          import re
-          import subprocess
-          import tempfile
-
-          project = os.environ['COPR_PROJECT']
-          if not re.fullmatch(r'@?[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+', project):
-              raise SystemExit('COPR_PROJECT must be OWNER/PROJECT')
-          config = os.environ.pop('COPR_CONFIG')
-          parsed = configparser.ConfigParser(interpolation=None)
-          try:
-              parsed.read_string(config)
-          except configparser.Error:
-              raise SystemExit('COPR_CONFIG must be a valid INI file') from None
-          section = parsed['copr-cli']
-          if any(not section.get(k) for k in ['login', 'username', 'token']):
-              raise SystemExit('COPR_CONFIG is missing Copr credentials')
-          sources = list(Path('packages').rglob('*.src.rpm'))
-          if len(sources) != 1:
-              raise SystemExit('Expected exactly one checked source RPM')
-          with tempfile.TemporaryDirectory() as tmp:
-              path = Path(tmp) / 'copr'
-              path.touch(mode=0o600)
-              path.write_text(config)
-              subprocess.run(['copr-cli', '--config', str(path), 'build',
-                              project, str(sources[0])], check=True)
-          PY
+        run: python3 tools/desktop/copr_publish.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: copr-build
+          path: build/copr/build.json
+          if-no-files-found: ignore
