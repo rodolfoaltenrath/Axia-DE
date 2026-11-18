@@ -85,6 +85,24 @@ jobs:
         run: python3 -m unittest discover -s tools/desktop/tests -v
       - name: Stage installation
         run: make install PREFIX=/usr DESTDIR="$RUNNER_TEMP/axia-de"
+      - name: Calibrate private session idle budgets
+        if: matrix.gpu == 1
+        shell: bash
+        env:
+          AXIA_IDLE_ENFORCE: ${{ vars.AXIA_IDLE_ENFORCE }}
+          AXIA_IDLE_MAX_POLLS: ${{ vars.AXIA_IDLE_MAX_POLLS || '15' }}
+          AXIA_IDLE_MAX_RSS_MIB: ${{ vars.AXIA_IDLE_MAX_RSS_MIB || '120' }}
+        run: |
+          dnf install -y --setopt=install_weak_deps=False strace
+          mode=()
+          if [[ "$AXIA_IDLE_ENFORCE" != true ]]; then mode+=(--report-only); fi
+          python3 tools/desktop/axia_idle_check.py --installation "$RUNNER_TEMP/axia-de/usr/libexec/axia" --output "$RUNNER_TEMP/axia-idle/report.json" --max-polls-per-second "$AXIA_IDLE_MAX_POLLS" --max-rss-mib "$AXIA_IDLE_MAX_RSS_MIB" "${mode[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-idle
+          path: ${{ runner.temp }}/axia-idle/
+          if-no-files-found: warn
   rpm:
     needs: [desktop, runtime-memory]
     runs-on: ubuntu-latest

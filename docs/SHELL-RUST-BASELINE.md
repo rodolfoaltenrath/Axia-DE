@@ -199,7 +199,8 @@ em hardware precisa de orçamento próprio.
 
 Pendências que **não estão concluídas por esta documentação**:
 
-- Implementar e calibrar esse teste no CI; não foi adicionado teste executável.
+- Calibrar o runner e ativar a imposição do orçamento no CI. O coletor executável
+  e os testes de regressão já foram adicionados; veja a seção abaixo.
 - Medir frame completo/primeira apresentação em hardware e ociosidade com os
   serviços reais da sessão. RSS, poll/s e marcadores headless já têm referência.
 - Comparar `lto` e `codegen-units`, mantendo flags da distribuição e o mesmo
@@ -216,6 +217,33 @@ Pendências que **não estão concluídas por esta documentação**:
 O ganho de build do benchmark de 563,96 s para 21,19 s, registrado em
 `RUST-BUILD.md`, vem de reaproveitar artefatos. Ele não é resultado de alterar
 LTO/codegen-units nem evidência de menor consumo da sessão em runtime.
+
+## Coletor executável e calibração no Actions
+
+`tools/desktop/axia_idle_check.py` recebe `--installation` com a raiz instalada
+que contém `bin/`, `assets/` e `themes/`, e `--output` para o JSON. Faz uma cópia
+privada legível em `/var/tmp`, usa `nobody` quando iniciado como root e coleta
+três amostras de 8 s de aquecimento + 20 s de observação, com prioridade baixa.
+O tema original e seu manifesto não são modificados. HOME/XDG são privados e
+as conexões herdadas à sessão gráfica/áudio/D-Bus do dono são removidas.
+
+Por padrão, retorna erro se a mediana ultrapassar 15 poll/s ou 120 MiB. Um
+poll bloqueado durante toda a janela pode produzir zero; um trace ausente,
+uma sessão encerrada cedo ou um tema que falhou são coleta inválida, não passe.
+O JSON e os traces/logs de cada amostra são preservados em falhas ordinárias.
+
+O job desktop executa o coletor após `make install`, só na variante GPU=1,
+sempre com renderização em software. O artifact `axia-idle` inclui JSON e logs.
+Inicialmente usa `--report-only`: registra excessos sem impor números do WSL
+ao runner; falhas de coleta continuam falhando o job. Após três amostras válidas
+no runner, a variável de repositório `AXIA_IDLE_ENFORCE=true` ativa a imposição.
+`AXIA_IDLE_MAX_POLLS` e `AXIA_IDLE_MAX_RSS_MIB` ajustam os limites, inicialmente
+15 e 120. Alterar limites exige registrar as novas condições e medições.
+
+A validação local do coletor passou 40 testes Python e três sessões reais com
+medianas de 12,400 poll/s e 102,539 MiB de RSS. Uma execução com limite de
+0,01 poll/s retornou erro e preservou o relatório de excesso. Nenhuma flag ou
+implementação de C, JS ou React foi otimizada nesta entrega.
 
 ## Instrumentação de referência do ciclo de janelas
 
