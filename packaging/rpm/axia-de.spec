@@ -83,6 +83,9 @@ install -Dpm 644 packaging/systemd/axia-update.service %{buildroot}%{_unitdir}/a
 install -Dpm 644 packaging/systemd/axia-update.timer %{buildroot}%{_unitdir}/axia-update.timer
 
 %check
+# cargo test compiles axia-shell twice (the library and its tests), about 7-8 GB of rustc each with
+# the Fedora flags (debuginfo, one codegen unit); together they killed 16 GB builders. One job at a time.
+export CARGO_BUILD_JOBS=1
 %make_build -C server GPU=1 test-platform
 %make_build -C server GPU=1 build/tp-test
 server/build/tp-test
