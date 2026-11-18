@@ -220,7 +220,7 @@ LTO/codegen-units nem evidência de menor consumo da sessão em runtime.
 
 ## Coletor executável e calibração no Actions
 
-`tools/desktop/axia_idle_check.py` recebe `--installation` com a raiz instalada
+`cargo xtask idle-check` recebe `--installation` com a raiz instalada
 que contém `bin/`, `assets/` e `themes/`, e `--output` para o JSON. Faz uma cópia
 privada legível em `/var/tmp`, usa `nobody` quando iniciado como root e coleta
 três amostras de 8 s de aquecimento + 20 s de observação, com prioridade baixa.
@@ -234,16 +234,33 @@ O JSON e os traces/logs de cada amostra são preservados em falhas ordinárias.
 
 O job desktop executa o coletor após `make install`, só na variante GPU=1,
 sempre com renderização em software. O artifact `axia-idle` inclui JSON e logs.
-Inicialmente usa `--report-only`: registra excessos sem impor números do WSL
+Inicialmente usa `--enforce false`: registra excessos sem impor números do WSL
 ao runner; falhas de coleta continuam falhando o job. Após três amostras válidas
 no runner, a variável de repositório `AXIA_IDLE_ENFORCE=true` ativa a imposição.
 `AXIA_IDLE_MAX_POLLS` e `AXIA_IDLE_MAX_RSS_MIB` ajustam os limites, inicialmente
 15 e 120. Alterar limites exige registrar as novas condições e medições.
 
-A validação local do coletor passou 40 testes Python e três sessões reais com
-medianas de 12,400 poll/s e 102,539 MiB de RSS. Uma execução com limite de
-0,01 poll/s retornou erro e preservou o relatório de excesso. Nenhuma flag ou
-implementação de C, JS ou React foi otimizada nesta entrega.
+O coletor e seus testes estão em Rust, no pacote `xtask`; os arquivos Python
+introduzidos para essa coleta foram removidos. A suíte cobre traces incompletos,
+medianas, limites, argumentos inválidos e falhas da sessão com diagnóstico.
+A integração real, executada separadamente, também verifica o modo de calibração
+e a recusa de regressão forçada. Para reproduzir no Linux com `strace` instalado:
+
+```text
+cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline
+AXIA_IDLE_TEST_INSTALLATION=/caminho/instalado/axia cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test idle real_session_calibration_and_enforcement -- --ignored --nocapture
+cargo xtask idle-check --installation /caminho/instalado/axia --output /var/tmp/axia-idle/report.json --enforce false
+```
+
+A validação Rust passou 30 testes automáticos e a integração real separada.
+As três amostras reais tiveram medianas de 13,050 poll/s e 102,547 MiB de RSS.
+O limite forçado de 0,01 poll/s produz `exceeded`: retorna erro com imposição e
+sucesso em calibração, preservando o relatório em ambos os modos.
+
+Esta substituição não migra as verificações Python anteriores de empacotamento,
+Copr, clipboard e rede. Elas continuam no CI até receberem equivalentes Rust;
+novos testes e coletores desta migração devem ser implementados em Rust.
+Nenhuma flag ou implementação de C, JS ou React foi otimizada nesta entrega.
 
 ## Instrumentação de referência do ciclo de janelas
 

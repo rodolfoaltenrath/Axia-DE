@@ -70,7 +70,8 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
 
 1. A chave de transição foi removida e o código React/JS antigo foi **apagado**.
 2. Testes unitários em Rust cobrem a regra; um teste de integração headless
-   cobre o fluxo real.
+   também em Rust cobre o fluxo real. Novos testes e coletores não usam Python
+   nem scripts shell.
 3. Capturas de tela nos modos claro e escuro, na largura padrão e na mínima,
    iguais ou melhores que as anteriores.
 4. As métricas da Fase 0 não pioram: despertares por segundo em ociosidade,
@@ -96,7 +97,8 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
       Referência headless inicial registrada abaixo; primeira apresentação e
       frame completo em hardware seguem pendentes.
 - [x] Teste que falha se a atividade ociosa passar de um orçamento:
-      `tools/desktop/axia_idle_check.py` compara três amostras de poll/RSS.
+      `cargo xtask idle-check` compara três amostras de poll/RSS; coletor e
+      testes implementados em Rust.
       O Actions começa em calibração; ativar a imposição após conferir os
       relatórios do runner, conforme `SHELL-RUST-BASELINE.md`.
 - [ ] Opções de compilação do Rust (`lto`, `codegen-units`) em `rust/Cargo.toml`,
@@ -292,3 +294,4 @@ mostraram.
 | 2026-11-18 | Roadmap criado; decisão 1 (opção A) | | |
 | 2026-11-18 | Fase 0: inventário classificado, dependências do host .lpk e referência headless | Commit desta linha (`git log -- docs/ROADMAP-SHELL-RUST.md`) | 491 entradas; 114/114 módulos no host; 12,293 poll/s; 101,352 MiB; detalhes em `SHELL-RUST-BASELINE.md`. CI, flags e apresentação física pendentes. |
 | 2026-11-18 | Fase 0: coletor de orçamento ocioso e calibração no CI | Commit desta linha | 40 testes Python; sessão real: 12,400 poll/s e 102,539 MiB; regressão forçada recusada com relatório. Calibração do runner e imposição obrigatória pendentes. |
+| 2026-11-18 | Fase 0: coletor e testes migrados para Rust (`cargo xtask idle-check`) | Commit desta linha | 30 testes automáticos e integração real Rust; 13,050 poll/s e 102,547 MiB. Regressão forçada verificada com imposição e em calibração; removidos o coletor e os testes Python desta fatia. |

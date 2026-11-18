@@ -13,6 +13,7 @@ mod native_apps;
 mod deploy;
 mod dist;
 mod install;
+mod idle;
 mod sha256;
 mod srpm;
 
@@ -77,8 +78,9 @@ fn dispatch(args: &[String]) -> Result<()> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check>")?;
     match command.as_str() {
+        "idle-check" => idle::execute(rest),
         "native-apps" => {
             options(rest, &[])?;
             println!("{}", native_apps::manifests());
