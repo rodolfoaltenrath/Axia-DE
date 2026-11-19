@@ -82,7 +82,7 @@ for (const appHost of [false, true]) {
     .reduce((total, [, input]) => total + input.bytesInOutput, 0);
   reports.push({ appHost, reactMenu: bytes('runtime/lpk/menu.jsx'), nativeMenu: bytes('sdk/nativemenu.jsx'),
     reactBanner: bytes('runtime/lpk/notifications.js'), nativeBanner: bytes('sdk/nativebanner.js'),
-    runtimeFlag: ['menuNativeView','notificationsNativeView','dockNativeView','spotlightNativeView'].some(flag => result.outputFiles[0].text.includes(flag)) });
+    runtimeFlag: ['menuNativeView','notificationsNativeView','dockNativeView','spotlightNativeView','launcherNativeView'].some(flag => result.outputFiles[0].text.includes(flag)) });
 }
 console.log(JSON.stringify(reports));
 "#;

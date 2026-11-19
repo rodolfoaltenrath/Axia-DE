@@ -842,6 +842,10 @@ impl Host {
                     m.offset = spec["initialOffset"].as_f64().filter(|v| v.is_finite()).unwrap_or(0.).max(0.);
                     m.spec = json!({"initialized":true});
                 }
+                m.spec["onScroll"] = spec["onScroll"].clone();
+                if let Some(offset) = spec["offset"].as_f64().filter(|v| v.is_finite()) {
+                    m.offset = offset.max(0.);
+                }
                 m.style(
                     0,
                     json!([{"overflow":"hidden","flex":1,"position":"relative"}, style]),
@@ -1305,10 +1309,17 @@ impl Host {
         if max <= 0. {
             return;
         }
+        let changed = offset != m.offset;
         m.offset = offset;
         m.style(1, json!({"translateY": -offset}));
+        let action = m.spec["onScroll"].clone();
         self.bars.insert(node, now_ms() + BAR_SHOWN);
         self.restyle(node);
+        if changed && action.is_array() {
+            self.dispatch(&action, Map::from_iter([
+                ("offset".into(), json!(offset)), ("height".into(), json!(view)),
+            ]));
+        }
     }
     /// The scroll offset that puts the thumb's top at `top` (drag).
     fn scroll_to_thumb(&mut self, node: i32, y: f64) {
@@ -1791,3 +1802,7 @@ impl Host {
         .reduce(f64::min)
     }
 }
+
+#[cfg(test)]
+#[path = "scroll_tests.rs"]
+mod scroll_tests;

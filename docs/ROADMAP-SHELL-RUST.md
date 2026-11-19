@@ -61,9 +61,11 @@ usam adaptadores JS/React e permanecem no escopo das fases seguintes.
 **Spotlight definitivo no host Rust:** painel e entrada nativos, com catálogo
 de ícones. Estado da sessão, provedores e efeitos ainda passam pelo adaptador JS.
 
-**Shell com versão nativa atrás de chave:** launcher e barra de título.
-Chaves em uso: `launcherNativeView`,
-`titleBarNativeView`, `filesNativeView`, `lordNativeView`.
+**Launcher definitivo no host Rust:** grade, entrada, menus e rolagem por
+viewport. O adaptador JS ainda executa abertura de apps e efeitos da Dock.
+
+**Shell com versão nativa atrás de chave:** barra de título e Arquivos.
+Chaves em uso: `titleBarNativeView`, `filesNativeView`, `lordNativeView`.
 
 **Já em Rust no lado dos modelos:** lista de janelas, desktops e encaixe
 (`winmodel/`, `snap/`), política da Dock, launcher e busca, clipboard, rede,
@@ -230,9 +232,12 @@ correspondentes, remover a chave.
       substituídos removidos; catálogo de ícones e transferência/restauração de
       foco corrigidos. Integração com teclado, ponteiro e quatro capturas, além
       da regressão residente de busca, documentadas em `NATIVE-SHELL.md`.
-- [ ] `launcherNativeView`: antes de remover o fallback, corrigir a faixa fixa
-      de 16.384 px usada em `native_view/launcher.rs` e validar rolagem até o
-      último app em catálogos grandes; preservar cache, categorias, menus e drag.
+- [x] `launcherNativeView`: grade sempre no host Rust, renderer React removido.
+      Rolagem por viewport substitui a faixa fixa de 16.384 px; integração com
+      2.048 apps alcança e abre o último, com seis capturas (640/1000/1920 px).
+      Grade ampliada a pedido do usuário: sem limite de 780 px, até 14 colunas
+      em 1920 px, respeitando margens laterais. Cache, categorias,
+      menus, teclado, drag, pacotes, idioma, Unicode e redimensionamento cobertos.
 - [ ] `titleBarNativeView`.
 - [ ] `filesNativeView`.
 - [ ] `lordNativeView`: descobrir o que cobre e fechá-la ou documentá-la.
@@ -403,3 +408,4 @@ mostraram.
 | 2026-11-19 | Fase 1: apresentação das notificações sempre no host Rust | Commit desta linha | Removido o fallback React da shell e a escolha por preferência; compatibilidade `.lpk` mantida no host. Quatro cenários reais e capturas, contratos de bundle e regressão dos menus passaram. Estado e timers continuam para a Fase 2; medições físicas para o encerramento. |
 | 2026-11-19 | Fase 1: dicas e fantasma da Dock sempre no host Rust | Commit desta linha | Removida a chave e os dois renderers React substituídos. Corrigida a resolução de IDs tipados no ícone arrastado. Integração Rust real passou em quatro casos, cobrindo as três posições e política de arraste; capturas publicadas pelo CI. A Dock completa ainda depende de JS/React; métricas físicas seguem para o encerramento. |
 | 2026-11-19 | Fase 1: Spotlight sempre no host Rust | Commit desta linha | Removido o renderer React substituído e a chave; catálogo de ícones enviado ao host e foco anterior suspenso/restaurado. Testes Rust cobrem entrada, seleção, provedores, clique externo e quatro capturas; regressão de busca residente preservada. Launcher continua pendente, incluindo a faixa fixa de rolagem. |
+| 2026-11-19 | Fase 1: launcher sempre no host Rust | Commit desta linha | Removido o renderer React; rolagem monta apenas viewport e margem, alcançando o fim de 2.048 apps. Corrigidos catálogo dinâmico, menu por teclado e conflito entre clique no fundo e encerramento do host. A pedido do usuário, grade sem limite de 780 px e com colunas conforme a tela. Seis capturas em 640/1000/1920 px e regressão ampla com 1.029 apps; testes Rust também cobrem touchpad e barra. Efeitos ainda usam o adaptador JS; métricas físicas continuam adiadas. |

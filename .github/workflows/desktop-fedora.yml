@@ -83,6 +83,17 @@ jobs:
         env:
           AXIA_SPOTLIGHT_OUTPUT: ${{ runner.temp }}/axia-spotlight
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test spotlight_runtime -- --ignored --nocapture
+      - name: Rust native launcher integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_LAUNCHER_OUTPUT: ${{ runner.temp }}/axia-launcher
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test launcher_native_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-launcher
+          path: ${{ runner.temp }}/axia-launcher
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

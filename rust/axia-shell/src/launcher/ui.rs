@@ -26,6 +26,14 @@ fn scroll_node(m: &Menu, model: &AxiaLauncher, region: &str, style: Value) -> Va
     json!({"kind":"scroll","region":region,"key":format!("{region}:{}:{}",m.scroll_generation,model.generation),"style":style})
 }
 
+// Leave room at the display edges, then use every full column that fits.
+// Center the complete rows instead of leaving a partial column on one side.
+fn grid_dimensions(area: &Value) -> (f64, usize) {
+    let available = (number(area, "w", 1000., 1., 16384.) - 48.).max(1.);
+    let columns = ((available / 130.).floor() as usize).clamp(1, 32);
+    ((columns as f64 * 130.).min(available), columns)
+}
+
 fn cell(a: &Value) -> Value {
     let id = string(a, "id");
     let label_style = json!({"fontSize":13,"fontWeight":500,"color":"#fff","whiteSpace":"nowrap","maxWidth":120,"overflow":"hidden"});
@@ -50,7 +58,8 @@ pub(super) fn scroll(m: &mut Menu, model: &mut AxiaLauncher, region: &str) -> Va
         .get(region)
         .copied()
         .unwrap_or((0., fallback.max(1.)));
-    let plan = model.view(&json!({"layout":"grid","query":m.query.as_str(),"category":m.category.as_str(),"offset":offset,"height":height})).unwrap();
+    let (_, columns) = grid_dimensions(&m.context["area"]);
+    let plan = model.view(&json!({"layout":"grid","columns":columns,"query":m.query.as_str(),"category":m.category.as_str(),"offset":offset,"height":height})).unwrap();
     let mut children = Vec::new();
     for r in plan["items"].as_array().unwrap() {
         let kids = r["indices"]
@@ -88,7 +97,7 @@ pub(super) fn render(m: &mut Menu, model: &mut AxiaLauncher) -> Value {
         cats.extend(model.categories.iter().map(|s| s.to_string()));
         children.push(events(view(json!({"marginTop":22,"flexDirection":"row","gap":6}),cats.iter().map(|c|events(view(json!({"paddingHorizontal":12,"paddingVertical":5,"borderRadius":14,"backgroundColor":if c==&m.category {"rgba(255,255,255,0.32)"}else{"rgba(255,255,255,0.1)"}}),vec![text(key(&if c.is_empty(){"shell.category.all".into()}else{format!("shell.category.{c}")}),json!({"fontSize":12,"fontWeight":600,"color":"#fff"}))]),json!({"onClick":["category",c]}))).collect()),json!({"onClick":["noop"]})));
     }
-    children.push(scroll_node(m,model,"grid",json!({"marginTop":if q.is_empty(){14}else{40},"height":number(&area,"h",700.,1.,16384.)-190.,"width":780_f64.min(number(&area,"w",1000.,1.,16384.)-20.)})));
+    children.push(scroll_node(m,model,"grid",json!({"marginTop":if q.is_empty(){14}else{40},"height":number(&area,"h",700.,1.,16384.)-190.,"width":grid_dimensions(&area).0})));
     if let Some(p) = &m.popup {
         let id = string(p, "id");
         let d = &p["dock"];

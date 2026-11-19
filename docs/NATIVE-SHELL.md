@@ -163,6 +163,54 @@ regressão residente de busca e quatro cenários de cada integração de menus,
 notificações, Dock e Spotlight passaram. Não houve novo RPM completo nem
 medição em hardware real.
 
+## Launcher definitivo — 2026-11-19
+
+`RustLauncher` monta sempre `shell:launcher`; a preferência `launcherNativeView`
+e o renderer React de widgets foram removidos. O host mantém a altura completa
+da grade, mas solicita ao modelo apenas as linhas do viewport e a margem de
+uma linha em cada extremidade. O limite fixo anterior de 16.384 px não restringe
+mais os apps alcançáveis. Roda, touchpad e arraste da barra notificam o mesmo
+callback Rust `onScroll`; entradas já limitadas na extremidade não invalidam
+a lista novamente. Uma nova consulta/categoria/catálogo descarta o offset antigo.
+
+Mudanças do catálogo também atualizam categorias e conteúdo de um launcher
+aberto. A pedido do usuário, o limite horizontal de 780 px foi retirado: a grade
+usa a largura da área de trabalho com margens mínimas de 24 px e centraliza
+colunas completas. São quatro colunas em 640 px, sete em 1000 px e quatorze
+em 1920 px. O menu de contexto aceita setas, Home/End, Enter e Escape,
+pula itens desabilitados e
+fecha antes do launcher. O clique no fundo emite `cancel`: o nome `close`
+pertence ao encerramento do host e antes destruía o modelo sem fechar a UI.
+O adaptador suspende o foco de campos JS e impede abertura acidental após drag.
+
+O teste de catálogo existente foi adaptado para observar nós nativos. Mantém
+as verificações de 1.029 apps, identidade estável da lista, geometria, cache,
+busca/Enter, categoria, menus, fixar/desafixar, início de drag, instalação/remoção
+de pacote, idioma, Unicode e redimensionamento. Testes Rust do host exercitam
+roda, touchpad, barra e limites; os do modelo cobrem posições do viewport.
+
+O driver adicional usa 2.048 apps com a preferência antiga em `false`, vai até
+o fim da grade, verifica o último item também no hit test real e o abre. Cobre
+busca, filtros, Escape no menu, fixação por teclado, remoção por clique, catálogo
+dinâmico, arraste sem abrir apps, clique externo e isolamento da digitação em
+claro/escuro em 640, 1000 e 1920 px, com seis capturas. Em 1920 px os textos
+da primeira linha ocupam mais de 85% da largura, verificados nos nós reais:
+
+```text
+AXIA_LAUNCHER_OUTPUT=/var/tmp/axia-launcher cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test launcher_native_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige essa integração e publica `axia-launcher`; as capturas locais
+ficam em `build/validation/native-launcher/`. A abertura de apps, pins e arraste
+ainda passam pelos efeitos do adaptador JS. Esta entrega não remove QuickJS
+da sessão; medições físicas continuam para o encerramento do roadmap.
+
+Validação: build do compositor e da interface, 104 testes do host nativo,
+suíte de modelos do launcher (51 passaram, benchmark ignorado), 47 testes
+leves, dois contratos e regressão de catálogo passaram. Passaram também os
+seis cenários do launcher e os quatro de cada integração de menus,
+notificações, Dock e Spotlight. Nenhum novo RPM completo foi executado.
+
 ## Sequência de retirada
 
 1. Completar widgets e integração nativa e migrar os consumidores do host React.

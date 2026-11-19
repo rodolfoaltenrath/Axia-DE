@@ -20,7 +20,7 @@ impl Drop for Scratch {
 
 #[test]
 #[ignore = "requires built axia-server and local esbuild; see docs/RUST.md"]
-fn real_launcher_catalog_and_both_theme_menus() {
+fn real_native_launcher_catalog_cache_menus_and_packages() {
     let repo = std::env::var_os("AXIA_LAUNCHER_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -176,9 +176,9 @@ fn real_launcher_catalog_and_both_theme_menus() {
     assert!(!mounted.is_empty());
     assert!(mounted.len() <= 48, "{initial}");
     let first = mounted.iter().find(|v| v["text"] == "App 0000").unwrap();
-    let next = mounted.iter().find(|v| v["text"] == "App 0006").unwrap();
-    assert_eq!(first, &json!({"text":"App 0000", "x":143.5, "y":235}));
-    assert_eq!(next, &json!({"text":"App 0006", "x":143.5, "y":359}));
+    let next = mounted.iter().find(|v| v["text"] == "App 0007").unwrap();
+    assert_eq!(first, &json!({"text":"App 0000", "x":78.5, "y":235}));
+    assert_eq!(next, &json!({"text":"App 0007", "x":79, "y":359}));
     assert_eq!(
         next["y"].as_f64().unwrap() - first["y"].as_f64().unwrap(),
         124.
@@ -217,11 +217,11 @@ fn real_launcher_catalog_and_both_theme_menus() {
         .iter()
         .any(|v| v == "Jogos"));
     assert!(get("resized")["labels"].as_array().unwrap().len() <= 36);
-    assert!(get("touchpad")["offset"].as_f64().unwrap() > 0.);
+    assert!(get("resized-scroll")["offset"].as_f64().unwrap() > 0.);
     assert_eq!(get("empty")["total"], 0);
     assert!(get("empty")["labels"].as_array().unwrap().is_empty());
     assert_eq!(get("empty-enter")["opened"], "test-0999");
-    println!("launcher real QuickJS/React: {} apps, {} mounted app labels; cache, search/Enter, category, wheel, context, drag and install/remove passed",
+    println!("launcher native UI: {} apps, {} mounted app labels; cache, search/Enter, category, wheel, context, drag and install/remove passed",
         initial["total"], mounted.len());
 }
 
@@ -237,25 +237,14 @@ import { settings } from '@ROOT@/sdk/settings.js';
 const Launchpad = props => h(RustLauncher,{...props,mode:'flow'});
 
 
-const records = new Map(); let root, catalogs = 0, sourceNames, lastPlan, opened = null, closed = false;
-for (const method of ['createNode','setRoot','appendChild','insertBefore','removeChild','setText','destroy']) {
-  const original = lord[method];
-  lord[method] = (...args) => {
-    const result = original(...args);
-    if (method === 'createNode') records.set(result, { id: result });
-    if (method === 'setRoot') root = args[0];
-    if (method === 'appendChild' || method === 'insertBefore') records.get(args[1]).parent = args[0];
-    if (method === 'removeChild') records.get(args[1]).parent = null;
-    if (method === 'setText') records.get(args[0]).text = args[1];
-    if (method === 'destroy') records.delete(args[0]);
-    return result;
-  };
-}
+let handle=0,catalogs=0,opened=null,closed=false,query='',category='',areaWidth=1000;
+const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
+lord.nativeViews.mount=(node,app,text)=>{const id=mount(node,app,text);if(app==='shell:launcher')handle=id;return id;};
+lord.nativeViews.unmount=id=>{if(handle===id)handle=0;return unmount(id);};
 const native = lord.launcher.request.bind(lord.launcher);
 lord.launcher.request = (raw) => {
   const input = JSON.parse(raw), result = native(raw);
-  if (input.op === 'sync') { catalogs++; sourceNames=result.source.map(a=>a.name); }
-  if (['view','open','event','context','scroll'].includes(input.op)) lastPlan = result;
+  if (input.op === 'sync') catalogs++;
   return result;
 };
 const Icon = ({size}) => h(View, {style:{width:size,height:size,backgroundColor:'#3489bd'}});
@@ -275,47 +264,50 @@ const tokens = {effects:true, mode:'dark', text:'#fff',textDim:'#aaa',accent:'#3
 function Harness() {
   const apps = useLauncherApps(); currentApps = apps;
   const [mode,setMode] = useState('default'), [tick,setTick] = useState(0), [area,setArea] = useState({x:0,y:0,w:1000,h:700});
-  control = {setMode,setTick,setArea};
+  control = {setMode:mode=>{query='';category='';setMode(mode);},setTick,setArea:area=>{areaWidth=area.w;setArea(area);}};
   return h(ThemeProvider,{tokens},h(View,{style:{width:1000,height:700}},
     h(Launchpad,{key:mode,t:tokens,apps,onOpen:id=>{opened=id;},onClose:()=>{closed=true;},area})));
 }
-const alive = n => { for(let i=0;n && i<100;i++,n=records.get(n.parent)) if(n.id===root) return true; return false; };
-const texts = () => [...records.values()].filter(n=>n.text && alive(n));
-const labelNodes = () => texts().filter(n=>/^App \d{4}$/.test(n.text));
-const click = (node,button=0) => {const [x,y,w,hh]=lord.getLayout(node.parent); __lordEvent('down',node.parent,x+w/2,y+hh/2,button); __lordEvent('up',node.parent,x+w/2,y+hh/2,button);};
-const word = text => texts().find(n=>n.text===text);
-// The query itself is also a text node (in the search field, above y = 72); the grid starts below it.
-const resultVisible = title => texts().some(n=>n.text===title && lord.getLayout(n.parent)[1]>=72);
+const texts = () => (handle?lord.nativeViews.text(handle):'').split('\n').map(text=>({text}));
+const word = text => {const id=handle?lord.nativeViews.findText(handle,text):0;return id?{id,parent:id,text}:null;};
+const labelNodes = () => (currentApps||[]).filter(app=>/^App \d{4}$/.test(app.name)).map(app=>word(app.name)).filter(node=>node&&lord.getLayout(node.id)[1]>=190);
+const pointer=(type,node,x,y,button=0)=>{const target=lord.nativeViews.pointer(type,node,x,y,button);__lordEvent(type,target,x,y,button);globalThis.__lordNativeView();};
+const click = (node,button=0) => {const [x,y,w,hh]=lord.getLayout(node.id);for(const type of ['down','up'])pointer(type,node.id,x+w/2,y+hh/2,button);};
+const resultVisible = title => (handle?lord.nativeViews.text(handle):'').split(title).length>=3;
 const snapshot = (name, extra={}) => {
-  const data = {name,catalogs,stats:lord.stats(),total:lastPlan?.total,first:lastPlan?.first,
-    offset:lastPlan?.offset,labels:labelNodes().map(n=>({text:n.text,x:lord.getLayout(n.parent)[0],y:lord.getLayout(n.parent)[1]})),...extra};
+  const labels=labelNodes().map(n=>({text:n.text,x:lord.getLayout(n.id)[0],y:lord.getLayout(n.id)[1]}));
+  const plan=launcherView({query,category});
+  const columns=Math.max(1,Math.floor((areaWidth-48)/130));
+  const offset=query||category||!labels.length?0:Math.max(0,...labels.map(n=>235+Math.floor(Number(n.text.slice(4))/columns)*124-n.y));
+  const data = {name,catalogs,stats:lord.stats(),total:plan.total,first:plan.first?.id,
+    offset,labels,...extra};
   console.log('launcher-observation '+JSON.stringify(data));
 };
 const pause = (ms=250) => new Promise(resolve=>setTimeout(resolve,ms));
-const type = async text => {for(const c of text) {__lordKey(0,1,c,c,c,0);await pause(40);}await pause();};
+const type = async text => {query=text;for(const c of text) {__lordKey(0,1,c,c,c,0);__lordKey(0,0,c,'',c,0);await pause(40);}await pause();};
 const appNode = text => labelNodes().find(n=>n.text===text);
-render(h(Harness));
+settings.set({language:'en',launcherNativeView:false});render(h(Harness));
 async function run() {
   while(!appNode('App 0000') || !(lord.getLayout(appNode('App 0000').parent)[1]>0)) await pause(25);
 
   previousApps=currentApps;
   snapshot('initial',{order:currentApps.map(a=>a.id),expectedOrder:[...currentApps].sort((a,b)=>a.name.localeCompare(b.name)).map(a=>a.id)});
   control.setTick(v=>v+1);await pause();snapshot('rerender',{sameArray:previousApps===currentApps});
-  let node=labelNodes()[0];__lordEvent('wheel',node.parent,300,300,-20);await pause();snapshot('scrolled');
+  let node=labelNodes()[0];pointer('wheel',node.id,300,300,-20);await pause();snapshot('scrolled');
   await type('App 0999');snapshot('searched');__lordKey(28,1,'Enter','','Enter',0);snapshot('entered',{opened});
-  control.setMode('fresh');await pause();click(word('Games'));await pause();snapshot('category');
+  control.setMode('fresh');await pause();click(word('Games'));category='Game';await pause();snapshot('category');
   control.setMode('context');await pause();click(appNode('App 0000'),2);await pause();snapshot('context',{texts:texts().map(n=>n.text)});
   closed=false;click(word('Keep in Dock'));await pause();snapshot('dock-pinned',{pinned:settings.get().dockPinned.includes('app:test-0000'),closed});
   click(appNode('App 0000'),2);await pause();click(word('Keep in Dock'));await pause();snapshot('dock-unpinned',{pinned:settings.get().dockPinned.includes('app:test-0000'),closed});
   control.setMode('drag');await pause();closed=false;node=appNode('App 0000');let [x,y]=lord.getLayout(node.parent);
-  __lordEvent('down',node.parent,x+5,y+5,0);__lordEvent('move',node.parent,x+30,y+30,0);await pause();snapshot('drag',{closed});__lordEvent('up',node.parent,x+30,y+30,0);
+  pointer('down',node.id,x+5,y+5);pointer('move',node.id,x+30,y+30);await pause();snapshot('drag',{closed});pointer('up',node.id,x+30,y+30);
   control.setMode('install');await pause();await type('New Package');
   setPackageApps([{id:'new-package',name:'New Package',package:true,Icon,Component:()=>null}]);await pause();snapshot('installed',{found:currentApps.find(a=>a.id==='new-package')?.id || null,searchVisible:resultVisible('New Package')});
   setPackageApps([]);await pause();snapshot('removed',{found:currentApps.find(a=>a.id==='new-package')?.id || null,searchVisible:resultVisible('New Package')});
   snapshot('unicode',{greek:launcherView({query:'ΟΣ'}).first?.id,accent:launcherView({query:'árvore'}).total,turkish:launcherView({query:'İSTANBUL'}).first?.id});
   locale.set({...locale.get(),lang:'pt'});control.setMode('locale');await pause();snapshot('locale',{texts:texts().map(n=>n.text)});
   control.setArea({x:0,y:0,w:800,h:600});await pause();snapshot('resized');node=labelNodes()[0];
-  __lordGesture('scroll','begin',node.parent,300,300,0,0,0,0);__lordGesture('scroll','update',node.parent,300,300,0,900,0,0);await pause();snapshot('touchpad');
+  pointer('wheel',node.id,300,300,-20);await pause();snapshot('resized-scroll');
   await type('nonexistent-axia-fixture');snapshot('empty');__lordKey(28,1,'Enter','','Enter',0);snapshot('empty-enter',{opened});lord.quit();
 }
 run().catch(error=>console.error('launcher driver: '+error.stack));

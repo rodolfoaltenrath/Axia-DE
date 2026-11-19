@@ -147,5 +147,5 @@ async function run() {
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
 // The assertions use English captions, regardless of the developer's system locale.
-settings.set({ language: 'en', launcherNativeView: true });
+settings.set({ language: 'en' });
 render(h(Harness));

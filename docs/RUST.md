@@ -329,7 +329,8 @@ de widgets. (O menu Iniciar do Lord Classic também era Rust; saiu com o tema.)
 
 Os arquivos `themes/default/components/Launchpad.jsx` e
 `themes/classic/components/StartMenu.jsx` foram removidos (e depois o tema Classic inteiro). `sdk/rustlauncher.jsx`
-interpreta os widgets e liga eventos e efeitos aos serviços existentes. O SDK
+monta sempre `shell:launcher` e liga seus efeitos aos serviços existentes. O
+renderer React substituído e a chave `launcherNativeView` foram removidos. O SDK
 mantém apenas uma cópia dos metadados retornados para assinaturas React e
 vinculação dos ícones. Mudanças do registro, idioma ou atualização explícita
 dos aplicativos Linux invalidam o catálogo; notificações do mesmo turno são
@@ -345,12 +346,16 @@ ignorando a categoria selecionada; limpá-la restaura o filtro de categoria.
 Cada menu tem um identificador isolado e liberado ao desmontar; há um limite
 de 16 menus simultâneos por contexto.
 
-O `ScrollView` aceita também uma função de conteúdo com o deslocamento e a altura
-medidos. Os menus usam a altura total para manter a barra de rolagem e montam
+O host nativo informa o deslocamento e a altura medidos pelo callback Rust
+`onScroll`; roda, touchpad e arraste da barra usam o mesmo caminho. O launcher
+usa a altura total para manter a barra de rolagem e monta
 somente as linhas visíveis com uma linha de margem em cada extremidade. As
 posições, tamanhos, materiais e conteúdo dos menus são descritos em Rust.
-Os controles compartilhados continuam desenhando inputs, ícones e popups no
-runtime existente. Os efeitos acionam os serviços ativos da Dock, preferências,
+Inputs, ícones e popups do launcher também são montados pelo host Rust.
+A grade adapta a quantidade de colunas à largura disponível, sem o antigo
+limite de 780 px: usa margens mínimas de 24 px e centraliza as colunas completas
+(4/7/14 colunas em 640/1000/1920 px). Os efeitos
+acionam os serviços ativos da Dock, preferências,
 gerenciador de janelas e sessão. A pesquisa geral do tema clássico usa o serviço
 compartilhado `search/`, também em Rust, incluindo pontuação, arquivos, notas e
 calculadora. O menu recebe suas seções e decide seleção e apresentação.
@@ -360,7 +365,7 @@ Os testes novos são Rust: incluem cobertura de viewport em milhares de posiçõ
 catálogos grandes, categorias, busca por campo, invalidação, memória da ABI,
 transições de estado, isolamento dos menus e permissões das ações de sessão.
 O teste de integração também é dirigido e verificado em Rust; seu módulo
-JavaScript embutido somente opera a interface React real e relata observações.
+JavaScript embutido somente opera o adaptador e a interface nativa e relata observações.
 Ele usa um HOME e um socket privados e não modifica a sessão do usuário.
 
 ```sh
@@ -373,13 +378,17 @@ cargo test --manifest-path rust/Cargo.toml --release --locked --offline launcher
 
 A integração verifica a grade, identidade estável da lista, geometria,
 rolagem, pesquisa/Enter, categorias, contexto, fixar/desafixar na Dock, início
-de arraste e instalação/remoção de pacote, mudança de idioma, Unicode, redimensionamento e touchpad.
+de arraste e instalação/remoção de pacote, mudança de idioma, Unicode e redimensionamento.
+O teste Rust do host verifica roda, touchpad, arraste da barra e limites do viewport.
 As coordenadas visíveis são verificadas contra valores fixos da interface validada,
 sem carregar os componentes antigos; o limite de nós montados também é verificado.
 `AXIA_LAUNCHER_OBSERVATIONS` permite salvar as observações em JSON.
 Ele roda também no job Fedora com GPU habilitada; a sessão
 de teste usa composição por CPU. A avaliação de fluidez, aparência do blur e
-latência no computador físico continua necessária.
+latência no computador físico fica para o encerramento do roadmap, conforme
+decisão do usuário. A integração adicional `launcher_native_runtime` é exigida
+no CI GPU=1: 2.048 apps, último item por rolagem e clique, menus por teclado,
+clique no fundo e capturas claro/escuro em 640/1000/1920 px (`axia-launcher`).
 
 ## Pesquisa global residente
 
