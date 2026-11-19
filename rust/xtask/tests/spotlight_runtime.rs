@@ -61,7 +61,7 @@ let handle=0,last,catalogSent=false,opened,copied,ran=false,underlay='';
 const request=lord.launcher.request.bind(lord.launcher),mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
 lord.launcher.request=raw=>{const input=JSON.parse(raw),reply=request(raw);if(input.op==='search'){if(input.cmd==='poll'){for(const update of reply.updates||[])last=update;}else if(reply?.id)last=reply;}return reply;};
 const inspect=text=>{const data=JSON.parse(text);if(data.args?.owner==='spotlight'&&data.catalog?.some(app=>app.id==='notes'))catalogSent=true;};
-lord.nativeViews.mount=(node,app,text)=>{inspect(text);const id=mount(node,app,text);if(JSON.parse(text).args?.owner==='spotlight')handle=id;return id;};
+lord.nativeViews.mount=(node,app,text,...source)=>{inspect(text);const id=mount(node,app,text,...source);if(JSON.parse(text).args?.owner==='spotlight')handle=id;return id;};
 lord.nativeViews.facts=(id,text)=>{inspect(text);return facts(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)handle=0;return unmount(id);};
 const find=text=>handle?lord.nativeViews.findText(handle,text):0;

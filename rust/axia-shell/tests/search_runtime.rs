@@ -276,7 +276,7 @@ import {clipboard,clipboardHistory} from '@ROOT@/sdk/clipboard.js';
 
 let handle=0,polls=0,lastReply;
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
-lord.nativeViews.mount=(node,app,text)=>{const result=mount(node,app,text);if(JSON.parse(text).args?.owner==='spotlight')handle=result;return result;};
+lord.nativeViews.mount=(node,app,text,...source)=>{const result=mount(node,app,text,...source);if(JSON.parse(text).args?.owner==='spotlight')handle=result;return result;};
 lord.nativeViews.unmount=id=>{if(id===handle)handle=0;return unmount(id);};
 const native=lord.launcher.request.bind(lord.launcher);
 lord.launcher.request=raw=>{const input=JSON.parse(raw),result=native(raw);if(input.op==='search'){if(input.cmd==='poll'){polls++;for(const update of result.updates)lastReply=update;}else if(result?.id)lastReply=result;}return result;};

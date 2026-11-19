@@ -239,7 +239,7 @@ const Launchpad = props => h(RustLauncher,{...props,mode:'flow'});
 
 let handle=0,catalogs=0,opened=null,closed=false,query='',category='',areaWidth=1000;
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
-lord.nativeViews.mount=(node,app,text)=>{const id=mount(node,app,text);if(app==='shell:launcher')handle=id;return id;};
+lord.nativeViews.mount=(node,app,text,...source)=>{const id=mount(node,app,text,...source);if(app==='shell:launcher')handle=id;return id;};
 lord.nativeViews.unmount=id=>{if(handle===id)handle=0;return unmount(id);};
 const native = lord.launcher.request.bind(lord.launcher);
 lord.launcher.request = (raw) => {

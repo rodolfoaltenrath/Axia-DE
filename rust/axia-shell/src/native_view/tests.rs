@@ -521,6 +521,54 @@ struct CountedApp {
     app: Box<dyn NativeApp>,
     syncs: Rc<std::cell::Cell<usize>>,
 }
+
+#[test]
+fn native_keyboard_uses_model_focus_before_a_tick_and_respects_input_gates() {
+    let mut session = crate::winmodel::Session::default();
+    let mut other = crate::winmodel::Session::default();
+    for state in [&mut session, &mut other] {
+        for app in ["a", "b"] {
+            state.call("open", &[json!({}), json!({"app":app})]).unwrap();
+        }
+    }
+    let (mut a, node_a, syncs) = counted_calculator();
+    let (mut b, node_b, _) = counted_calculator();
+    a.bind_window(session.reader());
+    b.bind_window(session.reader());
+    a.facts(json!({"windowId":"a","focused":true,"inputAllowed":true}));
+    b.facts(json!({"windowId":"b","focused":false,"inputAllowed":true}));
+    assert!(!a.key("1", "1", 0), "stale JS focus cannot grant ownership");
+    assert!(b.key("2", "2", 0));
+    session.call("focus", &[json!({}), json!("a")]).unwrap();
+    assert!(!b.key("3", "3", 0), "old owner stops before the compositor ticks");
+    assert!(a.key("4", "4", 0));
+    a.window_focus(false);
+    assert!(!a.key("5", "5", 0), "JS text fields and shell overlays gate input");
+    b.window_focus(true);
+    assert!(!b.key("6", "6", 0), "a gate cannot focus a background window");
+    a.window_focus(true);
+    assert!(a.key("7", "7", 0));
+    assert!(texts(&a).lines().any(|s| s == "47"));
+    assert!(texts(&b).lines().any(|s| s == "2"));
+    a.tick(0.);
+    assert!(a.deadline().is_none());
+    let before = syncs.get();
+    other.call("focus", &[json!({}), json!("a")]).unwrap();
+    assert!(a.deadline().is_none(), "other context is isolated");
+    session.call("patch", &[json!({}), json!("a"), json!({"title":"Renamed"})]).unwrap();
+    assert!(a.deadline().is_some());
+    a.tick(0.);
+    assert_eq!(syncs.get(), before, "unrelated title changes do not rebuild content");
+    assert!(a.deadline().is_none(), "no polling timer after consuming revision");
+    session.call("close", &[json!({}), json!("a")]).unwrap();
+    assert!(!a.key("8", "8", 0), "removed windows cannot retain ownership");
+    assert!(b.key("9", "9", 0));
+    drop(session);
+    assert!(b.key("0", "0", 0), "the reader owns its model lifetime");
+    drop((a, b));
+    scene::destroy(node_a);
+    scene::destroy(node_b);
+}
 impl NativeApp for CountedApp {
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "sync" || input["cmd"] == "icon" {

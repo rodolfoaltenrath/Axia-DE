@@ -329,6 +329,9 @@ fn real_compiled_app_widgets_and_effects() {
     assert!(has_text("calculator-keyboard-error", "Error"));
     assert!(has_text("calculator-keyboard", "3"));
     assert!(has_text("calculator-remount", "0"));
+    assert!(has_text("calculator-model-background", "0"));
+    assert!(has_text("calculator-model-foreground", "8"));
+    assert_eq!(get("calculator-model-foreground")["mirror"], "demo");
     assert_eq!(get("appabout")["title"], "About Calculator");
     assert_eq!(get("appabout")["react"], 0);
     assert_eq!(get("appabout-missing")["react"], 0);
@@ -525,7 +528,7 @@ async function run(){
   calls=[];click('Force Quit');await pause();record('selection-removed',{calls});
   wm.open('demo');await pause();click('Demo');await pause();control.setInstance(1);await pause();
   calls=[];click('Force Quit');await pause();record('remount',{calls});
-  control.setMode('calculator');await pause();
+  wm.open('calculator');control.setMode('calculator');await pause();
   const key=(name,char='')=>{__lordKey(0,1,name,char,name,0);__lordKey(0,0,name,'',name,0);};
   for(const label of ['2','+','3','×','4','Enter']){key(label,label);await pause();}
   record('calculator-precedence',{text:nativeTexts(),react:texts().length});
@@ -534,6 +537,11 @@ async function run(){
   key('Escape');key('1','1');key(',', ',');key('5','5');key('*','*');key('2','2');key('Enter');await pause();
   record('calculator-keyboard',{text:nativeTexts()});
   control.setInstance(2);await pause();record('calculator-remount',{text:nativeTexts()});
+  wm.focus('demo');await pause();
+  key('6','6');await pause();record('calculator-model-background',{text:nativeTexts()});
+  // Bypass the JS mirror and send the key in this same task, before any tick.
+  lord.windowList.call('focus',JSON.stringify([{},'calculator']));
+  key('8','8');await pause();record('calculator-model-foreground',{text:nativeTexts(),mirror:wm.focused()});
   wm.open('appabout',{args:{key:'calculator'}});control.setArgs({key:'calculator'});control.setMode('appabout');await pause();
   record('appabout',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});
   control.setArgs({key:'missing'});await pause();record('appabout-missing',{title:wm.get('appabout').title,text:nativeTexts(),react:texts().length});

@@ -103,6 +103,17 @@ jobs:
           AXIA_FILES_AXIA_OUTPUT: ${{ runner.temp }}/axia-files/axia
           AXIA_FILES_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-files/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test files_runtime -- --ignored --nocapture
+      - name: Rust native focus integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_NATIVE_FOCUS_OUTPUT: ${{ runner.temp }}/axia-native-focus
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_focus_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-native-focus
+          path: ${{ runner.temp }}/axia-native-focus/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

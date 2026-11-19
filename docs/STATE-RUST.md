@@ -63,6 +63,21 @@ O protocolo antigo de fatos explícitos permanece para controladores puros sem
 proprietário de janelas. A sessão vincula o leitor e prioriza os valores do
 modelo mesmo que fatos explícitos estejam desatualizados.
 
+## Foco do conteúdo dos apps nativos
+
+`sdk/nativeview.js` também vincula as views de apps que possuem uma janela ao
+leitor do contexto. Envia `windowId` e a permissão de entrada `inputAllowed`,
+sem reenviar o foco da janela no JSON. O host Rust determina a janela ativa
+diretamente do modelo. O adaptador continua suspendendo entrada quando um
+campo de texto JS ou uma sobreposição da shell possui o teclado.
+
+A consulta acontece antes de despachar uma tecla, inclusive quando o modelo
+muda na mesma tarefa JS e o compositor ainda não executou outro quadro.
+Uma permissão de entrada não pode ativar uma janela em segundo plano.
+Revisões consumidas não deixam timer; mudanças só de título não reconstroem
+o conteúdo. Ícones e views sem janela, como os painéis da shell, conservam
+seus protocolos próprios. A moldura e o espelho JS continuam pendentes.
+
 ## Verificação
 
 ```sh
@@ -88,3 +103,14 @@ oito cenários gráficos dos cabeçalhos, dois contratos LPK e integração dos
 apps compilados passaram. Capturas e logs estão em
 `build/validation/native-titlebar/{axia,adwaita}/`; o CI já exige a integração
 e publica `axia-titlebar`. Não houve novo RPM completo nem medição física.
+
+O teste Rust `native_focus_runtime` cobre duas calculadoras pelo adaptador
+real: fonte opaca correta, ausência de foco nos fatos, foco direto com espelho
+JS desatualizado, prioridade de TextInput e sobreposição, e retomada do teclado.
+São quatro cenários, claro/escuro em 640/1000 px. O CI GPU=1 exige o teste e
+publica `axia-native-focus`; a coleta local fica em
+`build/validation/native-focus/`. O host tem 109 testes aprovados, incluindo
+isolamento, remoção, vida útil do leitor e ausência de reconstrução por título.
+Compositor e frontend recompilados, integração dos apps compilados, dois
+contratos LPK e oito cenários de cada uma das regressões de Arquivos e dos
+cabeçalhos também passaram. Não houve medição física nesta etapa.

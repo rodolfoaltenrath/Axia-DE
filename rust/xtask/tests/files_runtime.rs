@@ -127,7 +127,7 @@ async function until(fn){for(let i=0;i<150&&!fn();i++)await sleep(20);return!!fn
 const home=lord.fs.home(),base=home+'/files-integration',devicePath=home+'/files-device';
 let handle=0,iconHandle=0,show,facts=[],legacyCreates=0,menuUpdates=0,setPicker,pickerId=0,pickerAction=null;const results=[],volumeCalls=[],choices=[];
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,result=lord.nativeViews.result,request=lord.files.request,setMenus=wm.setMenus;
-lord.nativeViews.mount=(node,app,text)=>{const id=mount(node,app,text);if(app==='files'){if(JSON.parse(text).icon)iconHandle=id;else handle=id;}return id;};
+lord.nativeViews.mount=(node,app,text,...source)=>{const id=mount(node,app,text,...source);if(app==='files'){if(JSON.parse(text).icon)iconHandle=id;else handle=id;}return id;};
 lord.nativeViews.unmount=id=>{if(id===handle)handle=0;if(id===iconHandle)iconHandle=0;return unmount(id);};
 lord.nativeViews.result=(id,value)=>{results.push(value);return result(id,value);};
 // Only disk facts and volume replies are simulated. No real host disk is changed.

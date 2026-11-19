@@ -259,6 +259,8 @@ pub struct Host {
     effects: VecDeque<Value>,
     title: String,
     window_focused: bool,
+    window_source: Option<(axia_state::Reader<crate::winmodel::WindowState>, axia_state::Subscription)>,
+    input_allowed: bool,
     width: f32,
     height: f32,
     next_sync: Option<f64>,
@@ -322,6 +324,8 @@ impl Host {
             effects: VecDeque::new(),
             title: String::new(),
             window_focused: true,
+            window_source: None,
+            input_allowed: true,
             width: 0.,
             height: 0.,
             next_sync: None,
@@ -384,17 +388,42 @@ impl Host {
             .as_str()
             .unwrap_or(".")
             .to_owned();
-        if let Some(focused) = self.facts["focused"].as_bool() {
+        if self.window_source.is_some() {
+            self.input_allowed = self.facts["inputAllowed"].as_bool().unwrap_or(true);
+            self.update_model_focus();
+        } else if let Some(focused) = self.facts["focused"].as_bool() {
             self.change_window_focus(focused);
         }
         self.sync();
     }
     pub fn window_focus(&mut self, focused: bool) {
+        let focused = if self.window_source.is_some() {
+            self.input_allowed = focused;
+            self.effective_focus()
+        } else { focused };
         let changed = self.window_focused != focused;
         self.change_window_focus(focused);
         if changed {
             self.sync();
         }
+    }
+    /// The source belongs to this JS context; retain its reader, never its FFI pointer.
+    pub fn bind_window(&mut self, reader: axia_state::Reader<crate::winmodel::WindowState>) {
+        let changes = reader.subscribe();
+        self.window_source = Some((reader, changes));
+    }
+    fn effective_focus(&self) -> bool {
+        self.window_source.as_ref().map_or(self.window_focused, |(reader, _)| {
+            self.input_allowed && self.facts["windowId"].as_str()
+                .is_some_and(|id| reader.read().focused_window() == Some(id))
+        })
+    }
+    fn update_model_focus(&mut self) -> bool {
+        if let Some((_, changes)) = &self.window_source { changes.take(); }
+        let focused = self.effective_focus();
+        let changed = focused != self.window_focused;
+        self.change_window_focus(focused);
+        changed
     }
     /// Apply focus cleanup without an intermediate tree. facts() will sync
     /// once after both the cleanup and the new context have reached the app.
@@ -1613,10 +1642,11 @@ impl Host {
         Some(m.label.clone())
     }
     pub fn owns_text_input(&self) -> bool {
-        (self.field != 0 || self.app.text_input()) && self.window_focused && self.icon_mode().is_none()
+        (self.field != 0 || self.app.text_input()) && self.effective_focus() && self.icon_mode().is_none()
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
+        if self.update_model_focus() { self.sync(); }
         self.hide_tip();
         if !self.window_focused || self.icon_mode().is_some() {
             return false;
@@ -1762,7 +1792,8 @@ impl Host {
         let (width, height) = scene::frame(self.mount).map_or((0., 0.), |f| (f.2, f.3));
         let resized = width > 1. && (width - self.width).abs() >= 1.
             || height > 1. && (height - self.height).abs() >= 1.;
-        if resized || self.app.invalidated() || self.next_sync.is_some_and(|t| now >= t) {
+        let focus_changed = self.update_model_focus();
+        if resized || focus_changed || self.app.invalidated() || self.next_sync.is_some_and(|t| now >= t) {
             self.sync();
         }
         self.position_popovers();
@@ -1787,7 +1818,7 @@ impl Host {
         }
     }
     pub fn deadline(&self) -> Option<f64> {
-        if self.app.invalidated() { return Some(0.); }
+        if self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
         [
             self.next_sync,
             self.next_blink.filter(|_| self.field != 0),

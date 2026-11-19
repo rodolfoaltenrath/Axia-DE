@@ -4,6 +4,16 @@ O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena
 Rust já existente, até não restarem consumidores do motor.
 
+## Foco das janelas nativas
+
+O conteúdo dos apps nativos usa o leitor tipado da lista de janelas do seu
+contexto para decidir quem recebe teclado. `NativeView` fornece identidade
+e bloqueios de entrada para campos JS e painéis da shell. O foco não depende
+da atualização do espelho JS, nem exige reenviar fatos à view.
+`native_focus_runtime` verifica esse caminho em claro/escuro e 640/1000 px;
+capturas locais em `build/validation/native-focus/`, artefato CI
+`axia-native-focus`. Estado e limitações em [STATE-RUST.md](STATE-RUST.md).
+
 ## Estado validado
 
 - Monitor: árvore, rasters, entrada e atualização periódica nativos.

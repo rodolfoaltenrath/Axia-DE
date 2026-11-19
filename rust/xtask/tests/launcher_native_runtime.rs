@@ -85,7 +85,7 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 let handle=0,show,underlay='';const opened=[];
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
-lord.nativeViews.mount=(node,app,text)=>{const id=mount(node,app,text);if(app==='shell:launcher')handle=id;return id;};
+lord.nativeViews.mount=(node,app,text,...source)=>{const id=mount(node,app,text,...source);if(app==='shell:launcher')handle=id;return id;};
 lord.nativeViews.unmount=id=>{if(id===handle)handle=0;return unmount(id);};
 const find=text=>handle?lord.nativeViews.findText(handle,text):0;
 const count=()=>new Set((lord.nativeViews.text(handle)||'').match(/App \d{4}/g)||[]).size;

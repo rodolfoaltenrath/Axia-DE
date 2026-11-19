@@ -2,7 +2,7 @@
 // (rust/axia-shell/src/native_view, docs/RUST.md "Native views"). Rust draws the app, handles its
 // pointer, wheel and text input, translates its captions and refreshes it on its own timer. This
 // module only gives the view a mount node inside the window manager's frame, sends it the facts it
-// reads (settings, theme, services, catalog, focus) and runs the effects that belong to the shell:
+// reads (settings, theme, services, catalog), binds its window state and runs shell effects:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
 import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState, useMemo, memo } from 'react';
 import { View, screen, onScreenChange, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
@@ -182,10 +182,11 @@ function NativeApp(props) {
   if (!sameRecord(previousArgs.current, args)) previousArgs.current = args;
   // Window context objects may be recreated by their parent frame. Only facts
   // actually read by this mount cross the memo boundary.
+  const windowSource = win.id && !props.manifest.shell ? lord.windowList : null;
   return h(NativeBridge, { ...props, args: previousArgs.current, theme: previous.current, lang, region: region || '', dir,
-    localeRevision, winId: win.id, focused: win.focused !== false, windowMode: win.mode });
+    localeRevision, winId: win.id, windowSource, focused: windowSource ? undefined : win.focused !== false, windowMode: win.mode });
 }
-const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, theme, lang, region, dir, localeRevision, winId, focused, windowMode }) {
+const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
   const preferences = useStore(manifest.settings ? preferenceFacts : emptyFactsStore);
   const apps = useStore(manifest.facts === 'apps' ? catalogFacts : emptyFactsStore);
   const appWindows = useStore(manifest.facts === 'windows' ? windowFacts : emptyFactsStore);
@@ -196,7 +197,8 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const owner = useRef(null);
   useLayoutEffect(() => { if (mountRef) mountRef.current = ref.current; });
   owner.current = { focused: !!manifest.shell || focused, shell: !!manifest.shell };
-  const ownsKeyboard = () => owner.current.focused && !textFieldActive()
+  // Bound views read window focus in Rust. JS supplies only the shell/text input gate.
+  const ownsKeyboard = () => (windowSource || owner.current.focused) && !textFieldActive()
     && (owner.current.shell || !shellHasKeyboard());
   const [sampled] = useState(() => ({}));
   const [polled, setPolled] = useState(() => (manifest.services ? services(manifest, {}, sampled) : {}));
@@ -219,7 +221,9 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const context = `{${Object.entries(contextFields).filter(([, value]) => value !== undefined).map(([key, value]) => `"${key}":${value}`).join(',')}}`;
   const parts = [
     `"args":${block('args', windowArgs)}`, `"keyboard":${block('keyboard', !!manifest.keyboard)}`,
-    `"lang":${block('lang', lang)}`, `"focused":${block('focused', ownsKeyboard())}`,
+    `"lang":${block('lang', lang)}`,
+    ...(windowSource ? [`"windowId":${block('windowId', winId)}`, `"inputAllowed":${block('inputAllowed', !!ownsKeyboard())}`]
+      : [`"focused":${block('focused', !!ownsKeyboard())}`]),
     `"refreshMs":${block('refreshMs', manifest.refreshMs || 0)}`, `"width":${block('width', manifest.size?.[0] || 1000)}`,
     `"services":${block('services', liveServices)}`, `"context":${context}`,
   ];
@@ -231,19 +235,20 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {
     const m = mounted.current;
-    m.handle = ref.current ? lord.nativeViews.mount(ref.current.id, manifest.id, json) : 0;
+    m.handle = ref.current ? (windowSource ? lord.nativeViews.mount(ref.current.id, manifest.id, json, windowSource)
+      : lord.nativeViews.mount(ref.current.id, manifest.id, json)) : 0;
     m.sent = json;
     if (!m.handle) return undefined;
     runners.set(m.handle, runner(m.handle, manifest, winId, () => ref.current?.id || 0));
     const sendDisks = () => lord.nativeViews.action(m.handle, { action: ['disks'], extra: { disks: disks.list() } });
     const stopDisks = manifest.id === 'files' ? disks.watch(sendDisks) : null;
     if (stopDisks) sendDisks();
-    const syncFocus = () => lord.nativeViews.focus(m.handle, ownsKeyboard());
+    const syncFocus = () => lord.nativeViews.focus(m.handle, !!ownsKeyboard());
     const stopText = onTextField(syncFocus), stopShell = onShellKeyboard(syncFocus);
     syncFocus();
     globalThis.__lordNativeView();
     return () => { stopDisks?.(); stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
-  }, [manifest.id]);
+  }, [manifest.id, windowSource, winId]);
   useEffect(() => {
     const m = mounted.current;
     if (!m.handle || m.sent === json) return;

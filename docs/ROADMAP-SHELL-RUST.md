@@ -278,7 +278,8 @@ views nativas lerem direto, sem JSON.
       e invalidações agrupadas, sem dependências externas. Ainda falta ligar
       os demais consumidores e substituir os stores JS dos serviços. O host
       já agenda sincronização imediata de revisões pendentes; a barra de título
-      é o primeiro consumidor. Contrato e limites em `STATE-RUST.md`.
+      e o conteúdo dos apps nativos leem seu foco diretamente do modelo.
+      Contrato e limites em `STATE-RUST.md`.
 - [ ] Lista de janelas: trocar o espelho em JS (`sdk/windows.js`) e o ciclo
       `JSON.stringify` / `JSON.parse` por revisões numéricas (o campo `rev` já
       existe) lidas pelo Rust.
@@ -289,6 +290,9 @@ views nativas lerem direto, sem JSON.
       valida e vincula o proprietário do contexto. A integração altera título
       com o espelho JS parado para comprovar esse caminho. Restam moldura,
       overview, alternador, catálogos de janelas e demais consumidores.
+      O conteúdo nativo recebe identidade e permissão de entrada, sem foco
+      dinâmico no JSON. Quatro cenários gráficos verificam troca direta do
+      foco e prioridade de campos JS e sobreposições, com capturas no CI.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
@@ -452,3 +456,4 @@ mostraram.
 | 2026-11-19 | Fase 1: navegador Arquivos sempre nativo; chaves encerradas | Commit desta linha | Removidos o renderer React do navegador e sua preferência; ícone nativo. Corrigido o recorte de PDFs com contain, reproduzido no compositor anterior e verificado por pixels do centro/topo/rodapé. Oito cenários em Rust cobrem arquivos privados, navegação, renomeação, PDF, seletores e volumes simulados. Smoke JS/Python substituído pela integração Rust exigida no CI. lordNativeView auditado como preferência inexistente no código atual; o despachante __lordNativeView permanece até as fases seguintes. Seletores e transferências registrados na Fase 3; validação física adiada ao encerramento. |
 | 2026-11-19 | Fase 2 iniciada: base observável e proprietário do estado de janelas | Commit desta linha | Crate axia-state sem dependências externas; leitores por empréstimo, revisões e assinaturas canceláveis com invalidações agrupadas. Session guarda WindowState nessa base e expõe leitura nativa. Testes distinguem mutações, ordem e remoção de leituras, resync e operações sem efeito. ABI JSON, espelho JS e consumidores gráficos ainda pendentes; sem nova medição física. |
 | 2026-11-19 | Fase 2: cabeçalhos consomem título e foco do estado observável | Commit desta linha | Mount vincula leitor Rust à lista de janelas do contexto, validando o objeto opaco sem reter ponteiro C/JS. Revisões pendentes pedem tick imediato; não há timer de assinatura após consumo. Removidos título/foco dinâmicos dos fatos JSON do cabeçalho. Oito cenários gráficos comprovam título atualizado com espelho JS parado e fonte inválida rejeitada; 108 testes do host, 34 do modelo, contratos LPK e integração dos apps passaram. Espelho JS, ABI JSON e demais consumidores continuam pendentes; sem medição física. |
+| 2026-11-19 | Fase 2: conteúdo nativo lê foco do modelo Rust | Commit desta linha | Apps com janela recebem leitor tipado e identidade; o JS só fornece bloqueios de entrada para campos e painéis. Troca de foco vale antes do próximo quadro, sem foco dinâmico nos fatos. Quatro cenários gráficos e capturas, 109 testes do host, integração dos apps, dois contratos LPK e oito cenários de Arquivos e de cabeçalhos passaram. CI GPU=1 exige native_focus_runtime e publica as capturas. Espelho JS, moldura e demais serviços continuam pendentes; medições físicas no encerramento. |

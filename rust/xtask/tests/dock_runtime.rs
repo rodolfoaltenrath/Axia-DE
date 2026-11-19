@@ -67,7 +67,7 @@ const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeV
 const icons={},ghostIcons=[];let change,opens=0;
 const inspect=text=>{const args=JSON.parse(text).args;if(args?.owner==='dock-ghost')ghostIcons.push(args.tree.children.find(child=>child.kind==='appIcon')?.app||'');};
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts;
-lord.nativeViews.mount=(node,app,text)=>{inspect(text);return mount(node,app,text);};
+lord.nativeViews.mount=(node,app,text,...source)=>{inspect(text);return mount(node,app,text,...source);};
 lord.nativeViews.facts=(handle,text)=>{inspect(text);return facts(handle,text);};
 const Files=({size})=>h(View,{ref:node=>{icons.files=node;},style:{width:size,height:size,backgroundColor:'#5c946e'}});
 const Notes=({size})=>h(View,{ref:node=>{icons.notes=node;},style:{width:size,height:size,backgroundColor:'#d6a529'}});

@@ -201,7 +201,7 @@ pub unsafe extern "C" fn axia_view_mount_windows(
 unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     windows: Option<axia_state::Reader<crate::winmodel::WindowState>>) -> u32 {
     let app = if id == "shell:titlebar" {
-        windows.map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
+        windows.clone().map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
     } else { app(id) };
     let Some(app) = app else {
         return 0;
@@ -212,6 +212,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     let facts = json(facts);
     let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
     let mut host = Host::new(node, app, &assets, home.as_deref());
+    if facts["windowId"].as_str().is_some_and(|id| !id.is_empty()) && facts["icon"].is_null() {
+        if let Some(reader) = windows { host.bind_window(reader); }
+    }
     host.facts(facts);
     with(|r| {
         r.next = r.next.wrapping_add(1).max(1);
