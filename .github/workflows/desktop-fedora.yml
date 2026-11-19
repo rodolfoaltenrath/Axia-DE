@@ -85,10 +85,10 @@ jobs:
         run: python3 -m unittest discover -s tools/desktop/tests -v
       - name: Stage installation
         run: make install PREFIX=/usr DESTDIR="$RUNNER_TEMP/axia-de"
-      - name: Calibrate private session idle budgets
+      - name: Verify private session idle budgets
         if: matrix.gpu == 1
         env:
-          AXIA_IDLE_ENFORCE: ${{ vars.AXIA_IDLE_ENFORCE || 'false' }}
+          AXIA_IDLE_ENFORCE: ${{ vars.AXIA_IDLE_ENFORCE || 'true' }}
           AXIA_IDLE_MAX_POLLS: ${{ vars.AXIA_IDLE_MAX_POLLS || '15' }}
           AXIA_IDLE_MAX_RSS_MIB: ${{ vars.AXIA_IDLE_MAX_RSS_MIB || '120' }}
         run: |

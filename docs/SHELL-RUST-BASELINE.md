@@ -186,9 +186,10 @@ checkout. A instalação descartável pode ser removida após preservar os dados
 
 Como referência **para este ambiente e protocolo**, propõe-se 15 chamadas de
 poll/s (maior valor observado + cerca de 20%) e 120 MiB de RSS da sessão.
-São margens iniciais de detecção, não metas universais de produto nem limites
-já impostos pelo CI. Calibrar o runner Fedora com três amostras antes de tornar
-o teste obrigatório; não copiar números do WSL para outra máquina sem medição.
+São margens de detecção, não metas universais de produto. Os limites foram
+calibrados depois com seis amostras do runner Fedora e passaram a ser impostos
+por padrão no CI; veja a seção de calibração abaixo. Não copiar os números
+do WSL para outra máquina sem medição.
 
 O teste posterior deve falhar quando a mediana exceder o orçamento, guardar
 as três amostras/versões/logs mesmo na falha e recusar coleta sem sessão viva,
@@ -199,8 +200,6 @@ em hardware precisa de orçamento próprio.
 
 Pendências que **não estão concluídas por esta documentação**:
 
-- Calibrar o runner e ativar a imposição do orçamento no CI. O coletor executável
-  e os testes de regressão já foram adicionados; veja a seção abaixo.
 - Medir frame completo/primeira apresentação em hardware e ociosidade com os
   serviços reais da sessão. RSS, poll/s e marcadores headless já têm referência.
 - Comparar `lto` e `codegen-units`, mantendo flags da distribuição e o mesmo
@@ -234,9 +233,10 @@ O JSON e os traces/logs de cada amostra são preservados em falhas ordinárias.
 
 O job desktop executa o coletor após `make install`, só na variante GPU=1,
 sempre com renderização em software. O artifact `axia-idle` inclui JSON e logs.
-Inicialmente usa `--enforce false`: registra excessos sem impor números do WSL
-ao runner; falhas de coleta continuam falhando o job. Após três amostras válidas
-no runner, a variável de repositório `AXIA_IDLE_ENFORCE=true` ativa a imposição.
+As primeiras execuções usaram `--enforce false` para calibrar o runner sem impor
+os números do WSL. Após conferir seis amostras válidas de dois workflows, o
+default do workflow passou a `true`. `AXIA_IDLE_ENFORCE=false` permite retornar
+explicitamente à calibração; falhas de coleta continuam falhando o job.
 `AXIA_IDLE_MAX_POLLS` e `AXIA_IDLE_MAX_RSS_MIB` ajustam os limites, inicialmente
 15 e 120. Alterar limites exige registrar as novas condições e medições.
 
@@ -261,6 +261,28 @@ Esta substituição não migra as verificações Python anteriores de empacotame
 Copr, clipboard e rede. Elas continuam no CI até receberem equivalentes Rust;
 novos testes e coletores desta migração devem ser implementados em Rust.
 Nenhuma flag ou implementação de C, JS ou React foi otimizada nesta entrega.
+
+### Calibração do runner e imposição, 2026-11-18
+
+Foram conferidos os artifacts `axia-idle` de duas execuções concluídas com
+sucesso, com três amostras completas de 20 s em cada uma. O escopo é a thread
+principal, software, offline e UID 65534, como no protocolo acima.
+
+| Workflow / revisão | Poll/s: amostras | Poll/s mediano | RSS mediano da sessão |
+| --- | --- | ---: | ---: |
+| [44393655897](https://github.com/rodolfoaltenrath/Axia-DE/actions/runs/44393655897), `61cd4bb8` | 12,650 / 12,550 / 12,500 | 12,550 | 102,969 MiB |
+| [44422355912](https://github.com/rodolfoaltenrath/Axia-DE/actions/runs/44422355912), `c5e595f1` | 12,300 / 12,400 / 12,100 | 12,300 | 103,148 MiB |
+
+Os relatórios estavam em calibração (`enforced=false`), com `status=passed` e
+`exceeded=[]`. Cada amostra registrou 20 leituras de RSS, duração completa e
+saída zero. Mantêm-se os limites de **15 poll/s e 120 MiB**; agora o workflow os
+impõe por padrão. Não foi alterada uma variável remota de repositório: o commit
+muda o fallback versionado, preservando o override explícito do operador.
+
+Os ZIPs e traces originais foram preservados localmente em
+`build/validation/profile-compare-resume/` no checkout isolado da retomada.
+Os links dos workflows acima permitem recuperar os artifacts enquanto retidos
+pelo Actions. Essa calibração não conclui as medições de apresentação física.
 
 ## Instrumentação de referência do ciclo de janelas
 

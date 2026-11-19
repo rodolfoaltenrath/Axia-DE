@@ -99,8 +99,8 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
 - [x] Teste que falha se a atividade ociosa passar de um orçamento:
       `cargo xtask idle-check` compara três amostras de poll/RSS; coletor e
       testes implementados em Rust.
-      O Actions começa em calibração; ativar a imposição após conferir os
-      relatórios do runner, conforme `SHELL-RUST-BASELINE.md`.
+      O Actions foi calibrado com seis amostras de dois workflows e agora
+      impõe 15 poll/s e 120 MiB por padrão; veja `SHELL-RUST-BASELINE.md`.
 - [ ] Opções de compilação do Rust (`lto`, `codegen-units`) em `rust/Cargo.toml`,
       medidas contra a linha de base.
       Protocolo e comandos preparados em
@@ -127,9 +127,9 @@ em [SHELL-RUST-BASELINE.md](SHELL-RUST-BASELINE.md). Nenhuma flag Rust foi alter
 | Ciclo síncrono WM/JSON/espelho, 50 janelas | p50 0,8120 / p99 1,3074 ms | Alteração de título; sem pintura posterior |
 
 O orçamento inicial proposto para o mesmo ambiente é 15 chamadas de poll/s
-e 120 MiB de RSS. Ainda precisa de calibração e implementação no runner:
-o coletor já está no CI em modo de calibração e só impõe limites quando
-`AXIA_IDLE_ENFORCE=true`. A comparação de
+e 120 MiB de RSS. Após conferir os artifacts de dois workflows, o coletor no CI
+impõe esses limites por padrão (`AXIA_IDLE_ENFORCE=false` permite calibração
+explícita). A comparação de
 `lto`/`codegen-units` também continua aberta. Não marcar a Fase 0 inteira como
 concluída nem remover chaves de transição com base nesses resultados parciais.
 
@@ -159,10 +159,12 @@ O clone descartável local é `/var/tmp/axia-profile-20261118` no Fedora WSL;
 os relatórios parciais estão em `build/validation/profile-compare/`.
 Esses diretórios **não acompanham o push** e podem ser recriados pelo protocolo.
 
+Na retomada, a calibração dos limites do runner foi concluída com seis amostras
+de dois workflows. O CI impõe os limites por padrão; acompanhar os artifacts
+para detectar regressões. Essa mudança não altera as flags Rust.
+
 Continuam pendentes também:
 
-- Calibrar os limites com os artifacts do GitHub Actions e ativar a imposição
-  somente após confirmar os números do runner.
 - Medir primeira apresentação e frame completo em hardware real.
 - Migrar os testes Python antigos restantes; novos testes e coletores são Rust.
 - Iniciar a Fase 1 depois dos critérios da Fase 0, começando por uma fatia
@@ -333,3 +335,4 @@ mostraram.
 | 2026-11-18 | Fase 0: coletor e testes migrados para Rust (`cargo xtask idle-check`) | Commit desta linha | 30 testes automáticos e integração real Rust; 13,050 poll/s e 102,547 MiB. Regressão forçada verificada com imposição e em calibração; removidos o coletor e os testes Python desta fatia. |
 | 2026-11-18 | Fase 0: telemetria de compilação e seus testes em Rust (`cargo xtask build-memory`) | Commit desta linha | 41 testes Rust; coleta validada em compilação real do xtask com dois jobs. Desktop/RPM usam o coletor Rust; comparação de LTO/codegen-units permanece pendente. |
 | 2026-11-18 | Fase 0: protocolo e ferramentas para comparar perfis; ponto de parada | Commit desta linha | 43 testes Rust passaram; primeira compilação cancelada para desligamento. Thin LTO, cgu8 e integração comparativa não executados. Nenhuma flag alterada. |
+| 2026-11-18 | Fase 0: calibração confirmada no runner e orçamento obrigatório por padrão | Commit desta linha | Seis amostras válidas em dois workflows: medianas de 12,550/12,300 poll/s e 102,969/103,148 MiB. Mantidos os limites de 15 poll/s e 120 MiB. |
