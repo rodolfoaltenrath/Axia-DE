@@ -108,6 +108,18 @@ jobs:
         env:
           AXIA_NATIVE_FOCUS_OUTPUT: ${{ runner.temp }}/axia-native-focus
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_focus_runtime -- --ignored --nocapture
+      - name: Rust native switcher integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_SWITCHER_AXIA_OUTPUT: ${{ runner.temp }}/axia-switcher/axia
+          AXIA_SWITCHER_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-switcher/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test switcher_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-switcher
+          path: ${{ runner.temp }}/axia-switcher/
+          if-no-files-found: warn
       - name: Rust Force Quit integration and captures
         if: matrix.gpu == 1
         env:

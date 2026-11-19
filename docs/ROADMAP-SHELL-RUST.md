@@ -290,7 +290,7 @@ views nativas lerem direto, sem JSON.
       Título e foco dos cabeçalhos já são lidos diretamente do modelo; o mount
       valida e vincula o proprietário do contexto. A integração altera título
       com o espelho JS parado para comprovar esse caminho. Restam moldura,
-      overview, alternador, catálogos de janelas e demais consumidores.
+      overview, catálogos de janelas e demais consumidores.
       O conteúdo nativo recebe identidade e permissão de entrada, sem foco
       dinâmico no JSON. Quatro cenários gráficos verificam troca direta do
       foco e prioridade de campos JS e sobreposições, com capturas no CI.
@@ -303,6 +303,11 @@ views nativas lerem direto, sem JSON.
       com a view e enviados só quando muda o catálogo/idioma. `runningApps`
       ainda adapta IDs para objetos do espelho; os consumidores dessa API e
       a execução final dos efeitos permanecem em JS.
+      O alternador também lê esse modelo: histórico de foco, grupos, escolha
+      de janela, seleção e cena ficam em Rust. O adaptador envia só comandos,
+      metadados e aparência; não assina a lista nem envia itens/índice. O comando
+      separado `cycleAppWindows` ainda usa o espelho. Integração Rust e capturas
+      Axia/Adwaita em claro/escuro e 640/1000 px; detalhes em `STATE-RUST.md`.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
@@ -337,6 +342,9 @@ Fatias de interface (cada uma completa, com seus chamadores):
 
 - [ ] Moldura de janela (`windowshell.jsx`, `Window.jsx`).
 - [ ] Overview e alternador de apps (`overview.jsx`, `appswitcher.jsx`).
+      Alternador nativo implementado, sem a antiga faixa React; abertura,
+      atalhos e aplicação do foco ainda têm adaptador JS. Overview e a retirada
+      desses adaptadores permanecem pendentes; esta caixa não está concluída.
 - [ ] Central de Controle e bandeja (`ControlCenter.jsx`, `tray.jsx`).
 - [ ] Diálogos de energia, confirmação e `powerbox` (`power.jsx`,
       `powerbox.jsx`).

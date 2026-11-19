@@ -138,6 +138,18 @@ if (!names.length || names.includes('app-host')) await buildAppHost();
 if (!names.length || names.includes('sysapps')) await buildSysApps();
 // Prebundle the integration fixture so RPM checks run offline without Node.js.
 if (!names.length) await build({
+  stdin: {
+    contents: fs.readFileSync(path.join(root, 'rust/xtask/tests/fixtures/switcher_runtime.jsx'), 'utf8')
+      .replaceAll('@ROOT@', root).replaceAll('@MODE@', 'dark').replaceAll('@WIDTH@', '1000')
+      .replaceAll('@IMAGE@', '""').replaceAll('@APPEARANCE@', 'axia'),
+    resolveDir: root, sourcefile: 'switcher-runtime.jsx', loader: 'jsx',
+  },
+  outfile: path.join(root, 'tests/switcher-native.bundle.js'),
+  bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
+  alias: { '@lordos/runtime': path.join(root, 'runtime/index.js'), '@lordos/sdk': path.join(root, 'sdk/index.js') },
+  define: defines, logLevel: 'warning',
+});
+if (!names.length) await build({
   entryPoints: [path.join(root, 'server/tests/switcher_smoke.jsx')],
   outfile: path.join(root, 'tests/switcher-smoke.bundle.js'),
   bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',

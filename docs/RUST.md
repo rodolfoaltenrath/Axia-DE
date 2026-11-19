@@ -23,40 +23,18 @@ edição no processo isolado; veja [RUST-REMINDERS.md](RUST-REMINDERS.md).
 O fallback e o ícone do Sandbox Probe também são nós Rust; seus testes de
 sandbox continuam no módulo Rust `server/src/app/probe.rs`.
 
-## Responsabilidades
+## Alternador de aplicativos
 
-- Rust mantém o histórico de foco, ordena os candidatos e controla a seleção,
-  avanço, retrocesso, cancelamento e remoção de candidatos fechados.
-- C oferece uma ponte pequena para QuickJS e continua responsável por input,
-  Wayland e demais recursos do compositor.
-- O SDK monta a lista de aplicativos e suas janelas, envia identificadores ao
-  modelo e aplica o foco escolhido por meio do gerenciador de janelas existente.
-- React desenha o seletor usando o mesmo material glass da Dock, compartilhado
-  em `sdk/glass.js`. Cores, blur e bordas acompanham o tema; efeitos
-  desativados produzem uma superfície opaca.
+O histórico de foco pertence a `WindowState`. A view nativa
+`native_view/switcher.rs` lê o modelo por referência, agrupa aplicativos,
+seleciona sua janela e desenha ícones e faixa por viewport. React mantém apenas
+abertura, atalhos e aplicação do foco, sem transportar listas ou índice.
+Tela cheia cede temporariamente à shell; cancelar restaura sua janela de origem
+se ela ainda existir. Detalhes e limites em [STATE-RUST.md](STATE-RUST.md).
 
-O comportamento de agrupar janelas por aplicativo foi preservado. Se uma janela
-representante fechar e houver outra do mesmo app, ela assume o lugar. Sem outras
-janelas, o candidato é removido. Aplicativos em tela cheia ainda têm a limitação
-do compositor existente: a superfície de tela cheia fica acima dos overlays e o
-alternador não abre nessa situação.
-
-A política anterior de MRU e seleção em JavaScript foi removida, assim como os
-handlers e bindings duplicados do alternador nos dois temas. O ponto de entrada
-dos atalhos é o dispatcher compartilhado do SDK; o modelo Rust é a única
-implementação da seleção. React e C continuam como interface e integração ativas.
-
-## Fronteira entre as linguagens
-
-A interface está em `server/src/ui/switcher_ffi.h` e a ponte em
-`server/src/ui/js_switcher.c`. Os identificadores são copiados durante a
-chamada. Rust possui seu estado e suas strings; nenhum ponteiro para uma janela,
-node ou objeto JavaScript é guardado em Rust.
-
-Cada contexto da sessão possui um objeto `lord.switcher`, cujo finalizador
-libera o estado Rust. A API não é registrada nos processos de apps isolados.
-O acesso é restrito à thread da interface, com no máximo 512 candidatos e
-identificadores de até 1024 bytes.
+A interface antiga em `server/src/ui/switcher_ffi.h` e a ponte
+`server/src/ui/js_switcher.c` permanecem por compatibilidade até a limpeza da
+Fase 4; o alternador da sessão usa `nativeViews` com o leitor de seu contexto.
 
 ## Build e testes
 
@@ -78,15 +56,12 @@ node server/tests/shortcut_profile_test.mjs
 make check
 ```
 
-`make check` cobre os testes de política em Rust, o contrato C/Rust, os
-grabs dos dois perfis e um teste no compositor headless real. O último testa
-MRU, renderização do overlay, cancelamento, confirmação ao soltar o modificador,
-fechamento de janelas e troca de perfil ao vivo. Ele não valida teclado físico,
-DRM/KMS nem o resultado visual do blur em hardware.
-
-Os próximos módulos devem manter uma fronteira pequena, com responsabilidade
-única e testes próprios. A interface de usuário continua no runtime existente;
-a migração do núcleo pode prosseguir por módulos.
+A integração Rust `switcher_runtime`, obrigatória no CI GPU=1, cobre MRU,
+renderização, atalhos, cancelamento, confirmação ao soltar o modificador,
+remoção de janelas, tela cheia e troca de perfil. Produz oito capturas,
+Axia/Adwaita em claro/escuro e 640/1000 px. O RPM usa o mesmo contrato por
+`cargo xtask switcher-check`, com fixture pré-compilado e sem Node.
+Teclado físico, DRM/KMS e blur em hardware ficam para a validação final.
 
 ## Núcleo do runtime: árvore, estilos, layout e imagens
 

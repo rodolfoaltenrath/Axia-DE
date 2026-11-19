@@ -19,6 +19,7 @@ import { useLocale, formatNumber } from './i18n.js';
 import { wm } from './windows.js';
 import { launchApp } from './apps.js';
 import { nativeCatalogFacts } from './nativecatalog.js';
+import { switcherBridge } from './nativeswitcher.js';
 export { appFacts } from './nativecatalog.js';
 import { refreshPackages } from './packages.js';
 import { settings } from './settings.js';
@@ -71,6 +72,7 @@ function runner(handle, manifest, winId, node = () => 0) {
       try { launcherBridge.perform?.(effect.effect, { handle, node, act }); } catch (e) { console.error('native launcher:', e); }
       return;
     }
+    if (manifest.id === 'shell:switcher' && !effect.host) { switcherBridge.perform?.(effect); return; }
     // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)
     if (manifest.id === 'shell:menubar' && !effect.host) { barEffect(effect, handle); return; }
     if (effect.host) {                 // the host's own: no result goes back to the app
@@ -171,9 +173,9 @@ function NativeApp(props) {
   return h(NativeBridge, { ...props, args: previousArgs.current, theme: previous.current, lang, region: region || '', dir,
     localeRevision, winId: win.id, windowSource, focused: windowSource ? undefined : win.focused !== false, windowMode: win.mode });
 }
-const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
+const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, handleRef, stateSource, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
   const preferences = useStore(manifest.settings ? preferenceFacts : emptyFactsStore);
-  const apps = useStore(manifest.id === 'forcequit' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
+  const apps = useStore(manifest.id === 'forcequit' || manifest.facts === 'appcontrol' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
   const clock = useStore(manifest.facts === 'clock' ? clockState : emptyFactsStore);
   useStore(manifest.facts === 'system' ? screenFacts : emptyFactsStore);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
@@ -218,7 +220,8 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {
     const m = mounted.current;
-    m.handle = ref.current ? (windowSource ? lord.nativeViews.mount(ref.current.id, manifest.id, json, windowSource)
+    const source = stateSource || windowSource;
+    m.handle = ref.current ? (source ? lord.nativeViews.mount(ref.current.id, manifest.id, json, source)
       : lord.nativeViews.mount(ref.current.id, manifest.id, json)) : 0;
     m.sent = json;
     if (!m.handle) return undefined;
@@ -229,9 +232,10 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
     const syncFocus = () => lord.nativeViews.focus(m.handle, !!ownsKeyboard());
     const stopText = onTextField(syncFocus), stopShell = onShellKeyboard(syncFocus);
     syncFocus();
+    if (handleRef) { handleRef.current = m.handle; handleRef.attach?.(m.handle); }
     globalThis.__lordNativeView();
-    return () => { stopDisks?.(); stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
-  }, [manifest.id, windowSource, winId]);
+    return () => { if (handleRef?.current === m.handle) handleRef.current = 0; stopDisks?.(); stopText(); stopShell(); runners.delete(m.handle); lord.nativeViews.unmount(m.handle); m.handle = 0; };
+  }, [manifest.id, windowSource, stateSource, winId]);
   useEffect(() => {
     const m = mounted.current;
     if (!m.handle || m.sent === json) return;

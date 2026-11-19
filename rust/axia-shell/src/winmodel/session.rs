@@ -177,11 +177,12 @@ pub struct WindowState {
     seq: u64,
     clock: u64,
     sent: u64,
+    recent: Vec<String>,
 }
 
 impl Default for WindowState {
     fn default() -> Self {
-        WindowState { wins: Vec::new(), desktops: vec![FIRST_DESKTOP], active: FIRST_DESKTOP, overview: false, seq: 2, clock: 0, sent: 0 }
+        WindowState { wins: Vec::new(), desktops: vec![FIRST_DESKTOP], active: FIRST_DESKTOP, overview: false, seq: 2, clock: 0, sent: 0, recent: Vec::new() }
     }
 }
 
@@ -697,11 +698,7 @@ impl WindowState {
                 // the window an app comes back with: on this desktop if it has one, a visible one before
                 // a minimized one, else the top one of any desktop
                 let ids: Vec<&str> = a(0).as_array().map(|l| l.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
-                let group: Vec<&Win> = ids.iter().filter_map(|id| self.find(id).map(|i| &self.wins[i])).collect();
-                let here: Vec<&Win> = group.iter().copied().filter(|w| self.here(w)).collect();
-                let from = if here.is_empty() { &group } else { &here };
-                let pick = from.iter().rev().find(|w| !w.on("minimized")).or(from.last());
-                result = pick.map_or(Value::Null, |w| Value::String(w.id().into()));
+                result = self.pick_window(&ids).map_or(Value::Null, |w| Value::String(w.id().into()));
             }
             "moveToDesktop" => {
                 let d = a(1).as_f64().map(|d| d as i64);
@@ -852,6 +849,19 @@ impl WindowState {
         let changed = self.wins.len() != before.len()
             || self.wins.iter().zip(&before).any(|(w, b)| w.id() != b.id() || w.rev != b.rev)
             || self.desktops != desktops || self.active != active || self.overview != overview;
+        // Keep MRU in the owner, including focus changes caused by minimizing,
+        // closing or moving between desktops. No JS window subscription is needed.
+        if changed {
+            let wins = &self.wins;
+            self.recent.retain(|id| wins.iter().any(|w| w.id() == id));
+            if let Some(id) = self.focused_window().map(str::to_owned) {
+                if self.recent.first() != Some(&id) {
+                    self.recent.retain(|old| old != &id);
+                    self.recent.insert(0, id);
+                    self.recent.truncate(MAX_WINDOWS);
+                }
+            }
+        }
         let state = if changed || self.clock > self.sent || op == "state" || op == "resync" { self.snapshot() } else { Value::Null };
         Ok((json!({ "result": result, "state": state }), changed))
     }
@@ -889,6 +899,28 @@ impl Session {
     }
 }
 
+#[cfg(test)]
+mod recent_tests {
+    use super::*;
+    #[test]
+    fn recent_focus_lives_in_the_model_and_reads_are_silent() {
+        let mut session = Session::default();
+        for app in ["files","notes","calculator"] {
+            session.call("open", &[json!({}),json!({"app":app})]).unwrap();
+        }
+        let reader = session.reader();
+        assert_eq!(reader.read().recent_windows(), &["calculator","notes","files"]);
+        session.call("minimize", &[json!({}),json!("calculator")]).unwrap();
+        assert_eq!(reader.read().recent_windows(), &["notes","calculator","files"]);
+        session.call("close", &[json!({}),json!("notes")]).unwrap();
+        assert_eq!(reader.read().recent_windows(), &["files","calculator"]);
+        let revision = reader.revision();
+        session.call("state", &[json!({})]).unwrap();session.call("resync", &[json!({})]).unwrap();
+        assert_eq!(reader.revision(), revision);
+        assert_eq!(reader.read().recent_windows(), &["files","calculator"]);
+    }
+}
+
 /// Borrowed window data for native readers. App arguments retain their existing
 /// dynamic representation; geometry and window identity need no JSON transport.
 pub struct Window<'a>(&'a Win);
@@ -899,14 +931,24 @@ impl Window<'_> {
     pub fn frame(&self) -> Rect { self.0.rect() }
     pub fn desktop(&self) -> i64 { self.0.desktop() }
     pub fn minimized(&self) -> bool { self.0.on("minimized") }
+    pub fn pip(&self) -> bool { self.0.on("pip") }
     pub fn revision(&self) -> u64 { self.0.rev }
     pub fn args(&self) -> &Value { self.0.data.get("args").unwrap_or(&Value::Null) }
 }
 impl WindowState {
+    pub fn recent_windows(&self) -> &[String] { &self.recent }
+    /// The front visible member on this desktop, else its minimized member,
+    /// else the front visible member of any desktop. Same rule as wm.pick.
+    pub fn pick_window(&self, ids: &[&str]) -> Option<Window<'_>> {
+        let group: Vec<&Win> = ids.iter().filter_map(|id| self.find(id).map(|i| &self.wins[i])).collect();
+        let here: Vec<&Win> = group.iter().copied().filter(|w| self.here(w)).collect();
+        let from = if here.is_empty() { &group } else { &here };
+        from.iter().rev().find(|w| !w.on("minimized")).or(from.last()).map(|w| Window(w))
+    }
     pub fn focused_window(&self) -> Option<&str> {
         self.wins.iter().rev().find(|w| !w.on("minimized") && !w.on("pip") && self.here(w)).map(Win::id)
     }
-    pub fn windows(&self) -> impl Iterator<Item = Window<'_>> { self.wins.iter().map(Window) }
+    pub fn windows(&self) -> impl DoubleEndedIterator<Item = Window<'_>> { self.wins.iter().map(Window) }
     pub fn window(&self, id: &str) -> Option<Window<'_>> { self.find(id).map(|i| Window(&self.wins[i])) }
     pub fn desktops(&self) -> &[i64] { &self.desktops }
     pub fn active_desktop(&self) -> i64 { self.active }

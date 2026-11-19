@@ -101,38 +101,56 @@ pub fn run_ui_with_capture(
     )
     .unwrap();
     let bundle = scratch.0.join("probe.bundle.js");
-    let output = Command::new(repo.join("node_modules/.bin/esbuild"))
-        .current_dir(repo)
-        .arg(&driver)
-        .args([
-            "--bundle",
-            "--format=iife",
-            "--jsx=automatic",
-            "--target=es2020",
-        ])
-        .arg(format!("--outfile={}", bundle.display()))
-        .arg(format!(
-            "--alias:@lordos/runtime={}/runtime/index.js",
-            repo.display()
-        ))
-        .arg(format!(
-            "--alias:@lordos/sdk={}/sdk/index.js",
-            repo.display()
-        ))
-        .args([
-            "--define:process.env.NODE_ENV=\"production\"",
-            "--define:__LORD_STANDALONE__=true",
-            "--define:__AXIA_APP_HOST__=false",
-        ])
-        .env("NODE_PATH", repo.join("node_modules"))
-        .output()
+    if let Some(prebuilt) = std::env::var_os("AXIA_UI_PREBUILT") {
+        let config = serde_json::json!({"mode":mode,"width":width,"image":image,"kind":kind});
+        fs::write(
+            &bundle,
+            format!(
+                "globalThis.__AXIA_UI_TEST__={config};\n{}",
+                fs::read_to_string(prebuilt).unwrap()
+            ),
+        )
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let mut command = Command::new(repo.join("server/build/axia-server"));
+    } else {
+        let output = Command::new(repo.join("node_modules/.bin/esbuild"))
+            .current_dir(repo)
+            .arg(&driver)
+            .args([
+                "--bundle",
+                "--format=iife",
+                "--jsx=automatic",
+                "--target=es2020",
+            ])
+            .arg(format!("--outfile={}", bundle.display()))
+            .arg(format!(
+                "--alias:@lordos/runtime={}/runtime/index.js",
+                repo.display()
+            ))
+            .arg(format!(
+                "--alias:@lordos/sdk={}/sdk/index.js",
+                repo.display()
+            ))
+            .args([
+                "--define:process.env.NODE_ENV=\"production\"",
+                "--define:__LORD_STANDALONE__=true",
+                "--define:__AXIA_APP_HOST__=false",
+            ])
+            .env("NODE_PATH", repo.join("node_modules"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let server = std::env::var_os("AXIA_UI_SERVER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo.join("server/build/axia-server"));
+    let fonts = std::env::var_os("AXIA_UI_FONTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo.join("assets/fonts"));
+    let mut command = Command::new(server);
     command
         .current_dir(repo.join("server"))
         .args([
@@ -144,7 +162,7 @@ pub fn run_ui_with_capture(
         ])
         .arg(&bundle)
         .arg("--fonts")
-        .arg(repo.join("assets/fonts"))
+        .arg(fonts)
         .env("HOME", &home)
         .env("XDG_RUNTIME_DIR", home.join("runtime"))
         .env("XDG_CONFIG_HOME", home.join(".config"))

@@ -178,7 +178,6 @@ def main():
                 '--theme', '../themes/default/theme.bundle.js',
                 cwd=staged / 'bin', env=env, timeout=25, **opts)
             log = (home / '.cache/axia/session.log').read_text()
-            assert 'switcher integration: passed' in log, log
             assert 'session power integration: passed' in log, log
             assert 'host power dialog rendering: passed' in log, log
             assert 'wallpaper integration: passed' in log, log

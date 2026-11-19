@@ -8,18 +8,18 @@ use std::rc::Rc;
 use crate::native_view::windows::{WindowRef, WindowSource};
 
 #[derive(Clone)]
-struct Window {
-    id: String,
+pub struct Window {
+    pub id: String,
     surface: Option<i32>,
     x11: bool,
     isolated: bool,
-    icon: Value,
+    pub icon: Value,
 }
 #[derive(Clone)]
-struct Group {
-    key: String,
-    name: String,
-    windows: Vec<Window>,
+pub struct Group {
+    pub key: String,
+    pub name: String,
+    pub windows: Vec<Window>,
 }
 #[derive(Default)]
 pub struct App {
@@ -136,6 +136,11 @@ fn native_groups(source: &dyn WindowSource, input: &Value) -> Vec<Group> {
     sorted_groups(groups)
 }
 impl App {
+    /// Native consumers share membership and metadata policy without JSON summaries.
+    pub fn native_groups(&mut self, input: &Value) -> &[Group] {
+        self.refresh(input);
+        &self.groups
+    }
     pub fn with_windows(source: Rc<dyn WindowSource>) -> Self {
         Self { source: Some(source), ..Self::default() }
     }

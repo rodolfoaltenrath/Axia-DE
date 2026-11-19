@@ -91,6 +91,7 @@ CARGO_BUILD_JOBS=1 %make_build -C server GPU=1 test-platform SKIP_RUST_TESTS=1
 %make_build -C server GPU=1 build/tp-test
 server/build/tp-test
 python3 tools/desktop/check.py --require-gpu
+cargo xtask switcher-check --installation %{buildroot}%{_libexecdir}/axia
 
 # Automatic updates are opt-in; do not run presets which could enable this timer.
 %preun

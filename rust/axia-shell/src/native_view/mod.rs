@@ -16,6 +16,9 @@ pub(crate) use menu::measure as measure_text;
 mod menubar;
 mod shell_icons;
 mod titlebar;
+mod switcher;
+#[cfg(test)]
+mod switcher_tests;
 #[cfg(test)]
 mod titlebar_tests;
 mod tree;
@@ -205,6 +208,8 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     } else if id == "forcequit" {
         windows.clone().map(|reader| Box::new(crate::forcequit::App::with_windows(
             std::rc::Rc::new(crate::winmodel::WindowReader(reader)))) as Box<dyn NativeApp>).or_else(|| app(id))
+    } else if id == "shell:switcher" {
+        windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
     } else { app(id) };
     let Some(app) = app else {
         return 0;

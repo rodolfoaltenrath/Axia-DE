@@ -122,8 +122,46 @@ JSON continua valendo. O catálogo ainda precisa migrar para estado nativo.
 A execução final dos efeitos Wayland e `wm.close` ainda passa pelo adaptador
 JS. `runningApps()` conserva o contrato dos consumidores legados: converte IDs
 em objetos do espelho, omitindo entradas cujo objeto ainda não chegou.
-Portanto, o alternador e os menus ainda precisam migrar; essa adaptação não é
+Portanto, os menus e outros consumidores ainda precisam migrar; essa adaptação não é
 evidência de que o espelho inteiro foi retirado.
+
+## Alternador nativo
+
+`native_view/switcher.rs` monta `shell:switcher` com o leitor do contexto.
+O histórico MRU agora pertence a `WindowState`: alterações semânticas atualizam
+o foco recente e removem IDs fechados; leituras e ressincronizações são silenciosas.
+A view reutiliza o agrupamento nativo do Forçar encerramento e a política
+`WindowState.pick_window`, sem pedir resumos JSON ao controlador da sessão.
+Revisões invalidam a cena e são consumidas antes de confirmar uma ação; fechar
+a janela escolhida substitui sua representante ou remove o grupo.
+
+Seleção, ícones e faixa por viewport são nativos. `appswitcher.jsx` conserva
+somente o ciclo de abertura, os atalhos e a aplicação do foco escolhido.
+`nativeswitcher.js` enfileira comandos recebidos antes do mount e usa um nonce
+para que efeitos de uma abertura antiga não encerrem a seguinte. Metadados e
+aparência ainda chegam pelo adaptador compartilhado. O comando separado de
+ciclar janelas do mesmo app ainda usa o espelho JS; overview e o antigo binding
+`lord.switcher` permanecem para as próximas etapas.
+
+O teste `switcher_runtime` verifica os dois estilos, claro/escuro em 640/1000 px,
+com MRU, janela representante removida antes do commit, foco em janela ausente
+do espelho, comandos antes do mount, troca de desktop, tela cheia, perfil, dispatcher,
+faixa com 18 apps, clique e desmontagem. O driver JS somente informa observações;
+as verificações e o processo pertencem ao Rust. Capturas ficam em
+`build/validation/switcher/`; o CI publica `axia-switcher`.
+
+`cargo xtask switcher-check --installation DIR --output DIR` executa o mesmo
+contrato com o fixture pré-compilado, sem Node ou compilação de perfil de testes.
+O RPM chama esse comando em `%check`; os testes legados de energia, wallpaper e
+MIME conservam sua cobertura separada. Isso não encerra a Fase 2 nem a caixa
+compartilhada com overview na Fase 3, e não substitui medições físicas.
+
+Validação local: 113 testes do host nativo, 35 do modelo de janelas e 35 do
+xtask; os oito cenários do alternador e quatro de cada uma das regressões de
+foco e Forçar encerramento passaram. Compositor e frontend recompilados;
+o contrato offline também passou com a instalação preparada para RPM.
+Os dois contratos LPK também passaram. Não houve reconstrução completa do RPM
+nesta fatia.
 
 ## Verificação
 
