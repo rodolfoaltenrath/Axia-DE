@@ -14,6 +14,11 @@ e substituí-los por Rust. Ele complementa:
 
 Marque as caixas conforme o trabalho for concluído, no mesmo commit que o conclui.
 
+**Decisão do usuário em 2026-11-19:** deixar as medições em hardware real para
+o encerramento do roadmap. Elas permanecem pendentes, mas não bloqueiam o início
+da Fase 1. Manter os testes Rust/headless e os limites já impostos no CI durante
+a migração; não declarar medições físicas concluídas sem executá-las.
+
 ## Objetivo e decisões
 
 **Objetivo:** a sessão principal (`axia-server`) roda sem QuickJS, sem React e sem
@@ -95,7 +100,7 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
       memória residente da sessão, tempo até a primeira janela, tempo de quadro
       (o benchmark do mouse na Dock já existe) e custo do ciclo de janelas.
       Referência headless inicial registrada abaixo; primeira apresentação e
-      frame completo em hardware seguem pendentes.
+      frame completo em hardware ficam para o encerramento, por decisão do usuário.
 - [x] Teste que falha se a atividade ociosa passar de um orçamento:
       `cargo xtask idle-check` compara três amostras de poll/RSS; coletor e
       testes implementados em Rust.
@@ -130,8 +135,8 @@ O orçamento inicial proposto para o mesmo ambiente é 15 chamadas de poll/s
 e 120 MiB de RSS. Após conferir os artifacts de dois workflows, o coletor no CI
 impõe esses limites por padrão (`AXIA_IDLE_ENFORCE=false` permite calibração
 explícita). A comparação de `lto`/`codegen-units` foi concluída, mantendo as flags
-Fedora; os números estão no relatório específico. Não marcar a Fase 0 inteira
-como concluída: primeira apresentação e frame completo em hardware ainda faltam.
+Fedora; os números estão no relatório específico. A coleta física permanece
+pendente para o encerramento; a Fase 1 está liberada pela decisão de 2026-11-19.
 
 **Saída:** decisões fechadas, números registrados, orçamento de ociosidade no CI.
 
@@ -185,6 +190,11 @@ de Copr, clipboard/rede e verificações gerais de empacotamento. A Fase 1 não
 foi iniciada nesta entrega.
 
 ## Fase 1: terminar o que já começou
+
+Retomada em 2026-11-19: comparação de perfis e calibração do CI já concluídas;
+não repeti-las. O usuário adiou as medições físicas para o encerramento e
+liberou a Fase 1 com validação Rust/headless. Também foi iniciada a parte
+independente da Fase 7: declaração e documentação da API JavaScript dos `.lpk`.
 
 Para cada chave de transição: ligar de vez, apagar o caminho React e os `.jsx`
 correspondentes, remover a chave.
@@ -298,8 +308,10 @@ Aqui não se reescreve nada: mantém-se e congela-se.
 
 - [ ] Separar o SDK dos `.lpk` (`runtime/app-host.js` e o que ele importa) do
       resto do `sdk/`, com a lista da Fase 0.
-- [ ] Declarar um número de versão para a API dos `.lpk` e documentar o que ela
-      garante (`NATIVE-APPS.md`).
+- [x] Declarar um número de versão para a API dos `.lpk` e documentar o que ela
+      garante (`NATIVE-APPS.md`). API JavaScript versão 1, publicada pelo host
+      e pelo SDK; resolução de módulos e identidade dos stores cobertas por
+      teste Rust exigido no CI. A separação dos entry points continua pendente.
 - [ ] Manter o manifesto, as permissões e a assinatura independentes da forma de
       execução do app.
 - [ ] O QuickJS fica no binário, carregado só quando um app `.lpk` é aberto.
@@ -353,3 +365,4 @@ mostraram.
 | 2026-11-18 | Fase 0: comparação de perfis concluída com instrumentos e testes Rust | Commit desta linha | Três builds frios e três vínculos reais; nove amostras ociosas e paridade de pixels/texto. Mantidas as flags Fedora. Primeira apresentação e frame completo em hardware continuam pendentes. |
 | 2026-11-18 | Fase 0: testes da divisão de build migrados para Rust | Commit desta linha | Três verificações reais de Cargo/Make passaram; removido `test_rust_build_partition.py`. Os testes dependentes do ambiente são exigidos explicitamente no CI. Suíte leve: 47 testes passaram no host e no container. |
 | 2026-11-18 | Inicialização da sessão e testes migrados para Rust | Commit desta linha | 18 testes automáticos, recusa de root e integração real instalada passaram. Removidos os dois scripts e testes Python da inicialização; memória observada do lançador: 2,555 MiB em sessão privada. Pausa solicitada pelo usuário após concluir esta entrega. |
+| 2026-11-19 | Fase 7: API JavaScript dos `.lpk` declarada como versão 1 | Commit desta linha | 47 testes leves e contrato adicional Rust/Node passaram; bundles reconstruídos. Módulos e stores preservados, versão do host imutável; nenhum campo obrigatório ou alteração de assinatura/permissões. Separação dos entry points pendente. Medições físicas adiadas para o encerramento a pedido do usuário. |

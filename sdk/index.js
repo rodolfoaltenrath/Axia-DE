@@ -1,4 +1,5 @@
 // @lordos/sdk — everything a LordOS theme or app needs.
+export { LPK_API_VERSION } from '../runtime/lpk-api.js';
 export { standaloneDesktop } from './platform.js';
 import { createElement, cloneElement, Fragment } from 'react';
 import { render, onScreenChange } from '@lordos/runtime';

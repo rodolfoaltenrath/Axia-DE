@@ -16,14 +16,11 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import * as runtime from '@lordos/runtime';
 import * as sdk from '@lordos/sdk';
 import * as nativeApps from './nativeapps.js';
+import { createLpkApi } from './lpk-api.js';
 
 // Shared modules the app asks for with globalThis.__lordos.require (as in the theme).
 const shared = { react: React, 'react/jsx-runtime': jsxRuntime, '@lordos/runtime': runtime, '@lordos/sdk': sdk, '@lordos/nativeapps': nativeApps };
-globalThis.__lordos = globalThis.__lordos || {};
-globalThis.__lordos.require = (name) => {
-  if (!(name in shared)) throw new Error(`module not available: ${name}`);
-  return shared[name];
-};
+globalThis.__lordos = createLpkApi(shared);
 
 const { createElement: h, Fragment } = React;
 const { render } = runtime;

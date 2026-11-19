@@ -4,6 +4,17 @@ Fase 0, 2026-11-18. Referência documental: `lpk-sdk-0.8.7/ffabc1aa`.
 Esse identificador é da captura: não adiciona campos ao manifesto, negociação
 de versão nem uma nova API em runtime. O congelamento executável fica na Fase 7.
 
+Atualização de 2026-11-19: a Fase 7 passou a declarar **LPK API versão 1**
+em `runtime/lpk-api.js`, disponível em `__lordos.apiVersion` e no export
+`LPK_API_VERSION` do SDK. O contrato e seus limites estão em
+[NATIVE-APPS.md](NATIVE-APPS.md#api-for-installed-apps). Não há novo campo
+obrigatório no manifesto ou negociação de versão. Os números do grafo abaixo
+continuam sendo os da captura histórica; os entry points ainda não foram separados.
+Validação desta declaração: 47 testes leves do xtask e o contrato Rust/Node
+adicional passaram; o build dos bundles passou. No mesmo clone Linux, o bundle
+do app-host passou de 575726 para 575817 bytes. Isso não é uma medição de RSS
+ou desempenho, nem evidência de redução do grafo compartilhado.
+
 ## Contrato que a opção A preserva
 
 Cada app continua no processo `axia-server --app <id>`, com QuickJS, React e

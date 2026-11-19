@@ -42,6 +42,8 @@ jobs:
           dnf install -y dnf5-plugins nodejs npm xdg-user-dirs dbus-daemon mesa-libgbm-devel mesa-libEGL-devel mesa-libGLES-devel clang strace
           dnf builddep -y packaging/rpm/axia-de.spec
       - run: npm ci
+      - name: Rust LPK API compatibility contract
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test lpk_api -- --include-ignored
       - name: Desktop model regression tests
         run: |
           node server/tests/shortcut_profile_test.mjs

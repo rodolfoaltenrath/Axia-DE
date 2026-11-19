@@ -16,17 +16,13 @@ import { createStore } from './store.js';
 import { locale } from './i18n.js';
 import { setPackageApps, windows, wm, appIdOf } from './windows.js';
 import { iconFromFile } from './apps.js';
+import { createLpkApi } from '../runtime/lpk-api.js';
 
 const h = React.createElement;
 const shared = {
   react: React, 'react/jsx-runtime': jsxRuntime, '@lordos/runtime': runtime, '@lordos/sdk': sdk,
 };
-globalThis.__lordos = {
-  require(name) {
-    if (!(name in shared)) throw new Error(`module not available to installed apps: ${name}`);
-    return shared[name];
-  },
-};
+globalThis.__lordos = createLpkApi(shared);
 
 const has = () => typeof lord.apps !== 'undefined' && typeof lord.apps.packages === 'function';
 const loaded = new Map();               // id → { default, Icon } | { error }

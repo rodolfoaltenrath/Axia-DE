@@ -84,6 +84,45 @@ The full example is in `examples/apps/fractal/`. It uses:
 
 ## API for installed apps
 
+The JavaScript module contract is **LPK API version 1**. Apps can read
+`globalThis.__lordos.apiVersion` or import `LPK_API_VERSION` from `@lordos/sdk`.
+The host's `apiVersion` property is read-only. Hosts predating this declaration
+may omit both values; existing apps do not need to declare or negotiate a version.
+The app's manifest `version` continues to describe the app, independently.
+
+Version 1 preserves these module names and the identity of their shared objects:
+`react`, `react/jsx-runtime`, `@lordos/runtime` and `@lordos/sdk`, through
+`globalThis.__lordos.require(name)`. Stores remain live shared objects within
+the app process. Only explicitly registered module names are resolved;
+unknown names and inherited Object properties are rejected. The isolated host
+also keeps `@lordos/nativeapps` for the existing compiled system-app adapter;
+that internal adapter is not a new third-party extension API.
+
+This version identifies the existing JavaScript host contract; it does not
+promise that every exported function has a privileged broker implementation
+or exists on every distribution. Availability and permissions still apply;
+see [the API inventory](SHELL-RUST-API-INVENTORY.md) and
+[SDK boundaries](LPK-SDK-BOUNDARY.md). Native scene structures, Rust/C layouts,
+private host internals and exception text are not a stable package ABI.
+
+Compatible additions may retain version 1. Removing or incompatibly changing
+the documented module/SDK contract requires a new API version and an explicit
+compatibility decision. Replacing the session with Rust does not permit silently
+removing the JavaScript runtime from isolated `.lpk` processes.
+
+The `.lpk` tar layout, manifest validation, permissions, `contenido.json` and
+`firma.json` signing rules are unchanged. This API number grants no permissions,
+does not change trust decisions and does not repackage or re-sign existing apps.
+
+The module registry is shared by the isolated host and transitional loader in
+`runtime/lpk-api.js`. The Rust compatibility test evaluates the actual loader
+with Node and checks object identity, live stores, module isolation and version
+immutability; desktop CI requires it explicitly:
+
+```text
+cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test lpk_api -- --include-ignored
+```
+
 | | |
 |---|---|
 | `loadWasm(appId, 'assets/x.wasm', imports)` | `WebAssembly.instantiate` of a file in the package |
