@@ -62,7 +62,7 @@ console.log(JSON.stringify({ version: LPK_API_VERSION, legacyVersion: legacy.api
 
 #[test]
 #[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
-fn shell_excludes_the_react_menu_while_lpk_hosts_retain_it() {
+fn shell_excludes_react_surfaces_while_lpk_hosts_retain_them() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .nth(2)
@@ -81,7 +81,8 @@ for (const appHost of [false, true]) {
   const bytes = suffix => Object.entries(inputs).filter(([name]) => name.replaceAll('\\', '/').endsWith(suffix))
     .reduce((total, [, input]) => total + input.bytesInOutput, 0);
   reports.push({ appHost, reactMenu: bytes('runtime/lpk/menu.jsx'), nativeMenu: bytes('sdk/nativemenu.jsx'),
-    runtimeFlag: result.outputFiles[0].text.includes('menuNativeView') });
+    reactBanner: bytes('runtime/lpk/notifications.js'), nativeBanner: bytes('sdk/nativebanner.js'),
+    runtimeFlag: ['menuNativeView','notificationsNativeView'].some(flag => result.outputFiles[0].text.includes(flag)) });
 }
 console.log(JSON.stringify(reports));
 "#;
@@ -101,6 +102,12 @@ console.log(JSON.stringify(reports));
     assert_eq!(reports[0]["reactMenu"], 0, "React menu leaked into shell");
     assert!(reports[0]["nativeMenu"].as_u64().unwrap() > 0);
     assert!(reports[1]["reactMenu"].as_u64().unwrap() > 0);
+    assert_eq!(
+        reports[0]["reactBanner"], 0,
+        "React banner leaked into shell"
+    );
+    assert!(reports[0]["nativeBanner"].as_u64().unwrap() > 0);
+    assert!(reports[1]["reactBanner"].as_u64().unwrap() > 0);
     for report in reports {
         assert_eq!(report["runtimeFlag"], false);
     }

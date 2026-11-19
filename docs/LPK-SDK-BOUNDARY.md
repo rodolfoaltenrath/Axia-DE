@@ -21,6 +21,12 @@ build. `__AXIA_APP_HOST__` não é uma preferência do usuário nem um campo do
 manifesto. A separação completa do SDK continua pendente; o teste de metafile
 garante somente a ausência desse renderer específico no bundle da sessão.
 
+O mesmo recorte passou a valer para `NotificationBanner`: a sessão desenha os
+banners no host Rust, e `runtime/lpk/notifications.js` fica somente no bundle
+do host isolado. O contrato do SDK continua exportando `NotificationBanner` e
+as funções/lojas de notificações. Estado e timers da sessão ainda são JS;
+essa separação de apresentação não conclui a migração dos serviços.
+
 ## Contrato que a opção A preserva
 
 Cada app continua no processo `axia-server --app <id>`, com QuickJS, React e

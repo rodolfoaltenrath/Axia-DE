@@ -68,6 +68,17 @@ jobs:
         env:
           AXIA_MENUS_OUTPUT: ${{ runner.temp }}/axia-menus
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test menus_runtime -- --ignored --nocapture
+      - name: Rust notification integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_NOTIFICATIONS_OUTPUT: ${{ runner.temp }}/axia-notifications
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test notifications_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-notifications
+          path: ${{ runner.temp }}/axia-notifications
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

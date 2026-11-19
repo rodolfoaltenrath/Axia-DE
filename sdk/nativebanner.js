@@ -1,5 +1,5 @@
-// The notification banners drawn by the Rust view host (native_view/tree.rs, the
-// "notificationsNativeView" setting): the shell builds each banner's tree from the notifications
+// The notification banners drawn by the Rust view host (native_view/tree.rs):
+// the shell builds each banner's tree from the notifications
 // (sdk/notify.js keeps them, their timers and their actions) and Rust draws and routes the clicks.
 import { createElement as h, useEffect } from 'react';
 import { screen } from '@lordos/runtime';
@@ -7,8 +7,9 @@ import { useStore } from './store.js';
 import { useTheme } from './theme.js';
 import { direction, formatTime, appName } from './i18n.js';
 import { getApp, workArea } from './windows.js';
-import { settings, useSettings } from './settings.js';
-import { useNotifications, dismissNotification, runAction, grouped, bannerPlacement, ReactNotificationBanner } from './notify.js';
+import { settings } from './settings.js';
+import { useNotifications, dismissNotification, runAction, grouped, bannerPlacement } from './notify.js';
+import { AppNotificationBanner } from '../runtime/lpk/notifications.js';
 import { NativeView } from './nativeview.js';
 import { NATIVE_TREE, treeOwners } from './nativetree.js';
 
@@ -65,6 +66,6 @@ function NativeBanners() {
 }
 
 export function NotificationBanner() {
-  const [prefs] = useSettings();
-  return h(prefs.notificationsNativeView === true ? NativeBanners : ReactNotificationBanner);
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return h(AppNotificationBanner);
+  return h(NativeBanners);
 }

@@ -66,6 +66,36 @@ fatia. Passaram 47 testes leves, dois contratos Rust/Node e a integração real
 com quatro casos e capturas. Métricas físicas e avaliação final de desempenho ficam para o encerramento
 do roadmap, por decisão do usuário; o orçamento existente continua no CI.
 
+## Notificações da sessão — 2026-11-19
+
+`NotificationBanner` usa sempre o host de views Rust na sessão. A preferência
+antiga `notificationsNativeView` não escolhe mais um renderer. A apresentação
+React foi retirada de `sdk/notify.js` e mantida em `runtime/lpk/notifications.js`,
+apenas para o build do host isolado, assim como o menu de compatibilidade.
+O teste Rust de metafile exige zero bytes desse renderer no bundle da shell e
+presença no host `.lpk`.
+
+A lista, a política de agrupamento, as permissões, os timers e as ações de
+`notify.js` não foram reescritos nesta fatia. A descrição da árvore ainda vem do
+adaptador JS e é desenhada pelo host Rust. A Fase 2 deve levar o estado e os
+serviços para Rust; não se declara aqui uma sessão sem JavaScript.
+
+O driver Rust exige `notificationsNativeView=false` e exercita dois botões sem
+duplicar ações, ação pelo corpo, fechamento, reapresentação do item anterior de
+um grupo, Não Perturbe com histórico, expiração e posicionamento inferior em
+RTL numa área de trabalho deslocada. Executa os quatro casos claro/escuro em
+640/1000 px e salva PNGs com os tokens reais do tema, efeitos desligados:
+
+```text
+AXIA_NOTIFICATIONS_OUTPUT=/var/tmp/axia-notifications cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test notifications_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige essa integração e publica `axia-notifications`. As capturas e
+logs locais ficam em `build/validation/native-notifications/`. O suporte Rust
+de processos, permissões da instalação privada, coleta e PNG foi compartilhado
+com o teste de menus; essa regressão também foi executada. Não houve novo RPM
+completo nem novas medições físicas nesta fatia.
+
 ## Sequência de retirada
 
 1. Completar widgets e integração nativa e migrar os consumidores do host React.
