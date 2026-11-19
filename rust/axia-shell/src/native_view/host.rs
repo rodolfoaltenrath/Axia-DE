@@ -1762,7 +1762,7 @@ impl Host {
         let (width, height) = scene::frame(self.mount).map_or((0., 0.), |f| (f.2, f.3));
         let resized = width > 1. && (width - self.width).abs() >= 1.
             || height > 1. && (height - self.height).abs() >= 1.;
-        if resized || self.next_sync.is_some_and(|t| now >= t) {
+        if resized || self.app.invalidated() || self.next_sync.is_some_and(|t| now >= t) {
             self.sync();
         }
         self.position_popovers();
@@ -1787,6 +1787,7 @@ impl Host {
         }
     }
     pub fn deadline(&self) -> Option<f64> {
+        if self.app.invalidated() { return Some(0.); }
         [
             self.next_sync,
             self.next_blink.filter(|_| self.field != 0),

@@ -2,6 +2,7 @@
  * view its mount node, its facts (settings, theme, services) and runs the effects that belong
  * to the shell; drawing, input and captions are Rust's. */
 #include "js_nativeview.h"
+#include "js_winmodel.h"
 #include "ui.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,11 +39,14 @@ static JSValue f_mount(JSContext *c, JSValueConst t, int argc, JSValueConst *arg
     JSValue keep;
     const char *facts = arg_json(c, argv[2], &keep);
     int allowed = app && (!only_app[0] || !strcmp(app, only_app));
-    unsigned h = allowed && facts ? axia_view_mount(node, app, facts) : 0;
+    AxiaWindows *windows = argc > 3 ? js_windows_borrow(c, argv[3]) : NULL;
+    unsigned h = 0;
+    if (allowed && facts && (argc <= 3 || windows))
+        h = windows ? axia_view_mount_windows(node, app, facts, windows) : axia_view_mount(node, app, facts);
     if (app) JS_FreeCString(c, app);
     if (facts) JS_FreeCString(c, facts);
     JS_FreeValue(c, keep);
-    return JS_NewUint32(c, h);
+    return argc > 3 && !windows ? JS_EXCEPTION : JS_NewUint32(c, h);
 }
 
 static JSValue f_unmount(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {

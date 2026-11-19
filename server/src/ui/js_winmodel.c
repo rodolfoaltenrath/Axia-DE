@@ -12,6 +12,10 @@
 
 static JSClassID list_class;
 
+AxiaWindows *js_windows_borrow(JSContext *c, JSValueConst object) {
+    return JS_GetOpaque2(c, object, list_class);
+}
+
 static void list_finalize(JSRuntime *rt, JSValue v) {
     (void)rt;
     axia_windows_free(JS_GetOpaque(v, list_class));

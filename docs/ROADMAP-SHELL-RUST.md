@@ -276,14 +276,19 @@ views nativas lerem direto, sem JSON.
       Base `axia-state` implementada e usada pelo proprietário do modelo de
       janelas: leitura por empréstimo, revisão numérica, assinaturas canceláveis
       e invalidações agrupadas, sem dependências externas. Ainda falta ligar
-      as views ao despacho de invalidações e substituir os stores JS dos
-      demais serviços. Contrato e limites em `STATE-RUST.md`.
+      os demais consumidores e substituir os stores JS dos serviços. O host
+      já agenda sincronização imediata de revisões pendentes; a barra de título
+      é o primeiro consumidor. Contrato e limites em `STATE-RUST.md`.
 - [ ] Lista de janelas: trocar o espelho em JS (`sdk/windows.js`) e o ciclo
       `JSON.stringify` / `JSON.parse` por revisões numéricas (o campo `rev` já
       existe) lidas pelo Rust.
       `Session.reader()` já expõe o estado diretamente para consumidores Rust;
       ordem, remoção, desktops e overview também invalidam essa revisão.
       ABI JSON, espelho JS e envio de fatos às views continuam pendentes.
+      Título e foco dos cabeçalhos já são lidos diretamente do modelo; o mount
+      valida e vincula o proprietário do contexto. A integração altera título
+      com o espelho JS parado para comprovar esse caminho. Restam moldura,
+      overview, alternador, catálogos de janelas e demais consumidores.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
@@ -446,3 +451,4 @@ mostraram.
 | 2026-11-19 | Fase 1: barra de título sempre no host Rust | Commit desta linha | Removida a escolha por preferência e o renderer React substituído. Corrigida a maximização indevida por duplo clique num controle, reproduzida e verificada em Rust. Oito cenários Axia/Adwaita, claro/escuro e 640/1000 px, com janelas reais e PNGs. A moldura, o fallback de arraste e os efeitos ainda usam o adaptador JS; validação de grab físico e métricas ficam para o encerramento. |
 | 2026-11-19 | Fase 1: navegador Arquivos sempre nativo; chaves encerradas | Commit desta linha | Removidos o renderer React do navegador e sua preferência; ícone nativo. Corrigido o recorte de PDFs com contain, reproduzido no compositor anterior e verificado por pixels do centro/topo/rodapé. Oito cenários em Rust cobrem arquivos privados, navegação, renomeação, PDF, seletores e volumes simulados. Smoke JS/Python substituído pela integração Rust exigida no CI. lordNativeView auditado como preferência inexistente no código atual; o despachante __lordNativeView permanece até as fases seguintes. Seletores e transferências registrados na Fase 3; validação física adiada ao encerramento. |
 | 2026-11-19 | Fase 2 iniciada: base observável e proprietário do estado de janelas | Commit desta linha | Crate axia-state sem dependências externas; leitores por empréstimo, revisões e assinaturas canceláveis com invalidações agrupadas. Session guarda WindowState nessa base e expõe leitura nativa. Testes distinguem mutações, ordem e remoção de leituras, resync e operações sem efeito. ABI JSON, espelho JS e consumidores gráficos ainda pendentes; sem nova medição física. |
+| 2026-11-19 | Fase 2: cabeçalhos consomem título e foco do estado observável | Commit desta linha | Mount vincula leitor Rust à lista de janelas do contexto, validando o objeto opaco sem reter ponteiro C/JS. Revisões pendentes pedem tick imediato; não há timer de assinatura após consumo. Removidos título/foco dinâmicos dos fatos JSON do cabeçalho. Oito cenários gráficos comprovam título atualizado com espelho JS parado e fonte inválida rejeitada; 108 testes do host, 34 do modelo, contratos LPK e integração dos apps passaram. Espelho JS, ABI JSON e demais consumidores continuam pendentes; sem medição física. |

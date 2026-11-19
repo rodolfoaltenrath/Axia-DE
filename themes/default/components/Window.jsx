@@ -3,7 +3,7 @@
 // borders on all 4 sides and 4 corners, <WindowShell>) is done by axia-server in C
 // (docs/WINDOWS.md), a maximized or snapped window coming loose at its own size as soon as it moves;
 // the JS drag below is only a fallback for when the C one can't start.
-import { View, addListener, wm, AppHost, windowTitle, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance, NativeTitleBar } from '@lordos/sdk';
+import { View, addListener, wm, AppHost, appName, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance, NativeTitleBar } from '@lordos/sdk';
 import { useEffect, useRef } from 'react';
 import { Menu } from './Menu.jsx';
 
@@ -64,7 +64,7 @@ export function Window({ win, app, t, focused, leaving = false }) {
       boxShadow: focused ? chrome?.shadowFocused || '0 24px 56px rgba(0,0,0,0.55)' : chrome?.shadowInactive || '0 10px 28px rgba(0,0,0,0.32)',
       ...fxs,
     }}>
-      <NativeTitleBar id={win.id} title={windowTitle(win)} focused={focused} height={chrome?.header?.height ?? TITLE_H} chrome={chrome}
+      <NativeTitleBar id={win.id} fallbackTitle={appName(app) || ''} height={chrome?.header?.height ?? TITLE_H} chrome={chrome}
         controls={controls.map(({ key, color, glyph }) => ({ key, color, glyph }))}
         tokens={{ titleBg: t.titleBg, text: t.text, textDim: t.textDim, lightOff: t.lightOff }}
         onDrag={(x, y) => { if (!wm.beginMove(win.id)) drag.current = { dx: x - geo.x, dy: y - geo.y }; }}

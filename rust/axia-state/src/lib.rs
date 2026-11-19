@@ -126,6 +126,10 @@ pub struct Subscription {
 }
 
 impl Subscription {
+    /// Check readiness without consuming it, for the native event-loop deadline.
+    pub fn pending(&self) -> bool {
+        self.pending.get().is_some()
+    }
     /// The newest pending revision, at most once until the next commit.
     pub fn take(&self) -> Option<u64> {
         self.pending.take()
@@ -145,7 +149,9 @@ mod tests {
         assert!(!store.set(String::from("before")));
         assert_eq!(store.revision(), 0);
         assert!(store.set(String::from("after")));
+        assert!(changes.pending());
         assert_eq!(changes.take(), Some(1));
+        assert!(!changes.pending());
         assert_eq!(&*other.read(), "after");
         assert_eq!(changes.take(), None);
     }

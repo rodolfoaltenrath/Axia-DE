@@ -1,6 +1,6 @@
 // A window's title bar drawn by the Rust native view host (native_view/titlebar.rs).
 // The shell always mounts this header for framed windows. Lean on purpose:
-// it only mounts the view, sends it the title and the colors when they change, and hands the
+// it only mounts the view, sends appearance data when they change, and hands the
 // window manager's actions (drag, zoom, a light) to the theme's callbacks.
 import { createElement as h, useEffect, useLayoutEffect, useRef } from 'react';
 import { View } from '@lordos/runtime';
@@ -8,13 +8,13 @@ import { addRunner } from './nativeview.js';
 
 // controls: [{ key, color, glyph }]; tokens: { titleBg, text, textDim, lightOff }; chrome: the
 // window's appearance plan or null. onDrag(x, y): the pointer in screen coordinates.
-export function NativeTitleBar({ id, title, focused, height, controls, tokens, chrome, onDrag, onMax, onAct }) {
+export function NativeTitleBar({ id, fallbackTitle, height, controls, tokens, chrome, onDrag, onMax, onAct }) {
   const ref = useRef(null), state = useRef({ handle: 0, sent: '' }), calls = useRef(null);
   calls.current = { onDrag, onMax, onAct };
-  const json = JSON.stringify({ focused: true, args: { id, title, focused, height, controls, tokens, chrome } });
+  const json = JSON.stringify({ focused: true, args: { id, fallbackTitle, height, controls, tokens, chrome } });
   useLayoutEffect(() => {
     const s = state.current;
-    s.handle = ref.current ? lord.nativeViews.mount(ref.current.id, 'shell:titlebar', json) : 0;
+    s.handle = ref.current ? lord.nativeViews.mount(ref.current.id, 'shell:titlebar', json, lord.windowList) : 0;
     s.sent = json;
     if (!s.handle) return undefined;
     const off = addRunner(s.handle, (effect) => {

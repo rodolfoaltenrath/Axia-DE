@@ -1,17 +1,21 @@
 //! A window's title bar (title, close/minimize/zoom lights) as a native view: the shell mounts one
 //! per framed window (`shell:titlebar`, sdk/nativetitlebar.jsx) in place of the React header of
-//! themes/default/components/Window.jsx. The facts are `args = {"id","title","focused","height",
+//! themes/default/components/Window.jsx. The shell binds its context-owned window reader for title
+//! and focus; facts only carry `args = {"id","fallbackTitle","height",
 //! "controls":[{"key","color","glyph"}],"tokens":{"titleBg","text","textDim","lightOff"},
 //! "chrome": null | {"header","controls","button","buttonHover","glyph","title"}}`, the `chrome`
 //! plan being the one Rust already made for the window's appearance. The effects go to the shell,
 //! which owns the window manager: `{"kind":"winDrag"|"winMax"|"winAct","id","key","x","y"}`.
 use super::NativeApp;
 use serde_json::{json, Value};
+use axia_state::{Reader, Subscription};
+use crate::winmodel::WindowState;
 
 const TITLE_H: f64 = 40.;
 
 #[derive(Default)]
 pub struct TitleBar {
+    windows: Option<(Reader<WindowState>, Subscription)>,
     /// The light under the pointer, "*" over the group between them, "" elsewhere.
     hot: String,
     last: Value,
@@ -30,10 +34,13 @@ fn merge(base: Value, over: &Value) -> Value {
 }
 
 impl TitleBar {
-    fn tree(&self, args: &Value) -> Value {
+    pub fn with_windows(windows: Reader<WindowState>) -> Self {
+        let changes = windows.subscribe();
+        Self { windows: Some((windows, changes)), ..Self::default() }
+    }
+    fn tree(&self, args: &Value, title_text: &str, focused: bool) -> Value {
         let tokens = &args["tokens"];
         let chrome = args["chrome"].is_object().then(|| &args["chrome"]);
-        let focused = args["focused"] == true;
         let height = args["height"].as_f64().unwrap_or(TITLE_H);
         let header = chrome.map(|c| c["header"].clone()).filter(Value::is_object).unwrap_or_else(|| {
             json!({"height":TITLE_H,"flexDirection":"row","alignItems":"center","paddingLeft":14,"backgroundColor":tokens["titleBg"]})
@@ -78,18 +85,34 @@ impl TitleBar {
             // onClick only so the host sends the press (it goes to the nearest view that takes clicks)
             "events":{"onClick":["noop"],"onMouseDown":["drag"],"onDoubleClick":["max"]},
             "children":[
-                {"kind":"text","key":"title","label":args["title"],"style":title},
+                {"kind":"text","key":"title","label":title_text,"style":title},
                 {"kind":"view","key":"lights","style":controls_style,
                     "events":{"onMouseEnter":["hot","*"],"onMouseLeave":["hot",""]},"children":lights}]})
     }
 }
 
 impl NativeApp for TitleBar {
+    fn invalidated(&self) -> bool {
+        self.windows.as_ref().is_some_and(|(_, changes)| changes.pending())
+    }
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
                 self.id = input["args"]["id"].clone();
-                let tree = self.tree(&input["args"]);
+                let args = &input["args"];
+                let fallback = args["fallbackTitle"].as_str().unwrap_or("");
+                let (title, focused) = if let Some((windows, changes)) = &self.windows {
+                    changes.take();
+                    let state = windows.read();
+                    let id = self.id.as_str().unwrap_or("");
+                    let title = state.window(id).map(|w| w.title().to_owned()).filter(|s| !s.is_empty()).unwrap_or_else(|| fallback.to_owned());
+                    (title, state.focused_window() == Some(id))
+                } else {
+                    // Pure controller/ABI users without a window model retain
+                    // explicit facts. The session binds its own typed reader.
+                    (args["title"].as_str().unwrap_or(fallback).to_owned(), args["focused"] == true)
+                };
+                let tree = self.tree(args, &title, focused);
                 if tree == self.last {
                     return json!({"same":true});
                 }
@@ -122,6 +145,29 @@ mod tests {
     }
     fn act(app: &mut TitleBar, cmd: &str, key: Value) -> Value {
         app.request(&json!({"cmd":cmd,"key":key,"x":12.,"y":8.}))
+    }
+
+    #[test]
+    fn bound_title_and_focus_come_from_the_model_even_when_explicit_facts_disagree() {
+        let mut model = crate::winmodel::Session::default();
+        for name in ["files", "other"] {
+            model.call("open", &[json!({}), json!({"app":name})]).unwrap();
+        }
+        model.call("patch", &[json!({}),json!("files"),json!({"title":"Native title"})]).unwrap();
+        let mut app = TitleBar::with_windows(model.reader());
+        let tree = sync(&mut app, args(Value::Null, true))["tree"].clone();
+        assert_eq!(tree["children"][0]["label"], "Native title");
+        assert_eq!(tree["children"][0]["style"]["color"], "#888", "the other window is focused");
+        assert!(!app.invalidated());
+        model.call("focus", &[json!({}),json!("files")]).unwrap();
+        assert!(app.invalidated());
+        let tree = sync(&mut app, args(Value::Null, false))["tree"].clone();
+        assert_eq!(tree["children"][0]["style"]["color"], "#fff", "stale JS focus does not override the model");
+        assert!(!app.invalidated());
+        model.call("patch", &[json!({}),json!("files"),json!({"title":null})]).unwrap();
+        let mut input = args(Value::Null, false); input["fallbackTitle"] = json!("Localized Files");
+        let tree = sync(&mut app, input)["tree"].clone();
+        assert_eq!(tree["children"][0]["label"], "Localized Files");
     }
 
     #[test]

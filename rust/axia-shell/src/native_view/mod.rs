@@ -184,7 +184,26 @@ pub unsafe extern "C" fn axia_view_mount(
     id: *const c_char,
     facts: *const c_char,
 ) -> u32 {
-    let Some(app) = app(text(id)) else {
+    mount(node, text(id), facts, None)
+}
+
+/// A context-owned window list is borrowed only for this call. The title bar
+/// retains a safe Rust reader, never the opaque C/QuickJS object or pointer.
+#[no_mangle]
+pub unsafe extern "C" fn axia_view_mount_windows(
+    node: i32, id: *const c_char, facts: *const c_char,
+    windows: *const crate::winmodel::Session,
+) -> u32 {
+    let reader = windows.as_ref().map(crate::winmodel::Session::reader);
+    mount(node, text(id), facts, reader)
+}
+
+unsafe fn mount(node: i32, id: &str, facts: *const c_char,
+    windows: Option<axia_state::Reader<crate::winmodel::WindowState>>) -> u32 {
+    let app = if id == "shell:titlebar" {
+        windows.map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
+    } else { app(id) };
+    let Some(app) = app else {
         return 0;
     };
     if !crate::runtime::native::exists(node) {

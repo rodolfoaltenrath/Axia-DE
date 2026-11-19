@@ -21,6 +21,9 @@ fn window_headers_stay_native_and_preserve_window_manager_actions() {
                 let report = ui::run_ui(repo, &kind, &driver, mode, width, "titlebar.png");
                 for flag in [
                     "nativeHeaders",
+                    "nativeStateTransport",
+                    "directModelTitle",
+                    "sourceChecked",
                     "focused",
                     "retitled",
                     "moved",
@@ -61,9 +64,9 @@ import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {media} from '@ROOT@/sdk/media.js';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
-const handles=new Map(),argsById=new Map(),drags=[];
+const handles=new Map(),argsById=new Map(),drags=[],boundSources=[];
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
-lord.nativeViews.mount=(node,app,text)=>{const id=mount(node,app,text);if(app==='shell:titlebar'){const args=JSON.parse(text).args;handles.set(args.id,id);argsById.set(args.id,args);}return id;};
+lord.nativeViews.mount=(node,app,text,...source)=>{const id=mount(node,app,text,...source);if(app==='shell:titlebar'){const args=JSON.parse(text).args;handles.set(args.id,id);argsById.set(args.id,args);boundSources.push(source[0]===lord.windowList);}return id;};
 lord.nativeViews.facts=(id,text)=>{for(const[win,handle]of handles)if(handle===id)argsById.set(win,JSON.parse(text).args);return facts(id,text);};
 lord.nativeViews.unmount=id=>{for(const[win,handle]of handles)if(handle===id){handles.delete(win);argsById.delete(win);}return unmount(id);};
 const begin=wm.beginMove;wm.beginMove=id=>{const result=begin(id);drags.push({id,result});return result;};
@@ -89,8 +92,16 @@ render(h(App));
 async function run(){
  await until(()=>{const node=find(primary,'Active window');return node&&lord.getLayout(node)[2]>0;});await sleep(100);
  const nativeHeaders=handles.has(primary)&&handles.has(secondary);
+ const nativeStateTransport=boundSources.every(Boolean)&&[...argsById.values()].every(args=>!('title'in args)&&!('focused'in args));
+ const previousTitle=wm.get(primary).title;
+ // The SDK mirror and React props stay unchanged. Only the Rust subscription
+ // can deliver this mutation to the native header.
+ lord.windowList.call('patch',JSON.stringify([{},primary,{title:'Direct Rust model title'}]));
+ const directModelTitle=await until(()=>!!find(primary,'Direct Rust model title'))&&wm.get(primary).title===previousTitle;
+ lord.windowList.call('patch',JSON.stringify([{},primary,{title:previousTitle}]));await until(()=>!!find(primary,previousTitle));
+ let sourceChecked=false;try{mount(0,'shell:titlebar',JSON.stringify({args:{id:primary}}),{});}catch(error){sourceChecked=error instanceof TypeError;}
  let[x,y]=point(secondary);const target=lord.nativeViews.hitTest(x,y);for(const type of ['down','up'])pointer(type,target,x,y);await until(()=>wm.focused()===secondary);
- wm.focus(primary);await sleep(70);const focused=wm.focused()===primary&&argsById.get(primary)?.focused&&!argsById.get(secondary)?.focused;
+ wm.focus(primary);await sleep(70);const focused=wm.focused()===primary;
  wm.setTitle(primary,'A long updated title — Axia window');await until(()=>!!find(primary,'A long updated title — Axia window'));const retitled=!!find(primary,'A long updated title — Axia window');
  [x,y]=point(primary);const before={...wm.frame(wm.get(primary))};pointer('down',lord.nativeViews.hitTest(x,y),x,y);pointer('move',0,x+30,y+25);pointer('up',0,x+30,y+25);
  await until(()=>wm.frame(wm.get(primary)).x!==before.x);const after=wm.frame(wm.get(primary));const moved=after.x===before.x+30&&after.y===before.y+25;
@@ -104,7 +115,7 @@ async function run(){
  const unguard=wm.setCloseGuard(primary,()=>false);await control(primary,'close');const guardKept=!!wm.get(primary);unguard();await control(primary,'close');await until(()=>!wm.get(primary));const closed=!wm.get(primary);noControlDrag=noControlDrag&&drags.length===count;
  const csd=wm.open('probe',{new:true,args:{csd:true},frame:{x:40,y:400,w:260,h:150}});const own=wm.open('own-probe',{frame:{x:70,y:420,w:260,h:150}});await sleep(100);
  const csdHasNoHeader=!handles.has(csd),ownHasNoHeader=!handles.has(own);
- console.log('@KIND@-observation '+JSON.stringify({nativeHeaders,focused,retitled,moved,sceneMoved,maximized,restored,doubleMaximized,minimized,reopened,guardKept,closed,noControlDrag,csdHasNoHeader,ownHasNoHeader,titleRect,after,drags,saved:!!saved?.ok}));
+ console.log('@KIND@-observation '+JSON.stringify({nativeHeaders,nativeStateTransport,directModelTitle,sourceChecked,focused,retitled,moved,sceneMoved,maximized,restored,doubleMaximized,minimized,reopened,guardKept,closed,noControlDrag,csdHasNoHeader,ownHasNoHeader,titleRect,after,drags,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('@KIND@ driver: '+(error.stack||error))),200);
 "#;

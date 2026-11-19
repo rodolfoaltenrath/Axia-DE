@@ -608,7 +608,7 @@ impl WindowState {
         // the minimized windows of this desktop are shown too.
         let mounted = ids(&|w| !w.on("fullscreen") && !w.on("pip") && (!w.surface() || (here(w) && (self.overview || !w.on("minimized")))));
         // the front window of this desktop: never another desktop's, never picture-in-picture
-        let front = self.wins.iter().rev().find(|w| !w.on("minimized") && !w.on("pip") && here(w)).map(|w| w.id().to_owned());
+        let front = self.focused_window().map(str::to_owned);
         let hidden = ids(&|w| w.on("minimized") || !here(w));
         let parked = ids(&|w| !here(w));
         // a minimized Linux window in the Overview may have nothing to draw: a placeholder goes behind it
@@ -889,6 +889,9 @@ impl Window<'_> {
     pub fn args(&self) -> &Value { self.0.data.get("args").unwrap_or(&Value::Null) }
 }
 impl WindowState {
+    pub fn focused_window(&self) -> Option<&str> {
+        self.wins.iter().rev().find(|w| !w.on("minimized") && !w.on("pip") && self.here(w)).map(Win::id)
+    }
     pub fn windows(&self) -> impl Iterator<Item = Window<'_>> { self.wins.iter().map(Window) }
     pub fn window(&self, id: &str) -> Option<Window<'_>> { self.find(id).map(|i| Window(&self.wins[i])) }
     pub fn desktops(&self) -> &[i64] { &self.desktops }

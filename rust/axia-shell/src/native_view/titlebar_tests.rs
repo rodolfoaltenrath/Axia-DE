@@ -3,6 +3,70 @@ use crate::runtime::native as scene;
 use serde_json::{json, Value};
 
 #[test]
+fn model_revisions_update_headers_without_facts_and_are_scoped_to_their_owner() {
+    let mut a = crate::winmodel::Session::default();
+    let mut b = crate::winmodel::Session::default();
+    for (session, title) in [(&mut a, "Owner A"), (&mut b, "Owner B")] {
+        session
+            .call("open", &[json!({}), json!({"app":"probe"})])
+            .unwrap();
+        session
+            .call(
+                "patch",
+                &[json!({}), json!("probe"), json!({"title":title})],
+            )
+            .unwrap();
+    }
+    let node_a = scene::create(scene::VIEW);
+    let node_b = scene::create(scene::VIEW);
+    let mut host_a = Host::new(
+        node_a,
+        Box::new(TitleBar::with_windows(a.reader())),
+        "",
+        None,
+    );
+    let mut host_b = Host::new(
+        node_b,
+        Box::new(TitleBar::with_windows(b.reader())),
+        "",
+        None,
+    );
+    let facts = json!({"args":{"id":"probe","fallbackTitle":"Probe","height":40,"controls":[],"tokens":{}}});
+    host_a.facts(facts.clone());
+    host_b.facts(facts);
+    assert_ne!(host_a.find_text("Owner A"), 0);
+    assert_ne!(host_b.find_text("Owner B"), 0);
+    assert!(host_a.deadline().is_none());
+    a.call(
+        "patch",
+        &[json!({}), json!("probe"), json!({"title":"Updated A"})],
+    )
+    .unwrap();
+    assert!(
+        host_a.deadline().is_some(),
+        "the loop receives an immediate invalidation"
+    );
+    assert!(
+        host_b.deadline().is_none(),
+        "another context's model never invalidates this header"
+    );
+    host_a.tick(0.);
+    assert_ne!(host_a.find_text("Updated A"), 0);
+    assert_eq!(host_a.find_text("Owner A"), 0);
+    assert!(
+        host_a.deadline().is_none(),
+        "no idle timer remains after consuming the revision"
+    );
+    drop(a);
+    host_a.tick(0.);
+    assert_ne!(host_a.find_text("Updated A"), 0);
+    drop(host_a);
+    drop(host_b);
+    scene::destroy(node_a);
+    scene::destroy(node_b);
+}
+
+#[test]
 fn double_click_on_a_control_never_bubbles_to_header_maximize() {
     let mount = scene::create(scene::VIEW);
     let mut host = Host::new(mount, Box::new(TitleBar::default()), "", None);

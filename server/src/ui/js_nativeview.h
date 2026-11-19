@@ -3,11 +3,13 @@
 #ifndef LORD_JS_NATIVEVIEW_H
 #define LORD_JS_NATIVEVIEW_H
 #include "quickjs.h"
+#include "winmodel_ffi.h"
 
 /* Rust (native_view/mod.rs). UI thread only. */
 char    *axia_clock_request(const char *input);
 void     axia_view_init(const char *assets, const char *home);
 unsigned axia_view_mount(int node, const char *app, const char *facts);
+unsigned axia_view_mount_windows(int node, const char *app, const char *facts, const AxiaWindows *windows);
 void     axia_view_unmount(unsigned handle);
 void     axia_view_facts(unsigned handle, const char *facts);
 void     axia_view_focus(unsigned handle, int focused);

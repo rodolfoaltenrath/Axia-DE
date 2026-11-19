@@ -219,6 +219,16 @@ de hover e a assinatura usada para escolher esse renderer foram removidos.
 Os estilos Axia e Adwaita, títulos dinâmicos, foco e callbacks do gerenciador
 permanecem. Janelas CSD e apps `ownFrame` continuam sem esse cabeçalho.
 
+Na Fase 2, título e foco desse cabeçalho passaram a vir diretamente de
+`Session.reader()`. O mount recebe e valida a lista de janelas do seu contexto,
+sem reter ponteiro C ou objeto JS. A assinatura pede sincronização imediata no
+loop nativo quando há revisão pendente e não mantém timer ocioso. O adaptador
+envia aparência e nome localizado de fallback, sem título/foco dinâmicos no
+JSON. A integração altera o modelo sem atualizar o espelho JS e exige o título
+novo na cena. Propriedade, cancelamento, foco com fatos discordantes e rejeição
+de fonte opaca inválida também são verificados; detalhes em `STATE-RUST.md`.
+Moldura, efeitos e demais consumidores de janelas continuam pendentes.
+
 Uma regressão Rust com o host real reproduziu um duplo clique num controle
 emitindo duas ações e uma maximização indevida. Cada controle agora intercepta
 o duplo clique; somente o fundo do cabeçalho executa a maximização. O teste

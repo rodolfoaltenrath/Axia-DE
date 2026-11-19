@@ -2,6 +2,9 @@ use serde_json::Value;
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
+    /// A native state subscription has an unread revision. The host schedules
+    /// an immediate sync; the app consumes the invalidation during that sync.
+    fn invalidated(&self) -> bool { false }
     /// Resource roots supplied by the host, including user language packs.
     fn resources(&mut self, _assets: &str, _home: Option<&str>) {}
     /// An app may vary its refresh cadence with its current page and state.
