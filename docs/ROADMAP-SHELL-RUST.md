@@ -358,6 +358,10 @@ views nativas lerem direto, sem JSON.
       LPK preserva o comportamento local. Preferências, permissões/firewall,
       som, callbacks e stores de compatibilidade ainda usam o adaptador.
       Relógio, apresentação de alarmes e seus efeitos continuam pendentes.
+      Correção pontual: toque repetido só é armado para banner entregue e
+      audível, e é cancelado na retirada, silêncio, recusa ou no prazo de
+      um minuto. A migração do relógio e dos prazos de toque permanece adiada
+      por solicitação do usuário; o intervalo JS existente foi preservado.
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
       e substituir ícones descritos por funções JS por recursos serializáveis;
       o host nativo ainda usa placeholder para esses ícones personalizados.
@@ -536,3 +540,4 @@ mostraram.
 | 2026-11-19 | Correção do smoke agregado desatualizado no Actions | Commit desta linha | Run 44595705926 falhou porque a fixture não registrava a janela após a migração de título/foco nativos em e77d3bc5. Reproduzido localmente; fixture agora usa janela real e a encerra após os cliques. Executor/assertivas agregadas migrados do check.py para shell_surfaces_runtime em Rust, obrigatório no make check para GPU=0/1, com sete etapas e captura. Ambas as variantes e saída normal/SIGTERM aprovadas; removido o bundle antigo do build. |
 | 2026-11-19 | Fase 2: decisão dos gestos horizontais no proprietário Rust | Commit desta linha | Troca de desktops ou ciclo de janelas escolhidos pelo estado atual, com RTL, limites e filtragem compartilhada com a API legada. 553 testes unitários, quatro contratos LPK, oito cenários gráficos de indicador/animação, encerramento instalado e smoke agregado passaram em GPU=1. Integração bloqueia leitura do espelho da lista; fixtures agora definem RTL explicitamente, sem depender de catálogo árabe ausente. Reconsultado Actions: última execução ainda é 44595705926, cuja fixture de título foi corrigida em 796b6a89; confirmação remota aguarda push. |
 | 2026-11-19 | Fase 2: serviço e banners de notificações no contexto Rust | Commit desta linha | Lista/histórico limitados, IDs, agrupamento, DND, política de entrega, ações e prazos monotônicos no proprietário nativo; a view não recebe árvore/lista JS. 558 testes unitários, cinco contratos LPK, quatro cenários gráficos com fonte opaca, espelho parado e remontagem, encerramento instalado e smoke agregado passaram em GPU=1. Captura inspecionada; callbacks e consumidores de compatibilidade, preferências, permissões/firewall, som e alarmes continuam pendentes. |
+| 2026-11-19 | Correção pontual do toque de alarmes, sem migrar o relógio | Commit desta linha | Reproduzidos som repetido para entrega recusada/DND/silenciosa, retirada do banner e estado preso no prazo final. Guardas e cancelamento do intervalo existente corrigidos, com liberação das assinaturas. Seis testes Rust/Node do contrato, quatro cenários gráficos reais, encerramento instalado e smoke agregado aprovados em GPU=1. Migração do relógio adiada a pedido; push permanece com o usuário. |

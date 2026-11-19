@@ -4,6 +4,85 @@ use std::{path::Path, process::Command};
 
 #[test]
 #[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
+fn clock_ringing_stops_when_delivery_is_suppressed_or_the_banner_leaves() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap();
+    let fixture = r#"
+import path from 'node:path';
+import {build} from 'esbuild';
+const root=process.argv[1];let now=1000,next=0,sounds=0,policy={},event=null,last;
+Date.now=()=>now;
+const intervals=new Map();
+globalThis.setInterval=(fn,ms)=>{const id=++next;intervals.set(id,{fn,ms});return id;};
+globalThis.clearInterval=id=>intervals.delete(id);
+const store=initial=>{let value=initial;const subs=new Set();return{get:()=>value,set:patch=>{value=typeof patch==='function'?patch(value):patch;for(const fn of subs)fn();},subscribe:fn=>{subs.add(fn);return()=>subs.delete(fn);}};};
+const notifications=store([]),settings=store({clock:{}});
+const sound={play:()=>sounds++};
+const probe={notifications,settings,sound,View:()=>null,Text:()=>null,t:key=>key,formatTime:()=>'',
+ appNotifyPrefs:()=>({allow:true,sound:true,style:'banner',...policy}),dndActive:()=>!!policy.dnd,
+ notify:options=>{last=options;if(policy.allow===false)return 0;const id=++next;
+   if(!policy.dnd&&policy.style!=='none'){notifications.set([...notifications.get(),{...options,id}]);if(policy.sound!==false)sound.play();}return id;},
+ dismissNotification:()=>{},registerStatusItem:()=>{},wm:{}};
+globalThis.__clockProbe=probe;
+globalThis.lord={clock:{request:()=>{const effects=event?[event]:[];event=null;return{timer:{state:'idle',duration:1000,endsAt:0,left:0},stopwatch:{running:false,start:0,acc:0,laps:[]},nextAlarm:null,wait:null,effects};}}};
+const names={runtime:['View','Text'],'settings.js':['settings'],'i18n.js':['t','formatTime'],
+ 'notify.js':['notify','dismissNotification','notifications','appNotifyPrefs','dndActive'],
+ 'sound.js':['sound'],'statusitems.js':['registerStatusItem'],'windows.js':['wm']};
+const result=await build({entryPoints:[path.join(root,'sdk/alarms.js')],bundle:true,write:false,format:'esm',plugins:[{name:'clock-services',setup(build){
+ build.onResolve({filter:/.*/},args=>{const name=args.path==='@lordos/runtime'?'runtime':path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
+ build.onLoad({filter:/.*/,namespace:'probe'},args=>({contents:names[args.path].map(name=>`export const ${name}=globalThis.__clockProbe.${name};`).join('\n')}));
+ }}]});
+const sdk=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+function reset(p={}){for(const n of notifications.get())n.onClose?.();notifications.set([]);intervals.clear();sdk.ringing.set([]);policy=p;sounds=0;now=1000;}
+function fire(alarm=false){event=alarm?{kind:'alarm',alarm:{id:'test',label:'Alarm'},due:now}:{kind:'timer'};sdk.clockRequest('arm');}
+function tick(at){now=at;for(const [id,task] of [...intervals])if(intervals.has(id))task.fn();}
+const report={};
+for(const [name,p] of Object.entries({denied:{allow:false},dnd:{dnd:true},silent:{sound:false},historyOnly:{style:'none'}})){
+ reset(p);fire();report[name]=intervals.size===0&&sdk.ringing.get().length===0&&sounds===0;
+}
+reset();fire();const armed=intervals.size===1&&sdk.ringing.get().length===1;tick(3500);
+report.audible=armed&&sounds===2;
+notifications.set([]);const after=sounds;tick(6000);
+report.evicted=intervals.size===0&&sdk.ringing.get().length===0&&sounds===after;
+reset();fire(true);last.onClose();tick(3500);
+report.closed=intervals.size===0&&sdk.ringing.get().length===0&&sounds===1;
+reset();fire();policy={sound:false};settings.set({clock:{}});tick(3500);
+report.mutedWhileRinging=intervals.size===0&&sdk.ringing.get().length===0&&sounds===1;
+reset();fire();tick(61000);
+report.deadline=intervals.size===0&&sdk.ringing.get().length===0&&sounds===1;
+console.log(JSON.stringify(report));
+"#;
+    let output = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", fixture])
+        .arg(repo)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    for flag in [
+        "denied",
+        "dnd",
+        "silent",
+        "historyOnly",
+        "audible",
+        "evicted",
+        "closed",
+        "mutedWhileRinging",
+        "deadline",
+    ] {
+        assert_eq!(report[flag], true, "{flag}: {report}");
+    }
+}
+
+#[test]
+#[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
 fn isolated_notifications_keep_callbacks_and_deadlines_without_session_authority() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()

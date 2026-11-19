@@ -698,6 +698,10 @@ running, and so does its JS.
   "Snooze 9 min", plus the `notify` sound from `lord.sound.play` every 2.5 s for one minute or until
   the notification is touched. One-time alarms switch themselves off. The timer notifies the same
   way, with "Repeat".
+  Repetition starts only for an audible, delivered banner. Denied, history-only,
+  muted and Do Not Disturb notifications do not arm it. Removing or evicting the
+  banner, changing its permission/sound settings, or reaching the one-minute
+  limit cancels the interval and releases its subscriptions and ringing entry.
 - **Menu bar:** `registerStatusItem('clock', …)` shows ⏱ with the time left on the timer (redrawn
   every second only while it runs) or ⏰ with the time of the next alarm if it rings within 24 h.
   A click opens Clock on that tab.

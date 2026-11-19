@@ -5,7 +5,7 @@ import { View, Text } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
 import { t, formatTime } from './i18n.js';
-import { notify, dismissNotification } from './notify.js';
+import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive } from './notify.js';
 import { sound } from './sound.js';
 import { registerStatusItem } from './statusitems.js';
 import { wm } from './windows.js';
@@ -58,13 +58,31 @@ export const arm = () => clockRequest('arm');
 
 export const ringing = createStore([]);       // notification ids that are ringing
 function ring(notifyOpts) {
-  let iv = null, stopAt = Date.now() + RING_MS;
+  let iv = null, stopped = false, offNotices = () => {}, offPrefs = () => {};
+  const stopAt = Date.now() + RING_MS;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(iv);
+    offNotices(); offPrefs();
+    ringing.set((l) => l.filter((x) => x !== id));
+  };
   const id = notify({
     ...notifyOpts, sticky: true, sound: true,
-    onClose: () => { clearInterval(iv); ringing.set((l) => l.filter((x) => x !== id)); },
+    onClose: stop,
   });
+  const audible = () => {
+    const prefs = appNotifyPrefs(notifyOpts.app);
+    return id > 0 && notifications.get().some((n) => n.id === id)
+      && prefs.allow && prefs.sound && !dndActive() && Date.now() < stopAt;
+  };
+  // History-only, denied and silent notifications must never arm a repeating sound.
+  if (!audible()) return id;
+  const check = () => { if (!audible()) stop(); };
+  offNotices = notifications.subscribe(check);
+  offPrefs = settings.subscribe(check);
+  iv = setInterval(() => { if (!audible()) { stop(); return; } sound.play('notify'); }, 2500);
   ringing.set((l) => [...l, id]);
-  iv = setInterval(() => { if (Date.now() > stopAt) { clearInterval(iv); return; } sound.play('notify'); }, 2500);
   return id;
 }
 
