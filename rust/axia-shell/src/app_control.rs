@@ -26,6 +26,22 @@ impl Controller {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "memoryMerge" {
+            return if self.windows.is_some() {
+                crate::window_memory::merge(&input["places"], &input["updates"])
+            } else {
+                json!({"error":"app.invalidRequest"})
+            };
+        }
+        if input["cmd"] == "memoryFrame" {
+            return self
+                .windows
+                .as_ref()
+                .map(|windows| {
+                    crate::window_memory::restore(&windows.reader(), self.app.metadata(), input)
+                })
+                .unwrap_or_else(|| json!({"error":"app.invalidRequest"}));
+        }
         if input["cmd"] == "desktopCommand" {
             let command = match input["action"].as_str() {
                 Some("step") => match input["step"].as_i64() {

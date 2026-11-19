@@ -1019,6 +1019,11 @@ impl Window<'_> {
     pub fn snapped(&self) -> Option<&str> { self.0.data.get("snapped").and_then(Value::as_str) }
     pub fn revision(&self) -> u64 { self.0.rev }
     pub fn args(&self) -> &Value { self.0.data.get("args").unwrap_or(&Value::Null) }
+    pub fn place_on(&self, display: &Value) -> Value { super::place::place_fields(|key|self.0.data.get(key).unwrap_or(&Value::Null),display) }
+    pub fn placement_frame(&self) -> Rect {
+        if self.snapped().is_some() { self.0.data.get("restore").and_then(Rect::from_value).unwrap_or_else(||self.frame()) }
+        else { self.frame() }
+    }
 }
 impl WindowState {
     pub fn recent_windows(&self) -> &[String] { &self.recent }

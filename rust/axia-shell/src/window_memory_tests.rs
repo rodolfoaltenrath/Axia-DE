@@ -1,0 +1,180 @@
+use super::*;
+use crate::winmodel::Session;
+
+fn facts() -> Value {
+    json!({"registry":[{"id":"notes"},{"id":"panel","builtin":true},{"id":"pkg","package":true}],
+        "catalog":[{"id":"desktop:org.Editor","kind":"linux","desktopId":"org.Editor","wmClass":"Editor"}],
+        "args":{"enabled":true,"places":[["app:old",{"w":100,"h":100}]],
+        "displays":[{"id":0,"name":"Panel","connector":"DP-1","x":0,"y":0,"w":1000,"h":800,
+            "work":{"x":0,"y":20,"w":1000,"h":740}}]}})
+}
+
+#[test]
+fn memory_coalesces_native_changes_and_skips_dialogs_panels_and_transient_frames() {
+    let mut session = Session::default();
+    for input in [
+        json!({"app":"notes","frame":{"x":30,"y":50,"w":300,"h":220}}),
+        json!({"app":"panel"}),
+        json!({"app":"notes","instance":"dialog","args":{"dialog":true}}),
+        json!({"app":"linux","instance":"1","args":{"appId":"Editor"}}),
+        json!({"app":"linux","instance":"2","args":{"pkg":true,"appId":"pkg"}}),
+        json!({"app":"linux","instance":"3"}),
+    ] {
+        session.call("open", &[json!({}), input]).unwrap();
+    }
+    let mut memory = Memory::new(session.reader());
+    let input = facts();
+    let now = Instant::now();
+    assert!(memory.sync(&input, now)["effects"].is_null());
+    session
+        .call(
+            "setFrame",
+            &[
+                json!({}),
+                json!("notes"),
+                json!({"x":77,"y":50,"w":300,"h":220}),
+            ],
+        )
+        .unwrap();
+    assert!(memory.invalidated());
+    memory.sync(&input, now + Duration::from_millis(600));
+    assert_eq!(memory.due, Some(now + SAVE_DELAY));
+    let effect = memory.sync(&input, now + SAVE_DELAY);
+    let merged = merge(&input["args"]["places"], &effect["effects"][0]["updates"]);
+    let entries = rows(&merged["entries"]);
+    let keys: Vec<_> = entries
+        .iter()
+        .map(|entry| entry[0].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        keys,
+        vec!["app:old", "app:notes", "desktop:org.Editor", "lpk:pkg"]
+    );
+    assert_eq!(entries[1][1]["x"], 77);
+    assert_eq!(entries[1][1]["d"], "Panel|DP-1");
+    assert!(memory.refresh_ms().is_none());
+    assert!(!memory.invalidated());
+    session
+        .call(
+            "patch",
+            &[json!({}), json!("notes"), json!({"title":"Only a title"})],
+        )
+        .unwrap();
+    memory.sync(&input, now + Duration::from_secs(1));
+    assert!(memory.sync(&input, now + Duration::from_secs(2))["effects"].is_null());
+    session
+        .call(
+            "setPip",
+            &[
+                json!({}),
+                json!("notes"),
+                json!({"x":999,"y":0,"w":200,"h":150}),
+            ],
+        )
+        .unwrap();
+    memory.sync(&input, now + Duration::from_secs(3));
+    assert!(memory.sync(&input, now + Duration::from_secs(4))["effects"].is_null());
+}
+
+#[test]
+fn restore_counts_native_twins_and_retains_saved_monitor_and_fixed_size_rules() {
+    let displays = json!([{"id":0,"x":0,"y":0,"w":10,"h":10},{"id":1,"x":20,"y":0,"w":10,"h":10}]);
+    assert_eq!(
+        display_for(Rect::new(14., 0., 2., 1.), rows(&displays)).unwrap()["id"],
+        1
+    );
+    let mut session = Session::default();
+    for instance in ["a", "b"] {
+        session
+            .call(
+                "open",
+                &[json!({}), json!({"app":"notes","instance":instance})],
+            )
+            .unwrap();
+    }
+    let metadata = facts();
+    let mut input = json!({"key":"app:notes","windows":[],"places":[["app:notes",{
+        "d":"Panel|DP-1","x":30,"y":50,"w":300,"h":220,"max":true}]],
+        "displays":metadata["args"]["displays"],"options":{"main":0}});
+    let reply = restore(&session.reader(), &metadata, &input);
+    assert_eq!(reply["frame"]["x"], 90.);
+    assert_eq!(reply["frame"]["y"], 110.);
+    assert_eq!(reply["frame"]["maximized"], true);
+    input["options"] = json!({"fixed":true,"size":[200,180],"shift":0});
+    let reply = restore(&session.reader(), &metadata, &input);
+    assert_eq!(reply["frame"]["w"], 200.);
+    assert_eq!(reply["frame"]["maximized"], false);
+    input["places"][0][1]["d"] = json!("Missing|HDMI");
+    assert_eq!(
+        restore(&session.reader(), &metadata, &input)["frame"]["x"],
+        400.
+    );
+    input["places"][0][1]["w"] = json!(-1);
+    assert!(restore(&session.reader(), &metadata, &input)["frame"].is_null());
+}
+
+#[test]
+fn memory_keeps_normal_geometry_and_the_two_hundred_most_recent_keys() {
+    let mut session = Session::default();
+    session
+        .call("open", &[json!({}), json!({"app":"notes"})])
+        .unwrap();
+    session
+        .call(
+            "setFrame",
+            &[
+                json!({}),
+                json!("notes"),
+                json!({"x":80,"y":60,"w":340,"h":250}),
+            ],
+        )
+        .unwrap();
+    session
+        .call(
+            "liftForKeyboard",
+            &[
+                json!({}),
+                json!("notes"),
+                json!({"x":80,"y":0,"w":340,"h":180}),
+            ],
+        )
+        .unwrap();
+    let mut input = facts();
+    input["args"]["places"] = json!((0..200)
+        .map(|i| json!([format!("app:{i}"), {}]))
+        .collect::<Vec<_>>());
+    let mut memory = Memory::new(session.reader());
+    let now = Instant::now();
+    memory.sync(&input, now);
+    let reply = memory.sync(&input, now + SAVE_DELAY);
+    let merged = merge(&input["args"]["places"], &reply["effects"][0]["updates"]);
+    let entries = rows(&merged["entries"]);
+    assert_eq!(entries.len(), 200);
+    assert_eq!(entries[0][0], "app:1");
+    assert_eq!(
+        entries[199],
+        json!(["app:notes",{"d":"Panel|DP-1","x":80,"y":60,"w":340,"h":250,"max":false}])
+    );
+}
+
+#[test]
+fn merging_rebases_on_current_preferences_and_disabled_service_has_no_deadline() {
+    let mut session = Session::default();
+    session
+        .call("open", &[json!({}), json!({"app":"notes"})])
+        .unwrap();
+    let mut memory = Memory::new(session.reader());
+    let mut input = facts();
+    input["args"]["enabled"] = json!(false);
+    assert!(memory.sync(&input, Instant::now())["effects"].is_null());
+    assert!(memory.refresh_ms().is_none());
+    assert!(!memory.invalidated());
+    let merged = merge(
+        &json!([["app:external",{"x":40}],["app:notes",{"x":1}]]),
+        &json!([["app:notes",{"x":70}]]),
+    );
+    assert_eq!(
+        merged["entries"],
+        json!([["app:external",{"x":40}],["app:notes",{"x":70}]])
+    );
+}

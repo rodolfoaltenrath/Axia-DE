@@ -17,6 +17,7 @@ import { MenuBar } from './components/MenuBar.jsx';
 import { Dock, LaunchpadIcon, dockThickness } from './components/Dock.jsx';
 import { Window } from './components/Window.jsx';
 import { ControlCenter } from './components/ControlCenter.jsx';
+import { WindowMemory } from '../../sdk/windowmemory.js';
 import { Menu } from './components/Menu.jsx';
 
 const MENU_H = 28;
@@ -192,6 +193,7 @@ function App() {
         <AppSwitcher />
         <OverviewChrome />
         <DesktopHud />
+        <WindowMemory />
         {control && <Layer name="popover"><ControlCenter t={t} top={MENU_H} area={control} onClose={() => setControl(null)} /></Layer>}
         {context && (
           <Menu x={context.x} y={context.y} onClose={() => setContext(null)} items={[

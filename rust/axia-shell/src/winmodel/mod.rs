@@ -9,6 +9,7 @@ mod displays;
 mod ffi;
 mod layout;
 mod place;
+pub(crate) use place::{restore_frame, MAX_PLACES};
 mod session;
 #[cfg(test)]
 mod tests;

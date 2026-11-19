@@ -343,6 +343,42 @@ com estado JS desatualizado, exigindo a migração das janelas para o destino
 correto. O novo contrato LPK executa esses mesmos comandos locais e exige
 zero acesso à autoridade da sessão. Compositor e frontend recompilados.
 
+## Memória de geometria das janelas
+
+`window_memory.rs` lê o proprietário Rust por assinatura. A coleta aguarda um
+prazo de 800 ms, agrupa as mudanças e compara os valores por janela sem
+serialização para detectar igualdade. Diálogos, painéis internos, fullscreen,
+PiP e superfícies sem identidade não fornecem uma posição. A identidade de
+launcher/Dock é compartilhada com o agrupamento do Forçar encerramento.
+
+`shell:window-memory` é um serviço sem árvore visual, montado no host nativo
+pelo adaptador do tema. Recebe metadados de apps/telas; não recebe janelas nem
+assina o espelho JS. Oculto e sem revisão pendente, não agenda polling.
+`rememberedFrame` também resolve a quantidade de janelas já abertas no Rust,
+preservando deslocamento por instância, tamanho fixo e escolha do monitor.
+
+O efeito contém somente alterações das preferências. Antes de persistir, o
+adaptador fornece os pares ordenados atuais a `memoryMerge`, que aplica as
+alterações no Rust e limita a 200 chaves. Isso preserva a ordem de uso e uma
+edição de preferências feita depois da coleta. O formato `windowPlaces` no
+disco permanece o mesmo. Configurações e sua gravação continuam no adaptador
+JS até a migração desse serviço; restauração da sessão também permanece
+pendente. Live, greeter e processos de apps isolados não ativam a coleta.
+
+Validação: 531 testes unitários da shell aprovados (sete especiais ignorados),
+13 do Forçar encerramento e 15 do núcleo nativo. Os quatro cenários de
+`window_memory_runtime` bloqueiam `windows.get()` no JS, movem/criam janelas
+diretamente no proprietário, verificam exclusões, ordem de preferências,
+deslocamento por instância e parada após desmontar o serviço. Capturas e logs
+em `build/validation/window-memory/`; o CI GPU=1 exige o teste e publica
+`axia-window-memory`. Passaram também quatro contratos LPK e as regressões de
+menus de app, Forçar encerramento e alternador. Medições físicas e RPM completo
+continuam reservados ao encerramento.
+
+Compositor e frontend recompilados; o teste do serviço passou novamente no
+binário final. Instalação temporária e `switcher-check` com os arquivos
+instalados aprovados.
+
 ## Verificação
 
 ```sh

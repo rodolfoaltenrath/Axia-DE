@@ -47,21 +47,26 @@ pub fn find_display(key: &str, displays: &[Value]) -> Option<usize> {
 /// What a window leaves: its normal frame (not the snapped or keyboard-lifted one), and whether it
 /// was maximized. Null for picture-in-picture, fullscreen or a frame without a size.
 pub fn place_of(w: &Value, display: &Value) -> Value {
-    if truthy(get(w, "pip")) || truthy(get(w, "fullscreen")) {
+    place_fields(|key| get(w,key),display)
+}
+
+pub fn place_fields<'a>(field: impl Fn(&str) -> &'a Value, display: &Value) -> Value {
+    if truthy(field("pip")) || truthy(field("fullscreen")) {
         return Value::Null;
     }
-    let osk = Some(get(w, "oskFrame")).filter(|v| truthy(v));
-    let restore = Some(get(w, "restore")).filter(|v| truthy(get(w, "snapped")) && truthy(v));
-    let f = osk.or(restore).unwrap_or(w);
-    let (fw, fh) = (number(get(f, "w")), number(get(f, "h")));
+    let osk = Some(field("oskFrame")).filter(|v| truthy(v));
+    let restore = Some(field("restore")).filter(|v| truthy(field("snapped")) && truthy(v));
+    let f = osk.or(restore);
+    let geometry = |key| f.map_or_else(||field(key),|f|get(f,key));
+    let (fw, fh) = (number(geometry("w")), number(geometry("h")));
     if !(fw > 0.0 && fh > 0.0) {
         return Value::Null;
     }
-    let max = truthy(get(osk.unwrap_or(w), "maximized"));
+    let max = truthy(osk.map_or_else(||field("maximized"),|f|get(f,"maximized")));
     json!({
         "d": display_key(display),
-        "x": num(js_round(number(get(f, "x")) - number(get(display, "x")))),
-        "y": num(js_round(number(get(f, "y")) - number(get(display, "y")))),
+        "x": num(js_round(number(geometry("x")) - number(get(display, "x")))),
+        "y": num(js_round(number(geometry("y")) - number(get(display, "y")))),
         "w": num(js_round(fw)),
         "h": num(js_round(fh)),
         "max": max,

@@ -26,7 +26,7 @@ import { settings } from './settings.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { forceQuit } from './appcontrol.js';
-import { executeNativeEffect } from './nativeappmodel.js';
+import { executeNativeEffect, nativeAppRequest } from './nativeappmodel.js';
 import { disks } from './disks.js';
 import { createFactsStore, createFactsEncoder, emptyFactsStore, sameFacts, sameRecord, nativeTheme } from './nativeviewfacts.js';
 // The nodes of the shell layers a native view may put its menus and popovers in ("layer": "popover").
@@ -93,6 +93,13 @@ function runner(handle, manifest, winId, node = () => 0) {
     try {
       switch (effect.kind) {
         case 'settings': settings.set(effect.patch); break;
+        case 'windowPlaces':
+          if (manifest.id === 'shell:window-memory') {
+            const reply = nativeAppRequest(lord.nativeApps, { cmd: 'memoryMerge',
+              places: Object.entries(settings.get().windowPlaces || {}), updates: effect.updates });
+            if (!reply.error) settings.set({ windowPlaces: Object.fromEntries(reply.entries) });
+          }
+          break;
         case 'openApp': wm.open(effect.app, { args: effect.args || {} }); break;
         case 'forceQuit':
           if (manifest.id !== 'forcequit') throw new Error('app.invalidRequest');

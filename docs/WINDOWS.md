@@ -494,7 +494,13 @@ A theme turns it on with `configureWindows({ snap: true })` (Lord Flow does);
 
 ## Remembered places (0.8.7)
 
-Each app reopens where it was: size, position, maximized and display, per app, in `settings.windowPlaces` (`sdk/windowmemory.js`, the rules in Rust: `rust/axia-shell/src/winmodel/place.rs` through `sdk/winmodel.js`, tests in `winmodel/tests.rs`). Flow and Classic share this, for LordOS apps and for Linux apps, whose position the compositor decides.
+Each app reopens where it was: size, position, maximized and display, per app,
+in `settings.windowPlaces`. `rust/axia-shell/src/window_memory.rs` observes the
+native session model and schedules an 800 ms save; `winmodel/place.rs` supplies
+the placement rules. `sdk/windowmemory.js` mounts the nonvisual native service,
+supplies display metadata and installs the opening hook. Saving and counting
+other windows of the app do not read the JS mirror. This covers Axia apps and
+Linux apps, whose position the compositor decides.
 
 - **Which display:** a place is kept relative to its display, and a display is known by its name from the EDID plus its connector, never by index. The same monitor on another port still matches, unless two identical monitors make that ambiguous. Monitors with the same name on the same connector can't be told apart.
 - **Display gone, or the place off screen:** the window goes to a visible area of a display that exists, sized to fit.

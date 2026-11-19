@@ -104,10 +104,8 @@ fn native_groups(source: &dyn WindowSource, input: &Value, include_forcequit: bo
         let package = registry.get(app_id).copied().filter(|app| app["package"] == true || app["isolated"] == true);
         let desktop = catalog.iter().find(|app| s(app, "kind") == "linux" &&
             crate::native_view::windows::matches_desktop(app_id, s(app, "desktopId"), s(app, "wmClass")));
-        let key = if !linux { w.app.to_owned() }
-            else if w.args["pkg"] == true && package.is_some() { app_id.to_owned() }
-            else if let Some(desktop) = desktop { s(desktop, "id").to_owned() }
-            else { format!("linux:{}", if app_id.is_empty() { w.id } else { app_id }) };
+        let key = crate::native_view::windows::launcher_identity(&w,
+            input["registry"].as_array().map(Vec::as_slice).unwrap_or(&[]),catalog);
         let group_app = registry.get(key.as_str()).copied();
         let name = group_app.map(|app| s(app, "name").to_owned()).or_else(||
             desktop.map(|app| s(app, "shortName").to_owned()).filter(|name| !name.is_empty()))
@@ -136,6 +134,7 @@ fn native_groups(source: &dyn WindowSource, input: &Value, include_forcequit: bo
     sorted_groups(groups)
 }
 impl App {
+    pub fn metadata(&self) -> &Value { &self.metadata }
     /// Window-management commands also operate on the Force Quit window itself.
     /// Keep their projection separate from the panel's selection/execution state.
     pub fn command_groups(&self) -> Vec<Group> {
