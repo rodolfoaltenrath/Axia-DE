@@ -15,7 +15,8 @@ import { t, direction } from './i18n.js';
 import { settings } from './settings.js';
 import { NativeView } from './nativeview.js';
 import { Layer } from './layers.js';
-import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows } from './windows.js';
+import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows, applyNativeWindowState } from './windows.js';
+import { nativeAppRequest } from './nativeappmodel.js';
 import { MAX_DESKTOPS } from './desktopmodel.js';
 import { neighbor, arrowStep, swipeStep, cleanCount, cleanIndex } from './winmodel.js';
 import { cycleWindows } from './trackpad.js';
@@ -39,21 +40,32 @@ export function desktopSuffix(w) {
 // ---- switching ----
 
 export function switchDesktop(id) { setActiveDesktop(id); }
+function desktopCommand(action, step) {
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'desktopCommand', action, ...(step === undefined ? {} : { step }) });
+  if (reply.error) throw new Error(reply.error);
+  applyNativeWindowState(reply);
+  return reply.result;
+}
 export function nextDesktopBy(step) {
-  const id = neighbor(desktopList.get(), activeDesktop.get(), step);
-  if (id != null) switchDesktop(id);
-  else showHud();                                     // the end of the strip: at least say where we are
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) {
+    const id = neighbor(desktopList.get(), activeDesktop.get(), step);
+    if (id != null) switchDesktop(id); else showHud();
+    return;
+  }
+  if (desktopCommand('step', step)?.boundary) showHud();
 }
 const stepArrow = (dir) => nextDesktopBy(arrowStep(dir, direction() === 'rtl'));
 
 export function addDesktopAndShow() {
+  if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) return desktopCommand('add');
   const id = createDesktop();
   if (id != null) switchDesktop(id);
   return id;
 }
 export const canAddDesktop = () => desktopList.get().length < MAX_DESKTOPS;
 export function removeDesktopById(id) { return closeDesktop(id); }
-export const closeActiveDesktop = () => closeDesktop(activeDesktop.get());
+export const closeActiveDesktop = () => typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__
+  ? closeDesktop(activeDesktop.get()) : desktopCommand('closeActive');
 
 // The window menu's Move to Desktop.
 export function moveToDesktopItems(id) {

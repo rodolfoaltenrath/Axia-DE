@@ -666,7 +666,7 @@ impl WindowState {
         match op {
             "appControl" => {
                 let (command, ids) = control.ok_or("appControl requires a native owner")?;
-                self.app_command(command, ids, &facts);
+                result = self.app_command(command, ids, &facts);
             }
             "state" => {}
             // the mirror lost track: everything again, in full
@@ -918,11 +918,24 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str) }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), AddDesktopAndShow, CloseActiveDesktop }
 
 impl WindowState {
-    fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) {
+    fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) -> Value {
         match command {
+            AppCommand::StepDesktop(step) => {
+                let target = self.desktops.iter().position(|id| *id == self.active)
+                    .and_then(|i| (i as i64).checked_add(step))
+                    .and_then(|i| usize::try_from(i).ok()).and_then(|i| self.desktops.get(i)).copied();
+                if let Some(id) = target { self.active = id; }
+                return json!({"boundary":target.is_none()});
+            }
+            AppCommand::AddDesktopAndShow => {
+                let id = self.create_desktop();
+                if let Some(id) = id.as_i64() { self.active = id; }
+                return id;
+            }
+            AppCommand::CloseActiveDesktop => return self.close_desktop(self.active),
             AppCommand::BringAll => {
                 for id in ids { self.raise_unless_top(id); }
             }
@@ -932,7 +945,7 @@ impl WindowState {
             AppCommand::Cycle(back) => {
                 let mine: Vec<_> = self.wins.iter().filter(|w| ids.contains(&w.id()) && !w.on("minimized") && self.here(w))
                     .map(|w| w.id().to_owned()).collect();
-                if mine.len() < 2 { return; }
+                if mine.len() < 2 { return Value::Null; }
                 if back {
                     if let Some(top) = self.focused_window().and_then(|id| self.find(id)) {
                         let window = self.wins.remove(top);self.wins.insert(0, window);
@@ -965,6 +978,7 @@ impl WindowState {
                 }
             }
         }
+        Value::Null
     }
 }
 

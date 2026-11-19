@@ -328,7 +328,10 @@ views nativas lerem direto, sem JSON.
       Indicador de troca de desktop agora lê o modelo Rust diretamente: nome,
       posição e pontos são nativos, assim como a expiração de 800 ms. Retirados
       o store, a assinatura JS de apresentação e o temporizador desse indicador.
-      Atalhos, animação, persistência e restauração ainda usam adaptadores JS.
+      Avançar/voltar, criar e mostrar, e fechar o desktop ativo também escolhem
+      os alvos no proprietário Rust, com uma revisão por comando. Atalhos
+      encaminham somente a intenção; não enviam lista ou desktop ativo.
+      Animação, persistência e restauração ainda usam adaptadores JS.
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
 - [ ] Notificações, relógio e alarmes (`notify.js`, `alarms.js`).
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores

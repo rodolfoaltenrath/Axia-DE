@@ -195,3 +195,64 @@ console.log(JSON.stringify({groupIdentity,emptyIdentity,forward,back,othersHidde
         json!([["notes#a", "notes#b"], ["notes#a", "notes#b"]])
     );
 }
+
+#[test]
+#[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
+fn isolated_desktop_commands_keep_local_state_without_session_authority() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap();
+    let fixture = r#"
+import path from 'node:path';
+import {build} from 'esbuild';
+const root=process.argv[1];let list=[1,2,3],active=2,privileged=0;
+const store=get=>({get,subscribe:()=>()=>{}}),deny=()=>{privileged++;throw Error('isolated desktop reached session authority');};
+const probe={windows:store(()=>[]),wm:{},activeDesktop:store(()=>active),desktopList:store(()=>list),
+ setActiveDesktop:id=>{active=id;},setDesktops:(ids,id)=>{list=ids;active=id;},
+ createDesktop:()=>{const id=Math.max(...list)+1;list.push(id);return id;},
+ closeDesktop:id=>{if(list.length<2)return false;const i=list.indexOf(id),next=list[i+1]??list[i-1];list=list.filter(x=>x!==id);if(active===id)active=next;return true;},
+ fxNodes:new Map(),overviewShowing:store(()=>false),visibleWindows:()=>[],applyNativeWindowState:deny,
+ nativeAppRequest:deny,neighbor:(ids,id,step)=>ids[ids.indexOf(id)+step]??null,
+ arrowStep:()=>1,swipeStep:()=>1,cleanCount:n=>n,cleanIndex:n=>n,
+ settings:{get:()=>({}),set:()=>{}},t:key=>key,direction:()=> 'ltr',
+ NativeView:()=>null,Layer:()=>null,MAX_DESKTOPS:9,cycleWindows:()=>{},nativeAnim:()=>null,whenAnimDone:()=>{},
+ toggleOverview:()=>{},toggleAppWindows:()=>{},mainDisplay:()=>({x:0,y:0,w:640,h:700}),onScreenChange:()=>()=>{}};
+globalThis.__desktopProbe=probe;
+const names={
+ 'windows.js':['windows','wm','activeDesktop','desktopList','setActiveDesktop','setDesktops','createDesktop','closeDesktop','fxNodes','overviewShowing','visibleWindows','applyNativeWindowState'],
+ 'nativeappmodel.js':['nativeAppRequest'],'nativeview.js':['NativeView'],'i18n.js':['t','direction'],
+ 'settings.js':['settings'],'layers.js':['Layer'],'desktopmodel.js':['MAX_DESKTOPS'],
+ 'winmodel.js':['neighbor','arrowStep','swipeStep','cleanCount','cleanIndex'],'trackpad.js':['cycleWindows'],
+ 'anim.js':['nativeAnim','whenAnimDone'],'overview.jsx':['toggleOverview','toggleAppWindows'],
+ runtime:['mainDisplay','onScreenChange']};
+const result=await build({entryPoints:[path.join(root,'sdk/desktops.js')],bundle:true,write:false,format:'esm',
+ define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-desktops',setup(build){
+ build.onResolve({filter:/.*/},args=>{if(args.path==='@lordos/runtime')return{path:'runtime',namespace:'probe'};
+ const name=path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
+ build.onLoad({filter:/.*/,namespace:'probe'},args=>({contents:names[args.path].map(name=>`export const ${name}=globalThis.__desktopProbe.${name};`).join('\n')}));
+ }}]});
+const sdk=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+sdk.nextDesktopBy(1);const next=active===3;sdk.nextDesktopBy(1);const boundary=active===3;
+sdk.nextDesktopBy(-1);const previous=active===2;
+const added=sdk.addDesktopAndShow(),add=added===4&&active===4;
+const close=sdk.closeActiveDesktop()===true&&active===3&&!list.includes(4);
+console.log(JSON.stringify({next,boundary,previous,add,close,privileged}));
+"#;
+    let output = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", fixture])
+        .arg(repo)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    for flag in ["next", "boundary", "previous", "add", "close"] {
+        assert_eq!(report[flag], true, "{report}");
+    }
+    assert_eq!(report["privileged"], 0);
+}

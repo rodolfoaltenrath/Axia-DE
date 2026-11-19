@@ -2,6 +2,8 @@
 use crate::winmodel::{AppCommand, Session, WindowReader};
 use serde_json::{json, Value};
 use std::rc::Rc;
+#[cfg(test)]
+mod desktop_tests;
 mod quit;
 #[cfg(test)]
 mod quit_tests;
@@ -24,6 +26,22 @@ impl Controller {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "desktopCommand" {
+            let command = match input["action"].as_str() {
+                Some("step") => match input["step"].as_i64() {
+                    Some(step) => AppCommand::StepDesktop(step),
+                    None => return json!({"error":"app.invalidRequest"}),
+                },
+                Some("add") => AppCommand::AddDesktopAndShow,
+                Some("closeActive") => AppCommand::CloseActiveDesktop,
+                _ => return json!({"error":"app.invalidRequest"}),
+            };
+            return self
+                .windows
+                .as_mut()
+                .and_then(|windows| windows.app_command(command, &[]).ok())
+                .unwrap_or_else(|| json!({"error":"app.invalidRequest"}));
+        }
         match input["cmd"].as_str() {
             Some("groupInfo" | "group" | "quitApp" | "quitAppNext") => {
                 let Some(windows) = &self.windows else {
@@ -114,7 +132,10 @@ impl Controller {
                 })
                 .map(|w| w.id().to_owned())
                 .collect();
-            if let Some(anchor) = input["id"].as_str().filter(|id| stack.iter().any(|w| w == id)) {
+            if let Some(anchor) = input["id"]
+                .as_str()
+                .filter(|id| stack.iter().any(|w| w == id))
+            {
                 stack.retain(|id| id != anchor);
                 if matches!(command, AppCommand::Arrange(_)) {
                     stack.reverse();

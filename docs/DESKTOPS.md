@@ -120,6 +120,12 @@ the Overview do not show it. At either end of the list, the shortcut forwards a
 `show` command to the native view. There is no JS store or timer for this UI.
 The adapter supplies display geometry and follows display configuration events.
 
+The session's next/previous, add-and-show and close-active commands resolve their
+targets in the native owner, without sending the JS desktop list or selection.
+Each command publishes at most one observable revision; adding and showing a
+desktop is atomic. Boundary steps return an indication without changing state.
+The isolated `.lpk` host retains local compatibility behavior.
+
 ## What is kept
 
 - `settings.desktopCount`: the number of desktops, across sessions.

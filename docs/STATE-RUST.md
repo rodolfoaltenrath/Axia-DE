@@ -311,8 +311,17 @@ pede atualização periódica. O assinante e o prazo acabam ao desmontar a view.
 principal, com assinatura de eventos de tela. A tentativa de avançar além do
 limite encaminha um comando `show`; não envia desktop ativo, lista ou árvores.
 Removidos `hudState`, `hudTimer` e a assinatura JS que mostrava o indicador.
-Animação de janelas, escolha do vizinho, configuração da quantidade e
-restauração ainda estão nos adaptadores das fases seguintes.
+Animação de janelas, configuração da quantidade e restauração ainda estão nos
+adaptadores das fases seguintes.
+
+Os comandos `desktopCommand` também pertencem ao controlador vinculado ao
+contexto: `step`, `add` e `closeActive` consultam a lista e o desktop atuais no
+próprio modelo. Criar e mostrar é uma única mutação observável; fechar move as
+janelas e escolhe o destino nas regras existentes, também em uma revisão.
+Passos fora do intervalo não alteram o modelo e sinalizam o limite ao indicador.
+Pedidos inválidos e controladores sem proprietário são recusados. O SDK aplica
+o delta de compatibilidade, mas não escolhe os alvos pelo espelho. O host `.lpk`
+mantém o caminho local anterior, selecionado na compilação.
 
 O teste Rust `desktop_hud_runtime` monta o componente real e exige fonte opaca
 correta, troca com espelho parado, extensão/expiração do prazo, indicação no
@@ -325,6 +334,14 @@ extensão e expiração sem espera. Não houve medição física nesta etapa.
 Compositor/frontend recompilados; passaram 526 testes unitários da shell (sete
 especiais ignorados), três contratos LPK e as regressões gráficas dos comandos
 de janela e menu Janela, em quatro cenários cada.
+
+Na etapa seguinte dos comandos de desktop, passaram 527 testes unitários da
+shell (sete especiais ignorados), quatro contratos LPK e quatro cenários
+gráficos de cada uma das integrações de indicador e comandos de janela.
+O cenário do indicador também executa avanço, retorno, criação e fechamento
+com estado JS desatualizado, exigindo a migração das janelas para o destino
+correto. O novo contrato LPK executa esses mesmos comandos locais e exige
+zero acesso à autoridade da sessão. Compositor e frontend recompilados.
 
 ## Verificação
 
