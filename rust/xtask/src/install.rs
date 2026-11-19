@@ -6,8 +6,9 @@ use std::fs::{self, File, FileTimes, Metadata, Permissions};
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 
-pub const DESKTOP_BINARIES: [&str; 11] = [
+pub const DESKTOP_BINARIES: [&str; 12] = [
     "axia-server",
+    "axia-session",
     "axia-vault",
     "axia-maild",
     "axia-doc",
@@ -36,20 +37,23 @@ const ASSET_DIRS: [&str; 13] = [
     "browser",
 ];
 
-const REQUIRED: [&str; 5] = [
+const REQUIRED: [&str; 7] = [
     "server/build/axia-server",
+    "server/build/axia-session",
+    "server/build/fedora-session",
     "server/build/axia-vault",
     "themes/default/theme.bundle.js",
     "assets/app-host.bundle.js",
     "code-manifest.json",
 ];
 
-const DOCS: [&str; 10] = [
+const DOCS: [&str; 11] = [
     "STANDALONE.md",
     "COPR-UPDATES.md",
     "REPOSITORY.md",
     "RUST.md",
     "RUST-BUILD.md",
+    "RUST-SESSION.md",
     "FEDORA-NETWORK-TRAY.md",
     "DOCK-PREVIEWS.md",
     "FILES.md",
@@ -247,33 +251,15 @@ pub fn install(repo: &Path, prefix: &str, libexecdir: &str, destdir: &str) -> Re
     }
 
     let session = target.join("fedora-session");
-    copy_with_mode(
-        &repo.join("tools/desktop/fedora-session.in"),
-        &session,
-        0o755,
-    )?;
-    let text = at(&session, fs::read_to_string(&session))?;
-    at(
-        &session,
-        fs::write(
-            &session,
-            text.replace("@BINDIR@", &bindir.to_string_lossy()),
-        ),
-    )?;
+    copy_with_mode(&repo.join("server/build/fedora-session"), &session, 0o755)?;
 
     let root_text = root.to_string_lossy();
     let launcher = staged(&bindir).join("axia-session");
-    let source = repo.join("tools/desktop/axia-session.in");
     make_parent(&launcher)?;
-    let text = at(&source, fs::read_to_string(&source))?;
-    at(
-        &launcher,
-        fs::write(&launcher, text.replace("@ROOT@", &root_text)),
-    )?;
-    at(
-        &launcher,
-        fs::set_permissions(&launcher, Permissions::from_mode(0o755)),
-    )?;
+    if fs::symlink_metadata(&launcher).is_ok() {
+        at(&launcher, fs::remove_file(&launcher))?;
+    }
+    at(&launcher, symlink(root.join("bin/axia-session"), &launcher))?;
 
     // The terminal commands find their helpers through their real path in libexec.
     for name in ["axia-fetch", "axia-sysreport"] {

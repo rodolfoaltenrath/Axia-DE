@@ -170,6 +170,20 @@ Continuam pendentes também:
 - Iniciar a Fase 1 depois dos critérios da Fase 0, começando por uma fatia
   completa com remoção do React, testes Rust, capturas e comparação de métricas.
 
+### Última entrega concluída antes da pausa
+
+Inicialização da sessão e seus testes migrados para `rust/axia-session`:
+`fedora-session` e o comando `axia-session` são executáveis Rust, sem os scripts
+Python/shell anteriores. Instalação e ISO usam os novos binários. Passaram 18
+testes automáticos, a recusa de root e a integração instalada com compositor e
+Calculadora reais. Protocolo em [RUST-SESSION.md](RUST-SESSION.md).
+
+Esta fatia está concluída; a sessão física existente não foi reiniciada.
+O trabalho foi pausado a pedido do usuário após a validação e o commit.
+Ao retomar, continuam faltando as medições físicas acima e os testes antigos
+de Copr, clipboard/rede e verificações gerais de empacotamento. A Fase 1 não
+foi iniciada nesta entrega.
+
 ## Fase 1: terminar o que já começou
 
 Para cada chave de transição: ligar de vez, apagar o caminho React e os `.jsx`
@@ -338,3 +352,4 @@ mostraram.
 | 2026-11-18 | Fase 0: calibração confirmada no runner e orçamento obrigatório por padrão | Commit desta linha | Seis amostras válidas em dois workflows: medianas de 12,550/12,300 poll/s e 102,969/103,148 MiB. Mantidos os limites de 15 poll/s e 120 MiB. |
 | 2026-11-18 | Fase 0: comparação de perfis concluída com instrumentos e testes Rust | Commit desta linha | Três builds frios e três vínculos reais; nove amostras ociosas e paridade de pixels/texto. Mantidas as flags Fedora. Primeira apresentação e frame completo em hardware continuam pendentes. |
 | 2026-11-18 | Fase 0: testes da divisão de build migrados para Rust | Commit desta linha | Três verificações reais de Cargo/Make passaram; removido `test_rust_build_partition.py`. Os testes dependentes do ambiente são exigidos explicitamente no CI. Suíte leve: 47 testes passaram no host e no container. |
+| 2026-11-18 | Inicialização da sessão e testes migrados para Rust | Commit desta linha | 18 testes automáticos, recusa de root e integração real instalada passaram. Removidos os dois scripts e testes Python da inicialização; memória observada do lançador: 2,555 MiB em sessão privada. Pausa solicitada pelo usuário após concluir esta entrega. |

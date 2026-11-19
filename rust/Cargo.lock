@@ -368,6 +368,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-session"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-shell"
 version = "0.1.0"
 dependencies = [

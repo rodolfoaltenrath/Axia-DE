@@ -272,6 +272,13 @@ build/platform-admin-test: tests/platform_admin_test.c src/platform/admin.c src/
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -D_GNU_SOURCE -Isrc -o $@ tests/platform_admin_test.c src/platform/admin.c
 ALL += build/axia-server
+# Session startup is a small independent Rust crate; it does not pull the shell.
+SESSION_INPUTS := ../rust/axia-session/Cargo.toml $(wildcard ../rust/axia-session/src/*.rs) $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
+ALL += build/axia-session build/fedora-session
+build/axia-session build/fedora-session &: $(SESSION_INPUTS)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-session --bin axia-session --bin fedora-session --target-dir $(abspath build/session-rust) --release --locked --offline
+	cp build/session-rust/release/axia-session build/axia-session
+	cp build/session-rust/release/fedora-session build/fedora-session
 # axia-media: the media helper (docs/MEDIA.md). It's the only one that links FFmpeg (and libva);
 # axia-server never does. If FFmpeg's -dev packages are missing, everything else is built without it.
 MEDIA ?= $(shell pkg-config --exists libavcodec libavformat libavutil libswscale libswresample 2>/dev/null && echo 1 || echo 0)

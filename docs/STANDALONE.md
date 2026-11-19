@@ -67,6 +67,12 @@ Ficam com os nomes antigos, de propósito: a API interna (`lord.*`, `@lordos/sdk
 
 ## Verificação
 
+Os pontos de entrada `fedora-session` e `axia-session` são executáveis Rust,
+compilados pelo crate independente `rust/axia-session`. O comando público é um
+link para o executável instalado em libexec. Inicialização, sinais, D-Bus, logs,
+pastas XDG e aviso de atualização têm testes Rust; os scripts anteriores foram
+removidos. Detalhes e reprodução em [RUST-SESSION.md](RUST-SESSION.md).
+
 `make check` compila o desktop, executa testes do ciclo de vida da sessão com um provedor simulado, verifica que nenhuma ação administrativa funciona e examina os símbolos do binário para impedir a ligação acidental de componentes do SO.
 
 Também valida os hashes dos bundles, instala em diretório temporário, verifica que nenhum serviço ou configuração de `/etc` foi instalado, confere o manifesto após a instalação e inicializa os temas sem monitor como usuário sem privilégios.

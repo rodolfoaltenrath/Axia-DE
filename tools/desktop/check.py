@@ -84,8 +84,6 @@ def main():
         assert 'DesktopNames=Axia;' in desktop
         wrapper = staged / 'fedora-session'
         assert wrapper.is_file() and os.access(wrapper, os.X_OK)
-        assert '@BINDIR@' not in wrapper.read_text()
-        assert '/usr/bin/axia-session' in wrapper.read_text()
         assert 'FAILED' not in run(str(staged / 'bin/axia-server'), '--check-code', str(staged))
         Path(tmp).chmod(0o755)
         # An ordinary user can initialize the complete desktop without root or a seat

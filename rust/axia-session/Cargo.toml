@@ -1,0 +1,26 @@
+[package]
+name = "axia-session"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native desktop session startup and supervision"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+
+[[bin]]
+name = "axia-session"
+path = "src/direct.rs"
+
+[[bin]]
+name = "fedora-session"
+path = "src/desktop.rs"
+
+# Rust subprocess fixture for integration tests; never staged or installed.
+[[bin]]
+name = "axia-session-fixture"
+path = "tests/support/fixture.rs"
+test = false
+bench = false
+doc = false

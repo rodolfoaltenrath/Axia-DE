@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PATHS: [&str; 34] = [
+const PATHS: [&str; 35] = [
     ".cargo",
     "server",
     "rust",
@@ -35,6 +35,7 @@ const PATHS: [&str; 34] = [
     "docs/REPOSITORY.md",
     "docs/RUST.md",
     "docs/RUST-BUILD.md",
+    "docs/RUST-SESSION.md",
     "docs/SHORTCUTS.md",
     "docs/FILES.md",
     "docs/FEDORA-NETWORK-TRAY.md",
