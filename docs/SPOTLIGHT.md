@@ -2,7 +2,8 @@
 
 Both are mounted by the SDK, so **every theme has them** without doing anything:
 `startShell` adds `<SpotlightPanel />` and `<ClipboardPanel />`. Search is owned by
-`rust/axia-shell/src/search/`; `sdk/rustsearch.jsx` draws its widgets and `sdk/search.js`
+`rust/axia-shell/src/search/`; the Rust native view host draws its widgets and
+`sdk/rustsearch.jsx` mounts the view without a renderer preference. `sdk/search.js`
 connects shared shell services. Clipboard transfers, history and panel trees live in Rust;
 `sdk/clipboard.js` is their host adapter (see [CLIPBOARD.md](CLIPBOARD.md)).
 
@@ -110,16 +111,29 @@ cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --lock
 ```
 
 The integration test is orchestrated and asserted in Rust. Its temporary embedded
-module drives the existing React/QuickJS UI. It checks the real shortcut and button,
+module drives the QuickJS adapter and Rust native UI. It checks the real shortcut and button,
 Enter/reveal, calculator/conversion, apps/files/images/notes/help/clipboard/providers,
 160 open/search/close cycles, released native pixels and absence of closed-panel
-polling. The visible text and geometry are checked against fixed expectations from
-the validated UI, without loading the removed engine. `AXIA_SEARCH_OBSERVATIONS`
+polling. Native captions and uniquely matched geometry are checked against fixed
+expectations from the validated UI. `AXIA_SEARCH_OBSERVATIONS`
 saves JSON; calculator and conversion cases also have native Rust unit tests.
 The `activeBytes` diagnostic measures serialized active result/query/preview payload,
 not allocator usage; process RSS and managed image bytes are checked separately.
-Headless timing measures key dispatch to a native text update, not presented-frame
-latency. Appearance, blur, typing and RAM still need validation on the Fedora machine.
+The test checks cleanup and bounded resident growth; it does not measure
+presented-frame latency. Physical measurements remain deferred to the end of
+`ROADMAP-SHELL-RUST.md`, as requested on 2026-11-19.
+
+The native renderer is now unconditional; `spotlightNativeView` is ignored.
+The GPU=1 desktop CI additionally requires a Rust capture driver in light/dark
+at 640/1000 px, including arrow/Tab navigation, provider clicks, outside clicks
+and isolation/restoration of the previous text field's focus:
+
+```sh
+AXIA_SPOTLIGHT_OUTPUT=/var/tmp/axia-spotlight cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test spotlight_runtime -- --ignored --nocapture
+```
+
+Its logs and PNGs are published as `axia-spotlight`. The shell still uses the JS
+session/provider/effect adapter; this step does not remove QuickJS.
 
 **Preview (on the right):**
 - the app's icon;

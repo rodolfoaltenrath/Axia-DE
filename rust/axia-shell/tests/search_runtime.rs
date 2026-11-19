@@ -236,19 +236,16 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
         assert_eq!(get(stage)["stats"]["managedImageKB"], 0);
     }
     assert_eq!(get("idle")["polls"], get("cycles")["polls"]);
-    // Coordinates captured from the validated 1000x700 UI. Keep this contract
-    // independent of renderer allocation order and of the removed JS engine.
+    // Captions with unique matches keep the original 1000x700 geometry contract.
+    // Native nodes are owned by Rust, so inspect them through nativeViews rather
+    // than intercepting React's setText calls. Repeated captions are checked by
+    // the interaction/preview assertions and the four capture cases.
     let expected = json!([
         {"h":13,"text":"↑↓ select · Enter open · ❖Enter show in Files · Tab section · Esc close","w":332,"x":155,"y":358},
-        {"h":25,"text":"App 0042","w":95,"x":199,"y":128},
         {"h":21,"text":"APPS","w":460,"x":141,"y":175},
-        {"h":16,"text":"App 0042","w":62,"x":187,"y":205},
-        {"h":14,"text":"Axia DE app","w":328,"x":259,"y":206},
-        {"h":18,"text":"App 0042","w":69,"x":697,"y":273},
-        {"h":15,"text":"Axia DE app","w":231,"x":616,"y":322}
+        {"h":14,"text":"Axia DE app","w":328,"x":259,"y":206}
     ]);
     let actual = get("app")["layout"].as_array().unwrap();
-    assert_eq!(actual.len(), expected.as_array().unwrap().len());
     for node in expected.as_array().unwrap() {
         assert!(
             actual.contains(node),
@@ -269,36 +266,30 @@ import {createElement as h} from '@ROOT@/node_modules/react/index.js';
 import {render,View} from '@ROOT@/runtime/index.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {configureWindows,wm} from '@ROOT@/sdk/windows.js';
-import {spotlight,spotlightOpen,registerSpotlightSource} from '@ROOT@/sdk/search.js';
+import {spotlight,spotlightOpen,registerSpotlightSource,searchCaption} from '@ROOT@/sdk/search.js';
+import {settings} from '@ROOT@/sdk/settings.js';
 import {SpotlightPanel} from '@ROOT@/sdk/rustsearch.jsx';
 import {MenuBar} from '@ROOT@/themes/default/components/MenuBar.jsx';
 import {treeOwners} from '@ROOT@/sdk/nativetree.js';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {clipboard,clipboardHistory} from '@ROOT@/sdk/clipboard.js';
 
-const records=new Map();let root, pendingInput, keyTimes=[], polls=0,lastReply;
-for(const method of ['createNode','setRoot','appendChild','insertBefore','removeChild','setText','setStyle','setProp','destroy']){
- const original=lord[method];lord[method]=(...a)=>{const result=original(...a);
- if(method==='createNode')records.set(result,{id:result,style:{},props:{}});
- if(method==='setRoot')root=a[0];
- if(method==='appendChild'||method==='insertBefore')records.get(a[1]).parent=a[0];
- if(method==='removeChild')records.get(a[1]).parent=null;
- if(method==='setText'){records.get(a[0]).text=a[1];if(pendingInput&&a[1]===pendingInput.text){keyTimes.push(lord.now()-pendingInput.at);pendingInput=null;}}
- if(method==='setStyle')records.get(a[0]).style[a[1]]=a[2];
- if(method==='setProp')records.get(a[0]).props[a[1]]=a[2];
- if(method==='destroy')records.delete(a[0]);return result;};
-}
+let handle=0,polls=0,lastReply;
+const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
+lord.nativeViews.mount=(node,app,text)=>{const result=mount(node,app,text);if(JSON.parse(text).args?.owner==='spotlight')handle=result;return result;};
+lord.nativeViews.unmount=id=>{if(id===handle)handle=0;return unmount(id);};
 const native=lord.launcher.request.bind(lord.launcher);
 lord.launcher.request=raw=>{const input=JSON.parse(raw),result=native(raw);if(input.op==='search'){if(input.cmd==='poll'){polls++;for(const update of result.updates)lastReply=update;}else if(result?.id)lastReply=result;}return result;};
 const stats=()=>native(JSON.stringify({op:'search',cmd:'stats'}));
-const alive=n=>{for(let i=0;n&&i<100;i++,n=records.get(n.parent))if(n.id===root)return true;return false;};
-const texts=()=>[...records.values()].filter(n=>n.text&&alive(n));
-const layout=()=>texts().filter(n=>lord.getLayout(n.parent)[1]>=112).map(n=>{const [x,y,w,h]=lord.getLayout(n.parent);return{text:n.text,x,y,w,h};});
+const texts=()=>handle?[{text:lord.nativeViews.text(handle)}]:[];
+const nodes=tree=>tree?[tree,...(tree.children||[]).flatMap(nodes)]:[];
+const layout=()=>[...new Set(nodes(lastReply?.tree).filter(n=>n.kind==='text').map(n=>searchCaption(n.label)))].flatMap(text=>{
+ const node=lord.nativeViews.findText(handle,text);if(!node)return[];const[x,y,w,h]=lord.getLayout(node);return[{text,x,y,w,h}];});
 const selected=()=>lastReply?.sections?.flatMap(s=>s.items)[lastReply.selected]?.key;
 const snapshot=(name,extra={})=>console.log('search-observation '+JSON.stringify({name,stats:lord.stats(),native:stats(),polls,selected:selected(),...extra}));
 const pause=(ms=120)=>new Promise(resolve=>setTimeout(resolve,ms));
 const key=(code,name,char='',mods=0)=>{__lordKey(code,1,name,char,name,mods);__lordKey(code,0,name,'',name,mods);};
-async function type(text){let value='';for(const c of text){value+=c;pendingInput={text:value,at:lord.now()};key(0,c,c);await pause(20);}await pause(250);}
+async function type(text){for(const c of text){key(0,c,c);await pause(20);}await pause(250);}
 async function waitReady(){for(let i=0;i<200;i++){if(!lastReply?.pending)return;await pause(20);}throw Error('search worker did not settle');}
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 const apps=Array.from({length:512},(_,i)=>({id:`test-${String(i).padStart(4,'0')}`,name:`App ${String(i).padStart(4,'0')}`,Icon,Component:()=>null}));
@@ -306,7 +297,7 @@ configureWindows({apps:[...apps,{id:'editor',name:'Editor',Icon,Component:()=>nu
 const theme={effects:true,mode:'dark',text:'#fff',textDim:'#aaa',accent:'#3489bd',separator:'#555',control:'#333',menuText:'#fff',menuHover:'#444',menuBg:'#222',blur:24};
 
 function Harness(){useShortcuts({grabs:'flow'});return h(ThemeProvider,{tokens:theme},h(View,{style:{width:1000,height:700}},h(MenuBar,{t:theme,height:28,focused:null,onLaunchpad:()=>{},onControlCenter:()=>{},area:{x:0,y:0,w:1000,h:700}}),h(SpotlightPanel)));}
-resetShortcuts();render(h(Harness));
+settings.set({language:'en',spotlightNativeView:false});resetShortcuts();render(h(Harness));
 let opened,args,copied,used;const oldOpen=wm.open,oldCopy=clipboard.set,oldUse=clipboard.use;
 wm.open=(id,options)=>{opened=id;args=options;return 'probe-window';};clipboard.set=text=>{copied=text;};clipboard.use=it=>{used=it.id;};
 async function fresh(query){spotlight.close();await pause(30);spotlight.open();await pause(40);if(query)await type(query);await waitReady();await pause(60);}
@@ -316,11 +307,11 @@ async function run(){
  key(57,'Space',' ',16);await pause();snapshot('shortcut',{open:spotlightOpen.get()});key(1,'Escape');await pause();
  // the search button is drawn by Rust (shell:tree): its click reaches the bar's owner, as the host does
  const owner=treeOwners.get('bar-search');if(!owner)throw Error('search button owner not found');owner({action:['search']});await pause();snapshot('button',{open:spotlightOpen.get()});
- keyTimes=[];await type('App 0042');await waitReady();snapshot('app',{layout:layout(),keyToNodeMs:keyTimes});key(28,'Enter');await pause();snapshot('entered',{opened});
+ await type('App 0042');await waitReady();snapshot('app',{layout:layout()});key(28,'Enter');await pause();snapshot('entered',{opened});
  await fresh('15% of 2400');key(28,'Enter');await pause();snapshot('calculated',{copied});
  await fresh('1,5 gb to mb');key(28,'Enter');await pause();snapshot('converted',{copied});
  await fresh('budget-fixture');snapshot('file',{texts:texts().map(n=>n.text)});key(28,'Enter');await pause();snapshot('edit',{opened,args});await fresh('budget-fixture');key(28,'Enter','',16);await pause();snapshot('reveal',{opened,args});
- await fresh('photo-fixture');snapshot('photo',{image:[...records.values()].some(n=>alive(n)&&String(n.props.src||'').includes('/axia/search/preview-'))});spotlight.close();await pause();
+ await fresh('photo-fixture');snapshot('photo',{image:nodes(lastReply?.tree).some(n=>n.kind==='image'&&String(n.src||'').includes('/axia/search/preview-'))});spotlight.close();await pause();
  configureWindows({apps:[...apps,...['notes','help','editor'].map(id=>({id,name:id,Icon,Component:()=>null}))]});await pause();
  await fresh('budget');snapshot('notes',{notes:lastReply.sections.some(s=>s.id==='notes')});
  await fresh('clipboard');snapshot('help',{help:lastReply.sections.some(s=>s.id==='help')});spotlight.close();await pause();

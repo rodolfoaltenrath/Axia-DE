@@ -58,8 +58,11 @@ somente no host `.lpk` para compatibilidade da API.
 consultam mais `dockNativeView`. Montagem da barra, estado e prévias ainda
 usam adaptadores JS/React e permanecem no escopo das fases seguintes.
 
-**Shell com versão nativa atrás de chave:** launcher, busca (Spotlight), barra de título.
-Chaves em uso: `launcherNativeView`, `spotlightNativeView`,
+**Spotlight definitivo no host Rust:** painel e entrada nativos, com catálogo
+de ícones. Estado da sessão, provedores e efeitos ainda passam pelo adaptador JS.
+
+**Shell com versão nativa atrás de chave:** launcher e barra de título.
+Chaves em uso: `launcherNativeView`,
 `titleBarNativeView`, `filesNativeView`, `lordNativeView`.
 
 **Já em Rust no lado dos modelos:** lista de janelas, desktops e encaixe
@@ -223,7 +226,13 @@ correspondentes, remover a chave.
       React dessas partes removidos. Integração Rust cobre as três posições,
       cancelamento, itens fixos, remoção e ícones com IDs tipados em claro/escuro,
       640/1000 px. A montagem restante da Dock continua para as fases seguintes.
-- [ ] `launcherNativeView` e `spotlightNativeView`.
+- [x] `spotlightNativeView`: painel sempre no host Rust, widgets React
+      substituídos removidos; catálogo de ícones e transferência/restauração de
+      foco corrigidos. Integração com teclado, ponteiro e quatro capturas, além
+      da regressão residente de busca, documentadas em `NATIVE-SHELL.md`.
+- [ ] `launcherNativeView`: antes de remover o fallback, corrigir a faixa fixa
+      de 16.384 px usada em `native_view/launcher.rs` e validar rolagem até o
+      último app em catálogos grandes; preservar cache, categorias, menus e drag.
 - [ ] `titleBarNativeView`.
 - [ ] `filesNativeView`.
 - [ ] `lordNativeView`: descobrir o que cobre e fechá-la ou documentá-la.
@@ -244,6 +253,9 @@ views nativas lerem direto, sem JSON.
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
 - [ ] Notificações, relógio e alarmes (`notify.js`, `alarms.js`).
+- [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
+      e substituir ícones descritos por funções JS por recursos serializáveis;
+      o host nativo ainda usa placeholder para esses ícones personalizados.
 - [ ] Correio, calendário e contatos (`mail.js`, `calendar.js`, `contacts.js`).
 - [ ] Rede, discos e hardware: modelos e vigilância (`netmodel.js`,
       `diskwatch.js`, `hardware.jsx`).
@@ -390,3 +402,4 @@ mostraram.
 | 2026-11-19 | Fase 1: menus da sessão sempre em Rust | Commit desta linha | Removida a escolha por preferência e o menu React do bundle da shell; compatibilidade `.lpk` selecionada no build. Testes Rust verificam a separação, cliques, submenus, itens desabilitados, Escape e clique externo em quatro combinações de modo/largura, com PNGs. Sem nova medição física ou alteração de flags. |
 | 2026-11-19 | Fase 1: apresentação das notificações sempre no host Rust | Commit desta linha | Removido o fallback React da shell e a escolha por preferência; compatibilidade `.lpk` mantida no host. Quatro cenários reais e capturas, contratos de bundle e regressão dos menus passaram. Estado e timers continuam para a Fase 2; medições físicas para o encerramento. |
 | 2026-11-19 | Fase 1: dicas e fantasma da Dock sempre no host Rust | Commit desta linha | Removida a chave e os dois renderers React substituídos. Corrigida a resolução de IDs tipados no ícone arrastado. Integração Rust real passou em quatro casos, cobrindo as três posições e política de arraste; capturas publicadas pelo CI. A Dock completa ainda depende de JS/React; métricas físicas seguem para o encerramento. |
+| 2026-11-19 | Fase 1: Spotlight sempre no host Rust | Commit desta linha | Removido o renderer React substituído e a chave; catálogo de ícones enviado ao host e foco anterior suspenso/restaurado. Testes Rust cobrem entrada, seleção, provedores, clique externo e quatro capturas; regressão de busca residente preservada. Launcher continua pendente, incluindo a faixa fixa de rolagem. |

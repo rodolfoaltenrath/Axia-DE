@@ -2,6 +2,7 @@
  * view its mount node, its facts (settings, theme, services) and runs the effects that belong
  * to the shell; drawing, input and captions are Rust's. */
 #include "js_nativeview.h"
+#include "ui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -119,6 +120,17 @@ static JSValue f_find_text(JSContext *c, JSValueConst t, int argc, JSValueConst 
     return JS_NewInt32(c, node);
 }
 
+/* Read-only lookup: coordinate probes use the compositor's real scene target. */
+static JSValue f_hit_test(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    double x = 0, y = 0;
+    if (argc < 2) return JS_NewInt32(c, 0);
+    if (JS_ToFloat64(c, &x, argv[0]) || JS_ToFloat64(c, &y, argv[1])) return JS_EXCEPTION;
+    if (!(x > -1e9 && x < 1e9 && y > -1e9 && y < 1e9)) return JS_NewInt32(c, 0);
+    Node *target = ui.root ? hit_test(ui.root, (float)x, (float)y) : NULL;
+    return JS_NewInt32(c, target ? target->id : 0);
+}
+
 /* Synthetic input uses the same native pre-dispatch as js_pointer, returning
  * the shell mount target. The caller then dispatches its shell event normally. */
 static JSValue f_pointer(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
@@ -148,6 +160,7 @@ static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("key", 3, f_key),
     JS_CFUNC_DEF("text", 1, f_text),
     JS_CFUNC_DEF("findText", 2, f_find_text),
+    JS_CFUNC_DEF("hitTest", 2, f_hit_test),
     JS_CFUNC_DEF("pointer", 5, f_pointer),
 };
 

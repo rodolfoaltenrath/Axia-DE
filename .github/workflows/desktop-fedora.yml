@@ -78,6 +78,17 @@ jobs:
         env:
           AXIA_DOCK_OUTPUT: ${{ runner.temp }}/axia-dock
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test dock_runtime -- --ignored --nocapture
+      - name: Rust Spotlight integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_SPOTLIGHT_OUTPUT: ${{ runner.temp }}/axia-spotlight
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test spotlight_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-spotlight
+          path: ${{ runner.temp }}/axia-spotlight
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

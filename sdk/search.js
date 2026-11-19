@@ -6,7 +6,7 @@ import { clipboard, clipboardHistory } from './clipboard.js';
 import { wm, getApp, appRegistry } from './windows.js';
 import { settings } from './settings.js';
 import { logOut } from './sessionrestore.jsx';
-import { focusToken, restoreFocus } from './components.jsx';
+import { focusToken, restoreFocus, clearTextFocus } from './components.jsx';
 
 const request = args => launcherRequest({ ...args, op: 'search' });
 const sessions = new Map(), sources = new Map();
@@ -14,7 +14,7 @@ const version = createStore(0);
 let timer = 0, dirty = true, queued = false, previousFocus, panelSession;
 export const spotlightOpen = createStore(false);
 export const spotlight = {
-  open() { if (!spotlightOpen.get()) { previousFocus = focusToken(); spotlightOpen.set(true); } },
+  open() { if (!spotlightOpen.get()) { previousFocus = focusToken(); clearTextFocus(); spotlightOpen.set(true); } },
   close() { if (spotlightOpen.get()) { panelSession?.close(); panelSession = null; spotlightOpen.set(false); setTimeout(() => restoreFocus(previousFocus), 0); } },
   toggle() { spotlightOpen.get() ? spotlight.close() : spotlight.open(); },
 };

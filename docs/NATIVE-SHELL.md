@@ -125,6 +125,44 @@ Validação desta fatia: build da interface, 47 testes leves, dois contratos de
 compatibilidade e as integrações reais de menus, notificações e Dock passaram
 (quatro combinações de tema/largura por integração). Sem novo RPM completo.
 
+## Spotlight definitivo — 2026-11-19
+
+O painel usa sempre o host de árvore Rust, sem consultar `spotlightNativeView`.
+O renderer de widgets React foi removido de `sdk/rustsearch.jsx`. O adaptador
+envia o catálogo de apps para os ícones das linhas e da prévia, preserva os
+provedores e encaminha ações e modificadores de teclado à sessão de busca.
+Abrir a busca guarda e suspende o foco do campo JS anterior; fechar devolve
+esse foco, impedindo que a digitação na busca altere o campo atrás do painel.
+
+O novo driver Rust verifica abertura de apps, cálculo, setas, Tab entre seções,
+ação de provedor por clique, Escape, clique externo, restauração de foco e
+limpeza dos clientes. Define a preferência antiga como `false` e salva quatro
+capturas em claro/escuro, 640/1000 px, com os tokens reais do tema:
+
+```text
+AXIA_SPOTLIGHT_OUTPUT=/var/tmp/axia-spotlight cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test spotlight_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige a integração e publica `axia-spotlight`. As capturas locais
+ficam em `build/validation/native-spotlight/`. O lookup somente de leitura
+`lord.nativeViews.hitTest(x, y)` permite que o driver use o alvo real da cena
+para cliques por coordenada, inclusive no fundo externo do painel; o restante
+da entrada continua pela mesma ponte usada pelo compositor.
+
+A regressão residente `search_runtime` também foi adaptada para observar
+textos e geometria do host nativo, sem depender de chamadas React `setText`.
+Mantém as verificações de arquivos, fotos, notas, ajuda, clipboard, provedores,
+reveal, liberação de imagens e 160 ciclos sem crescimento contínuo de memória
+ou polling após fechar. Estado, timers, provedores e efeitos ainda usam o
+adaptador JS; QuickJS continua necessário. Ícones arbitrários fornecidos por
+funções JS de provedores usam o placeholder já existente no host nativo;
+um contrato de recursos serializáveis continua pendente na migração do SDK.
+
+Validação desta fatia: build da interface, 47 testes leves, dois contratos,
+regressão residente de busca e quatro cenários de cada integração de menus,
+notificações, Dock e Spotlight passaram. Não houve novo RPM completo nem
+medição em hardware real.
+
 ## Sequência de retirada
 
 1. Completar widgets e integração nativa e migrar os consumidores do host React.
