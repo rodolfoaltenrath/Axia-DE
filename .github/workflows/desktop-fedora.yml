@@ -63,6 +63,17 @@ jobs:
       - name: Rust application menu integration
         if: matrix.gpu == 1
         run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test launcher_runtime -- --ignored --nocapture
+      - name: Rust context menu integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_MENUS_OUTPUT: ${{ runner.temp }}/axia-menus
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test menus_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-menus
+          path: ${{ runner.temp }}/axia-menus
+          if-no-files-found: warn
       - name: Compiled Rust application integration
         if: matrix.gpu == 1
         run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline --test native_apps_runtime -- --ignored --nocapture

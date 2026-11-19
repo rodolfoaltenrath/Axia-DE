@@ -10,7 +10,7 @@ import { writeManifest } from './code-manifest.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const nativeApps = JSON.parse(execFileSync(process.env.CARGO || 'cargo', ['xtask', 'native-apps'], { cwd: root, encoding: 'utf8' }));
-const defines = { 'process.env.NODE_ENV': '"production"', __LORD_STANDALONE__: 'true' };
+const defines = { 'process.env.NODE_ENV': '"production"', __LORD_STANDALONE__: 'true', __AXIA_APP_HOST__: 'false' };
 
 // Virtual module '@lordos/apps': remaining JS apps and the compiled Rust registry.
 const appsPlugin = {
@@ -81,7 +81,7 @@ async function buildAppHost() {
     outfile: path.join(root, 'assets', 'app-host.bundle.js'),
     bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
     alias: { '@lordos/runtime': path.join(root, 'runtime', 'index.js'), '@lordos/sdk': path.join(root, 'sdk', 'index.js') },
-    define: defines, metafile: true, logLevel: 'warning',
+    define: { ...defines, __AXIA_APP_HOST__: 'true' }, metafile: true, logLevel: 'warning',
   });
   const bytes = Object.values(result.metafile.outputs)[0].bytes;
   console.log(`app-host: ${(bytes / 1024).toFixed(0)} KB in ${Date.now() - t0} ms`);

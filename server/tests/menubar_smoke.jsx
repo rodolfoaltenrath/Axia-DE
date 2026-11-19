@@ -1,5 +1,5 @@
 // Real QuickJS -> Rust menu bar view -> compositor, in a private headless session: the bar's
-// menus are a native view (menuBarNativeView), a click opens one and an item runs in JS.
+// menus are a native view, a click opens one and an item runs in JS.
 import { createElement as h, useEffect, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
@@ -147,5 +147,5 @@ async function run() {
 }
 configureWindows({ apps: [{ id: 'smoke-app', name: 'Smoke App', size: [400, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
 // The assertions use English captions, regardless of the developer's system locale.
-settings.set({ language: 'en', menuBarNativeView: true, launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true, menuNativeView: true });
+settings.set({ language: 'en', launcherNativeView: true, spotlightNativeView: true, notificationsNativeView: true });
 render(h(Harness));

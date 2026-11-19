@@ -21,9 +21,50 @@ Rust já existente, até não restarem consumidores do motor.
 - Ícones: geometria dos apps compilados e de Arquivos, imagens do catálogo e
   fallback de inicial sobre gradiente podem ser montados pelo host Rust.
 
-A moldura das janelas, Dock, menu, busca e ajustes ainda usam os adaptadores
+A moldura das janelas, Dock, busca e ajustes ainda usam os adaptadores
 JavaScript/React. O host de apps `.lpk` também executa JavaScript. Portanto,
 QuickJS **ainda é uma dependência necessária** e não foi retirado do build.
+
+## Menus da sessão — 2026-11-19
+
+A barra de menus recebida já usava o caminho nativo definitivamente. Os menus
+de contexto agora também usam `NativeMenu` sem consultar `menuNativeView`;
+preferências antigas não reativam o renderer React. O adaptador conserva
+callbacks e repassa a camada solicitada ao host Rust.
+
+O contrato dos `.lpk` exige manter o componente `Menu` no processo dos apps.
+Seu renderer React fica em `runtime/lpk/menu.jsx`. O build do app-host define
+`__AXIA_APP_HOST__=true`; o da shell define `false`. A pasta de compatibilidade
+declara somente exports sem efeitos de inicialização para permitir a exclusão
+completa do módulo não usado. O teste Rust inspeciona o metafile real do esbuild:
+zero bytes desse renderer no bundle da shell e contribuição presente no host.
+Isso separa apenas esse componente, não todo o SDK nem os serviços da sessão.
+
+Testes do contrato e da separação de bundles:
+
+```text
+cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test lpk_api -- --include-ignored
+```
+
+Com `axia-server`, `axia-media` e os pacotes npm compilados, o driver Rust
+executa a sessão real privada em claro/escuro, com larguras de 640 e 1000 pixels.
+Define deliberadamente a preferência antiga como `false` e verifica cliques,
+itens desabilitados, seleção por teclado, submenu, Escape e clique externo.
+Gera uma captura PNG por combinação e preserva logs quando indicado:
+As capturas usam os tokens reais do tema padrão, com efeitos desligados para
+manter a comparação em software determinística.
+
+```text
+AXIA_MENUS_OUTPUT=/var/tmp/axia-menus cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test menus_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige essa integração e publica o artifact `axia-menus`. As quatro
+capturas locais ficam em `build/validation/native-menus/`, ignorado pelo Git.
+As asserções e a gestão dos processos são Rust; o fixture JavaScript apenas
+aciona a interface existente. Não foi executado um novo RPM completo nesta
+fatia. Passaram 47 testes leves, dois contratos Rust/Node e a integração real
+com quatro casos e capturas. Métricas físicas e avaliação final de desempenho ficam para o encerramento
+do roadmap, por decisão do usuário; o orçamento existente continua no CI.
 
 ## Sequência de retirada
 

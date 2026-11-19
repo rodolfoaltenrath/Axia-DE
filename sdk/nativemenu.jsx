@@ -1,5 +1,5 @@
 // A drop-down or context menu drawn by the Rust native view host (native_view/tree.rs and
-// menu.rs, the "menuNativeView" setting) in place of sdk/menu.jsx. The same props: where it
+// menu.rs). The same props: where it
 // opens, the items with their callbacks, what closes it. Rust lays it out in the shell's popover
 // layer (clamped to the screen, scrolling when taller, rows lit under the pointer, the submenu
 // beside its row, the arrows, Enter and Escape); the callbacks stay here, run by `["run", n]`.
@@ -22,12 +22,12 @@ function describe(items, calls) {
   });
 }
 
-export function NativeMenu({ x, y, items, onClose, width, above, centered, side }) {
+export function NativeMenu({ x, y, items, onClose, width, above, centered, side, layer = 'popover' }) {
   const [owner] = useState(() => `menu${++sequence}`);
   const calls = useRef(new Map()), close = useRef(onClose);
   close.current = onClose;
   calls.current = new Map();
-  const tree = { kind: 'menu', key: 'menu', absolute: true, x, y, layer: 'popover', width, above, centered, side,
+  const tree = { kind: 'menu', key: 'menu', absolute: true, x, y, layer, width, above, centered, side,
     items: describe(items, calls.current), events: { onDismiss: ['dismiss'] } };
   treeOwners.set(owner, ({ action }) => {
     if (action[0] === 'dismiss') { close.current(); return; }

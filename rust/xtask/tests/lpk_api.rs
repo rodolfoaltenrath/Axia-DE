@@ -59,3 +59,49 @@ console.log(JSON.stringify({ version: LPK_API_VERSION, legacyVersion: legacy.api
     assert_eq!(report["nativeIdentity"], true);
     assert_eq!(report["deleted"], false);
 }
+
+#[test]
+#[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
+fn shell_excludes_the_react_menu_while_lpk_hosts_retain_it() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap();
+    let fixture = r#"
+import path from 'node:path';
+import { build } from 'esbuild';
+const root = process.argv[1], reports = [];
+for (const appHost of [false, true]) {
+  const result = await build({ entryPoints: [path.join(root, 'sdk/menu.jsx')], bundle: true, write: false,
+    minify: true, format: 'esm', jsx: 'automatic', metafile: true,
+    external: ['react', 'react/jsx-runtime', '@lordos/runtime'],
+    alias: { '@lordos/sdk': path.join(root, 'sdk/index.js') },
+    define: { 'process.env.NODE_ENV': '"production"', __LORD_STANDALONE__: 'true', __AXIA_APP_HOST__: String(appHost) } });
+  const inputs = Object.values(result.metafile.outputs)[0].inputs;
+  const bytes = suffix => Object.entries(inputs).filter(([name]) => name.replaceAll('\\', '/').endsWith(suffix))
+    .reduce((total, [, input]) => total + input.bytesInOutput, 0);
+  reports.push({ appHost, reactMenu: bytes('runtime/lpk/menu.jsx'), nativeMenu: bytes('sdk/nativemenu.jsx'),
+    runtimeFlag: result.outputFiles[0].text.includes('menuNativeView') });
+}
+console.log(JSON.stringify(reports));
+"#;
+    let output = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", fixture])
+        .arg(repo)
+        .output()
+        .expect("Node and esbuild are required");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let reports: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reports.len(), 2);
+    assert_eq!(reports[0]["reactMenu"], 0, "React menu leaked into shell");
+    assert!(reports[0]["nativeMenu"].as_u64().unwrap() > 0);
+    assert!(reports[1]["reactMenu"].as_u64().unwrap() > 0);
+    for report in reports {
+        assert_eq!(report["runtimeFlag"], false);
+    }
+}

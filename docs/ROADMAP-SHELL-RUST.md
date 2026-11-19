@@ -38,16 +38,20 @@ desenvolvedores de fora; levaria meses e hoje não há quem dependa dela. A opç
 não a impede: o manifesto, as permissões e a assinatura dos `.lpk` ficam
 independentes da forma como o app executa.
 
-## Onde estamos (2026-11-18)
+## Onde estamos (2026-11-19)
 
 **Já em Rust, sem React:** Monitor, Calculadora, Axia Store, Sobre, Ajuda, Relógio,
 Caracteres, Notas, Lembretes, Contatos, Calendário, Câmera, Fotos, Gravador,
 Scanner, Backup, Registros, Fontes, Force Quit, Configurações e Arquivos (esse
 último atrás de chave). Host em `rust/axia-shell/src/native_view/`.
 
-**Shell com versão nativa atrás de chave:** barra de menus, menus, notificações,
-Dock (dica e fantasma de arraste), launcher, busca (Spotlight), barra de título.
-Chaves em uso: `menuBarNativeView`, `menuNativeView`, `notificationsNativeView`,
+**Menus definitivos em Rust:** barra de menus e menus de contexto da sessão;
+as chaves `menuBarNativeView` e `menuNativeView` não selecionam mais caminhos.
+O menu React dos apps `.lpk` é mantido somente no bundle do host isolado.
+
+**Shell com versão nativa atrás de chave:** notificações, Dock (dica e fantasma
+de arraste), launcher, busca (Spotlight), barra de título.
+Chaves em uso: `notificationsNativeView`,
 `dockNativeView`, `launcherNativeView`, `spotlightNativeView`,
 `titleBarNativeView`, `filesNativeView`, `lordNativeView`.
 
@@ -199,7 +203,11 @@ independente da Fase 7: declaração e documentação da API JavaScript dos `.lp
 Para cada chave de transição: ligar de vez, apagar o caminho React e os `.jsx`
 correspondentes, remover a chave.
 
-- [ ] `menuBarNativeView` e `menuNativeView` (barra de menus e menus).
+- [x] `menuBarNativeView` e `menuNativeView` (barra de menus e menus).
+      Barra já definitiva na revisão recebida; menus de contexto passam a ser
+      Rust independentemente das preferências antigas. O menu React pertence
+      ao host `.lpk` e é excluído do bundle da shell. Interação e quatro capturas
+      headless cobertas por driver Rust; detalhes em `NATIVE-SHELL.md`.
 - [ ] `notificationsNativeView`.
 - [ ] `dockNativeView` e as partes nativas da Dock.
 - [ ] `launcherNativeView` e `spotlightNativeView`.
@@ -366,3 +374,4 @@ mostraram.
 | 2026-11-18 | Fase 0: testes da divisão de build migrados para Rust | Commit desta linha | Três verificações reais de Cargo/Make passaram; removido `test_rust_build_partition.py`. Os testes dependentes do ambiente são exigidos explicitamente no CI. Suíte leve: 47 testes passaram no host e no container. |
 | 2026-11-18 | Inicialização da sessão e testes migrados para Rust | Commit desta linha | 18 testes automáticos, recusa de root e integração real instalada passaram. Removidos os dois scripts e testes Python da inicialização; memória observada do lançador: 2,555 MiB em sessão privada. Pausa solicitada pelo usuário após concluir esta entrega. |
 | 2026-11-19 | Fase 7: API JavaScript dos `.lpk` declarada como versão 1 | Commit desta linha | 47 testes leves e contrato adicional Rust/Node passaram; bundles reconstruídos. Módulos e stores preservados, versão do host imutável; nenhum campo obrigatório ou alteração de assinatura/permissões. Separação dos entry points pendente. Medições físicas adiadas para o encerramento a pedido do usuário. |
+| 2026-11-19 | Fase 1: menus da sessão sempre em Rust | Commit desta linha | Removida a escolha por preferência e o menu React do bundle da shell; compatibilidade `.lpk` selecionada no build. Testes Rust verificam a separação, cliques, submenus, itens desabilitados, Escape e clique externo em quatro combinações de modo/largura, com PNGs. Sem nova medição física ou alteração de flags. |

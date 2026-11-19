@@ -1,5 +1,5 @@
-// Shell side of the native menu bar (rust/axia-shell/src/native_view/menubar.rs; the
-// "menuBarNativeView" setting). Rust lays the bar out, lights its items and keeps the open menu's
+// Shell side of the native menu bar (rust/axia-shell/src/native_view/menubar.rs).
+// Rust lays the bar out, lights its items and keeps the open menu's
 // rows; this only knows what Rust can't: the items of a menu (built when it opens, with their
 // callbacks) and running one. MenuBar.jsx publishes the menus here on each render.
 export const NATIVE_MENUBAR = { id: 'shell:menubar', shell: true, keyboard: true, fullTheme: true };

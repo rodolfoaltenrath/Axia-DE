@@ -15,6 +15,12 @@ adicional passaram; o build dos bundles passou. No mesmo clone Linux, o bundle
 do app-host passou de 575726 para 575817 bytes. Isso não é uma medição de RSS
 ou desempenho, nem evidência de redução do grafo compartilhado.
 
+Na fatia seguinte, o renderer de `Menu` foi separado: a shell usa Rust e exclui
+`runtime/lpk/menu.jsx`; o app-host conserva o componente React com seleção no
+build. `__AXIA_APP_HOST__` não é uma preferência do usuário nem um campo do
+manifesto. A separação completa do SDK continua pendente; o teste de metafile
+garante somente a ausência desse renderer específico no bundle da sessão.
+
 ## Contrato que a opção A preserva
 
 Cada app continua no processo `axia-server --app <id>`, com QuickJS, React e

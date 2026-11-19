@@ -126,8 +126,7 @@ function NativeMenuBar({ t, height, focused, onLaunchpad, onControlCenter, contr
 }
 
 // area: the display it is on (global coordinates; the main one, or each one with "menu bar on all
-// displays"). The bar's menus are always drawn in Rust; the React bar is gone (the
-// "menuBarNativeView" setting no longer chooses anything).
+// displays"). The bar's menus are always drawn in Rust; the React bar is gone.
 export function MenuBar(props) {
   return <NativeMenuBar {...props} area={props.area || { x: 0, y: 0, w: screen.width, h: screen.height }} />;
 }
