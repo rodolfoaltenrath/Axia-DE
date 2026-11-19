@@ -9,7 +9,7 @@ import { dockGlass, useDockPreviews } from '@lordos/sdk';
 // precise position. The logic is the SDK's (sdk/dock.js: beginDockDrag, registerDockTarget, dock.*);
 // this file only draws it and says where things are. The Trash is always the last item.
 import {
-  NativeView, View, Text, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
+  NativeView, View, screen, appName, useLocale, addListener, t as tr, useStore, settings, dockDrag, dockPoof, beginDockDrag,
   registerDockTarget, dockDragJustEnded, refreshTrash, Layer, nativeAnim, whenAnimDone, NativeDockTip, NativeDockGhost,
 } from '@lordos/sdk';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -169,7 +169,6 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   const poof = useStore(dockPoof);
   const prefs = useStore(settings);
   const reduce = !!prefs.reduceMotion;
-  const nativeParts = prefs.dockNativeView === true;      // the tooltip and the drag ghost drawn by Rust
   const dragging = !!drag;
   const own = drag?.source === 'dock' ? drag.id : null;
   // Rust owns ordering, magnification and geometry. Callable icon components
@@ -270,12 +269,6 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
   // where to open the right-click menu and the tooltip: beside the icon, on the inner side
   const showTip = shown && hovered >= 0 && !keepOpen && !preview.open;
   const label = !hit ? '' : hit.trash ? tr('shell.trash.name') : hit.launcher ? tr('shell.menu.apps') : appName(hit);
-  const tip = (
-    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, backgroundColor: t.panelBg,
-      backdropFilter: `blur(${t.blur}px)`, border: `1px solid ${t.windowBorder}` }}>
-      <Text style={{ fontSize: 12, fontWeight: 500, color: t.text, whiteSpace: 'nowrap' }}>{label}</Text>
-    </View>
-  );
   // separators: halfway between the icons around them
   const sepLines = [];
   {
@@ -297,26 +290,6 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
       backgroundColor: feedback[isPressed(i) ? 'pressed' : 'hover'].backgroundColor,
       pointerEvents: 'none' }} />
   ) : null;
-  const ghost = drag ? (
-    <View style={{ position: 'absolute', left: drag.x - BASE / 2, top: drag.y - BASE / 2, width: BASE, height: BASE, pointerEvents: 'none',
-      opacity: drag.removing ? 0.55 : 0.92 }}>
-      {drag.Icon ? <drag.Icon size={BASE} /> : null}
-      {drag.removing && (
-        <View style={{ position: 'absolute', left: BASE / 2 - 50, width: 100, top: BASE + 6, alignItems: 'center' }}>
-          <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: t.panelBg, border: `1px solid ${t.windowBorder}` }}>
-            <Text style={{ fontSize: 11, fontWeight: 600, color: t.text, whiteSpace: 'nowrap' }}>{tr('shell.dock.removeCue')}</Text>
-          </View>
-        </View>
-      )}
-      {drag.removing && (
-        <View style={{ position: 'absolute', right: -6, top: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(235,238,245,0.95)',
-          alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.35)' }}>
-          <Text style={{ fontSize: 12, fontWeight: 700, color: '#4a4f5c' }}>×</Text>
-        </View>
-      )}
-    </View>
-  ) : null;
-
   return (
     <>
       <View style={{ position: 'absolute', left: AX, top: AY, width: area.w, height: area.h,
@@ -357,20 +330,19 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
       {preview.panel}
       {/* the name tooltip (not while the icon's menu is open: the menu takes that place) */}
       <Layer name="tooltip">
-        {showTip && position === 'bottom' && (nativeParts
-          ? <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
+        {showTip && position === 'bottom' && (
+          <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
             alignItems: 'center', pointerEvents: 'none', direction: 'ltr' }}><NativeDockTip t={t} label={label} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }} /></View>
-          : <View style={{ position: 'absolute', left: start + iconC[hovered] - 90, width: 180, bottom: screen.height - (AB - MARGIN) + sizes[hovered] + PAD + 12,
-            alignItems: 'center', pointerEvents: 'none', direction: 'ltr' }}>{tip}</View>)}
+        )}
         {showTip && vert && (
           <View style={{ position: 'absolute', top: start + iconC[hovered] - 13, pointerEvents: 'none', direction: 'ltr',
             ...(position === 'left' ? { left: AX + MARGIN + PAD + sizes[hovered] + 14 } : { right: screen.width - AR + MARGIN + PAD + sizes[hovered] + 14 }) }}>
-            {nativeParts ? <NativeDockTip t={t} label={label} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }} /> : tip}
+            <NativeDockTip t={t} label={label} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }} />
           </View>
         )}
       </Layer>
       <Layer name="drag">
-        {nativeParts && drag ? <NativeDockGhost t={t} drag={drag} base={BASE} removeLabel={tr('shell.dock.removeCue')} /> : ghost}
+        {drag && <NativeDockGhost t={t} drag={drag} base={BASE} removeLabel={tr('shell.dock.removeCue')} />}
         <Poof poof={poof} size={BASE} reduce={reduce} />
       </Layer>
     </>

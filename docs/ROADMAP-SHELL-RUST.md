@@ -54,9 +54,12 @@ não consulta mais `notificationsNativeView`. Serviços, timers e descrição da
 árvore ainda estão em JS e continuam no escopo da Fase 2; o banner React fica
 somente no host `.lpk` para compatibilidade da API.
 
-**Shell com versão nativa atrás de chave:** Dock (dica e fantasma
-de arraste), launcher, busca (Spotlight), barra de título.
-Chaves em uso: `dockNativeView`, `launcherNativeView`, `spotlightNativeView`,
+**Partes da Dock definitivas no host Rust:** dicas e fantasma de arraste não
+consultam mais `dockNativeView`. Montagem da barra, estado e prévias ainda
+usam adaptadores JS/React e permanecem no escopo das fases seguintes.
+
+**Shell com versão nativa atrás de chave:** launcher, busca (Spotlight), barra de título.
+Chaves em uso: `launcherNativeView`, `spotlightNativeView`,
 `titleBarNativeView`, `filesNativeView`, `lordNativeView`.
 
 **Já em Rust no lado dos modelos:** lista de janelas, desktops e encaixe
@@ -216,7 +219,10 @@ correspondentes, remover a chave.
       React excluído do bundle da shell e preservado apenas no host `.lpk`.
       Integração Rust cobre ações, fechamento, agrupamento, Não Perturbe,
       expiração e posição inferior/RTL em claro/escuro, 640/1000 px.
-- [ ] `dockNativeView` e as partes nativas da Dock.
+- [x] `dockNativeView`: dicas e fantasma de arraste sempre nativos; caminhos
+      React dessas partes removidos. Integração Rust cobre as três posições,
+      cancelamento, itens fixos, remoção e ícones com IDs tipados em claro/escuro,
+      640/1000 px. A montagem restante da Dock continua para as fases seguintes.
 - [ ] `launcherNativeView` e `spotlightNativeView`.
 - [ ] `titleBarNativeView`.
 - [ ] `filesNativeView`.
@@ -383,3 +389,4 @@ mostraram.
 | 2026-11-19 | Fase 7: API JavaScript dos `.lpk` declarada como versão 1 | Commit desta linha | 47 testes leves e contrato adicional Rust/Node passaram; bundles reconstruídos. Módulos e stores preservados, versão do host imutável; nenhum campo obrigatório ou alteração de assinatura/permissões. Separação dos entry points pendente. Medições físicas adiadas para o encerramento a pedido do usuário. |
 | 2026-11-19 | Fase 1: menus da sessão sempre em Rust | Commit desta linha | Removida a escolha por preferência e o menu React do bundle da shell; compatibilidade `.lpk` selecionada no build. Testes Rust verificam a separação, cliques, submenus, itens desabilitados, Escape e clique externo em quatro combinações de modo/largura, com PNGs. Sem nova medição física ou alteração de flags. |
 | 2026-11-19 | Fase 1: apresentação das notificações sempre no host Rust | Commit desta linha | Removido o fallback React da shell e a escolha por preferência; compatibilidade `.lpk` mantida no host. Quatro cenários reais e capturas, contratos de bundle e regressão dos menus passaram. Estado e timers continuam para a Fase 2; medições físicas para o encerramento. |
+| 2026-11-19 | Fase 1: dicas e fantasma da Dock sempre no host Rust | Commit desta linha | Removida a chave e os dois renderers React substituídos. Corrigida a resolução de IDs tipados no ícone arrastado. Integração Rust real passou em quatro casos, cobrindo as três posições e política de arraste; capturas publicadas pelo CI. A Dock completa ainda depende de JS/React; métricas físicas seguem para o encerramento. |

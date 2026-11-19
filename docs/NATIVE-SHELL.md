@@ -96,6 +96,35 @@ de processos, permissões da instalação privada, coleta e PNG foi compartilhad
 com o teste de menus; essa regressão também foi executada. Não houve novo RPM
 completo nem novas medições físicas nesta fatia.
 
+## Dicas e arraste da Dock — 2026-11-19
+
+As dicas e o fantasma de arraste usam sempre `NativeDockTip` e
+`NativeDockGhost`, sem consultar `dockNativeView`. Os dois renderers React
+substituídos foram removidos de `Dock.jsx`. O fantasma resolve IDs tipados
+`app:` e `lpk:` para a chave do catálogo de ícones e preserva o namespace
+`desktop:`. A resolução é memorizada por ID, sem nova consulta a cada movimento.
+A montagem da barra, prévias, estado e eventos ainda usam JS/React; esta entrega
+não conclui a migração da Dock inteira.
+
+O driver Rust define a preferência antiga como `false`, verifica as dicas nas
+posições inferior, esquerda e direita, preservação de item fixo, cancelamento
+com Escape, remoção por arraste e ausência de abertura acidental ao soltar.
+Também verifica os IDs enviados ao renderer e salva o fantasma com indicação
+de remoção em claro/escuro, 640/1000 px, usando os tokens reais do tema:
+
+```text
+AXIA_DOCK_OUTPUT=/var/tmp/axia-dock cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test dock_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige a integração e publica `axia-dock`. As quatro capturas e logs
+locais ficam em `build/validation/native-dock/`. A validação usa o suporte Rust
+compartilhado com menus e notificações. Medições físicas continuam reservadas
+para o encerramento do roadmap.
+
+Validação desta fatia: build da interface, 47 testes leves, dois contratos de
+compatibilidade e as integrações reais de menus, notificações e Dock passaram
+(quatro combinações de tema/largura por integração). Sem novo RPM completo.
+
 ## Sequência de retirada
 
 1. Completar widgets e integração nativa e migrar os consumidores do host React.

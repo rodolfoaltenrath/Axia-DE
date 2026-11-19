@@ -1,7 +1,8 @@
-// Parts of the Dock drawn by the Rust native view host (the "dockNativeView" setting): the name
+// Parts of the Dock drawn by the Rust native view host: the name
 // tooltip and the ghost of an icon being dragged, which React redrew on every hover change and
 // every pointer move of a drag. The bar, the reorder, the previews and the poof stay with the Dock.
-import { createElement as h } from 'react';
+import { createElement as h, useMemo } from 'react';
+import { parseDockId } from './dockmodel.js';
 import { NativeView } from './nativeview.js';
 import { NATIVE_TREE_APPS } from './nativetree.js';
 
@@ -18,8 +19,14 @@ export function NativeDockTip({ t, label, style }) {
 
 // The icon under the pointer while it is dragged (and the cue that releasing it removes it).
 export function NativeDockGhost({ t, drag, base, removeLabel }) {
+  // Dock IDs carry a namespace; the icon catalog expects app/LPK keys, but
+  // desktop icons retain their desktop: namespace. Parse only when the ID changes.
+  const app = useMemo(() => {
+    const typed = parseDockId(drag.id);
+    return typed && (typed.kind === 'app' || typed.kind === 'lpk') ? typed.key : drag.id;
+  }, [drag.id]);
   const tree = view('ghost', { width: base, height: base, opacity: drag.removing ? 0.55 : 0.92 }, [
-    drag.id ? { kind: 'appIcon', app: drag.id, size: base } : null,
+    app ? { kind: 'appIcon', app, size: base } : null,
     drag.removing ? view('cue', { position: 'absolute', left: base / 2 - 50, width: 100, top: base + 6, alignItems: 'center' }, [
       view('cuebox', { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: t.panelBg, border: `1px solid ${t.windowBorder}` },
         [text(removeLabel, { fontSize: 11, fontWeight: 600, color: t.text, whiteSpace: 'nowrap' })])]) : null,
