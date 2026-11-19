@@ -381,6 +381,42 @@ aprovados. Capturas e logs em `build/validation/desktop-session/`; o CI já
 exige `desktop_hud_runtime` e publica `axia-desktop-hud`. Sem nova medição
 física ou RPM completo nesta entrega.
 
+## Animação de troca de desktops
+
+`desktop_animation.rs` acompanha o desktop ativo no leitor do contexto e
+seleciona as janelas visíveis diretamente no modelo. As molduras registram
+somente `(id da janela, id do nó)` em `windowList.bindFx`; não enviam lista,
+seleção ou geometria de janelas. A ligação retém também a geração do nó na
+cena, evitando reaproveitar um ID já removido. Frames Linux que se montam
+durante a transição usam o tempo restante; após 170 ms não há repetição.
+
+O animador Rust restaura os valores iniciais no último frame e libera seu
+estado. A conclusão nativa é distinguida na ABI sem alterar seu layout; C
+aplica os valores e só entrega ao JS conclusões das animações legadas.
+Reversões, movimento reduzido, Overview, desmontagem e encerramento cancelam
+apenas as animações ainda pertencentes ao controlador. Uma alteração
+explícita de transformação/opacidade interrompe o efeito antes de aplicar
+o estilo, preservando transformações da interface, como as do Overview.
+
+O root fornece apenas movimento reduzido e direção. Não há assinatura de
+desktop ativo, escolha de janelas ou callbacks de término em JS na sessão;
+o host `.lpk` conserva o caminho local de compatibilidade. Não é uma shell
+sem JS: molduras, Overview, configurações e efeitos de outros serviços
+continuam pendentes no roadmap.
+
+Cinco testes nativos cobrem seleção, restauração automática, montagem tardia,
+reversões, RTL, redução de movimento, Overview, reciclagem de IDs e animações
+legadas intercaladas. `desktop_animation_runtime` usa molduras reais com
+as entradas JS de animação bloqueadas, exige ausência de callbacks e renders
+React por frame e verifica pixels após a conclusão e uma edição explícita.
+O CI GPU=1 exige quatro cenários e publica `axia-desktop-animation`.
+
+Validação: 552 testes unitários aprovados (sete especiais ignorados), quatro
+cenários gráficos de animação com checagens de pixels, quatro do indicador,
+quatro contratos LPK e saída normal/SIGTERM com apps nativos abertos passaram.
+Compositor e bundles reconstruídos. Evidências locais em
+`build/validation/desktop-animation/`. Sem nova medição física.
+
 ## Memória de geometria das janelas
 
 `window_memory.rs` lê o proprietário Rust por assinatura. A coleta aguarda um

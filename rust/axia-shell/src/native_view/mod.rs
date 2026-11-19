@@ -32,6 +32,7 @@ mod tests;
 #[cfg(test)]
 mod icon_tests;
 pub use host::Host;
+pub(crate) use host::now_ms;
 use serde_json::Value;
 use std::{
     cell::{Cell, RefCell},

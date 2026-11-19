@@ -14,5 +14,6 @@ void axia_winmodel_free(char *s);
 typedef struct AxiaWindows AxiaWindows;
 AxiaWindows *axia_windows_new(void);
 void         axia_windows_free(AxiaWindows *);
+int          axia_windows_bind_fx(const AxiaWindows *, const char *id, int node);
 int          axia_windows_call(AxiaWindows *, const char *op, const char *json, size_t len, char **out);
 #endif

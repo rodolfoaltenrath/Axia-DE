@@ -53,6 +53,17 @@ pub unsafe extern "C" fn axia_winmodel_free(s: *mut c_char) {
 pub extern "C" fn axia_windows_new() -> *mut super::session::Session {
     Box::into_raw(Box::default())
 }
+/// Bind a paint node to a window in this context; no window data crosses the ABI.
+#[no_mangle]
+pub unsafe extern "C" fn axia_windows_bind_fx(s:*const super::Session,id:*const c_char,node:i32)->i32 {
+    let Some(session)=s.as_ref()else{return 0;};
+    if id.is_null() || node<0 {return 0;}
+    let Ok(id)=CStr::from_ptr(id).to_str()else{return 0;};
+    if id.len()>512 {return 0;}
+    let shared=session.desktop_service();
+    let result=shared.borrow_mut().animation.bind(id,node,crate::native_view::now_ms());
+    result as i32
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn axia_windows_free(s: *mut super::session::Session) {

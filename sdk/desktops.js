@@ -1,6 +1,6 @@
 // Desktops adapters (docs/DESKTOPS.md). The context-owned Rust service initializes and
 // remembers desktops and theme hand-offs; the native indicator observes the same owner.
-// This module still routes shortcuts, persists settings effects and starts the switch animation.
+// This module routes shortcuts, persists settings effects and mounts native services.
 //
 //   nextDesktopBy(step), addDesktopAndShow(), closeActiveDesktop(), desktopName(id)
 //   flowDesktopKeys, linuxDesktopKeys       the shortcut profiles' entries (sdk/shortcuts.js)
@@ -13,6 +13,7 @@ import { createElement as h, useSyncExternalStore } from 'react';
 import { mainDisplay, onScreenChange } from '@lordos/runtime';
 import { t, direction } from './i18n.js';
 import { settings } from './settings.js';
+import { useStore } from './store.js';
 import { NativeView } from './nativeview.js';
 import { Layer } from './layers.js';
 import { wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows, applyNativeWindowState } from './windows.js';
@@ -143,8 +144,6 @@ let started = false;
 export function startDesktops() {
   if (!appHost) {
     sessionCommand('start', { settings: { desktopCount: settings.get().desktopCount, themeDesktops: settings.get().themeDesktops } });
-    started = true;
-    shown = activeDesktop.get();
     return;
   }
   const s = settings.get();
@@ -165,8 +164,8 @@ function showHud() {
   if (hudHandle.current) lord.nativeViews.action(hudHandle.current, { action: ['show'] });
 }
 
-// Switching desktops: the windows that appear slide in, natively (lord.anim.slide,
-// rust/axia-shell/src/anim.rs): no JS and no relayout per frame; their own values come back at the end.
+// Compatibility for isolated hosts. The main session's selection, bindings and completion
+// belong to desktop_animation.rs; it never subscribes to this mirror or calls these JS effects.
 const sliding = new Set();                          // the nodes the last switch animates
 function animate(step) {
   const anim = nativeAnim();
@@ -182,8 +181,8 @@ function animate(step) {
   }
 }
 
-let shown = activeDesktop.get();
-activeDesktop.subscribe(() => {
+let shown = appHost ? activeDesktop.get() : 0;
+if (appHost) activeDesktop.subscribe(() => {
   const to = activeDesktop.get(), from = shown;
   shown = to;
   if (!started || to === from) return;
@@ -202,6 +201,8 @@ export function DesktopHud() {
 // Mounted by the SDK root, independently of the theme's optional indicator.
 export function DesktopSession() {
   if (appHost || typeof lord === 'undefined' || typeof lord.appId === 'string' || typeof lord.greeter !== 'undefined') return null;
+  const reduceMotion = useStore(settings, s => !!s.reduceMotion);
   return h(NativeView, { manifest: NATIVE_DESKTOP_SESSION, stateSource: lord.windowList,
+    args: { reduceMotion },
     style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, pointerEvents: 'none' } });
 }

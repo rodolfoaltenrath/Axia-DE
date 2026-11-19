@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub struct Service {
+    pub(crate) animation: crate::desktop_animation::Animation,
     windows: Reader<WindowState>,
     changes: Subscription,
     started: bool,
@@ -22,6 +23,7 @@ fn surface(value: &Value) -> Option<i64> {
 impl Service {
     pub fn new(windows: Reader<WindowState>) -> Self {
         Self {
+            animation: crate::desktop_animation::Animation::new(windows.clone()),
             changes: windows.subscribe(),
             windows,
             started: false,
@@ -42,6 +44,7 @@ impl Service {
     }
     pub fn effects(&mut self) -> Vec<Value> {
         self.changes.take();
+        self.animation.sync(crate::native_view::now_ms());
         if !self.started {
             return Vec::new();
         }
@@ -95,6 +98,7 @@ impl Service {
                 let mut reply = session
                     .app_command(AppCommand::InitializeDesktops(count, active), &[])
                     .unwrap_or_else(|e| json!({"error":e}));
+                self.animation.initialize();
                 if !was.is_null() {
                     reply["effects"] = json!([{"kind":"settings","patch":{"themeDesktops":null}}]);
                 }
@@ -168,7 +172,9 @@ impl axia_native::NativeApp for Observer {
         if input["cmd"] != "sync" {
             return json!({});
         }
-        let effects = self.service.borrow_mut().effects();
+        let mut service = self.service.borrow_mut();
+        service.animation.configure(input["args"]["reduceMotion"]==true,input["context"]["direction"]=="rtl");
+        let effects = service.effects();
         if std::mem::replace(&mut self.mounted, true) {
             return json!({"same":true,"effects":effects});
         }

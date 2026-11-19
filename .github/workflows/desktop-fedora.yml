@@ -140,6 +140,17 @@ jobs:
           name: axia-window-memory
           path: ${{ runner.temp }}/axia-window-memory/
           if-no-files-found: warn
+      - name: Rust native desktop animation and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_DESKTOP_ANIMATION_OUTPUT: ${{ runner.temp }}/axia-desktop-animation
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test desktop_animation_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-desktop-animation
+          path: ${{ runner.temp }}/axia-desktop-animation/
+          if-no-files-found: warn
       - name: Rust native desktop indicator and captures
         if: matrix.gpu == 1
         env:

@@ -121,6 +121,12 @@ the Overview do not show it. At either end of the list, the shortcut forwards a
 `show` command to the native view. There is no JS store or timer for this UI.
 The adapter supplies display geometry and follows display configuration events.
 
+Desktop animation selection also reads the native window owner. WindowShell binds its paint node to
+the window ID once; Rust checks the node's generation and animates the visible incoming frames. A late
+surface uses the remaining transition time. Native completion restores the original paint values and
+releases the animation without a JS callback. Explicit style edits interrupt the native effect before
+taking ownership of the transform or opacity. Isolated hosts retain their local compatibility path.
+
 The session's next/previous, add-and-show and close-active commands resolve their
 targets in the native owner, without sending the JS desktop list or selection.
 Each command publishes at most one observable revision; adding and showing a

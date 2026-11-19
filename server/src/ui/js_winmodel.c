@@ -50,6 +50,18 @@ static JSValue f_list_call(JSContext *c, JSValueConst self, int argc, JSValueCon
     AxiaWindows *s = JS_GetOpaque2(c, self, list_class);
     return s ? run(c, s, argc, argv) : JS_EXCEPTION;
 }
+static JSValue f_bind_fx(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    AxiaWindows *s = JS_GetOpaque2(c, self, list_class);
+    if (!s) return JS_EXCEPTION;
+    int32_t node = 0;
+    if (argc < 2 || !JS_IsString(argv[0]) || JS_ToInt32(c, &node, argv[1])) return JS_FALSE;
+    size_t length = 0;
+    const char *id = JS_ToCStringLen(c, &length, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    int bound = length <= 512 && strlen(id) == length && axia_windows_bind_fx(s, id, node);
+    JS_FreeCString(c, id);
+    return JS_NewBool(c, bound);
+}
 
 void js_winmodel_register(JSContext *c, JSValue lord) {
     JS_SetPropertyStr(c, lord, "winmodel", JS_NewCFunction(c, f_call, "winmodel", 2));
@@ -62,5 +74,6 @@ void js_windows_register(JSContext *c, JSValue lord) {
     JSValue o = JS_NewObjectClass(c, list_class);
     JS_SetOpaque(o, axia_windows_new());
     JS_SetPropertyStr(c, o, "call", JS_NewCFunction(c, f_list_call, "call", 2));
+    JS_SetPropertyStr(c, o, "bindFx", JS_NewCFunction(c, f_bind_fx, "bindFx", 2));
     JS_SetPropertyStr(c, lord, "windowList", o);
 }

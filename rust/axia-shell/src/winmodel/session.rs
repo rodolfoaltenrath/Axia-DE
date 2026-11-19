@@ -1051,6 +1051,9 @@ impl Window<'_> {
 }
 impl WindowState {
     pub fn recent_windows(&self) -> &[String] { &self.recent }
+    pub fn visible_windows(&self) -> impl Iterator<Item=Window<'_>> {
+        self.wins.iter().filter(|w|!w.on("minimized") && !w.on("fullscreen") && !w.on("pip") && self.here(w)).map(Window)
+    }
     /// The front visible member on this desktop, else its minimized member,
     /// else the front visible member of any desktop. Same rule as wm.pick.
     pub fn pick_window(&self, ids: &[&str]) -> Option<Window<'_>> {

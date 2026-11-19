@@ -24,6 +24,31 @@ fn cstring(s: &str) -> CString {
 pub fn alive() -> bool {
     super::SCENE.try_with(|_| ()).is_ok()
 }
+/// A node ID may be reused after removal; native bindings retain this generation too.
+pub(crate) fn generation(id: i32) -> Option<u64> {
+    super::SCENE.try_with(|s| s.borrow().generation(id as usize)).ok().flatten()
+}
+pub(crate) fn animation_props(id: i32) -> Option<crate::anim::AnimProps> {
+    unsafe { with_scene(|s, _| {
+        let n=s.node(id as usize)?;
+        let mut p=crate::anim::AnimProps { opacity:n.s.opacity,translate_x:n.s.translate_x,translate_y:n.s.translate_y,..Default::default() };
+        if let Some(ext)=n.s.ext.as_ref() {
+            p.scale_x=ext.scale_x;p.scale_y=ext.scale_y;
+            if !(ext.origin_x.unit==2 && ext.origin_x.v==50. && ext.origin_y.unit==2 && ext.origin_y.v==50.) {
+                let px=|d:Dim,size:f32|match d.unit {1=>d.v,2=>size*d.v/100.,_=>size/2.};
+                p.origin_set=1;p.origin_x=px(ext.origin_x,n.w);p.origin_y=px(ext.origin_y,n.h);
+            }
+        }
+        Some(p)
+    }) }
+}
+pub(crate) fn apply_animation(id: i32, p: crate::anim::AnimProps) {
+    let values=[Prop::Num(p.scale_x as f64),Prop::Num(p.scale_y as f64),Prop::Num(p.opacity as f64),
+        Prop::Num(p.translate_x as f64),Prop::Num(p.translate_y as f64),Prop::Num(p.origin_x as f64),Prop::Num(p.origin_y as f64)];
+    set_style(id,&[("scaleX",Some(&values[0])),("scaleY",Some(&values[1])),("opacity",Some(&values[2])),
+        ("translateX",Some(&values[3])),("translateY",Some(&values[4])),
+        ("transformOriginX",(p.origin_set!=0).then_some(&values[5])),("transformOriginY",(p.origin_set!=0).then_some(&values[6]))]);
+}
 /// A new detached node; 0 when the scene is out of memory.
 pub fn create(kind: i32) -> i32 {
     unsafe { with_scene(|s, ui| s.create(kind, ui) as i32) }

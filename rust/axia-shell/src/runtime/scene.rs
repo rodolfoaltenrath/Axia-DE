@@ -19,6 +19,7 @@ struct Links {
     prev: usize,
 }
 struct OwnedNode {
+    generation: u64,
     // Keep the original raw allocation provenance for every renderer borrow.
     // Retaining a Box here would retag its pointee when the slot is moved or
     // mutably borrowed, invalidating pointers previously published to C.
@@ -26,9 +27,10 @@ struct OwnedNode {
     links: Links,
 }
 impl OwnedNode {
-    fn new(id: usize, kind: i32) -> Option<Self> {
+    fn new(id: usize, kind: i32, generation: u64) -> Option<Self> {
         let allocation = memory::try_box(Node::new(id as i32, kind))?;
         Some(Self {
+            generation,
             view: NonNull::new(Box::into_raw(allocation)).unwrap(),
             links: Links::default(),
         })
@@ -56,6 +58,7 @@ impl Drop for OwnedNode {
 }
 #[derive(Default)]
 pub struct Scene {
+    generation: u64,
     pub(super) layout_bounds: Option<(usize, super::layout::Bounds)>,
     slots: Vec<Option<OwnedNode>>,
     // Cell keeps the published pointer table writable without exclusive slice
@@ -65,6 +68,9 @@ pub struct Scene {
     count: usize,
 }
 impl Scene {
+    pub fn generation(&self, id: usize) -> Option<u64> {
+        self.slots.get(id)?.as_ref().map(|node| node.generation)
+    }
     pub fn ptr(&self, id: usize) -> *mut Node {
         self.views.get(id).map(Cell::get).unwrap_or(ptr::null_mut())
     }
@@ -142,9 +148,11 @@ impl Scene {
         if capacity > i32::MAX as usize {
             return 0;
         }
-        let Some(owned) = OwnedNode::new(id, kind) else {
+        let Some(generation) = self.generation.checked_add(1) else { return 0; };
+        let Some(owned) = OwnedNode::new(id, kind, generation) else {
             return 0;
         };
+        self.generation = generation;
         let required = self.slots.len().max(id + 1);
         // Reserve all metadata before committing a node. Vacancies can then be
         // recorded during destruction without allocating while freeing memory.

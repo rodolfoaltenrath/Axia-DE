@@ -77,6 +77,7 @@ const MINIMIZE_SCALE: f32 = 0.1;
 const MINIMIZE_OPACITY: f32 = 0.3;
 
 struct Anim {
+    native: bool,
     id: u32,
     node: i32,
     t0: f64,
@@ -142,7 +143,7 @@ impl Animator {
         }
         self.next = self.next.wrapping_add(1).max(1);
         let ms = if ms.is_finite() && ms > 0. { ms.min(10_000.) } else { 0. };
-        self.active.push(Anim { id: self.next, node, t0: now, ms, easing, from, to });
+        self.active.push(Anim { native:false, id: self.next, node, t0: now, ms, easing, from, to });
         self.next
     }
 
@@ -152,13 +153,16 @@ impl Animator {
         let mut out = Vec::new();
         let mut finished = Vec::new();
         for a in self.active.iter().take(max) {
-            let (props, done) = a.sample(now);
-            out.push(AnimFrame { node: a.node, id: a.id, props, done: done as u8 });
+            let (mut props, done) = a.sample(now);
+            if done && a.native {
+                if let Some(index)=self.base.iter().position(|(node,_)|*node==a.node) {props=self.base.swap_remove(index).1;}
+            }
+            out.push(AnimFrame { node: a.node, id: a.id, props, done: if done && a.native {2} else {done as u8} });
             if done {
                 finished.push(a.id);
+                if !a.native {self.completion_ready=true;}
             }
         }
-        self.completion_ready |= !finished.is_empty();
         self.active.retain(|a| !finished.contains(&a.id));
         out
     }
@@ -265,6 +269,33 @@ pub fn dock_poof_props(size: f32, part: u8, base: AnimProps) -> Option<(AnimProp
 }
 
 thread_local! { static ANIMATOR: RefCell<Animator> = RefCell::new(Animator::default()); }
+
+/// Native desktop slides restore their base on the final frame, without a JS notice.
+pub(crate) fn desktop_slide(node:i32,start:f64,now:f64,step:i32,rtl:bool,base:AnimProps)->Option<(u32,AnimProps)> {
+    if now-start>=DESKTOP_SLIDE_MS {return None;}
+    ANIMATOR.with(|a| {
+        let mut a=a.borrow_mut();let(from,to)=slide_props(step,rtl,base);
+        let id=a.start(node,start,DESKTOP_SLIDE_MS,Easing::Out,from,to,base);
+        let animation=a.active.iter_mut().find(|a|a.id==id)?;animation.native=true;
+        Some((id,animation.sample(now).0))
+    })
+}
+pub(crate) fn clear_desktop(node:i32,id:u32)->Option<AnimProps> {
+    ANIMATOR.try_with(|a| {
+        let mut a=a.borrow_mut();
+        if !a.active.iter().any(|a|a.node==node && a.id==id && a.native) {return None;}
+        a.clear(node)
+    }).ok().flatten()
+}
+#[no_mangle]
+pub unsafe extern "C" fn axia_anim_interrupt_native(node:i32,out:*mut AnimProps)->i32 {
+    ANIMATOR.with(|a| {
+        let mut a=a.borrow_mut();
+        if !a.active.iter().any(|a|a.node==node && a.native) {return 0;}
+        let Some(base)=a.clear(node)else{return 0;};
+        if !out.is_null(){out.write(base);}1
+    })
+}
 
 unsafe fn props(p: *const AnimProps) -> AnimProps {
     if p.is_null() { AnimProps::default() } else { *p }

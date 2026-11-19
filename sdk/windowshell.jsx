@@ -46,7 +46,11 @@ export function WindowShell({ win, style, children, onMouseDown, resizable = tru
   const here = useStore(windowViews, (v) => !v.sets.parked.has(win.id));
   const m = resizable && !win.maximized && !tv ? WINDOW_EDGE : 0;
   const inner = useRef(null);
-  if (!inner.current) inner.current = (n) => { if (n && n.id) fxNodes.set(win.id, n.id); else fxNodes.delete(win.id); };
+  if (!inner.current) inner.current = (n) => {
+    if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) {
+      if (n && n.id) fxNodes.set(win.id, n.id); else fxNodes.delete(win.id);
+    } else lord.windowList.bindFx(win.id, n?.id || 0);
+  };
   const place = tv ? { transform: `translate(${tv.x - geo.x}px, ${tv.y - geo.y}px) scale(${tv.scale})`, transformOrigin: 'left top' } : null;
   return (
     <View ref={wm.frameRef(win.id, m)} onMouseDown={tv ? undefined : onMouseDown}

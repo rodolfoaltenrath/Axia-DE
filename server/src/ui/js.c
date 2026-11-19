@@ -142,6 +142,10 @@ static JSValue f_set_style(JSContext *c, JSValueConst this_val, int argc, JSValu
     Node *n = arg_node(c, argv[0]);
     const char *key = JS_ToCString(c, argv[1]);
     if (!n || !key) { if (key) JS_FreeCString(c, key); return JS_UNDEFINED; }
+    if (!strcmp(key, "transform") || !strcmp(key, "opacity") ||
+        !strcmp(key, "translateX") || !strcmp(key, "translateY") ||
+        !strcmp(key, "scaleX") || !strcmp(key, "scaleY") ||
+        !strncmp(key, "transformOrigin", 15)) js_anim_interrupt_native(n->id);
     JSValueConst v = argv[2];
     int err = 0;
     Style before = n->s;

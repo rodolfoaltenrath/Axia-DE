@@ -59,6 +59,11 @@ static void apply(Node *n, const AnimProps *p) {
 }
 
 int js_anim_active(void) { return axia_anim_active(); }
+void js_anim_interrupt_native(int id) {
+    AnimProps base;
+    Node *node = node_get(id);
+    if (node && axia_anim_interrupt_native(id, &base)) apply(node, &base);
+}
 double js_anim_timeout(double now, double next_frame, int software_paced, int waiting_for_flip, unsigned refresh_hz, int js_frames) {
     return axia_anim_timeout(now, next_frame, software_paced != 0, waiting_for_flip != 0, refresh_hz, js_frames != 0);
 }
@@ -72,7 +77,7 @@ void js_anim_step(double now) {
         if (!node) { axia_anim_forget(f[i].node); continue; }
         apply(node, &f[i].props);
     }
-    for (size_t i = 0; i < n; i++) if (f[i].done) js_anim_done(f[i].id);
+    for (size_t i = 0; i < n; i++) if (f[i].done == 1) js_anim_done(f[i].id);
 }
 
 /* lord.anim.minimize(node, dockX, dockY) → id (0: not animated). The node's box is read here. */
