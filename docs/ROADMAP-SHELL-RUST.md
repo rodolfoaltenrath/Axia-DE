@@ -293,6 +293,10 @@ views nativas lerem direto, sem JSON.
       O conteúdo nativo recebe identidade e permissão de entrada, sem foco
       dinâmico no JSON. Quatro cenários gráficos verificam troca direta do
       foco e prioridade de campos JS e sobreposições, com capturas no CI.
+      O painel Forçar encerramento também lê a lista por referências Rust;
+      retirados sua assinatura do espelho e o envio de `windows` pelo mount.
+      Metadados de apps seguem no catálogo compartilhado. Menus, `runningApps`
+      e efeitos de encerramento ainda usam o adaptador `appcontrol.js`.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
@@ -457,3 +461,4 @@ mostraram.
 | 2026-11-19 | Fase 2 iniciada: base observável e proprietário do estado de janelas | Commit desta linha | Crate axia-state sem dependências externas; leitores por empréstimo, revisões e assinaturas canceláveis com invalidações agrupadas. Session guarda WindowState nessa base e expõe leitura nativa. Testes distinguem mutações, ordem e remoção de leituras, resync e operações sem efeito. ABI JSON, espelho JS e consumidores gráficos ainda pendentes; sem nova medição física. |
 | 2026-11-19 | Fase 2: cabeçalhos consomem título e foco do estado observável | Commit desta linha | Mount vincula leitor Rust à lista de janelas do contexto, validando o objeto opaco sem reter ponteiro C/JS. Revisões pendentes pedem tick imediato; não há timer de assinatura após consumo. Removidos título/foco dinâmicos dos fatos JSON do cabeçalho. Oito cenários gráficos comprovam título atualizado com espelho JS parado e fonte inválida rejeitada; 108 testes do host, 34 do modelo, contratos LPK e integração dos apps passaram. Espelho JS, ABI JSON e demais consumidores continuam pendentes; sem medição física. |
 | 2026-11-19 | Fase 2: conteúdo nativo lê foco do modelo Rust | Commit desta linha | Apps com janela recebem leitor tipado e identidade; o JS só fornece bloqueios de entrada para campos e painéis. Troca de foco vale antes do próximo quadro, sem foco dinâmico nos fatos. Quatro cenários gráficos e capturas, 109 testes do host, integração dos apps, dois contratos LPK e oito cenários de Arquivos e de cabeçalhos passaram. CI GPU=1 exige native_focus_runtime e publica as capturas. Espelho JS, moldura e demais serviços continuam pendentes; medições físicas no encerramento. |
+| 2026-11-19 | Fase 2: lista nativa do Forçar encerramento | Commit desta linha | Leitura emprestada do modelo por contexto, sem enviar lista de janelas à view. Retirado windowFacts do NativeView; catálogo de apps resolve nomes, ícones e identidade desktop com a regra compartilhada do launcher. Host revalida seleção antes de ações com revisões pendentes. Passaram 12 testes do app, 110 do host, 34 do modelo, 51 do launcher, contrato desktop, quatro cenários novos, regressões de foco/launcher, integração dos apps e dois contratos LPK. CI publica axia-forcequit. Efeitos de encerramento, menus, runningApps, espelho JS e demais serviços continuam pendentes. |

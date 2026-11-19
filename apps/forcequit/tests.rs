@@ -1,4 +1,79 @@
 use super::*;
+use std::cell::{Cell, RefCell};
+
+#[derive(Default)]
+struct Source {
+    revision: Cell<u64>,
+    windows: RefCell<Vec<Value>>,
+}
+impl Source {
+    fn set(&self, windows: Vec<Value>) {
+        *self.windows.borrow_mut() = windows;
+        self.revision.set(self.revision.get() + 1);
+    }
+}
+impl WindowSource for Source {
+    fn revision(&self) -> u64 { self.revision.get() }
+    fn visit(&self, visitor: &mut dyn FnMut(WindowRef<'_>)) {
+        for window in self.windows.borrow().iter() {
+            visitor(WindowRef { id:s(window,"id"), app:s(window,"app"), title:s(window,"title"), args:&window["args"] });
+        }
+    }
+}
+
+#[test]
+fn borrowed_groups_use_catalog_identity_and_all_windows_without_legacy_facts() {
+    assert_eq!(pretty_id(".org.my_app."), "My app");
+    let source = Rc::new(Source::default());
+    source.set(vec![
+        json!({"id":"panel","app":"panel"}),
+        json!({"id":"forcequit","app":"forcequit"}),
+        json!({"id":"notes#a","app":"notes","desktop":9,"minimized":true}),
+        json!({"id":"notes#b","app":"notes"}),
+        json!({"id":"linux#1","app":"linux","args":{"appId":"EDITOR","surface":11}}),
+        json!({"id":"linux#2","app":"linux","args":{"appId":"isolated","surface":12,"pkg":true}}),
+        json!({"id":"linux#3","app":"linux","args":{"appId":"org.unknown.some-app","surface":13}}),
+        json!({"id":"linux#4","app":"linux","args":{}}),
+    ]);
+    let mut app = App::with_windows(source);
+    let facts = json!({"cmd":"groups","registry":[
+        {"id":"panel","builtin":true,"name":"Panel"}, {"id":"linux","builtin":true,"name":"Linux"},
+        {"id":"notes","name":"Notas"}, {"id":"isolated","isolated":true,"name":"Isolated"}],
+        "catalog":[{"id":"desktop:org.editor","kind":"linux","desktopId":"org.editor","wmClass":"Editor","shortName":"Editor"},
+            {"id":"desktop:ambiguous","kind":"linux","desktopId":"another","wmClass":"Editor","shortName":"Another editor"}],
+        "windows":[{"id":"stale","key":"stale","name":"Wrong"}]});
+    let groups = app.request(&facts)["groups"].as_array().unwrap().clone();
+    assert_eq!(groups.len(), 5);
+    let by_key = |key| groups.iter().find(|g| g["key"] == key).unwrap();
+    assert_eq!(by_key("notes")["name"], "Notas");
+    assert_eq!(by_key("notes")["windows"], json!(["notes#a","notes#b"]));
+    assert_eq!(by_key("desktop:org.editor")["name"], "Editor");
+    assert_eq!(by_key("isolated")["name"], "Isolated");
+    assert_eq!(by_key("linux:org.unknown.some-app")["name"], "Some app");
+    assert_eq!(by_key("linux:linux#4")["name"], "Linux");
+}
+
+#[test]
+fn borrowed_membership_invalidates_selection_and_reads_fresh_surface_handles() {
+    use crate::native_view::NativeApp;
+    let source = Rc::new(Source::default());
+    source.set(vec![json!({"id":"linux#1","app":"linux","args":{"appId":"pkg","pkg":true,"surface":10}})]);
+    let mut app = App::with_windows(source.clone());
+    let facts = json!({"cmd":"sync","registry":[{"id":"pkg","package":true,"name":"Package"}]});
+    NativeApp::request(&mut app, &facts);
+    assert!(!app.invalidated());
+    NativeApp::request(&mut app, &json!({"cmd":"select","key":"pkg"}));
+    source.set(vec![]);
+    assert!(app.invalidated());
+    NativeApp::request(&mut app, &facts);
+    assert!(!app.invalidated());
+    assert!(NativeApp::request(&mut app, &json!({"cmd":"quit"})).is_null());
+    source.set(vec![json!({"id":"linux#1","app":"linux","args":{"appId":"pkg","pkg":true,"surface":20}})]);
+    let mut quit = facts.clone();quit["cmd"] = json!("quit");quit["key"] = json!("pkg");
+    assert_eq!(app.request(&quit)["effect"], json!({"kind":"kill","surface":20}));
+    drop(source);
+    assert!(app.source.is_some(), "reader owns its source lifetime");
+}
 fn snapshot() -> Value {
     json!([
         {"id":"panel","key":"panel","name":"Panel","builtin":true},

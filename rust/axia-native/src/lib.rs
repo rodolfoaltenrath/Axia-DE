@@ -15,6 +15,7 @@ pub mod retained;
 pub mod services;
 pub mod style;
 pub mod unicode;
+pub mod windows;
 pub use services::{app, icon_tree, measure_text};
 
 /// Bounded UTF-8 reads shared by the toolkit and applications.

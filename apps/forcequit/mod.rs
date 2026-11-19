@@ -4,6 +4,8 @@ mod tests;
 mod ui;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::rc::Rc;
+use crate::native_view::windows::{WindowRef, WindowSource};
 
 #[derive(Clone)]
 struct Window {
@@ -27,6 +29,8 @@ pub struct App {
     queue: VecDeque<Window>,
     pending: Option<Window>,
     isolated_killed: bool,
+    source: Option<Rc<dyn WindowSource>>,
+    revision: Option<u64>,
 }
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
@@ -68,14 +72,78 @@ fn groups(windows: &Value) -> Vec<Group> {
             icon: w["iconData"].clone(),
         });
     }
+    sorted_groups(groups)
+}
+fn sorted_groups(groups: BTreeMap<String, Group>) -> Vec<Group> {
     let mut groups: Vec<_> = groups.into_values().collect();
     // Accents and case don't move a name ("Área" sorts with "A", as the previous localeCompare did).
     groups.sort_by_cached_key(|g| (crate::search::matching::fold(&g.name), g.key.clone()));
     groups
 }
+
+fn pretty_id(id: &str) -> String {
+    let name = id.rsplit('.').find(|part| !part.is_empty()).unwrap_or("").replace(['-', '_'], " ");
+    let name = name.trim();
+    let mut chars = name.chars();
+    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
+}
+
+/// Metadata comes from the shared app catalog; window membership and handles
+/// come only from the borrowed authoritative model, never the JS mirror.
+fn native_groups(source: &dyn WindowSource, input: &Value) -> Vec<Group> {
+    let registry: BTreeMap<_, _> = input["registry"].as_array().into_iter().flatten()
+        .map(|app| (s(app, "id"), app)).collect();
+    let catalog = input["catalog"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    let mut groups = BTreeMap::new();
+    source.visit(&mut |w: WindowRef<'_>| {
+        let linux = w.id.starts_with("linux#");
+        let app = registry.get(w.app).copied().unwrap_or(&Value::Null);
+        if w.id.is_empty() || w.app == "forcequit" || (!linux && app["builtin"] == true) { return; }
+        let app_id = s(w.args, "appId");
+        let package = registry.get(app_id).copied().filter(|app| app["package"] == true || app["isolated"] == true);
+        let desktop = catalog.iter().find(|app| s(app, "kind") == "linux" &&
+            crate::native_view::windows::matches_desktop(app_id, s(app, "desktopId"), s(app, "wmClass")));
+        let key = if !linux { w.app.to_owned() }
+            else if w.args["pkg"] == true && package.is_some() { app_id.to_owned() }
+            else if let Some(desktop) = desktop { s(desktop, "id").to_owned() }
+            else { format!("linux:{}", if app_id.is_empty() { w.id } else { app_id }) };
+        let group_app = registry.get(key.as_str()).copied();
+        let name = group_app.map(|app| s(app, "name").to_owned()).or_else(||
+            desktop.map(|app| s(app, "shortName").to_owned()).filter(|name| !name.is_empty()))
+            .unwrap_or_else(|| {
+                if !linux { s(app, "name").to_owned() }
+                else if let Some(package) = package { s(package, "name").to_owned() }
+                else {
+                    let pretty = pretty_id(app_id);
+                    if pretty.is_empty() { s(app, "name").to_owned() } else { pretty }
+                }
+            });
+        let icon_app = if linux { package.filter(|app| app["icon"] == true).or(desktop) }
+            else { (app["icon"] == true).then_some(app) };
+        let icon = icon_app.map(|app| app["iconData"].clone())
+            .unwrap_or_else(|| json!({"kind":"letter","name":if !linux {w.id}
+                else if !app_id.is_empty() {app_id} else if !w.title.is_empty() {w.title} else {"Linux"}}));
+        groups.entry(key.clone()).or_insert_with(|| Group {key, name, windows: Vec::new()})
+            .windows.push(Window {
+                id: w.id.to_owned(),
+                surface: linux.then(|| w.args["surface"].as_i64().and_then(|n| i32::try_from(n).ok()).filter(|n| *n > 0)).flatten(),
+                x11: linux && w.args["x11"] == true,
+                isolated: linux && w.args["pkg"] == true,
+                icon,
+            });
+    });
+    sorted_groups(groups)
+}
 impl App {
+    pub fn with_windows(source: Rc<dyn WindowSource>) -> Self {
+        Self { source: Some(source), ..Self::default() }
+    }
     fn refresh(&mut self, input: &Value) {
-        self.groups = groups(&input["windows"]);
+        self.groups = if let Some(source) = &self.source {
+            let groups = native_groups(source.as_ref(), input);
+            self.revision = Some(source.revision());
+            groups
+        } else { groups(&input["windows"]) };
         if !self
             .groups
             .iter()
@@ -167,6 +235,9 @@ impl App {
 /// The window uses the session controller with fresh shell facts. It never
 /// executes the surface handles from its last rendered snapshot.
 impl crate::native_view::NativeApp for App {
+    fn invalidated(&self) -> bool {
+        self.source.as_ref().is_some_and(|source| self.revision != Some(source.revision()))
+    }
     fn request(&mut self, input: &Value) -> Value {
         match s(input, "cmd") {
             "quit" => {

@@ -202,6 +202,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     windows: Option<axia_state::Reader<crate::winmodel::WindowState>>) -> u32 {
     let app = if id == "shell:titlebar" {
         windows.clone().map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
+    } else if id == "forcequit" {
+        windows.clone().map(|reader| Box::new(crate::forcequit::App::with_windows(
+            std::rc::Rc::new(crate::winmodel::WindowReader(reader)))) as Box<dyn NativeApp>).or_else(|| app(id))
     } else { app(id) };
     let Some(app) = app else {
         return 0;

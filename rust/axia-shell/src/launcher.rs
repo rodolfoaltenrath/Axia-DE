@@ -310,11 +310,11 @@ impl AxiaLauncher {
             "view" => self.view(args),
             "open" | "context" | "event" | "scroll" | "close" => self.menu_request(args),
             "window" => {
-                let want = string(args, "id").to_lowercase();
+                let want = string(args, "id");
                 Ok(
-                    json!({"id": self.entries.iter().find(|a| string(&a.metadata,"kind")=="linux" && !want.is_empty() &&
-                    (string(&a.metadata,"desktopId").to_lowercase()==want || string(&a.metadata,"wmClass").to_lowercase()==want ||
-                        string(&a.metadata,"desktopId").to_lowercase().ends_with(&format!(".{want}")))).map(|a| string(&a.metadata,"id"))}),
+                    json!({"id": self.entries.iter().find(|a| string(&a.metadata,"kind")=="linux" &&
+                        axia_native::windows::matches_desktop(want, string(&a.metadata,"desktopId"), string(&a.metadata,"wmClass")))
+                        .map(|a| string(&a.metadata,"id"))}),
                 )
             }
             "category" => Ok(

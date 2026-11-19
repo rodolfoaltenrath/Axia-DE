@@ -1300,6 +1300,9 @@ impl Host {
     }
     /// Runs a widget action like the React host's `send([cmd, key], extra)`.
     fn dispatch(&mut self, action: &Value, extra: Map<String, Value>) {
+        // Model changes may arrive in the same task as a click, before tick().
+        // Revalidate selection and actions against the current native source.
+        if self.app.invalidated() { self.sync(); }
         self.send(action, extra);
         self.sync();
     }

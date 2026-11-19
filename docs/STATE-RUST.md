@@ -78,6 +78,30 @@ Revisões consumidas não deixam timer; mudanças só de título não reconstroe
 o conteúdo. Ícones e views sem janela, como os painéis da shell, conservam
 seus protocolos próprios. A moldura e o espelho JS continuam pendentes.
 
+## Lista do Forçar encerramento
+
+O app `forcequit` recebe o mesmo leitor, através de `axia_native::windows`.
+Esse contrato permite visitar referências emprestadas de identidade, título
+e argumentos, sem construir uma lista JSON para cruzar a fronteira entre
+modelo e app. O proprietário do contexto continua explícito no mount.
+
+A view monta os grupos a partir dessas referências. O catálogo compartilhado
+de apps ainda fornece nomes localizados, indicadores de pacote/painel e
+descritores de ícone. O catálogo só depende de apps e idioma; o adaptador
+`NativeView` deixou de assinar o espelho de janelas e retirou `windowFacts`.
+O manifesto do painel agora pede metadados de apps, não fatos de janelas.
+A correspondência de identidade desktop/WM_CLASS é compartilhada com o launcher.
+
+A revisão do leitor invalida a view, inclusive quando o modelo muda sem
+atualizar o espelho JS. Antes de despachar uma ação, o host sincroniza qualquer
+invalidação pendente: uma seleção removida não pode iniciar encerramento entre
+a mutação do modelo e o próximo quadro. A assinatura não adiciona polling.
+
+Esta etapa migra a leitura da lista no painel. `runningApps()`, menus e a
+execução dos efeitos de encerramento ainda usam `sdk/appcontrol.js` e seu
+adaptador transitório; o catálogo de apps, a moldura e o espelho JS também
+continuam no escopo das próximas etapas. Não é uma sessão sem JavaScript.
+
 ## Verificação
 
 ```sh
@@ -114,3 +138,16 @@ isolamento, remoção, vida útil do leitor e ausência de reconstrução por t�
 Compositor e frontend recompilados, integração dos apps compilados, dois
 contratos LPK e oito cenários de cada uma das regressões de Arquivos e dos
 cabeçalhos também passaram. Não houve medição física nesta etapa.
+
+Para a lista do Forçar encerramento, passaram 12 testes do app, 110 do host,
+34 do modelo de janelas, 51 do launcher e o contrato compartilhado de
+identidade desktop. A integração `forcequit_runtime` passou em quatro cenários
+claro/escuro e 640/1000 px, com fonte opaca verificada e sem campo `windows`
+nos fatos. Abre, fecha e altera argumentos diretamente no modelo, mantém
+o espelho JS parado e impede encerramento de uma seleção já removida.
+Capturas e logs: `build/validation/forcequit/`; o CI GPU=1 exige o teste e
+publica `axia-forcequit`.
+
+Compositor e frontend foram recompilados. Também passaram a integração dos
+apps compilados, seis cenários gráficos do launcher, quatro de foco e dois
+contratos LPK. Medições físicas e RPM completo não foram executados nesta fatia.

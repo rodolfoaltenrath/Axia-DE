@@ -16,6 +16,14 @@ capturas locais em `build/validation/native-focus/`, artefato CI
 
 ## Estado validado
 
+O painel Forçar encerramento lê a lista de janelas por referências Rust,
+vinculadas ao modelo do seu contexto. Nomes e ícones vêm do catálogo de apps;
+não recebe uma cópia JSON das janelas. `forcequit_runtime` verifica mutações
+diretas com espelho JS parado e remoção da seleção antes de uma ação, em
+claro/escuro e 640/1000 px. Artefato CI: `axia-forcequit`; captura local:
+`build/validation/forcequit/`. Os efeitos de encerramento e outros consumidores
+de `appcontrol.js` continuam no adaptador transitório.
+
 - Monitor: árvore, rasters, entrada e atualização periódica nativos.
 - Calculadora: árvore e ícone nativos, cálculo por teclado e ponteiro, foco,
   separador decimal e feedback de pressão/hover em Rust.

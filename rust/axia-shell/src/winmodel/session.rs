@@ -857,6 +857,20 @@ impl WindowState {
     }
 }
 
+/// Object-safe borrowed access for app crates, which do not depend on the compositor.
+pub struct WindowReader(pub Reader<WindowState>);
+impl axia_native::windows::WindowSource for WindowReader {
+    fn revision(&self) -> u64 { self.0.revision() }
+    fn visit(&self, visitor: &mut dyn FnMut(axia_native::windows::WindowRef<'_>)) {
+        let state = self.0.read();
+        for window in state.windows() {
+            visitor(axia_native::windows::WindowRef {
+                id: window.id(), app: window.app(), title: window.title(), args: window.args(),
+            });
+        }
+    }
+}
+
 /// The authoritative model lives in a typed observable store. The JSON response
 /// below remains the transitional JS/LPK adapter; native consumers use `reader`.
 #[derive(Default)]

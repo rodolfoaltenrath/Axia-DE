@@ -16,14 +16,14 @@ import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
 import { locale, useLocale, formatNumber } from './i18n.js';
-import { windows, appRegistry, wm, appCatalogSource } from './windows.js';
-import { launcherCatalog, launchApp, appIconFacts } from './apps.js';
+import { appRegistry, wm, appCatalogSource } from './windows.js';
+import { launcherCatalog, launchApp, appIconFacts, shortAppName } from './apps.js';
 import { refreshPackages } from './packages.js';
 import { settings } from './settings.js';
 import { appName } from './i18n.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
-import { appControlFacts, forceQuit } from './appcontrol.js';
+import { forceQuit } from './appcontrol.js';
 import { executeNativeEffect } from './nativeappmodel.js';
 import { disks } from './disks.js';
 import { createFactsStore, createFactsEncoder, emptyFactsStore, sameFacts, sameRecord, nativeTheme } from './nativeviewfacts.js';
@@ -43,7 +43,8 @@ const screenFacts = {
 
 // Serializable facts of an app; localized names and callable icons belong to the host.
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
-  desktopId: app.desktopId, mimeTypes: app.mimeTypes,
+  desktopId: app.desktopId, wmClass: app.wmClass, mimeTypes: app.mimeTypes,
+  builtin: !!app.builtin, shortName: app.kind === 'linux' ? shortAppName(app) : undefined,
   comment: app.comment, description: app.description, genericName: app.genericName,
   iconPath: typeof app.icon === 'string' ? app.icon : '',
   package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
@@ -57,9 +58,12 @@ const catalogFacts = createFactsStore([launcherCatalog, appRegistry, locale],
   () => [launcherCatalog.get(), appRegistry.get(), locale.get()],
   () => ({ catalog: launcherCatalog.get().apps.map(appFacts),
     registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) }));
-const windowFacts = createFactsStore([windows, launcherCatalog, appRegistry, locale],
-  () => [windows.get().map(w => [w.id, w.app, w.title, w.args?.appId, w.args?.surface, w.args?.x11, w.args?.pkg]),
-    launcherCatalog.get(), appRegistry.get(), locale.get()], appControlFacts);
+// Identity matching uses source order, as lord.launcher does. The visible
+// catalog is name-sorted and could pick a different app for an ambiguous WM_CLASS.
+const appControlCatalogFacts = createFactsStore([launcherCatalog, appRegistry, locale],
+  () => [launcherCatalog.get(), appRegistry.get(), locale.get()],
+  () => ({ catalog: [...launcherCatalog.get().byId.values()].map(appFacts),
+    registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) }));
 
 const runners = new Map();          // handle → runs one effect
 // A shell component that runs the effects of its own view (the title bar): returns the way to stop.
@@ -188,8 +192,7 @@ function NativeApp(props) {
 }
 const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
   const preferences = useStore(manifest.settings ? preferenceFacts : emptyFactsStore);
-  const apps = useStore(manifest.facts === 'apps' ? catalogFacts : emptyFactsStore);
-  const appWindows = useStore(manifest.facts === 'windows' ? windowFacts : emptyFactsStore);
+  const apps = useStore(manifest.id === 'forcequit' ? appControlCatalogFacts : manifest.facts === 'apps' ? catalogFacts : emptyFactsStore);
   const clock = useStore(manifest.facts === 'clock' ? clockState : emptyFactsStore);
   useStore(manifest.facts === 'system' ? screenFacts : emptyFactsStore);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });
@@ -230,7 +233,6 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const layers = block('layers', layerFacts());
   if (layers !== undefined) parts.push(`"layers":${layers}`);
   if (manifest.settings) parts.push(`"settings":${block('settings', preferences)}`);
-  if (appWindows) parts.push(`"windows":${block('windows', appWindows)}`);
   if (apps) parts.push(`"catalog":${block('catalog', apps.catalog)}`, `"registry":${block('registry', apps.registry)}`);
   const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {
