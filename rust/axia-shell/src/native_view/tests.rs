@@ -374,6 +374,37 @@ fn a_mounted_view_reconciles_in_place_handles_clicks_keys_and_unmounts() {
 }
 
 #[test]
+fn shutdown_closes_hosts_once_outside_registry_and_keeps_handles_unique() {
+    struct Closing(Rc<RefCell<usize>>);
+    impl NativeApp for Closing {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "close" {
+                assert!(super::handles().is_empty(), "close runs after draining the registry");
+                *self.0.borrow_mut() += 1;
+            }
+            json!({})
+        }
+    }
+    super::axia_view_shutdown();
+    let closed = Rc::new(RefCell::new(0));
+    let mount = scene::create(scene::VIEW);
+    let handle = super::with(|r| {
+        r.next += 1;
+        let handle = r.next;
+        r.hosts.insert(handle, Host::new(mount, Box::new(Closing(closed.clone())), "", None));
+        handle
+    });
+    super::axia_view_shutdown();
+    assert_eq!(*closed.borrow(), 1);
+    assert!(super::handles().is_empty());
+    super::axia_view_shutdown();
+    super::axia_view_unmount(handle);
+    assert_eq!(*closed.borrow(), 1, "repeated shutdown and stale unmount are harmless");
+    assert_eq!(super::with(|r| r.next), handle, "shutdown must not recycle handles");
+    scene::destroy(mount);
+}
+
+#[test]
 fn icons_render_once_without_timers_or_input() {
     let mount = scene::create(scene::VIEW);
     struct Icon;

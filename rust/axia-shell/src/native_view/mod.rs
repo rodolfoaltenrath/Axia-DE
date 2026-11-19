@@ -249,6 +249,16 @@ pub extern "C" fn axia_view_unmount(handle: u32) {
     // Dropped outside the registry: the app and its nodes go now.
     drop(host);
 }
+/// Close native apps while their services, scene and media owners are alive.
+/// Leaving hosts in TLS until process exit can run app callbacks after the
+/// app's own thread-local service has already been destroyed.
+#[no_mangle]
+pub extern "C" fn axia_view_shutdown() {
+    let hosts = with(|r| std::mem::take(&mut r.hosts));
+    // App close callbacks must run outside the registry borrow, as on unmount.
+    // Keep the handle sequence: a stale JS callback must never target a new host.
+    drop(hosts);
+}
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_facts(handle: u32, facts: *const c_char) {
     let facts = json(facts);

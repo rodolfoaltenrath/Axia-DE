@@ -58,6 +58,16 @@ jobs:
           name: desktop-memory-${{ matrix.gpu }}
           path: ${{ runner.temp }}/desktop-memory.json
           if-no-files-found: warn
+      - name: Rust installed shell shutdown regression
+        env:
+          AXIA_SHUTDOWN_OUTPUT: ${{ runner.temp }}/axia-shutdown
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test session_shutdown_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: axia-shutdown-${{ matrix.gpu }}
+          path: ${{ runner.temp }}/axia-shutdown/
+          if-no-files-found: warn
       - name: Rust runtime ABI and renderer regressions
         if: matrix.gpu == 1
         run: |

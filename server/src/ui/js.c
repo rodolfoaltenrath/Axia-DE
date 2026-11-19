@@ -656,6 +656,7 @@ int js_app_recovery(void) {
 }
 
 void js_shutdown(void) {
+    axia_view_shutdown();              /* close native apps before their services and TLS */
     media_shutdown();                   /* the axia-media helpers belong to this context */
     if (ctx) js_wasm_shutdown(ctx);
     if (ctx && hot_rt == rt) for (int i = 0; i < HOT_N; i++) JS_FreeAtom(ctx, hot_atom[i]);

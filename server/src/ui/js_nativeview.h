@@ -8,6 +8,7 @@
 /* Rust (native_view/mod.rs). UI thread only. */
 char    *axia_clock_request(const char *input);
 void     axia_view_init(const char *assets, const char *home);
+void     axia_view_shutdown(void);
 unsigned axia_view_mount(int node, const char *app, const char *facts);
 unsigned axia_view_mount_windows(int node, const char *app, const char *facts, const AxiaWindows *windows);
 void     axia_view_unmount(unsigned handle);

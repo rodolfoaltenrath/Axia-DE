@@ -414,6 +414,29 @@ instalação temporária e `switcher-check` aprovados. Capturas e logs locais:
 `build/validation/session-restore/`. Medições físicas e RPM completo
 permanecem para o encerramento do roadmap.
 
+## Encerramento das views e serviços
+
+`js_shutdown()` chama `axia_view_shutdown()` antes de encerrar mídia e liberar
+o contexto QuickJS. O registro Rust retira todas as views antes de executar
+seus callbacks de fechamento, fora do empréstimo do registro. A sequência
+dos handles permanece monotônica, inclusive após reiniciar o contexto.
+
+Isso corrige o aborto visto nos jobs `desktop (0)` e `desktop (1)` dos runs
+44570061368 e 44576784606: a sessão funcionava, mas os hosts permaneciam em
+TLS até a saída do processo. O callback de fechamento de Arquivos acessava
+seu serviço TLS já destruído (`AccessError`, seguido de SIGABRT).
+
+`session_shutdown_runtime` instala o desktop em uma árvore temporária,
+restaura Store/Configurações/Arquivos/Calculadora, abre Forçar encerramento
+e Sobre o app e exige status de saída zero, ausência de panic e marcador
+limpo nas preferências. Cobre timeout e SIGTERM, com logs publicados pelo
+CI em ambas as variantes GPU. O teste reproduziu o SIGABRT antes da correção.
+
+Validação local: builds GPU=0 e GPU=1 e os dois cenários de encerramento em
+cada variante passaram. Também passaram 540 testes unitários da shell (sete
+especiais ignorados), quatro contratos LPK, oito cenários de Arquivos e
+quatro de restauração. Evidências em `build/validation/ci-shutdown/`.
+
 ## Verificação
 
 ```sh
