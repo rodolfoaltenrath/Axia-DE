@@ -306,8 +306,13 @@ views nativas lerem direto, sem JSON.
       O alternador também lê esse modelo: histórico de foco, grupos, escolha
       de janela, seleção e cena ficam em Rust. O adaptador envia só comandos,
       metadados e aparência; não assina a lista nem envia itens/índice. O comando
-      separado `cycleAppWindows` ainda usa o espelho. Integração Rust e capturas
-      Axia/Adwaita em claro/escuro e 640/1000 px; detalhes em `STATE-RUST.md`.
+      separado `cycleAppWindows` agora também resolve grupo e foco no Rust.
+      Ocultar app/outros, mostrar todos e mostrar área de trabalho executam uma
+      mutação nativa por comando; a memória por desktop pertence ao modelo.
+      A resposta ainda atualiza o espelho para a interface legada, mas não envia
+      janelas ao Rust para decidir os alvos. Menus e `appGroup` seguem pendentes.
+      Alternador com integração Rust e capturas Axia/Adwaita em claro/escuro e
+      640/1000 px; comandos com quatro cenários gráficos. Detalhes em `STATE-RUST.md`.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).

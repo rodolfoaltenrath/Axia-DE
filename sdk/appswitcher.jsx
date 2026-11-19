@@ -5,8 +5,8 @@ import { mainDisplay } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
-import { windows, wm, onActiveDesktop } from './windows.js';
-import { dockIdOfWindow } from './dock.js';
+import { wm } from './windows.js';
+export { cycleAppWindows } from './appcontrol.js';
 import { dockGlass } from './glass.js';
 import { NativeView } from './nativeview.js';
 import { switcherBridge } from './nativeswitcher.js';
@@ -51,19 +51,6 @@ export function switcherKey(e) {
   else if (e.key === 'Enter') switcherBridge.send(['commit']);
   else if (e.key === 'Escape') cancelSwitcher();
   return true;
-}
-
-// This separate window-cycling command still uses the SDK mirror.
-const keyOf = w => dockIdOfWindow(w);
-export function cycleAppWindows(back = false) {
-  const top = wm.get(wm.focused());
-  if (!top) return;
-  const key = keyOf(top);
-  const mine = windows.get().filter((w) => keyOf(w) === key && !w.minimized && onActiveDesktop(w));
-  if (mine.length < 2) return;
-  if (!back) { wm.focus(mine[0].id); return; }           // the app's rearmost window comes up
-  wm.toBack(top.id);                                     // the front one goes under everything
-  wm.focus(mine[mine.length - 2].id);
 }
 
 export function AppSwitcher() {

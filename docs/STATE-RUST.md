@@ -140,8 +140,8 @@ somente o ciclo de abertura, os atalhos e a aplicação do foco escolhido.
 `nativeswitcher.js` enfileira comandos recebidos antes do mount e usa um nonce
 para que efeitos de uma abertura antiga não encerrem a seguinte. Metadados e
 aparência ainda chegam pelo adaptador compartilhado. O comando separado de
-ciclar janelas do mesmo app ainda usa o espelho JS; overview e o antigo binding
-`lord.switcher` permanecem para as próximas etapas.
+ciclar janelas do mesmo app usa o controlador nativo descrito abaixo; overview
+e o antigo binding `lord.switcher` permanecem para as próximas etapas.
 
 O teste `switcher_runtime` verifica os dois estilos, claro/escuro em 640/1000 px,
 com MRU, janela representante removida antes do commit, foco em janela ausente
@@ -162,6 +162,47 @@ foco e Forçar encerramento passaram. Compositor e frontend recompilados;
 o contrato offline também passou com a instalação preparada para RPM.
 Os dois contratos LPK também passaram. Não houve reconstrução completa do RPM
 nesta fatia.
+
+## Comandos de janelas do controlador da sessão
+
+`app_control::Controller` retém um proprietário compartilhado de `Session`,
+sem guardar o ponteiro C/QuickJS original. Só o controlador vinculado ao contexto
+recebe essa autoridade; modelos criados por `nativeApps.create()` não podem
+executar `windowCommand`. As views continuam recebendo somente leitores.
+
+Ciclar janelas do app, ocultar app, ocultar outros, mostrar todos e mostrar a
+área de trabalho leem os grupos atuais em Rust. O comando de ciclar e os atalhos
+de ocultação consultam o foco nativo; ações de menu podem indicar uma janela
+explicitamente. O painel Forçar encerramento pode ser ocultado como qualquer
+app, embora continue excluído de sua própria lista de encerramento. Painéis
+internos são preservados, e ocultar outros respeita o desktop ativo e PiP.
+
+Os IDs selecionados são emprestados a `Session.app_command`, sem serialização
+intermediária. Cada comando publica no máximo uma revisão após a mutação inteira,
+inclusive ao ciclar para trás. `WindowState` guarda os IDs ocultados por desktop;
+restaurar ignora janelas fechadas ou transferidas para outro desktop e não
+restaura as que já estavam minimizadas antes. Fechar um desktop recolhe sua
+memória. O histórico MRU continua seguindo o resultado final do comando.
+
+O adaptador JS envia ação, direção e identidade opcional. O controlador reutiliza
+os metadados já armazenados; nenhum pedido leva listas de janelas ou grupos.
+A resposta ainda contém o delta habitual de `WindowState`, aplicado pelo SDK
+para manter a interface React restante. Portanto, esta entrega retira as regras
+e a memória desses comandos do JS, mas não elimina o espelho nem seu retorno JSON.
+`appGroup`, apresentação dos menus e encerramento continuam pendentes.
+
+`window_commands_runtime` executa os comandos e o atalho de ocultação no
+compositor real, com espelho desatualizado, janelas recém-criadas, remoção,
+transferência de desktop, grupos Linux, painéis e cache de metadados.
+O CI GPU=1 exige quatro cenários em claro/escuro e 640/1000 px, publicando
+`axia-window-commands`; evidências locais em `build/validation/window-commands/`.
+
+Validação local: 517 testes aprovados e sete ignorados na biblioteca da shell,
+incluindo quatro novos testes de comandos; os 13 do app Forçar encerramento
+também passaram. Passaram os quatro cenários gráficos
+novos, oito do alternador, quatro de Forçar encerramento e dois contratos LPK.
+Compositor e frontend recompilados; o contrato offline do alternador passou na
+instalação preparada para RPM. RPM completo e medições físicas ficam pendentes.
 
 ## Verificação
 

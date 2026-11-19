@@ -179,6 +179,9 @@ function run(op, ...args) {
   if (r.state) apply(r.state);
   return r.result;
 }
+// Native session commands mutate the same owner and return its usual delta.
+// No mirror list is sent back into Rust to decide which windows to change.
+export function applyNativeWindowState(reply) { if (reply.state) apply(reply.state); }
 
 // Is window `w` on desktop `d` (the one showing, without d)? Picture-in-picture is on all of them.
 export const onDesktopOf = (w, d) => !!w && !!windowViews.get().sets.desk.get(d ?? activeDesktop.get())?.has(w.id);

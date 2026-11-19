@@ -22,6 +22,7 @@ use axia_app_reminders as reminders_app;
 use axia_app_contacts as contacts_app;
 use axia_app_calendar as calendar_app;
 mod native_apps_host;
+mod app_control;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;
 use axia_app_notes as notes_app;

@@ -108,6 +108,17 @@ jobs:
         env:
           AXIA_NATIVE_FOCUS_OUTPUT: ${{ runner.temp }}/axia-native-focus
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_focus_runtime -- --ignored --nocapture
+      - name: Rust session window commands and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_WINDOW_COMMANDS_OUTPUT: ${{ runner.temp }}/axia-window-commands
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test window_commands_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-window-commands
+          path: ${{ runner.temp }}/axia-window-commands/
+          if-no-files-found: warn
       - name: Rust native switcher integration and captures
         if: matrix.gpu == 1
         env:

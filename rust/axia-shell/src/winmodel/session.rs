@@ -178,11 +178,12 @@ pub struct WindowState {
     clock: u64,
     sent: u64,
     recent: Vec<String>,
+    hidden_by_desktop: std::collections::BTreeMap<i64, Vec<String>>,
 }
 
 impl Default for WindowState {
     fn default() -> Self {
-        WindowState { wins: Vec::new(), desktops: vec![FIRST_DESKTOP], active: FIRST_DESKTOP, overview: false, seq: 2, clock: 0, sent: 0, recent: Vec::new() }
+        WindowState { wins: Vec::new(), desktops: vec![FIRST_DESKTOP], active: FIRST_DESKTOP, overview: false, seq: 2, clock: 0, sent: 0, recent: Vec::new(), hidden_by_desktop: Default::default() }
     }
 }
 
@@ -655,7 +656,7 @@ impl WindowState {
 
     /// Runs one rule: `args` [facts, op arguments…]. Returns { result, state } (state: the snapshot,
     /// only when something changed or was asked for).
-    fn call(&mut self, op: &str, args: &[Value]) -> Result<(Value, bool), String> {
+    fn call(&mut self, op: &str, args: &[Value], control: Option<(AppCommand, &[&str])>) -> Result<(Value, bool), String> {
         let facts = Facts::from_value(args.first().unwrap_or(&Value::Null));
         let a = |i: usize| args.get(i + 1).unwrap_or(&Value::Null);
         let before = self.wins.clone();
@@ -663,6 +664,10 @@ impl WindowState {
         let win = |s: &Self| a(0).as_str().and_then(|id| s.find(id));
         let mut result = Value::Null;
         match op {
+            "appControl" => {
+                let (command, ids) = control.ok_or("appControl requires a native owner")?;
+                self.app_command(command, ids);
+            }
             "state" => {}
             // the mirror lost track: everything again, in full
             "resync" => self.sent = 0,
@@ -846,6 +851,7 @@ impl WindowState {
             _ => return Err(format!("unknown window op '{op}'")),
         }
         self.stamp(&before);
+        self.hidden_by_desktop.retain(|desktop, _| self.desktops.contains(desktop));
         let changed = self.wins.len() != before.len()
             || self.wins.iter().zip(&before).any(|(w, b)| w.id() != b.id() || w.rev != b.rev)
             || self.desktops != desktops || self.active != active || self.overview != overview;
@@ -883,7 +889,7 @@ impl axia_native::windows::WindowSource for WindowReader {
 
 /// The authoritative model lives in a typed observable store. The JSON response
 /// below remains the transitional JS/LPK adapter; native consumers use `reader`.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Session {
     state: Store<WindowState>,
 }
@@ -892,10 +898,64 @@ impl Session {
     pub fn reader(&self) -> Reader<WindowState> { self.state.reader() }
 
     pub fn call(&mut self, op: &str, args: &[Value]) -> Result<Value, String> {
-        self.state.update(|state| match state.call(op, args) {
+        self.state.update(|state| match state.call(op, args, None) {
             Ok((reply, changed)) => (Ok(reply), changed),
             Err(error) => (Err(error), false),
         })
+    }
+
+    /// Typed native mutation. The response only updates the transitional SDK mirror;
+    /// selection and grouping do not travel through JavaScript.
+    pub fn app_command(&mut self, command: AppCommand, ids: &[&str]) -> Result<Value, String> {
+        self.state.update(|state| match state.call("appControl", &[], Some((command, ids))) {
+            Ok((reply, changed)) => (Ok(reply), changed),
+            Err(error) => (Err(error), false),
+        })
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop }
+
+impl WindowState {
+    fn app_command(&mut self, command: AppCommand, ids: &[&str]) {
+        match command {
+            AppCommand::Cycle(back) => {
+                let mine: Vec<_> = self.wins.iter().filter(|w| ids.contains(&w.id()) && !w.on("minimized") && self.here(w))
+                    .map(|w| w.id().to_owned()).collect();
+                if mine.len() < 2 { return; }
+                if back {
+                    if let Some(top) = self.focused_window().and_then(|id| self.find(id)) {
+                        let window = self.wins.remove(top);self.wins.insert(0, window);
+                    }
+                    self.focus(&mine[mine.len()-2]);
+                } else { self.focus(&mine[0]); }
+            }
+            AppCommand::Hide | AppCommand::HideOthers => {
+                let active = self.active;
+                for w in &mut self.wins {
+                    if ids.contains(&w.id()) && (!matches!(command, AppCommand::HideOthers) || w.on("pip") || w.desktop() == active) {
+                        w.set("minimized", Value::Bool(true));
+                    }
+                }
+            }
+            AppCommand::ShowAll => {
+                let ids: Vec<_> = self.wins.iter().filter(|w| w.on("minimized")).map(|w| w.id().to_owned()).collect();
+                for id in ids { self.raise_unless_top(&id); }
+            }
+            AppCommand::ToggleDesktop => {
+                let visible: Vec<_> = self.wins.iter().filter(|w| ids.contains(&w.id()) && !w.on("minimized") && !w.on("pip") && self.here(w))
+                    .map(|w| w.id().to_owned()).collect();
+                if visible.is_empty() {
+                    for id in self.hidden_by_desktop.remove(&self.active).unwrap_or_default() {
+                        if self.find(&id).is_some_and(|i| self.wins[i].desktop() == self.active) { self.raise_unless_top(&id); }
+                    }
+                } else {
+                    for id in &visible { if let Some(i) = self.find(id) { self.wins[i].set("minimized", Value::Bool(true)); } }
+                    self.hidden_by_desktop.insert(self.active, visible);
+                }
+            }
+        }
     }
 }
 

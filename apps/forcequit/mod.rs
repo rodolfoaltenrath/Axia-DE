@@ -91,7 +91,7 @@ fn pretty_id(id: &str) -> String {
 
 /// Metadata comes from the shared app catalog; window membership and handles
 /// come only from the borrowed authoritative model, never the JS mirror.
-fn native_groups(source: &dyn WindowSource, input: &Value) -> Vec<Group> {
+fn native_groups(source: &dyn WindowSource, input: &Value, include_forcequit: bool) -> Vec<Group> {
     let registry: BTreeMap<_, _> = input["registry"].as_array().into_iter().flatten()
         .map(|app| (s(app, "id"), app)).collect();
     let catalog = input["catalog"].as_array().map(Vec::as_slice).unwrap_or(&[]);
@@ -99,7 +99,7 @@ fn native_groups(source: &dyn WindowSource, input: &Value) -> Vec<Group> {
     source.visit(&mut |w: WindowRef<'_>| {
         let linux = w.id.starts_with("linux#");
         let app = registry.get(w.app).copied().unwrap_or(&Value::Null);
-        if w.id.is_empty() || w.app == "forcequit" || (!linux && app["builtin"] == true) { return; }
+        if w.id.is_empty() || (!include_forcequit && w.app == "forcequit") || (!linux && app["builtin"] == true) { return; }
         let app_id = s(w.args, "appId");
         let package = registry.get(app_id).copied().filter(|app| app["package"] == true || app["isolated"] == true);
         let desktop = catalog.iter().find(|app| s(app, "kind") == "linux" &&
@@ -136,6 +136,11 @@ fn native_groups(source: &dyn WindowSource, input: &Value) -> Vec<Group> {
     sorted_groups(groups)
 }
 impl App {
+    /// Window-management commands also operate on the Force Quit window itself.
+    /// Keep their projection separate from the panel's selection/execution state.
+    pub fn command_groups(&self) -> Vec<Group> {
+        self.source.as_ref().map_or_else(Vec::new, |source| native_groups(source.as_ref(), &self.metadata, true))
+    }
     /// Native consumers share membership and metadata policy without JSON summaries.
     pub fn native_groups(&mut self, input: &Value) -> &[Group] {
         self.refresh(input);
@@ -147,7 +152,7 @@ impl App {
     fn refresh(&mut self, input: &Value) {
         self.groups = if let Some(source) = &self.source {
             let facts = if input["registry"].is_array() { input } else { &self.metadata };
-            let groups = native_groups(source.as_ref(), facts);
+            let groups = native_groups(source.as_ref(), facts, false);
             self.revision = Some(source.revision());
             groups
         } else { groups(&input["windows"]) };

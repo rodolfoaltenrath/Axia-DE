@@ -1,0 +1,232 @@
+//! Session commands borrow native groups and mutate their context's window owner.
+use crate::winmodel::{AppCommand, Session, WindowReader};
+use serde_json::{json, Value};
+use std::rc::Rc;
+
+#[derive(Default)]
+pub struct Controller {
+    app: crate::forcequit::App,
+    windows: Option<Session>,
+}
+impl Controller {
+    pub fn new(windows: Session) -> Self {
+        let app = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.reader())));
+        Self {
+            app,
+            windows: Some(windows),
+        }
+    }
+    pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] != "windowCommand" {
+            return self.app.request(input);
+        }
+        let command = match input["action"].as_str() {
+            Some("cycle") => AppCommand::Cycle(input["back"] == true),
+            Some("hide") => AppCommand::Hide,
+            Some("hideOthers") => AppCommand::HideOthers,
+            Some("showAll") => AppCommand::ShowAll,
+            Some("desktop") => AppCommand::ToggleDesktop,
+            _ => return json!({"error":"app.invalidRequest"}),
+        };
+        let Some(windows) = &mut self.windows else {
+            return json!({"error":"app.invalidRequest"});
+        };
+        let reader = windows.reader();
+        let state = reader.read();
+        let id = if matches!(command, AppCommand::Cycle(_)) {
+            state.focused_window()
+        } else {
+            input["id"].as_str().or_else(|| state.focused_window())
+        };
+        let groups = self.app.command_groups();
+        let selected = groups
+            .iter()
+            .find(|group| group.windows.iter().any(|w| Some(w.id.as_str()) == id));
+        if matches!(
+            command,
+            AppCommand::Cycle(_) | AppCommand::Hide | AppCommand::HideOthers
+        ) && selected.is_none()
+        {
+            return json!({"result":null,"state":null});
+        }
+        let ids: Vec<_> = groups
+            .iter()
+            .filter(|group| match command {
+                AppCommand::Cycle(_) | AppCommand::Hide => {
+                    selected.is_some_and(|selected| selected.key == group.key)
+                }
+                AppCommand::HideOthers => {
+                    selected.is_some_and(|selected| selected.key != group.key)
+                }
+                _ => true,
+            })
+            .flat_map(|group| group.windows.iter().map(|w| w.id.as_str()))
+            .collect();
+        drop(state);
+        windows
+            .app_command(command, &ids)
+            .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn call(session: &mut Session, op: &str, args: Vec<Value>) {
+        session.call(op, &[vec![json!({})], args].concat()).unwrap();
+    }
+    fn controller(session: &Session) -> Controller {
+        let mut controller = Controller::new(session.clone());
+        assert_eq!(controller.request(&json!({"cmd":"metadata","registry":[
+            {"id":"notes"},{"id":"calculator"},{"id":"panel","builtin":true},
+            {"id":"linux","builtin":true},{"id":"forcequit"}],
+            "catalog":[{"id":"desktop:term","kind":"linux","desktopId":"org.term","wmClass":"Terminal"}]}))["ok"], true);
+        controller
+    }
+    fn command(controller: &mut Controller, action: &str, id: &str, back: bool) -> Value {
+        controller.request(
+            &json!({"cmd":"windowCommand","action":action,"id":id,"back":back,
+            "windows":[{"id":"forged","app":"notes"}]}),
+        )
+    }
+    #[test]
+    fn cycles_grouped_windows_in_one_commit_with_the_context_owner() {
+        let mut session = Session::default();
+        for id in ["a", "b", "c"] {
+            call(
+                &mut session,
+                "open",
+                vec![json!({"app":"notes","instance":id})],
+            );
+        }
+        call(&mut session, "setDesktops", vec![json!([1, 2]), json!(1)]);
+        call(
+            &mut session,
+            "open",
+            vec![json!({"app":"notes","instance":"away","desktop":2})],
+        );
+        call(
+            &mut session,
+            "open",
+            vec![json!({"app":"notes","instance":"hidden"})],
+        );
+        call(&mut session, "minimize", vec![json!("notes#hidden")]);
+        let mut control = controller(&session);
+        let reader = session.reader();
+        let revision = reader.revision();
+        command(&mut control, "cycle", "stale", false);
+        assert_eq!(reader.read().focused_window(), Some("notes#a"));
+        assert_eq!(reader.revision(), revision + 1);
+        command(&mut control, "cycle", "", true);
+        assert_eq!(reader.read().focused_window(), Some("notes#c"));
+        assert_eq!(reader.revision(), revision + 2);
+        assert!(reader.read().window("notes#hidden").unwrap().minimized());
+        let other = Session::default();
+        assert_eq!(other.reader().read().windows().count(), 0);
+        drop(session);
+        command(&mut control, "hide", "notes#c", false);
+        assert!(reader.read().window("notes#away").unwrap().minimized());
+    }
+    #[test]
+    fn linux_classes_share_a_group_and_unrelated_unknown_apps_do_not() {
+        let mut session = Session::default();
+        for (id, app_id) in [
+            (1, "org.term"),
+            (2, "Terminal"),
+            (3, "unknown"),
+            (4, "Terminal"),
+        ] {
+            call(
+                &mut session,
+                "open",
+                vec![json!({"app":"linux","instance":id,"args":{"appId":app_id}})],
+            );
+        }
+        let mut control = controller(&session);
+        command(&mut control, "cycle", "", false);
+        assert_eq!(session.reader().read().focused_window(), Some("linux#1"));
+        command(&mut control, "hide", "linux#2", false);
+        let reader = session.reader();
+        let state = reader.read();
+        assert!([1, 2, 4]
+            .iter()
+            .all(|id| state.window(&format!("linux#{id}")).unwrap().minimized()));
+        assert!(!state.window("linux#3").unwrap().minimized());
+    }
+    #[test]
+    fn hide_others_respects_desktops_and_panels_and_show_all_restores_minimized() {
+        let mut session = Session::default();
+        call(&mut session, "setDesktops", vec![json!([1, 2]), json!(1)]);
+        for input in [
+            json!({"app":"notes"}),
+            json!({"app":"calculator"}),
+            json!({"app":"panel"}),
+            json!({"app":"notes","instance":"away","desktop":2}),
+            json!({"app":"forcequit"}),
+        ] {
+            call(&mut session, "open", vec![input]);
+        }
+        let mut control = controller(&session);
+        command(&mut control, "hideOthers", "notes", false);
+        let reader = session.reader();
+        {
+            let state = reader.read();
+            assert!(state.window("calculator").unwrap().minimized());
+            assert!(state.window("forcequit").unwrap().minimized());
+            assert!(!state.window("notes").unwrap().minimized());
+            assert!(!state.window("panel").unwrap().minimized());
+            assert!(!state.window("notes#away").unwrap().minimized());
+        }
+        command(&mut control, "showAll", "", false);
+        assert!(reader.read().windows().all(|w| !w.minimized()));
+        command(&mut control, "hide", "notes", false);
+        assert!(reader.read().window("notes#away").unwrap().minimized());
+    }
+    #[test]
+    fn show_desktop_remembers_only_its_own_windows_and_ignores_closed_or_moved_members() {
+        let mut session = Session::default();
+        call(&mut session, "setDesktops", vec![json!([1, 2]), json!(1)]);
+        for input in [
+            json!({"app":"notes"}),
+            json!({"app":"calculator"}),
+            json!({"app":"panel"}),
+            json!({"app":"notes","instance":"away","desktop":2}),
+        ] {
+            call(&mut session, "open", vec![input]);
+        }
+        call(&mut session, "minimize", vec![json!("calculator")]);
+        let mut control = controller(&session);
+        command(&mut control, "desktop", "", false);
+        let reader = session.reader();
+        assert!(reader.read().window("notes").unwrap().minimized());
+        assert!(!reader.read().window("panel").unwrap().minimized());
+        call(&mut session, "setActiveDesktop", vec![json!(2)]);
+        command(&mut control, "desktop", "", false);
+        command(&mut control, "desktop", "", false);
+        assert!(!reader.read().window("notes#away").unwrap().minimized());
+        call(&mut session, "setActiveDesktop", vec![json!(1)]);
+        command(&mut control, "desktop", "", false);
+        assert!(!reader.read().window("notes").unwrap().minimized());
+        assert!(reader.read().window("calculator").unwrap().minimized());
+        command(&mut control, "desktop", "", false);
+        call(
+            &mut session,
+            "moveToDesktop",
+            vec![json!("notes"), json!(2)],
+        );
+        command(&mut control, "desktop", "", false);
+        assert!(reader.read().window("notes").unwrap().minimized());
+        call(&mut session, "close", vec![json!("notes")]);
+        command(&mut control, "desktop", "", false);
+        let revision = reader.revision();
+        command(&mut control, "hide", "missing", false);
+        command(&mut control, "cycle", "", false);
+        assert_eq!(reader.revision(), revision);
+        assert_eq!(
+            Controller::default().request(&json!({"cmd":"windowCommand","action":"showAll"}))
+                ["error"],
+            "app.invalidRequest"
+        );
+        assert!(session.call("appControl", &[]).is_err());
+    }
+}

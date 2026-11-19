@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 use axia_app_pdf as pdf_model;
 pub enum NativeApp {
-    Control(crate::forcequit::App),
+    Control(crate::app_control::Controller),
     Settings(crate::settings_model::Model),
     Terminal,
     Passwords,
@@ -72,8 +72,7 @@ pub unsafe extern "C" fn axia_native_app_new_windows(
         return std::ptr::null_mut();
     }
     crate::native_view::install_services();
-    let source = std::rc::Rc::new(crate::winmodel::WindowReader((*windows).reader()));
-    Box::into_raw(Box::new(NativeApp::Control(crate::forcequit::App::with_windows(source))))
+    Box::into_raw(Box::new(NativeApp::Control(crate::app_control::Controller::new((*windows).clone()))))
 }
 #[no_mangle]
 pub unsafe extern "C" fn axia_native_app_free(app: *mut NativeApp) {
