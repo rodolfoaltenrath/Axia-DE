@@ -362,8 +362,8 @@ adaptador fornece os pares ordenados atuais a `memoryMerge`, que aplica as
 alterações no Rust e limita a 200 chaves. Isso preserva a ordem de uso e uma
 edição de preferências feita depois da coleta. O formato `windowPlaces` no
 disco permanece o mesmo. Configurações e sua gravação continuam no adaptador
-JS até a migração desse serviço; restauração da sessão também permanece
-pendente. Live, greeter e processos de apps isolados não ativam a coleta.
+JS até a migração desse serviço. Live, greeter e processos de apps isolados
+não ativam a coleta.
 
 Validação: 531 testes unitários da shell aprovados (sete especiais ignorados),
 13 do Forçar encerramento e 15 do núcleo nativo. Os quatro cenários de
@@ -378,6 +378,41 @@ continuam reservados ao encerramento.
 Compositor e frontend recompilados; o teste do serviço passou novamente no
 binário final. Instalação temporária e `switcher-check` com os arquivos
 instalados aprovados.
+
+## Restauração da sessão
+
+`session_restore.rs` guarda o serviço no contexto `Session`, compartilhado
+entre controlador e view. O serviço retém somente um leitor do modelo;
+remontar a view ou trocar o idioma não repete a inicialização. Snapshot,
+deduplicação, fila, geometria, desktops e associação de novas superfícies
+Linux usam esse leitor, sem transportar a lista de janelas pelo JS.
+
+O Rust controla os prazos: início de 1,5 s, abertura a cada 450 ms, espera de
+10 s antes de retomar a coleta, autosave agrupado de 2 s e validade de 90 s
+para posições de superfícies externas. A lista validada limita-se a 12
+janelas e aos argumentos permitidos por app. O serviço também decide os
+marcadores de saída, o congelamento antes de fechar apps e a retomada após
+cancelar uma saída. A revisão das preferências impede que fatos atrasados
+da view reativem uma opção recém-desligada no controlador.
+
+`session_restore_view.rs` desenha a confirmação e trata Enter/Escape. O
+adaptador `sdk/sessionrestore.jsx` persiste preferências, abre apps, aplica
+efeitos ao espelho legado e executa a ação fechada de política de navegador.
+Mantém apenas um booleano de apresentação para a camada modal; a interface
+oculta não bloqueia o teclado e a visível libera o foco de campos inferiores.
+Configurações, efeitos e espelho JS ainda aguardam as próximas etapas.
+
+Validação desta entrega: 539 testes unitários da shell aprovados (sete
+especiais ignorados) e quatro contratos LPK. `session_restore_runtime` usa
+o compositor real em claro/escuro e 640/1000 px: confirmação com campo
+inferior focado, remontagem, aceitação/recusa, exclusão de duplicatas,
+associação de superfícies, autosave com espelho parado, saída, retomada e
+desativação. O CI GPU=1 exige o teste e publica `axia-session-restore`.
+Também passaram os quatro cenários de cada regressão de foco, indicador de
+desktops e memória de posições. Compositor e frontend recompilados,
+instalação temporária e `switcher-check` aprovados. Capturas e logs locais:
+`build/validation/session-restore/`. Medições físicas e RPM completo
+permanecem para o encerramento do roadmap.
 
 ## Verificação
 

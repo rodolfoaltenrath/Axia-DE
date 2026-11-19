@@ -61,6 +61,9 @@ function load() {
 }
 
 export const settings = createStore(load());
+let preferenceRevision = 0;
+export const settingsRevision = () => preferenceRevision;
+settings.subscribe(() => { preferenceRevision++; });
 // Developer timing (settings.json "debugTiming": true, no UI): opening an app logs how long its
 // first window took (sdk/components.jsx AppHost, sdk/packages.js isolatedApp, docs/PRIVACY.md).
 globalThis.__lordTiming = !!settings.get().debugTiming;

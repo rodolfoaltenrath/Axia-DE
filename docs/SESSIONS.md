@@ -349,15 +349,16 @@ Settings → Session → **Reopen windows when you log in**: Always (the default
 | Power cut, crash, `SIGKILL` | asks ("did not shut down properly") | asks | nothing |
 | Everything was closed | clean desktop | clean desktop | clean desktop |
 
-**What is saved.** `sdk/sessionrestore.jsx` keeps a debounced snapshot of the windows store (2 s, only when it
-changed) in `settings.sessionSaved`, in `settings.json`, which is already on `lord.fs`'s deny list; no new file.
+**What is saved.** `rust/axia-shell/src/session_restore.rs` observes the native window owner and keeps a
+debounced snapshot (2 s, only when it changed). The `sdk/sessionrestore.jsx` adapter persists its effect in
+`settings.sessionSaved`, in `settings.json`, which is already on `lord.fs`'s deny list; no new file.
 That write and the logout's are `lord.settings.save(text, true)`: fsynced, file and folder, because they must
-survive the power cut they are for. Each entry is a typed Dock id (`dockIdOfWindow`), a frame, maximized,
+survive the power cut they are for. Each entry is a typed Dock id (the shared native Dock identity), a frame, maximized,
 minimized and the snap zone; never an Exec line, argv, environment, pid, title or a Linux app's document. A
-LordOS app's `args` are kept only for the fields listed per app in `sdk/sessionmodel.js`, without `nonce`. Left
+Axia app's `args` are kept only for the fields listed per app in `rust/axia-shell/src/launcher/session_model.rs`, without `nonce`. Left
 out: windows with no `.desktop`, hidden apps, Force Quit, About This App, the installer, the sandbox probe,
 Screenshots' editor, picture-in-picture. The file can be written by any program the user runs, so the list is
-validated again when it is read, the same rules (`server/tests/session_model_test.mjs`).
+validated again when it is read. Rust unit tests and `rust/xtask/tests/session_restore_runtime.rs` verify these rules.
 
 **The marker.** `sessionSaved.clean` is false from the moment a session starts. It turns true in `flushSession()`
 (`session.quit`, Search's Log Out, the power dialog before it asks lord-sessiond; a refusal undoes it) or in
@@ -370,10 +371,15 @@ without leaving the loop (seen on VM 125: gone in under 300 ms, nothing written)
 the main thread's signalfd, so every signal stop runs the normal end of a session, including `term_shutdown`.
 
 **Coming back.** Up to 12 windows, 450 ms apart, through the Dock's own path (`launchDockItem`: `launchApp`,
-`lord.apps.launchPackage`, `lord.apps.launch(desktop id)`). A LordOS app opens with `wm.open` and its frame. A
+`lord.apps.launchPackage`, `lord.apps.launch(desktop id)`). An Axia app opens with `wm.open` and its frame. A
 Linux window is a new process, so its saved frame waits by Dock id and the first new window of that app takes it
 (90 s at most). What is already open is not opened twice (Open at Login, the Terminal's live sessions). The
 window that was in front ends in front. Nothing runs on a live system, the login screen or in an isolated app.
+
+The native service belongs to the session context and survives prompt/locale remounts. Rust owns the queue,
+deadlines, claims, duplicate checks and confirmation UI (including Enter/Escape); JS performs launch and save
+effects. Collection resumes after a 10 s settling period. The hidden service does not occupy the modal layer;
+showing the question clears text focus below it. See [STATE-RUST.md](STATE-RUST.md) for the remaining adapters.
 
 **At the end of a session** `wl_close_all()` sends every window `xdg_toplevel.close` (or `WM_DELETE_WINDOW`) and
 waits up to 3 s for those apps to leave, before `wl_stop()`. Without it a browser records a crash. An app that

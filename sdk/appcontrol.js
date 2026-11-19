@@ -114,6 +114,7 @@ function windowCommand(command) {
 export function arrangeWindowMenu(id, layout) { windowCommand({ action: 'arrange', id, layout, facts: windowModelFacts() }); }
 export function bringAllWindows(id) { windowCommand({ action: 'bringAll', id }); }
 export function rememberWindowFrame(input) { return controlRequest({ cmd: 'memoryFrame', ...input }).frame || null; }
+export function sessionRestoreRequest(input) { return controlRequest({ cmd: 'sessionRestore', ...input }); }
 export function runningApps() {
   const snapshot = windows.get(), byId = new Map(snapshot.map(w => [String(w.id), w]));
   // Legacy JS callers still consume mirror objects. Native consumers use IDs

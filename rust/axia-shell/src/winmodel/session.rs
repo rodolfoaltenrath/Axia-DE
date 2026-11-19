@@ -892,9 +892,13 @@ impl axia_native::windows::WindowSource for WindowReader {
 #[derive(Clone, Default)]
 pub struct Session {
     state: Store<WindowState>,
+    restore: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>>,
 }
 
 impl Session {
+    pub(crate) fn restore_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>> {
+        self.restore.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::session_restore::Service::new(self.reader())))).clone()
+    }
     pub fn reader(&self) -> Reader<WindowState> { self.state.reader() }
 
     pub fn call(&mut self, op: &str, args: &[Value]) -> Result<Value, String> {
@@ -918,11 +922,15 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), AddDesktopAndShow, CloseActiveDesktop }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), AddDesktopAndShow, CloseActiveDesktop, PrepareDesktops(usize, Option<usize>) }
 
 impl WindowState {
     fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) -> Value {
         match command {
+            AppCommand::PrepareDesktops(index, active) => {
+                while self.desktops.len() <= index.min(MAX_DESKTOPS-1) { self.create_desktop(); }
+                if let Some(active) = active { if let Some(id) = self.desktops.get(active.min(MAX_DESKTOPS-1)) { self.active = *id; } }
+            }
             AppCommand::StepDesktop(step) => {
                 let target = self.desktops.iter().position(|id| *id == self.active)
                     .and_then(|i| (i as i64).checked_add(step))
@@ -1019,6 +1027,14 @@ impl Window<'_> {
     pub fn snapped(&self) -> Option<&str> { self.0.data.get("snapped").and_then(Value::as_str) }
     pub fn revision(&self) -> u64 { self.0.rev }
     pub fn args(&self) -> &Value { self.0.data.get("args").unwrap_or(&Value::Null) }
+    pub fn session_geometry(&self) -> Option<(Rect, bool, Option<&str>)> {
+        let osk=self.0.data.get("oskFrame").and_then(Value::as_object);
+        let field=|key:&str|osk.and_then(|o|o.get(key)).or_else(||self.0.data.get(key)).unwrap_or(&Value::Null);
+        let snapped=field("snapped").as_str().filter(|s|!s.is_empty());
+        let frame=if snapped.is_some() && truthy(field("restore")) {Rect::from_value(field("restore"))?}
+            else {Rect::new(field("x").as_f64()?,field("y").as_f64()?,field("w").as_f64()?,field("h").as_f64()?)};
+        Some((frame,truthy(field("maximized")),snapped))
+    }
     pub fn place_on(&self, display: &Value) -> Value { super::place::place_fields(|key|self.0.data.get(key).unwrap_or(&Value::Null),display) }
     pub fn placement_frame(&self) -> Rect {
         if self.snapped().is_some() { self.0.data.get("restore").and_then(Rect::from_value).unwrap_or_else(||self.frame()) }

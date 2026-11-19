@@ -24,6 +24,7 @@ use axia_app_calendar as calendar_app;
 mod native_apps_host;
 mod app_control;
 mod window_memory;
+mod session_restore;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;
 use axia_app_notes as notes_app;

@@ -39,7 +39,7 @@ fn parse(id: &Value) -> Option<(&str, &str)> {
 }
 /// The (kind, key) of a typed dock id, for the session rules.
 #[allow(dead_code)] // the Dock's node example does not include the session model
-pub(super) fn parse_id(id: &Value) -> Option<(&str, &str)> {
+pub(crate) fn parse_id(id: &Value) -> Option<(&str, &str)> {
     parse(id)
 }
 

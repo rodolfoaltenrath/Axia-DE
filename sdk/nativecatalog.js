@@ -6,7 +6,7 @@ import { createFactsStore } from './nativeviewfacts.js';
 
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
   desktopId: app.desktopId, wmClass: app.wmClass, mimeTypes: app.mimeTypes,
-  builtin: !!app.builtin, shortName: app.kind === 'linux' ? shortAppName(app) : undefined,
+  builtin: !!app.builtin, hidden: !!app.hidden, live: !!app.live, shortName: app.kind === 'linux' ? shortAppName(app) : undefined,
   comment: app.comment, description: app.description, genericName: app.genericName,
   iconPath: typeof app.icon === 'string' ? app.icon : '',
   package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
@@ -15,8 +15,8 @@ export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, ve
 
 // Only the metadata actually read by app control crosses its bounded bridge.
 function controlFacts(app) {
-  const { id, name, kind, desktopId, wmClass, builtin, shortName, package: packaged, isolated, icon, iconData } = appFacts(app);
-  return { id, name, kind, desktopId, wmClass, builtin, shortName, package: packaged, isolated, icon, iconData };
+  const { id, name, kind, desktopId, wmClass, builtin, hidden, live, shortName, package: packaged, isolated, icon, iconData } = appFacts(app);
+  return { id, name, kind, desktopId, wmClass, builtin, hidden, live, shortName, package: packaged, isolated, icon, iconData };
 }
 let visible, control;
 export function nativeCatalogFacts(appControl = false) {

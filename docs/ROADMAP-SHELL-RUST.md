@@ -331,12 +331,16 @@ views nativas lerem direto, sem JSON.
       Avançar/voltar, criar e mostrar, e fechar o desktop ativo também escolhem
       os alvos no proprietário Rust, com uma revisão por comando. Atalhos
       encaminham somente a intenção; não enviam lista ou desktop ativo.
-      Animação, persistência e restauração ainda usam adaptadores JS.
+      Animação e persistência dos desktops ainda usam adaptadores JS.
       A memória de geometria (`windowmemory.js`) também coleta posições e
       conta instâncias diretamente do modelo Rust, com prazo e deduplicação
       nativos. Mesclagem ordenada e limite de 200 apps ficam no Rust; o
       adaptador fornece metadados e persiste as preferências existentes.
-      A restauração da sessão continua pendente.
+      Restauração também pertence ao serviço Rust do contexto: snapshot por
+      assinatura, prazos, plano de abertura, posições, confirmação nativa e
+      marcadores de saída. Remontar a interface não reinicia o serviço.
+      O adaptador ainda grava preferências, abre apps e executa a política
+      de navegador; animação e persistência dos desktops continuam pendentes.
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
 - [ ] Notificações, relógio e alarmes (`notify.js`, `alarms.js`).
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
@@ -384,7 +388,9 @@ Fatias de interface (cada uma completa, com seus chamadores):
       Arquivos (`sdk/rustfiles.js`): preservar callbacks de abrir/salvar/pasta,
       múltipla seleção e a sessão dona dos trabalhos de transferência. O
       navegador já é nativo; isso não conclui os diálogos compartilhados.
-- [ ] Emoji, aviso de restauração de sessão, pré-visualizações da Dock.
+- [x] Aviso de restauração de sessão: interface e teclado nativos, com serviço
+      persistente no contexto e bloqueio de entrada somente enquanto visível.
+- [ ] Emoji e pré-visualizações da Dock.
 
 ## Fase 4: o tema
 
@@ -508,3 +514,4 @@ mostraram.
 | 2026-11-19 | Fase 2: indicador de desktop e prazo nativos | `16ebe870` | Eliminados store e timer JS do indicador. Fonte tipada, legenda, pontos e prazo monotônico de 800 ms no host; sem polling oculto. 526 testes unitários, quatro cenários gráficos e três contratos LPK aprovados. Animação e restauração permanecem pendentes. |
 | 2026-11-19 | Fase 2: navegação e ciclo de vida dos desktops no proprietário Rust | `8058267b` | Avançar/voltar, criar e mostrar, fechar o ativo consultam o estado atual sem lista/seleção JS nos pedidos. Uma revisão por operação, limites sem mutação e destino das janelas preservados. 527 testes unitários, quatro contratos LPK e integrações do indicador/comandos de janela aprovados; instalação e alternador instalado verificados. Persistência, restauração e demais serviços ainda pendentes; medições físicas reservadas ao encerramento. |
 | 2026-11-19 | Fase 2: memória de geometria lê o proprietário Rust | Commit desta linha | Coleta, prazo de 800 ms, deduplicação, identidade, contagem de instâncias e mesclagem ordenada limitadas a 200 apps no Rust. Retirados timer e leitura/assinatura do espelho JS dessa função; adaptador ainda persiste preferências. 531 testes unitários da shell, quatro cenários reais com acesso ao espelho bloqueado, quatro contratos LPK e regressões aprovados. Restauração e migração das configurações continuam pendentes. |
+| 2026-11-19 | Fase 2: serviço e confirmação da restauração no Rust | Commit desta linha | Snapshot nativo, fila, prazos, geometria, desktops, claims e marcadores pertencem ao contexto; remontagem não reinicia o serviço. Adaptador executa abertura, gravação e política de navegador. 539 testes unitários, quatro contratos LPK e 16 cenários gráficos de restauração/foco/indicador/memória passaram; instalação temporária e switcher-check aprovados. Configurações, efeitos e demais consumidores JS continuam pendentes; medições físicas no encerramento. |

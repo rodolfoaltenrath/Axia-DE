@@ -26,6 +26,11 @@ impl Controller {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "sessionRestore" {
+            let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
+            let service=windows.restore_service();
+            return service.borrow_mut().command(windows,self.app.metadata(),input,std::time::Instant::now());
+        }
         if input["cmd"] == "memoryMerge" {
             return if self.windows.is_some() {
                 crate::window_memory::merge(&input["places"], &input["updates"])

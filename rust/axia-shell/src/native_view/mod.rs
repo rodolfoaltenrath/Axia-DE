@@ -201,12 +201,12 @@ pub unsafe extern "C" fn axia_view_mount_windows(
     node: i32, id: *const c_char, facts: *const c_char,
     windows: *const crate::winmodel::Session,
 ) -> u32 {
-    let reader = windows.as_ref().map(crate::winmodel::Session::reader);
-    mount(node, text(id), facts, reader)
+    mount(node, text(id), facts, windows.as_ref().cloned())
 }
 
 unsafe fn mount(node: i32, id: &str, facts: *const c_char,
-    windows: Option<axia_state::Reader<crate::winmodel::WindowState>>) -> u32 {
+    owner: Option<crate::winmodel::Session>) -> u32 {
+    let windows=owner.as_ref().map(crate::winmodel::Session::reader);
     let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
     let app = if id == "shell:titlebar" {
         windows.clone().map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
@@ -221,6 +221,8 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         windows.clone().map(|reader| Box::new(desktop_hud::DesktopHud::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:window-memory" {
         windows.clone().map(|reader| Box::new(crate::window_memory::Memory::new(reader)) as Box<dyn NativeApp>)
+    } else if id == "shell:restore" {
+        owner.map(|session| Box::new(crate::session_restore::View::new(session)) as Box<dyn NativeApp>)
     } else { app(id) };
     let Some(app) = app else {
         return 0;

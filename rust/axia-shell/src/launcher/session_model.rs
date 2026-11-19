@@ -142,7 +142,7 @@ fn fit_frame(input: &Value) -> Option<Value> {
     }))
 }
 
-pub(super) fn request(input: &Value) -> Result<Value, &'static str> {
+pub(crate) fn request(input: &Value) -> Result<Value, &'static str> {
     match input["cmd"].as_str().unwrap_or("") {
         "constants" => Ok(json!({"modes":RESTORE_MODES,"default":RESTORE_DEFAULT,"max":MAX_WINDOWS,"never":NEVER})),
         "cleanArgs" => Ok(clean_args(input["app"].as_str().unwrap_or(""), &input["args"])),

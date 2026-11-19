@@ -20,9 +20,10 @@ import { wm } from './windows.js';
 import { launchApp } from './apps.js';
 import { nativeCatalogFacts } from './nativecatalog.js';
 import { switcherBridge } from './nativeswitcher.js';
+import { restoreBridge } from './nativerestore.js';
 export { appFacts } from './nativecatalog.js';
 import { refreshPackages } from './packages.js';
-import { settings } from './settings.js';
+import { settings, settingsRevision } from './settings.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { forceQuit } from './appcontrol.js';
@@ -73,6 +74,7 @@ function runner(handle, manifest, winId, node = () => 0) {
       return;
     }
     if (manifest.id === 'shell:switcher' && !effect.host) { switcherBridge.perform?.(effect); return; }
+    if (manifest.id === 'shell:restore' && !effect.host) { restoreBridge.perform?.(effect); return; }
     // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)
     if (manifest.id === 'shell:menubar' && !effect.host) { barEffect(effect, handle); return; }
     if (effect.host) {                 // the host's own: no result goes back to the app
@@ -207,6 +209,7 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   // theme/settings/catalog strings rather than stringifying the complete facts.
   const block = (name, value) => encoder.block(name, value);
   const contextFields = { theme: block('theme', theme), windowMode: block('windowMode', windowMode),
+    ...(manifest.settings ? { preferenceRevision: block('preferenceRevision', settingsRevision()) } : {}),
     region: block('region', region), direction: block('direction', dir), localeRevision: block('localeRevision', localeRevision),
     scale: block('scale', typeScale), decimal: block('decimal', formats.decimal), group: block('group', formats.group),
     ...(manifest.facts === 'system' ? { screen: block('screen', { width: screen.width, height: screen.height }),

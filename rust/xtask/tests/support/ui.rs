@@ -60,6 +60,50 @@ pub fn run_ui_with_capture(
     image_name: &str,
     check_capture: impl FnOnce(&Path),
 ) -> Value {
+    run_ui_config(
+        repo,
+        kind,
+        driver_source,
+        mode,
+        width,
+        image_name,
+        18,
+        check_capture,
+    )
+}
+
+#[allow(dead_code)]
+pub fn run_ui_with_timeout(
+    repo: &Path,
+    kind: &str,
+    driver_source: &str,
+    mode: &str,
+    width: u32,
+    image_name: &str,
+    seconds: u64,
+) -> Value {
+    run_ui_config(
+        repo,
+        kind,
+        driver_source,
+        mode,
+        width,
+        image_name,
+        seconds,
+        |_| {},
+    )
+}
+
+fn run_ui_config(
+    repo: &Path,
+    kind: &str,
+    driver_source: &str,
+    mode: &str,
+    width: u32,
+    image_name: &str,
+    seconds: u64,
+    check_capture: impl FnOnce(&Path),
+) -> Value {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -157,7 +201,7 @@ pub fn run_ui_with_capture(
             "--headless",
             &format!("{width}x700"),
             "--timeout",
-            "18",
+            &seconds.to_string(),
             "--theme",
         ])
         .arg(&bundle)
@@ -193,7 +237,7 @@ pub fn run_ui_with_capture(
     }
     let mut session = Session(command.spawn().unwrap());
     let log_path = home.join(".cache/axia/session.log");
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + Duration::from_secs(seconds + 2);
     loop {
         let text = fs::read_to_string(&log_path).unwrap_or_default();
         if text.contains(&format!("{kind}-observation "))

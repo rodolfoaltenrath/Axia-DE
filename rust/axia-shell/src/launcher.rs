@@ -1,9 +1,9 @@
 //! Application catalog and complete menu state/widget descriptions. The host
 //! retains only rendering, callback objects and access to shared shell services.
 mod session;
-mod dock_model;
+pub(crate) mod dock_model;
 mod osk_model;
-mod session_model;
+pub(crate) mod session_model;
 mod smart_model;
 mod ui;
 mod unicode;

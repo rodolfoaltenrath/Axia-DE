@@ -263,7 +263,8 @@ function LocaleRoot({ children }) {
     at('floating', FloatingWindows),
     at('overlay', SpotlightPanel),
     at('popover', ClipboardPanel, EmojiPanel),
-    at('modal', PrintDialog, RestorePrompt),
+    at('modal', PrintDialog),
+    createElement(RestorePrompt, { key: 'restore' }),
     at('notification', NotificationBanner, ClipboardToast, DisplayIdentify),
     at('system', PermissionPrompt, Powerbox, KeyringPrompt, BluetoothPrompt, DisplayConfirm),
     at('input', OskPanel, ImeOverlay));
