@@ -88,6 +88,18 @@ jobs:
         env:
           AXIA_LAUNCHER_OUTPUT: ${{ runner.temp }}/axia-launcher
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test launcher_native_runtime -- --ignored --nocapture
+      - name: Rust title bar integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_TITLEBAR_AXIA_OUTPUT: ${{ runner.temp }}/axia-titlebar/axia
+          AXIA_TITLEBAR_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-titlebar/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test titlebar_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-titlebar
+          path: ${{ runner.temp }}/axia-titlebar
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

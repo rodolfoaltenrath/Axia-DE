@@ -72,17 +72,17 @@ import path from 'node:path';
 import { build } from 'esbuild';
 const root = process.argv[1], reports = [];
 for (const appHost of [false, true]) {
-  const result = await build({ entryPoints: [path.join(root, 'sdk/index.js')], bundle: true, write: false,
+  const result = await build({ entryPoints: [path.join(root, 'sdk/index.js'),path.join(root, 'themes/default/components/Window.jsx')], outdir: '.lpk-contract', bundle: true, write: false,
     minify: true, format: 'esm', jsx: 'automatic', metafile: true,
     external: ['react', 'react/jsx-runtime', '@lordos/runtime'],
     alias: { '@lordos/sdk': path.join(root, 'sdk/index.js') },
     define: { 'process.env.NODE_ENV': '"production"', __LORD_STANDALONE__: 'true', __AXIA_APP_HOST__: String(appHost) } });
-  const inputs = Object.values(result.metafile.outputs)[0].inputs;
-  const bytes = suffix => Object.entries(inputs).filter(([name]) => name.replaceAll('\\', '/').endsWith(suffix))
+  const inputs = Object.values(result.metafile.outputs).flatMap(output => Object.entries(output.inputs));
+  const bytes = suffix => inputs.filter(([name]) => name.replaceAll('\\', '/').endsWith(suffix))
     .reduce((total, [, input]) => total + input.bytesInOutput, 0);
   reports.push({ appHost, reactMenu: bytes('runtime/lpk/menu.jsx'), nativeMenu: bytes('sdk/nativemenu.jsx'),
     reactBanner: bytes('runtime/lpk/notifications.js'), nativeBanner: bytes('sdk/nativebanner.js'),
-    runtimeFlag: ['menuNativeView','notificationsNativeView','dockNativeView','spotlightNativeView','launcherNativeView'].some(flag => result.outputFiles[0].text.includes(flag)) });
+    runtimeFlag: result.outputFiles.some(file => ['menuNativeView','notificationsNativeView','dockNativeView','spotlightNativeView','launcherNativeView','titleBarNativeView'].some(flag => file.text.includes(flag))) });
 }
 console.log(JSON.stringify(reports));
 "#;

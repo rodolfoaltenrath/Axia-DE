@@ -1,5 +1,5 @@
-// A window's title bar drawn by the Rust native view host (native_view/titlebar.rs, the
-// "titleBarNativeView" setting) in place of the React header of a theme's Window. Lean on purpose:
+// A window's title bar drawn by the Rust native view host (native_view/titlebar.rs).
+// The shell always mounts this header for framed windows. Lean on purpose:
 // it only mounts the view, sends it the title and the colors when they change, and hands the
 // window manager's actions (drag, zoom, a light) to the theme's callbacks.
 import { createElement as h, useEffect, useLayoutEffect, useRef } from 'react';

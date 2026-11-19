@@ -211,6 +211,47 @@ leves, dois contratos e regressão de catálogo passaram. Passaram também os
 seis cenários do launcher e os quatro de cada integração de menus,
 notificações, Dock e Spotlight. Nenhum novo RPM completo foi executado.
 
+## Barra de título definitiva — 2026-11-19
+
+`Window.jsx` monta sempre `NativeTitleBar` nas janelas com moldura da shell,
+sem consultar `titleBarNativeView`. O renderer React do cabeçalho, seus estados
+de hover e a assinatura usada para escolher esse renderer foram removidos.
+Os estilos Axia e Adwaita, títulos dinâmicos, foco e callbacks do gerenciador
+permanecem. Janelas CSD e apps `ownFrame` continuam sem esse cabeçalho.
+
+Uma regressão Rust com o host real reproduziu um duplo clique num controle
+emitindo duas ações e uma maximização indevida. Cada controle agora intercepta
+o duplo clique; somente o fundo do cabeçalho executa a maximização. O teste
+também verifica que os controles não iniciam arraste e que o duplo clique no
+cabeçalho emite exatamente uma maximização.
+
+A integração abre janelas pelo gerenciador real, usa os alvos do hit test da
+cena e cobre foco, atualização do título, arraste, maximizar/restaurar pelos
+controles e por duplo clique, minimizar/reabrir, guarda contra fechamento,
+fechamento e rotas CSD/ownFrame. A captura aguarda a nova posição na cena,
+além de conferir o estado Rust. Não há substituição das ações do gerenciador
+por mocks; o fixture somente observa `beginMove` e chama sua implementação.
+Em headless o grab nativo recusa iniciar sem botão físico pressionado: essa
+coleta verifica o fallback JS sobre o modelo Rust. O grab físico fica para a
+validação final da sessão, junto das medições em hardware adiadas pelo usuário.
+
+São oito combinações dos dois estilos, claro/escuro e 640/1000 px:
+
+```text
+AXIA_TITLEBAR_AXIA_OUTPUT=/var/tmp/axia-titlebar/axia AXIA_TITLEBAR_ADWAITA_OUTPUT=/var/tmp/axia-titlebar/adwaita cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test titlebar_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige essa integração e publica `axia-titlebar`. As capturas e logs
+locais ficam em `build/validation/native-titlebar/{axia,adwaita}/`. O contrato
+de bundles Rust/esbuild agora inspeciona também a entrada `Window.jsx`, além
+do SDK, exigindo ausência das chaves já retiradas nas duas entradas.
+A moldura, o AppHost, o fallback de arraste e os efeitos ainda passam por JS;
+isso continua no escopo das fases seguintes.
+
+Validação desta fatia: compositor e interface compilados; 106 testes do host
+nativo, 47 testes leves, dois contratos e os oito cenários com capturas passaram.
+Não houve novo RPM completo nem validação de grab em sessão física.
+
 ## Sequência de retirada
 
 1. Completar widgets e integração nativa e migrar os consumidores do host React.

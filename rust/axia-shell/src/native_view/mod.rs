@@ -16,6 +16,8 @@ pub(crate) use menu::measure as measure_text;
 mod menubar;
 mod shell_icons;
 mod titlebar;
+#[cfg(test)]
+mod titlebar_tests;
 mod tree;
 pub mod style;
 #[cfg(test)]

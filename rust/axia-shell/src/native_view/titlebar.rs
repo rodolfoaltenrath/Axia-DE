@@ -66,7 +66,7 @@ impl TitleBar {
                 };
                 json!({"kind":"view","key":key,"style":style,
                     // a press on a light is not the start of a window drag
-                    "events":{"onMouseDown":["noop"],"onClick":["act",key],"onMouseEnter":["hot",key],"onMouseLeave":["hot",""]},
+                    "events":{"onMouseDown":["noop"],"onDoubleClick":["noop"],"onClick":["act",key],"onMouseEnter":["hot",key],"onMouseLeave":["hot",""]},
                     "children":glyph.map(|g| vec![json!({"kind":"text","label":c["glyph"],"style":g})]).unwrap_or_default()})
             })
             .collect();
