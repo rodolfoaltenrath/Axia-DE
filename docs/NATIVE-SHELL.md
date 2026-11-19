@@ -101,15 +101,24 @@ apenas para o build do host isolado, assim como o menu de compatibilidade.
 O teste Rust de metafile exige zero bytes desse renderer no bundle da shell e
 presença no host `.lpk`.
 
-A lista, a política de agrupamento, as permissões, os timers e as ações de
-`notify.js` não foram reescritos nesta fatia. A descrição da árvore ainda vem do
-adaptador JS e é desenhada pelo host Rust. A Fase 2 deve levar o estado e os
-serviços para Rust; não se declara aqui uma sessão sem JavaScript.
+Na Fase 2, lista, histórico, agrupamento, política de entrega e prazos passaram
+ao serviço `notifications.rs`, pertencente ao contexto. A view
+`shell:notifications` lê esse estado por empréstimo e monta a árvore no Rust;
+não recebe lista nem árvore JS. A expiração usa o relógio monotônico e um prazo
+nativo, sem timer JS ou polling quando não há banners temporários. Remontar a
+view preserva os IDs e os prazos.
+
+O adaptador ainda consulta permissões/firewall, fornece preferências e metadados
+traduzidos, executa som e callbacks dos apps e mantém stores de compatibilidade.
+Esses stores não escolhem o que a view apresenta. O renderer e os timers locais
+do host `.lpk` continuam isolados da autoridade da sessão. Detalhes em `STATE-RUST.md`.
 
 O driver Rust exige `notificationsNativeView=false` e exercita dois botões sem
 duplicar ações, ação pelo corpo, fechamento, reapresentação do item anterior de
 um grupo, Não Perturbe com histórico, expiração e posicionamento inferior em
-RTL numa área de trabalho deslocada. Executa os quatro casos claro/escuro em
+RTL numa área de trabalho deslocada. Também verifica fonte opaca, ausência de
+árvore/lista nos fatos, expiração sem armar timer JS, notificação nativa ausente
+do espelho e prazo preservado após remontar a view. Executa os quatro casos claro/escuro em
 640/1000 px e salva PNGs com os tokens reais do tema, efeitos desligados:
 
 ```text

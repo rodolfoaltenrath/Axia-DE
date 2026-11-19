@@ -27,6 +27,16 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
             assert_eq!(report["oldRevealed"], true, "{report}");
             assert_eq!(report["dndSuppressed"], true, "{report}");
             assert_eq!(report["timerGone"], true, "{report}");
+            for flag in [
+                "bound",
+                "noPayload",
+                "noJsDeadline",
+                "nativeDirect",
+                "mirrorStale",
+                "remounted",
+            ] {
+                assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
+            }
             assert_eq!(
                 report["reasons"],
                 json!(["second", "first", "closed", "closed", "closed"]),
@@ -52,7 +62,7 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
 }
 
 const DRIVER: &str = r#"
-import { createElement as h } from 'react';
+import { createElement as h, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { NotificationBanner } from '@ROOT@/sdk/nativebanner.js';
 import { notify, notifications, notifyHistory, setBannerPlacement } from '@ROOT@/sdk/notify.js';
@@ -66,12 +76,19 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeViews.findText(handle,label);if(node)return node;}return 0;};
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 const ran=[], reasons=[];
+let bannerHandle=0,bound=false,noPayload=true,toggle;
+const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
+function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}));}
+lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
+lord.nativeViews.facts=(handle,text)=>{if(handle===bannerHandle)inspect(text);return facts(handle,text);};
+lord.nativeViews.unmount=handle=>{if(handle===bannerHandle)bannerHandle=0;return unmount(handle);};
 const push=(label,title,options={})=>notify({label,title,body:'Notification body',sticky:true,sound:false,onClose:reason=>reasons.push(reason),...options});
 const press=node=>{const[x,y,w,hh]=lord.getLayout(node);for(const type of ['down','up']){const mount=lord.nativeViews.pointer(type,node,x+w/2,y+hh/2,0);__lordEvent(type,mount,x+w/2,y+hh/2,0);}globalThis.__lordNativeView();};
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 settings.set({language:'en',mode:'@MODE@',notificationsNativeView:false,notifications:{grouping:'app',dnd:false}});
 configureWindows({apps:[],workArea:{x:20,y:28,w:@WIDTH@-40,h:644}});
-render(h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},h(NotificationBanner))));
+function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},on?h(NotificationBanner):null));}
+render(h(App));
 async function run(){
  push('Grouped','Grouped old');push('Grouped','Grouped latest');
  await until(()=>find('Grouped latest'));const grouped=!!find('Grouped · +1')&&!find('Grouped old');
@@ -85,13 +102,25 @@ async function run(){
  push('DND','Suppressed');await sleep(50);
  const dndSuppressed=notifications.get().length===0&&notifyHistory.get().some(n=>n.title==='Suppressed');
  settings.set(s=>({...s,notifications:{...s.notifications,dnd:false}}));
- push('Timer','Timed banner',{sticky:false,timeout:1500});await until(()=>find('Timed banner'));await sleep(1700);
+ const setTimeoutBefore=globalThis.setTimeout;let noJsDeadline=true;
+ globalThis.setTimeout=()=>{noJsDeadline=false;throw Error('notification armed a JS deadline');};
+ try{push('Timer','Timed banner',{sticky:false,timeout:1500});}finally{globalThis.setTimeout=setTimeoutBefore;}
+ await until(()=>find('Timed banner'));await sleep(1700);
  const timerGone=notifications.get().length===0&&!find('Timed banner');
+ // Discard the compatibility snapshot: the native surface must still see the new notice.
+ const direct=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',prefs:{},appPrefs:{},
+   wallMs:Date.now(),minute:0,notice:{title:'Direct native',label:'Direct',displayLabel:'Direct',sticky:true,sound:false}}));
+ const nativeDirect=await until(()=>find('Direct native'));
+ const mirrorStale=!notifications.get().some(n=>n.title==='Direct native');
+ lord.nativeViews.action(bannerHandle,{action:['dismiss',String(direct.result)]});__lordNativeView();await until(()=>!find('Direct native'));
+ notify({title:'Survives remount',sticky:false,timeout:1500,sound:false});await until(()=>find('Survives remount'));
+ toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>find('Survives remount'));
+ const remounted=!!find('Survives remount')&&await until(()=>!find('Survives remount'));
  setBannerPlacement('bottom');locale.set({lang:'en',region:'',dir:'rtl'});
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

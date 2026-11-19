@@ -884,9 +884,13 @@ pub struct Session {
     state: Store<WindowState>,
     restore: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>>,
     desktops: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>>,
+    notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
 }
 
 impl Session {
+    pub(crate) fn notification_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::notifications::Service>> {
+        self.notifications.clone()
+    }
     pub(crate) fn desktop_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>> {
         self.desktops.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::desktop_session::Service::new(self.reader())))).clone()
     }

@@ -3,6 +3,68 @@ use serde_json::{json, Value};
 use std::{path::Path, process::Command};
 
 #[test]
+#[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
+fn isolated_notifications_keep_callbacks_and_deadlines_without_session_authority() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap();
+    let fixture = r#"
+import path from 'node:path';
+import {build} from 'esbuild';
+const root=process.argv[1];let privileged=0,preferences={},seq=0;
+const timers=new Map(),closed=[],ran=[];
+globalThis.setTimeout=(fn,ms)=>{const id=++seq;timers.set(id,{fn,ms});return id;};
+globalThis.clearTimeout=id=>timers.delete(id);
+const deny=()=>{privileged++;throw Error('isolated notification reached session authority');};
+const probe={getApp:()=>null,sound:{play:()=>{}},perms:{get:()=> 'allow',set:()=>{}},
+ settings:{get:()=>preferences,set:patch=>{preferences=typeof patch==='function'?patch(preferences):{...preferences,...patch};}},
+ appName:app=>app.name,formatTime:()=> '12:00',nativeAppRequest:deny};
+globalThis.__notificationProbe=probe;
+const names={'windows.js':['getApp'],'sound.js':['sound'],'privacy.js':['perms'],
+ 'settings.js':['settings'],'i18n.js':['appName','formatTime'],'nativeappmodel.js':['nativeAppRequest']};
+const result=await build({entryPoints:[path.join(root,'sdk/notify.js')],bundle:true,write:false,format:'esm',
+ define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-notifications',setup(build){
+ build.onResolve({filter:/.*/},args=>{const name=path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
+ build.onLoad({filter:/.*/,namespace:'probe'},args=>({contents:names[args.path].map(name=>`export const ${name}=globalThis.__notificationProbe.${name};`).join('\n')}));
+ }}]});
+const sdk=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+const first=sdk.notify({label:'Group',title:'Old',sticky:true,sound:false});
+const second=sdk.notify({label:'Group',title:'New',sticky:true,sound:false,actions:[{id:'go',run:()=>ran.push('go')}]});
+const grouped=sdk.grouped(sdk.notifications.get()),group=grouped.length===1&&grouped[0].more===1;
+const n=sdk.notifications.get()[0];sdk.runAction(n,n.actions[0]);
+const action=ran[0]==='go'&&sdk.notifications.get()[0].id===first;
+sdk.dismissNotification(first);
+const timed=sdk.notify({title:'Timed',timeout:1,sound:false,onClose:reason=>closed.push(reason)});
+const timer=[...timers.values()][0],deadline=timer.ms===1500;timer.fn();
+const expired=sdk.notifications.get().length===0&&closed.join(',')==='closed';
+preferences.notifications={dnd:true};const hidden=sdk.notify({title:'DND',sound:false});
+const dnd=sdk.notifications.get().length===0&&sdk.notifyHistory.get().some(n=>n.id===hidden);
+sdk.setBannerPlacement('bottom');const bottom=sdk.bannerPlacement()==='bottom';
+sdk.clearNotifyHistory();const cleared=sdk.notifyHistory.get().length===0;
+console.log(JSON.stringify({group,action,deadline,expired,dnd,bottom,cleared,privileged}));
+"#;
+    let output = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", fixture])
+        .arg(repo)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    for flag in [
+        "group", "action", "deadline", "expired", "dnd", "bottom", "cleared",
+    ] {
+        assert_eq!(report[flag], true, "{report}");
+    }
+    assert_eq!(report["privileged"], 0);
+}
+
+#[test]
 #[ignore = "requires Node; explicitly required by desktop CI after npm ci"]
 fn isolated_and_transitional_loaders_preserve_the_versioned_module_contract() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))

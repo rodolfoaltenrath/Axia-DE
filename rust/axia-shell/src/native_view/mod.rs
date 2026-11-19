@@ -15,6 +15,7 @@ mod menu;
 pub(crate) use menu::measure as measure_text;
 mod menubar;
 mod desktop_hud;
+mod notifications;
 mod window_menu;
 #[cfg(test)]
 mod window_menu_tests;
@@ -222,6 +223,8 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         windows.clone().map(|reader| Box::new(desktop_hud::DesktopHud::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:desktops" {
         owner.clone().map(|session| Box::new(crate::desktop_session::Observer::new(session.desktop_service())) as Box<dyn NativeApp>)
+    } else if id == "shell:notifications" {
+        owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:window-memory" {
         windows.clone().map(|reader| Box::new(crate::window_memory::Memory::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:restore" {

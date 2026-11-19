@@ -1,4 +1,6 @@
-// notify.js — session notifications (like GNOME notifications).
+// notify.js — notification API and compatibility callbacks. The main session's
+// state, delivery policy, grouping and deadlines belong to notifications.rs.
+// Isolated LPK hosts keep their local implementation below.
 //
 //   const id = notify({ app: 'backup', title: 'Backup done', body: '1234 files',
 //                       actions: [{ id: 'open', label: 'Open', run: () => wm.open('backup') }],
@@ -16,12 +18,55 @@ import { getApp } from './windows.js';
 import { sound } from './sound.js';
 import { settings } from './settings.js';
 import { perms } from './privacy.js';
+import { appName, formatTime } from './i18n.js';
+import { nativeAppRequest } from './nativeappmodel.js';
+import { notificationBridge } from './nativenotifications.js';
+
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 
 const MAX_SHOWN = 4, HISTORY = 50;
 export const notifications = createStore([]);        // on screen, newest first
 export const notifyHistory = createStore([]);
 let seq = 1;
 const timers = new Map();
+const callbacks = new Map();
+export const notificationPlacement = createStore('top');
+
+function rawRequest(action, extra = {}) {
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'notifications', action, ...extra });
+  if (reply.error) throw new Error(reply.error);
+  return reply;
+}
+function perform(effect) {
+  if (effect.kind === 'notificationState') {
+    const { shown, history, placement } = effect.state;
+    const adapt = n => ({ ...n, actions: callbacks.get(n.id)?.actions || n.actions });
+    notifications.set(() => shown.map(n => ({ ...adapt(n), Icon: callbacks.get(n.id)?.icon || null,
+      onClose: callbacks.get(n.id)?.onClose })));
+    notifyHistory.set(() => history.map(adapt));
+    notificationPlacement.set(placement);
+    // Drain close/action effects before releasing callbacks removed by this revision.
+    Promise.resolve().then(() => {
+      const active = new Set(notifications.get().map(n => n.id));
+      const kept = new Set([...active, ...notifyHistory.get().map(n => n.id)]);
+      for (const [id, callback] of callbacks) {
+        if (!kept.has(id)) callbacks.delete(id);
+        else if (!active.has(id)) callback.onClose = null;
+      }
+    });
+  } else if (effect.kind === 'settings') settings.set(effect.patch);
+  else if (effect.kind === 'notificationSound') sound.play('notify');
+  else if (effect.kind === 'notificationClose') {
+    const callback = callbacks.get(effect.id), close = callback?.onClose;
+    if (callback) callback.onClose = null;
+    try { close?.(effect.reason); } catch (e) { console.error('notify onClose:', e); }
+  } else if (effect.kind === 'notificationAction') {
+    try { callbacks.get(effect.id)?.actions[effect.index]?.run?.(); } catch (e) { console.error('notify:', e); }
+  }
+}
+notificationBridge.perform = perform;
+function applyReply(reply) { for (const effect of reply.effects || []) perform(effect); return reply.result; }
+function command(action, extra = {}) { return applyReply(rawRequest(action, extra)); }
 
 // ---- Settings → Notifications (docs/SETTINGS.md): per-app style, Do Not Disturb, grouping ----
 //
@@ -47,6 +92,7 @@ export function setAppNotifyPrefs(app, patch) {
   });
 }
 export function dndActive(now = new Date(), s = settings.get()) {
+  if (!appHost) return command('policy', { prefs: notifyPrefs(s), wallMs: now.getTime(), minute: now.getHours() * 60 + now.getMinutes() });
   const p = notifyPrefs(s);
   if (p.dnd === true || (typeof p.dnd === 'number' && now.getTime() < p.dnd)) return true;
   if (!p.schedule?.on) return false;
@@ -75,6 +121,18 @@ function fwNotifyBlocked(app) {
 export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null } = {}) {
   app = String(app);
   const ap = appNotifyPrefs(app);
+  if (!appHost) {
+    const at = new Date(), registered = getApp(app);
+    const selected = Array.isArray(actions) ? actions.slice(0, 3) : [];
+    const reply = rawRequest('push', { prefs: notifyPrefs(), appPrefs: ap, blocked: fwNotifyBlocked(app),
+      wallMs: at.getTime(), minute: at.getHours() * 60 + at.getMinutes(),
+      notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
+        sound: !!withSound, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),
+        timeLabel: formatTime(at), actions: selected.map(a => ({ id: a.id, label: a.label, primary: !!a.primary })) } });
+    if (reply.result) callbacks.set(reply.result, { actions: selected, onClose, icon: typeof icon === 'function' ? icon : null });
+    applyReply(reply);
+    return reply.result;
+  }
   remember(app);
   if (!ap.allow || fwNotifyBlocked(app)) return 0;          // not delivered at all
   const id = seq++;
@@ -90,6 +148,7 @@ export function notify({ app = '', title = '', body = '', actions = [], sound: w
 }
 
 export function dismissNotification(id, reason = 'closed') {
+  if (!appHost) { if (Number.isSafeInteger(id) && id > 0) command('dismiss', { id, reason }); return; }
   clearTimeout(timers.get(id));
   timers.delete(id);
   const n = notifications.get().find((x) => x.id === id);
@@ -103,11 +162,19 @@ export const useNotifications = () => useStore(notifications);
 // Where the banners go: 'top' (default: below a menu bar) or 'bottom' (above a taskbar, for a theme
 // that has one). Always on the end side of the line.
 let placement = 'top';
-export function setBannerPlacement(p) { placement = p === 'bottom' ? 'bottom' : 'top'; }
-export const bannerPlacement = () => placement;
-export const clearNotifyHistory = () => notifyHistory.set([]);
+export function setBannerPlacement(p) {
+  if (!appHost) { command('placement', { placement: p }); return; }
+  placement = p === 'bottom' ? 'bottom' : 'top';
+}
+export const bannerPlacement = () => appHost ? placement : notificationPlacement.get();
+export const clearNotifyHistory = () => appHost ? notifyHistory.set([]) : command('clearHistory');
 
 export function runAction(n, a) {
+  if (!appHost) {
+    const index = n.actions.indexOf(a);
+    if (index >= 0) command('act', { id: n.id, index, history: true });
+    return;
+  }
   dismissNotification(n.id, a.id || 'action');
   try { a.run?.(); } catch (e) { console.error('notify:', e); }
 }

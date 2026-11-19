@@ -381,6 +381,39 @@ aprovados. Capturas e logs em `build/validation/desktop-session/`; o CI já
 exige `desktop_hud_runtime` e publica `axia-desktop-hud`. Sem nova medição
 física ou RPM completo nesta entrega.
 
+## Serviço e banners de notificações
+
+Cada `Session` possui um serviço `notifications` compartilhado apenas pelos
+clones daquele contexto. Seu `axia_state::Store` contém até quatro banners,
+50 itens de histórico, agrupamento e posicionamento; IDs não são reutilizados.
+Leitores e assinaturas nativas acessam os dados por empréstimo. Publicação,
+dispensa e ação emitem uma revisão; consultas e operações sem mudança ficam
+silenciosas. O histórico pode ser limpo sem dispensar banners ativos.
+
+A política distingue recusa por permissão/firewall (sem histórico), Não
+Perturbe/estilo sem banner (somente histórico) e entrega visual. A agenda usa
+minutos locais e aceita intervalos que cruzam meia-noite; um horário final de
+DND usa o relógio civil. Expiração de banners usa `Instant`, mínimo de 1.500 ms
+e nenhum prazo para sticky/alert. Banners retirados pelo limite não deixam
+temporizadores pendentes. A view agenda somente a próxima expiração; ociosa,
+não pede atualizações periódicas. O serviço mantém o prazo durante remontagens
+e expira itens vencidos na próxima sincronização ou comando.
+
+`shell:notifications` é ligada ao proprietário validado do contexto e constrói
+os widgets diretamente do estado Rust. Agrupamento mantém o banner mais novo
+por app/legenda e conta os demais; dispensá-lo revela o anterior. A view
+revalida a ação contra IDs e índices atuais; um clique antigo não aciona uma
+notificação removida ou reutilizada. Fechamento precede o callback da ação.
+
+`sdk/notify.js` fornece metadados, preferências, permissão efetiva e bloqueio
+de firewall; executa patches, som e callbacks. Os stores públicos recebem
+snapshots por revisão para compatibilidade, sem alimentar a view nativa.
+Referências de callbacks são limitadas aos banners/histórico mantidos, com
+liberação após drenar efeitos. Geometria do mount segue tema, área útil,
+direção e posicionamento. O host LPK mantém seu serviço local sem acessar o
+controlador privilegiado. Configurações, permissões, som, alarmes e os
+consumidores dos stores continuam como pendências da migração completa.
+
 ## Gestos horizontais de desktop
 
 `desktopCommand/swipe` resolve no proprietário Rust se o gesto troca desktops

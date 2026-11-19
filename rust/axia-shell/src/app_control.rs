@@ -26,6 +26,10 @@ impl Controller {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "notifications" {
+            let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };
+            return windows.notification_service().borrow_mut().command(input, std::time::Instant::now());
+        }
         if input["cmd"] == "desktopSession" {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.desktop_service();
