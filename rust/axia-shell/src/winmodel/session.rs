@@ -687,17 +687,7 @@ impl WindowState {
                 }
             }
             "cycle" => {
-                let vis: Vec<usize> =
-                    (0..self.wins.len()).filter(|&i| { let w = &self.wins[i]; !w.on("minimized") && !w.on("fullscreen") && !w.on("pip") && self.here(w) }).collect();
-                if vis.len() >= 2 {
-                    if a(0).as_str() == Some("left") {
-                        let w = self.wins.remove(vis[0]); // the rearmost comes up
-                        self.wins.push(w);
-                    } else {
-                        let w = self.wins.remove(*vis.last().unwrap()); // the front one goes under everything
-                        self.wins.insert(0, w);
-                    }
-                }
+                self.cycle_windows(a(0).as_str() == Some("left"));
             }
             "pick" => {
                 // the window an app comes back with: on this desktop if it has one, a visible one before
@@ -926,11 +916,30 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), AddDesktopAndShow, CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
 
 impl WindowState {
+    // Both the isolated-host API and native desktop gestures use the same selection rule.
+    fn cycle_windows(&mut self, left: bool) {
+        let visible: Vec<usize> = (0..self.wins.len()).filter(|&i| {
+            let w = &self.wins[i];
+            !w.on("minimized") && !w.on("fullscreen") && !w.on("pip") && self.here(w)
+        }).collect();
+        if visible.len() < 2 { return; }
+        let index = if left { visible[0] } else { *visible.last().unwrap() };
+        let window = self.wins.remove(index);
+        if left { self.wins.push(window); } else { self.wins.insert(0, window); }
+    }
+
     fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) -> Value {
         match command {
+            AppCommand::SwipeDesktop { left, rtl } => {
+                if self.desktops.len() > 1 {
+                    return self.app_command(AppCommand::StepDesktop(if left != rtl { 1 } else { -1 }), ids, facts);
+                }
+                self.cycle_windows(left);
+                return json!({"boundary":false});
+            }
             AppCommand::InitializeDesktops(count, active) => {
                 self.desktops=(1..=count.clamp(1,MAX_DESKTOPS) as i64).collect();
                 self.active=self.desktops[active.min(self.desktops.len()-1)];

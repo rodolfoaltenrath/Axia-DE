@@ -68,7 +68,7 @@ import {locale} from '@ROOT@/sdk/i18n.js';
 import {media} from '@ROOT@/sdk/media.js';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
-locale.set({...locale.get(),lang:'@MODE@'==='dark'?'ar':'en'});
+locale.set({...locale.get(),lang:'@MODE@'==='dark'?'ar':'en',dir:'@MODE@'==='dark'?'rtl':'ltr'});
 settings.set({desktopCount:2,reduceMotion:false});startDesktops();
 configureWindows({apps:[{id:'notes',name:'Notes',Component:()=>null,Icon:()=>null}]});
 const a=wm.open('notes',{instance:'a',desktop:1,frame:{x:60,y:120,w:220,h:160}}),

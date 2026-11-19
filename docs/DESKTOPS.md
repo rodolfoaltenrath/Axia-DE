@@ -133,6 +133,12 @@ Each command publishes at most one observable revision; adding and showing a
 desktop is atomic. Boundary steps return an indication without changing state.
 The isolated `.lpk` host retains local compatibility behavior.
 
+Horizontal desktop swipes also resolve in that owner: multiple desktops step in the
+locale's direction, while a single desktop cycles eligible windows. The decision
+uses the current native list even when the JS mirror is stale. Minimized,
+fullscreen and picture-in-picture windows stay outside the cycling targets.
+The request supplies only direction and RTL; it publishes at most one revision.
+
 ## What is kept
 
 - `settings.desktopCount`: the number of desktops, across sessions.

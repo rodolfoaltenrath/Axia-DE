@@ -381,6 +381,17 @@ aprovados. Capturas e logs em `build/validation/desktop-session/`; o CI já
 exige `desktop_hud_runtime` e publica `axia-desktop-hud`. Sem nova medição
 física ou RPM completo nesta entrega.
 
+## Gestos horizontais de desktop
+
+`desktopCommand/swipe` resolve no proprietário Rust se o gesto troca desktops
+ou alterna janelas. O pedido contém direção e RTL, sem lista ou seleção JS.
+Com vários desktops, respeita a ordem visual e retorna o limite sem mutação;
+com um só, reutiliza a seleção do ciclo legado e exclui janelas minimizadas,
+fullscreen e PiP. A operação publica no máximo uma revisão. O adaptador só
+encaminha o gesto e mostra o indicador no limite; o host LPK preserva a API local.
+O teste Rust verifica direções, RTL, filtragem, limites e entradas inválidas.
+A integração do indicador bloqueia leituras do espelho de desktops durante o gesto.
+
 ## Animação de troca de desktops
 
 `desktop_animation.rs` acompanha o desktop ativo no leitor do contexto e

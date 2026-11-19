@@ -60,6 +60,10 @@ impl Controller {
                 },
                 Some("add") => AppCommand::AddDesktopAndShow,
                 Some("closeActive") => AppCommand::CloseActiveDesktop,
+                Some("swipe") => match (input["direction"].as_str(), input["rtl"].as_bool()) {
+                    (Some(dir @ ("left" | "right")), Some(rtl)) => AppCommand::SwipeDesktop { left: dir == "left", rtl },
+                    _ => return json!({"error":"app.invalidRequest"}),
+                },
                 _ => return json!({"error":"app.invalidRequest"}),
             };
             return self

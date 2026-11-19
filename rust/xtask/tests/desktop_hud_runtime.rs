@@ -22,6 +22,7 @@ fn desktop_indicator_uses_native_state_and_expiry() {
                 "expired",
                 "boundary",
                 "nativeCommands",
+                "nativeSwipes",
                 "started",
                 "nativeCount",
                 "handoff",
@@ -44,7 +45,7 @@ const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
 import {render,View} from '@lordos/runtime';
 import {setDesktops,setActiveDesktop,activeDesktop,desktopList,windows} from '@ROOT@/sdk/windows.js';
-import {DesktopHud,DesktopSession,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch} from '@ROOT@/sdk/desktops.js';
+import {DesktopHud,DesktopSession,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch,desktopSwipe} from '@ROOT@/sdk/desktops.js';
 import {settings} from '@ROOT@/sdk/settings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
@@ -107,8 +108,20 @@ async function run(){
  direct('setOverview',false);await sleep(50);const noReplay=!text().includes('Desktop');
  direct('setDesktops',[10],10);lord.nativeViews.action(handle,{action:['show']});await sleep(50);
  const singleHidden=!text().includes('Desktop');hide();await until(()=>unmounted);
+ // The mirror still has multiple desktops; native state has one and must cycle windows.
+ direct('close','notes#moved');direct('open',{app:'first'});direct('open',{app:'second'});
+ const listGet=desktopList.get;desktopList.get=()=>{throw Error('swipe read desktop mirror');};
+ let nativeSwipes=false;
+ try{
+   desktopSwipe('left')();const first=state().windows.at(-1)?.id==='first';
+   direct('setDesktops',[10,20],10);desktopSwipe('left')();const switched=state().active===20;
+   desktopSwipe('left')();const boundary=state().active===20;
+   locale.set({...locale.get(),dir:'rtl'});desktopSwipe('left')();const rtl=state().active===10;
+   locale.set({...locale.get(),dir:'ltr'});nativeSwipes=first&&switched&&boundary&&rtl;
+ }finally{desktopList.get=listGet;}
+ direct('setDesktops',[10],10);
  direct('createDesktop');const withoutHud=serviceBound&&await until(()=>settings.get().desktopCount===2);
- console.log('desktop_hud-observation '+JSON.stringify({bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,saved:!!saved?.ok}));
+ console.log('desktop_hud-observation '+JSON.stringify({bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('desktop_hud driver: '+(error.stack||error))),150);
 "#;

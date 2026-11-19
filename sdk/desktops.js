@@ -6,8 +6,8 @@
 //   flowDesktopKeys, linuxDesktopKeys       the shortcut profiles' entries (sdk/shortcuts.js)
 //   desktopSwipe(dir)                       a registerGestureActions action
 //
-// The animation: the windows arriving slide a little and fade in, stepped by the native animator
-// (lord.anim.slide, rust/axia-shell/src/anim.rs): no JS and no relayout per frame, and none at all
+// The animation: the windows arriving slide a little and fade in, selected and stepped in Rust
+// (desktop_animation.rs and anim.rs): no JS and no relayout per frame, and none at all
 // with Reduce motion.
 import { createElement as h, useSyncExternalStore } from 'react';
 import { mainDisplay, onScreenChange } from '@lordos/runtime';
@@ -50,8 +50,8 @@ export function desktopSuffix(w) {
 // ---- switching ----
 
 export function switchDesktop(id) { setActiveDesktop(id); }
-function desktopCommand(action, step) {
-  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'desktopCommand', action, ...(step === undefined ? {} : { step }) });
+function desktopCommand(action, step, extra = {}) {
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'desktopCommand', action, ...(step === undefined ? {} : { step }), ...extra });
   if (reply.error) throw new Error(reply.error);
   applyNativeWindowState(reply);
   return reply.result;
@@ -113,6 +113,10 @@ export const linuxDesktopKeys = [
 
 // Trackpad (registerGestureActions): with one desktop a sideways swipe still switches windows.
 export const desktopSwipe = (dir) => () => {
+  if (!appHost) {
+    if (desktopCommand('swipe', undefined, { direction: dir, rtl: direction() === 'rtl' })?.boundary) showHud();
+    return;
+  }
   if (desktopList.get().length > 1) nextDesktopBy(swipeStep(dir, direction() === 'rtl'));
   else cycleWindows(dir);
 };
