@@ -219,6 +219,8 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:desktop-hud" {
         windows.clone().map(|reader| Box::new(desktop_hud::DesktopHud::new(reader)) as Box<dyn NativeApp>)
+    } else if id == "shell:desktops" {
+        owner.clone().map(|session| Box::new(crate::desktop_session::Observer::new(session.desktop_service())) as Box<dyn NativeApp>)
     } else if id == "shell:window-memory" {
         windows.clone().map(|reader| Box::new(crate::window_memory::Memory::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:restore" {

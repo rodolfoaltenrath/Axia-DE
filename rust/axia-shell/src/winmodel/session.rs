@@ -893,9 +893,13 @@ impl axia_native::windows::WindowSource for WindowReader {
 pub struct Session {
     state: Store<WindowState>,
     restore: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>>,
+    desktops: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>>,
 }
 
 impl Session {
+    pub(crate) fn desktop_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>> {
+        self.desktops.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::desktop_session::Service::new(self.reader())))).clone()
+    }
     pub(crate) fn restore_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>> {
         self.restore.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::session_restore::Service::new(self.reader())))).clone()
     }
@@ -922,11 +926,15 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), AddDesktopAndShow, CloseActiveDesktop, PrepareDesktops(usize, Option<usize>) }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), AddDesktopAndShow, CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
 
 impl WindowState {
     fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) -> Value {
         match command {
+            AppCommand::InitializeDesktops(count, active) => {
+                self.desktops=(1..=count.clamp(1,MAX_DESKTOPS) as i64).collect();
+                self.active=self.desktops[active.min(self.desktops.len()-1)];
+            }
             AppCommand::PrepareDesktops(index, active) => {
                 while self.desktops.len() <= index.min(MAX_DESKTOPS-1) { self.create_desktop(); }
                 if let Some(active) = active { if let Some(id) = self.desktops.get(active.min(MAX_DESKTOPS-1)) { self.active = *id; } }

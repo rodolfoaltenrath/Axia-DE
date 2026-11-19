@@ -1,15 +1,16 @@
 # Desktops
 
 Several desktops, each with its own windows. All displays switch together.
-There is always at least one, and at most nine. Most of this is SDK work: `axia-server` knows only that a
-window is *parked*.
+There is always at least one, and at most nine. Rust owns the desktop state and persistence decisions;
+the SDK still adapts that state for the remaining React shell and performs preference writes.
 
 | Code | Role |
 |---|---|
 | `rust/axia-shell/src/winmodel/session.rs` | The windows, the desktops and the one showing, and the rules: what shows, what is mounted, what is in front (who has the keyboard), what is parked. `winmodel/tests.rs`, `server/tests/windows_bridge_test.mjs` |
 | `rust/axia-shell/src/winmodel` (`sdk/winmodel.js`) | The list of desktops (add, close, neighbors, arrows and swipes in RTL), the saved count and position, and the Overview's grid and strip. `winmodel/tests.rs` |
 | `sdk/windows.js` | The mirror of Rust's list for React: `windows`, `activeDesktop`, `desktopList`, `windowViews`; `wm.moveToDesktop`, `wm.raise`, `useWindows`, `useWindowHidden`, `onActiveDesktop` |
-| `sdk/desktops.js` | Switching, the keys, the saved count, the indicator mount, the animation |
+| `rust/axia-shell/src/desktop_session.rs` | Context-owned initialization, saved count, native positional queries and surface mapping across theme switches; nonvisual observer |
+| `sdk/desktops.js` | Shortcut/command adapters, preference effects, indicator/service mounts and animation |
 | `rust/axia-shell/src/native_view/desktop_hud.rs` | The indicator's native state subscription, caption, dots and expiry |
 | `sdk/overview.jsx` | The Overview, the SDK's own, for every theme |
 | `sdk/windowshell.jsx` | `display: none` on a hidden desktop, the window's place in the Overview |
@@ -134,7 +135,21 @@ The isolated `.lpk` host retains local compatibility behavior.
   so it takes neither the front nor the keyboard of the desktop in view. Only a sane position is read back.
 - A theme switch keeps the desktops, the desktop in view and each window's place, Linux windows included.
 
+The context-owned `desktop_session` service validates the initial count and theme hand-off and initializes
+the native owner once. Repeated initialization does not reset an existing session. Positional queries and
+Linux surface mappings read the native owner, including changes absent from the JS mirror. Preparing missing
+desktops publishes one revision. Theme hand-off saves surface positions rather than context-local desktop IDs.
+
+The SDK root mounts `shell:desktops` independently of the theme's optional indicator. Its native subscription
+emits a preference patch only when the count changes; there is no JS list subscription or idle timer for this
+task. Remounting the observer preserves its state. Preference storage and animation still use SDK adapters.
+
 ## Checked
+
+The Rust `desktop_session` unit tests cover atomic initialization, validation, native queries, count changes,
+surface mapping and observer lifetime. `desktop_hud_runtime` exercises the real SDK and compositor in light/dark
+at 640/1000 px, including a stale JS mirror, blocked JS window reads for queries, remounts and persistence with
+the indicator removed. It is required by GPU=1 CI; captures and logs are published in `axia-desktop-hud`.
 
 `rust/axia-shell/src/winmodel/tests.rs`, `server/tests/windows_bridge_test.mjs` and `build/keygrab-test`. On VM 116, an isolated headless session driven
 over `remote.sock`, with a small Wayland client that logs keys, focus and `configure` states (2026-10-31):

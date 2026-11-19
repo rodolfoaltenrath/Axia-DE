@@ -331,7 +331,7 @@ views nativas lerem direto, sem JSON.
       Avançar/voltar, criar e mostrar, e fechar o desktop ativo também escolhem
       os alvos no proprietário Rust, com uma revisão por comando. Atalhos
       encaminham somente a intenção; não enviam lista ou desktop ativo.
-      Animação e persistência dos desktops ainda usam adaptadores JS.
+      Animação dos desktops ainda usa o adaptador JS.
       A memória de geometria (`windowmemory.js`) também coleta posições e
       conta instâncias diretamente do modelo Rust, com prazo e deduplicação
       nativos. Mesclagem ordenada e limite de 200 apps ficam no Rust; o
@@ -340,7 +340,11 @@ views nativas lerem direto, sem JSON.
       assinatura, prazos, plano de abertura, posições, confirmação nativa e
       marcadores de saída. Remontar a interface não reinicia o serviço.
       O adaptador ainda grava preferências, abre apps e executa a política
-      de navegador; animação e persistência dos desktops continuam pendentes.
+      de navegador. Inicialização, contagem e posições na troca de tema agora
+      pertencem a `desktop_session.rs`, com observador sem interface no root
+      do SDK. Não dependem do indicador montado pelo tema nem de assinatura
+      da lista JS. O adaptador grava patches de preferências; animação,
+      execução dos efeitos e configurações continuam pendentes.
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
 - [ ] Notificações, relógio e alarmes (`notify.js`, `alarms.js`).
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
@@ -516,3 +520,4 @@ mostraram.
 | 2026-11-19 | Fase 2: memória de geometria lê o proprietário Rust | Commit desta linha | Coleta, prazo de 800 ms, deduplicação, identidade, contagem de instâncias e mesclagem ordenada limitadas a 200 apps no Rust. Retirados timer e leitura/assinatura do espelho JS dessa função; adaptador ainda persiste preferências. 531 testes unitários da shell, quatro cenários reais com acesso ao espelho bloqueado, quatro contratos LPK e regressões aprovados. Restauração e migração das configurações continuam pendentes. |
 | 2026-11-19 | Fase 2: serviço e confirmação da restauração no Rust | Commit desta linha | Snapshot nativo, fila, prazos, geometria, desktops, claims e marcadores pertencem ao contexto; remontagem não reinicia o serviço. Adaptador executa abertura, gravação e política de navegador. 539 testes unitários, quatro contratos LPK e 16 cenários gráficos de restauração/foco/indicador/memória passaram; instalação temporária e switcher-check aprovados. Configurações, efeitos e demais consumidores JS continuam pendentes; medições físicas no encerramento. |
 | 2026-11-19 | Correção do aborto no encerramento detectado no Actions | Commit desta linha | Registro de views encerrado explicitamente antes dos serviços e do contexto JS, eliminando acesso ao serviço TLS de Arquivos já destruído. Regressão Rust reproduziu SIGABRT antes da correção; depois passaram timeout/SIGTERM em GPU=0 e GPU=1, 540 testes unitários, quatro contratos LPK e regressões de Arquivos/restauração. CI exige o novo teste em ambas as variantes e publica logs. |
+| 2026-11-19 | Fase 2: inicialização e persistência dos desktops no contexto Rust | Commit desta linha | Inicialização única e atômica, contagem por assinatura, consultas posicionais e associação de superfícies na troca de tema sem ler o espelho JS. Observador sem interface no root, independente do indicador do tema e sem polling ocioso; adaptador grava patches. 547 testes unitários, quatro contratos LPK, quatro cenários ampliados do indicador e regressões de restauração/comandos/encerramento passaram. Instalação e switcher-check aprovados; animação e demais serviços continuam pendentes. |

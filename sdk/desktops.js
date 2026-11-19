@@ -1,6 +1,6 @@
-// desktops.js — Desktops, the part with a runtime (docs/DESKTOPS.md). The rules are in desktopmodel.js
-// and the stores in windows.js; this module switches, keeps the count, draws the brief indicator and
-// runs the switch animation.
+// Desktops adapters (docs/DESKTOPS.md). The context-owned Rust service initializes and
+// remembers desktops and theme hand-offs; the native indicator observes the same owner.
+// This module still routes shortcuts, persists settings effects and starts the switch animation.
 //
 //   nextDesktopBy(step), addDesktopAndShow(), closeActiveDesktop(), desktopName(id)
 //   flowDesktopKeys, linuxDesktopKeys       the shortcut profiles' entries (sdk/shortcuts.js)
@@ -15,7 +15,7 @@ import { t, direction } from './i18n.js';
 import { settings } from './settings.js';
 import { NativeView } from './nativeview.js';
 import { Layer } from './layers.js';
-import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows, applyNativeWindowState } from './windows.js';
+import { wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows, applyNativeWindowState } from './windows.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { MAX_DESKTOPS } from './desktopmodel.js';
 import { neighbor, arrowStep, swipeStep, cleanCount, cleanIndex } from './winmodel.js';
@@ -24,7 +24,16 @@ import { nativeAnim, whenAnimDone } from './anim.js';
 import { toggleOverview, toggleAppWindows } from './overview.jsx';
 
 const NATIVE_DESKTOP_HUD = { id: 'shell:desktop-hud', shell: true, fullTheme: true };
+const NATIVE_DESKTOP_SESSION = { id: 'shell:desktops', shell: true };
 const hudHandle = { current: 0 };
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
+function sessionCommand(action, extra = {}) {
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'desktopSession', action, ...extra });
+  if (reply.error) throw new Error(reply.error);
+  applyNativeWindowState(reply);
+  for (const effect of reply.effects || []) if (effect.kind === 'settings') settings.set(effect.patch);
+  return reply.result;
+}
 
 // ---- names and positions ----
 
@@ -109,42 +118,44 @@ export const desktopSwipe = (dir) => () => {
 
 // ---- the count, across sessions and theme switches ----
 
-let surfaceDesktops = null;       // theme switch: Linux surface id → position in the list
-
 // A position in the list, created if it isn't there yet (a restored window comes before its desktop).
 export function desktopAt(index) {
+  if (!appHost) return sessionCommand('at', { index });
   const i = cleanIndex(index);
   while (desktopList.get().length <= i) if (createDesktop() == null) break;
   const list = desktopList.get();
   return list[Math.min(i, list.length - 1)];
 }
-export const activeIndex = () => Math.max(0, positionOf(activeDesktop.get()));
-export const indexOfDesktop = (id) => Math.max(0, positionOf(id));
+export const activeIndex = () => appHost ? Math.max(0, positionOf(activeDesktop.get())) : sessionCommand('active');
+export const indexOfDesktop = (id) => appHost ? Math.max(0, positionOf(id)) : sessionCommand('index', { id });
 
 // A Linux window that stays connected across a theme switch comes back on its desktop.
 export function desktopOfSurface(sid) {
-  const i = surfaceDesktops?.[sid];
-  return Number.isInteger(i) ? desktopAt(i) : undefined;
+  return appHost ? undefined : sessionCommand('surface', { surface: sid }) ?? undefined;
 }
 // themes.use: what the next JS context needs, by position (the ids are this context's).
 export function desktopsForThemeSwitch() {
-  const surfaces = {};
-  for (const w of windows.get()) if (w.args?.surface) surfaces[w.args.surface] = indexOfDesktop(w.desktop);
-  return { active: activeIndex(), surfaces };
+  return appHost ? { active: activeIndex(), surfaces: {} } : sessionCommand('theme');
 }
 
 let started = false;
 // startShell, once, before anything opens a window.
 export function startDesktops() {
+  if (!appHost) {
+    sessionCommand('start', { settings: { desktopCount: settings.get().desktopCount, themeDesktops: settings.get().themeDesktops } });
+    started = true;
+    shown = activeDesktop.get();
+    return;
+  }
   const s = settings.get();
   const list = Array.from({ length: cleanCount(s.desktopCount) }, (_, i) => i + 1);
   const was = s.themeDesktops;
-  if (was) { surfaceDesktops = was.surfaces || null; settings.set({ themeDesktops: null }); }
+  if (was) settings.set({ themeDesktops: null });
   setDesktops(list, list[Math.min(cleanIndex(was?.active), list.length - 1)]);
   started = true;
   shown = activeDesktop.get();
 }
-desktopList.subscribe(() => {
+if (appHost) desktopList.subscribe(() => {
   if (started && settings.get().desktopCount !== desktopList.get().length) settings.set({ desktopCount: desktopList.get().length });
 });
 
@@ -186,4 +197,11 @@ export function DesktopHud() {
     h(NativeView, { manifest: NATIVE_DESKTOP_HUD, stateSource: lord.windowList, handleRef: hudHandle,
       args: { display: { x: d.x, y: d.y, w: d.w, h: d.h } },
       style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'none' } }));
+}
+
+// Mounted by the SDK root, independently of the theme's optional indicator.
+export function DesktopSession() {
+  if (appHost || typeof lord === 'undefined' || typeof lord.appId === 'string' || typeof lord.greeter !== 'undefined') return null;
+  return h(NativeView, { manifest: NATIVE_DESKTOP_SESSION, stateSource: lord.windowList,
+    style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, pointerEvents: 'none' } });
 }

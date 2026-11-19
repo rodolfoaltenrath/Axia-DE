@@ -26,6 +26,11 @@ impl Controller {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "desktopSession" {
+            let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
+            let service=windows.desktop_service();
+            return service.borrow_mut().command(windows,input);
+        }
         if input["cmd"] == "sessionRestore" {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.restore_service();

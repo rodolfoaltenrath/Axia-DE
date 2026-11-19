@@ -311,8 +311,8 @@ pede atualização periódica. O assinante e o prazo acabam ao desmontar a view.
 principal, com assinatura de eventos de tela. A tentativa de avançar além do
 limite encaminha um comando `show`; não envia desktop ativo, lista ou árvores.
 Removidos `hudState`, `hudTimer` e a assinatura JS que mostrava o indicador.
-Animação de janelas, configuração da quantidade e restauração ainda estão nos
-adaptadores das fases seguintes.
+Animação de janelas continua no adaptador; persistência e restauração têm
+seus serviços nativos descritos nas seções seguintes.
 
 Os comandos `desktopCommand` também pertencem ao controlador vinculado ao
 contexto: `step`, `add` e `closeActive` consultam a lista e o desktop atuais no
@@ -342,6 +342,44 @@ O cenário do indicador também executa avanço, retorno, criação e fechamento
 com estado JS desatualizado, exigindo a migração das janelas para o destino
 correto. O novo contrato LPK executa esses mesmos comandos locais e exige
 zero acesso à autoridade da sessão. Compositor e frontend recompilados.
+
+## Inicialização e persistência dos desktops
+
+`desktop_session.rs` pertence ao `Session` do contexto, com leitor nativo e
+assinatura cancelável. `desktopSession` inicializa a lista validada e o desktop
+ativo numa mutação tipada, uma única vez; chamadas repetidas não apagam janelas
+ou desktops já criados. O serviço também resolve posição/ID e prepara desktops
+ausentes em uma revisão, sem receber a lista ou a seleção do espelho JS.
+Consultas a posições existentes não produzem um delta de janelas.
+
+Na troca de tema, a associação superfície Linux → posição é coletada por
+empréstimo do proprietário nativo. O novo contexto valida a contagem, o índice
+ativo e cada associação antes de aplicá-los. O formato persistido continua
+`desktopCount`/`themeDesktops`; apenas patches de preferências e o snapshot
+necessário à troca de contexto saem do serviço.
+
+O observador sem interface `shell:desktops` é montado pelo root do SDK,
+independentemente do indicador visual do tema. Revisões agrupam alterações
+da quantidade; valores iguais não geram nova gravação e não existe polling
+ocioso. O serviço sobrevive à remontagem do observador. O JS grava os patches;
+o caminho local de compatibilidade dos `.lpk` permanece separado no build.
+Animação, efeitos finais e o espelho legado seguem para as próximas etapas.
+
+Os sete testes novos verificam inicialização atômica/idempotente, isolamento
+e vida útil, validação das preferências, consultas atuais, associação de
+superfícies, agrupamento, remontagem e ausência de timer. A suíte completa
+tem 547 testes aprovados e sete especiais ignorados.
+
+`desktop_hud_runtime` também cobre agora contagem com espelho desatualizado,
+snapshot de troca de tema e consultas com `windows.get()` bloqueado, criação
+de desktops ausentes, reinicialização sem reset, remontagem do observador e
+persistência após retirar o indicador. Passaram os quatro cenários
+claro/escuro em 640/1000 px, quatro contratos LPK e as regressões de
+restauração, comandos de janela e encerramento do desktop instalado.
+Compositor e bundles reconstruídos; instalação temporária e `switcher-check`
+aprovados. Capturas e logs em `build/validation/desktop-session/`; o CI já
+exige `desktop_hud_runtime` e publica `axia-desktop-hud`. Sem nova medição
+física ou RPM completo nesta entrega.
 
 ## Memória de geometria das janelas
 

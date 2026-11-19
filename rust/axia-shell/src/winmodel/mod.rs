@@ -4,7 +4,7 @@
 //! rules take its facts as JSON (`lord.winmodel(op, args)`, server/src/ui/js_winmodel.c) and give
 //! JSON back. The session's windows themselves (the list, the desktops and what shows) are a state
 //! of their own (session.rs, `lord.windowList`).
-mod desktops;
+pub(crate) mod desktops;
 mod displays;
 mod ffi;
 mod layout;
