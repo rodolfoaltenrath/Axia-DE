@@ -4,7 +4,7 @@ import { createElement as h, useEffect, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { DEFAULT_TOKENS } from '../../sdk/theme.js';
 import { settings } from '../../sdk/settings.js';
-import { configureWindows } from '../../sdk/windows.js';
+import { configureWindows, wm } from '../../sdk/windows.js';
 import { enableShellLayers } from '../../sdk/layers.js';
 import { Menu } from '../../sdk/menu.jsx';
 import { NativeDockTip, NativeDockGhost } from '../../sdk/nativedockparts.jsx';
@@ -37,7 +37,10 @@ let menuRan = [], menuClosed = 0, showMenu = false, setMenuShown = () => {};
 let kbd = 0, ran = 0, launchpad = 0, maxes = 0, acts = [], closed = 0, showLauncher = false, setLauncher = () => {};
 const opened = [];
 const drags = [];
+let titleWindow = null, setTitleWindow = () => {};
 function Harness() {
+  const [titleId, setTitleId] = useState(null);
+  titleWindow = titleId; setTitleWindow = setTitleId;
   const [launcher, setShow] = useState(false);
   showLauncher = launcher; setLauncher = setShow;
   const [menuOn, setMenuOn] = useState(false), [partsOn, setPartsOn] = useState(false);
@@ -47,8 +50,8 @@ function Harness() {
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
     h(MenuBar, { t: theme, height: 28, focused: null, onLaunchpad: () => { launchpad++; }, onControlCenter: () => {}, controlCenter: false,
       area: { x: 0, y: 0, w: 1000, h: 700 } }),
-    h(View, { style: { position: 'absolute', left: 100, top: 100, width: 400 } },
-      h(NativeTitleBar, { id: 'w1', title: 'Smoke window', focused: true, height: 40, chrome: null,
+    titleWindow && h(View, { style: { position: 'absolute', left: 100, top: 100, width: 400 } },
+      h(NativeTitleBar, { id: titleWindow, height: 40, chrome: null,
         controls: [{ key: 'close', color: '#ff5f57', glyph: '×' }],
         tokens: { titleBg: '#222233', text: '#ffffff', textDim: '#888888', lightOff: '#555555' },
         onDrag: (x, y) => { drags.push([x, y]); }, onMax: () => { maxes++; }, onAct: (key) => { acts.push(key); } })),
@@ -85,12 +88,16 @@ async function run() {
   check(await until(() => lines().length === bar), 'Escape closes the menu');
   console.log('menu bar integration: passed');
   // the title bar of a window: a press on it starts the window manager's drag, a double press zooms
+  const titleId = wm.open('smoke-app', { instance: 'header' });
+  wm.setTitle(titleId, 'Smoke window'); setTitleWindow(titleId);
+  check(await until(() => find('Smoke window')), 'the title comes from the native window owner');
   press(find('Smoke window'));
   check(await until(() => drags.length === 1), 'a press on the title bar asks to drag the window');
   check(drags[0][0] > 100 && drags[0][1] >= 100, 'the pointer comes in screen coordinates');
   press(find('Smoke window')); press(find('Smoke window'));
   check(await until(() => maxes >= 1), 'a double press on the title bar zooms');
   console.log('title bar integration: passed');
+  setTitleWindow(null); wm.close(titleId); await sleep(100);
   // the launcher: the grid of apps drawn by Rust, opened and closed by the shell
   setLauncher(true);
   await sleep(600);

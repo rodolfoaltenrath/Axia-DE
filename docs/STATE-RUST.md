@@ -511,6 +511,28 @@ cada variante passaram. Também passaram 540 testes unitários da shell (sete
 especiais ignorados), quatro contratos LPK, oito cenários de Arquivos e
 quatro de restauração. Evidências em `build/validation/ci-shutdown/`.
 
+## Integração antiga da barra de título no Actions
+
+O run [44595705926](https://github.com/rodolfoaltenrath/Axia-DE/actions/runs/44595705926)
+falhou no smoke agregado, após passar pela inicialização e pelo encerramento
+que abortavam antes. A causa foi uma fixture não atualizada na migração
+`e77d3bc5`: `NativeTitleBar` passou a ler título/foco do proprietário Rust,
+mas `menubar_smoke.jsx` ainda usava `id: 'w1'` sem criar essa janela e fornecia
+o título somente como prop JS. O clique procurava um texto inexistente.
+
+A fixture agora abre a janela pelo `wm`, define seu título no modelo, testa
+arraste e maximização e a fecha antes de prosseguir. O cenário agregado foi
+transferido de `tools/desktop/check.py` para `shell_surfaces_runtime`, exigido
+por `make check` em ambas as variantes GPU. O Rust controla o processo, a
+captura e a exigência das sete etapas e de nenhum erro JS. O driver é
+compilado no próprio teste; removida a geração do bundle antigo no build.
+As outras verificações históricas de `check.py` permanecem para migração.
+
+Validação: cenário antigo reproduziu a falha no compositor atual; corrigido,
+passou nas variantes GPU=0 e GPU=1. O encerramento normal/SIGTERM também
+passou em GPU=0. Bundles reconstruídos. Evidências locais em
+`build/validation/ci-shell-surfaces/`; o CI publica `axia-shell-surfaces-0/1`.
+
 ## Verificação
 
 ```sh

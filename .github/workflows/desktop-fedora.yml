@@ -51,12 +51,20 @@ jobs:
         if: matrix.gpu == 1
         run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline -p axia-state
       - name: Build and test desktop with memory telemetry
+        env:
+          AXIA_SHELL_SURFACES_OUTPUT: ${{ runner.temp }}/axia-shell-surfaces
         run: cargo xtask build-memory --output "$RUNNER_TEMP/desktop-memory.json" -- make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: desktop-memory-${{ matrix.gpu }}
           path: ${{ runner.temp }}/desktop-memory.json
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: axia-shell-surfaces-${{ matrix.gpu }}
+          path: ${{ runner.temp }}/axia-shell-surfaces/
           if-no-files-found: warn
       - name: Rust installed shell shutdown regression
         env:

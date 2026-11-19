@@ -236,27 +236,8 @@ def main():
             assert 'scheduler compositor integration: passed' in log, log
             for error in ['dock preview smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
                 assert error not in log, log
-            # The menu bar's menus drawn by the Rust native view, opened and run through JS.
-            fixture = (REPO / 'tests/menubar-smoke.bundle.js').read_bytes()
-            target.write_bytes(fixture)
-            for entry in staged_manifest['files']:
-                if entry['path'] == 'themes/default/theme.bundle.js':
-                    entry['size'] = len(fixture)
-                    entry['sha256'] = hashlib.sha256(fixture).hexdigest()
-            (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
-            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '10',
-                        '--theme', '../themes/default/theme.bundle.js'], home / 'runtime',
-                       cwd=staged / 'bin', env=env, **opts)
-            log = (home / '.cache/axia/session.log').read_text()
-            assert 'menu bar integration: passed' in log, log
-            assert 'title bar integration: passed' in log, log
-            assert 'launcher integration: passed' in log, log
-            assert 'spotlight integration: passed' in log, log
-            assert 'banner integration: passed' in log, log
-            assert 'menu integration: passed' in log, log
-            assert 'dock parts integration: passed' in log, log
-            for error in ['menu bar smoke:', 'title bar:', 'native launcher:', 'native tree:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
-                assert error not in log, log
+            # Shell surface integration is owned by the Rust shell_surfaces_runtime
+            # test, required by make check in both GPU variants.
             # Real isolated app using the same Rust scheduler, driven by actual Wayland callbacks.
             # Mutate only this disposable install's calendar package and its code manifest.
             fixture_app = (REPO / 'server/tests/scheduler_app.js').read_bytes()
