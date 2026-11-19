@@ -315,6 +315,12 @@ views nativas lerem direto, sem JSON.
       da Dock e no atalho também é nativa, preservando guardas e IPC de saída.
       `appGroup`/`runningApps` mantêm objetos do espelho por compatibilidade;
       apresentação da barra, callbacks e execução de efeitos continuam em JS.
+      O menu Janela da barra agora monta comandos, lista, títulos e desktops
+      diretamente no host Rust. Não pede linhas a `barBridge` nem envia uma
+      lista de janelas; revisões atualizam o menu aberto. Arranjos e trazer
+      todas à frente escolhem alvos atuais em uma transação nativa. A API
+      `windowMenuItems` continua disponível por compatibilidade; não é usada
+      pela barra da sessão. Outros menus e serviços seguem pendentes.
       Alternador com integração Rust e capturas Axia/Adwaita em claro/escuro e
       640/1000 px; comandos com quatro cenários gráficos. Detalhes em `STATE-RUST.md`.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,

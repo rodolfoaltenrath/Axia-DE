@@ -12,7 +12,7 @@
 // Lord Flow shows the app menu under the app's name in its menu bar and the rest in the crown menu;
 // a theme without a menu bar can offer About in each window's Help menu. About <app> and Force Quit are system windows
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
-import { windows, wm, appMenus, applyNativeWindowState } from './windows.js';
+import { windows, wm, appMenus, applyNativeWindowState, windowModelFacts } from './windows.js';
 import { nativeCatalogFacts } from './nativecatalog.js';
 import { sameFacts } from './nativeviewfacts.js';
 import { openFileWithApps } from './sysopen.js';
@@ -111,6 +111,8 @@ function windowCommand(command) {
   if (reply.error) throw new Error(reply.error);
   applyNativeWindowState(reply);
 }
+export function arrangeWindowMenu(id, layout) { windowCommand({ action: 'arrange', id, layout, facts: windowModelFacts() }); }
+export function bringAllWindows(id) { windowCommand({ action: 'bringAll', id }); }
 export function runningApps() {
   const snapshot = windows.get(), byId = new Map(snapshot.map(w => [String(w.id), w]));
   // Legacy JS callers still consume mirror objects. Native consumers use IDs

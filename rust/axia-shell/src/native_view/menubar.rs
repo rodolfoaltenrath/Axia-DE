@@ -31,6 +31,10 @@ pub struct MenuBar {
     sub: i64,
     sub_row: i64,
     last: Value,
+    window_menu: Option<super::window_menu::WindowMenu>,
+    bar: Value,
+    width: f64,
+    lang: String,
 }
 
 pub(super) fn selectable(items: &[Value], i: i64) -> bool {
@@ -41,7 +45,9 @@ pub(super) fn selectable(items: &[Value], i: i64) -> bool {
 }
 pub(super) fn advance(items: &[Value], from: i64, dir: i64) -> Option<i64> {
     let n = items.len() as i64;
-    (1..=n).map(|s| (from + dir * s).rem_euclid(n)).find(|i| selectable(items, *i))
+    (1..=n)
+        .map(|s| (from + dir * s).rem_euclid(n))
+        .find(|i| selectable(items, *i))
 }
 /// Light ink (a dark bar) takes the light glyph, as `AxiaGlyph` does.
 fn light(color: &str) -> bool {
@@ -57,6 +63,24 @@ fn light(color: &str) -> bool {
 }
 
 impl MenuBar {
+    pub fn with_windows(
+        reader: axia_state::Reader<crate::winmodel::WindowState>,
+        assets: &str,
+        home: Option<&str>,
+    ) -> Self {
+        Self {
+            window_menu: Some(super::window_menu::WindowMenu::new(reader, assets, home)),
+            ..Self::default()
+        }
+    }
+    fn window_run(&mut self, action: &Value) -> Value {
+        let reply = self
+            .window_menu
+            .as_ref()
+            .map_or_else(|| json!({}), |menu| menu.effect(action));
+        self.close();
+        reply
+    }
     fn close(&mut self) {
         self.open = None;
         self.asked = None;
@@ -68,7 +92,11 @@ impl MenuBar {
         let inner = if item["glyph"].is_string() {
             GLYPH
         } else {
-            measure(item["label"].as_str().unwrap_or(""), FONT, if item["bold"] == true { 700. } else { 500. })
+            measure(
+                item["label"].as_str().unwrap_or(""),
+                FONT,
+                if item["bold"] == true { 700. } else { 500. },
+            )
         };
         inner + 2. * PAD
     }
@@ -92,8 +120,15 @@ impl MenuBar {
         let bar = &input["args"]["bar"];
         let items = bar["items"].as_array().map(Vec::as_slice).unwrap_or(&[]);
         let width = input["context"]["width"].as_f64().unwrap_or(0.);
-        let height = input["context"]["height"].as_f64().filter(|h| *h > 1.).or(bar["height"].as_f64()).unwrap_or(ITEM_H);
-        let rtl = matches!(input["lang"].as_str().unwrap_or(""), "ar" | "he" | "fa" | "ur");
+        let height = input["context"]["height"]
+            .as_f64()
+            .filter(|h| *h > 1.)
+            .or(bar["height"].as_f64())
+            .unwrap_or(ITEM_H);
+        let rtl = matches!(
+            input["lang"].as_str().unwrap_or(""),
+            "ar" | "he" | "fa" | "ur"
+        );
         let top = ((height - ITEM_H) / 2.).max(0.);
         let tone = if light(ink) { "light" } else { "dark" };
         let mut children: Vec<Value> = Self::places(items, width, rtl)
@@ -119,7 +154,11 @@ impl MenuBar {
             })
             .collect();
         if let Some(open) = &self.open {
-            let x = if rtl { (open.x - MENU_W).max(0.) } else { open.x };
+            let x = if rtl {
+                (open.x - MENU_W).max(0.)
+            } else {
+                open.x
+            };
             children.push(json!({"kind":"menu","key":"menu","x":x,"y":height + GAP,"width":MENU_W,"layer":"popover",
                 "items":open.items,"active":self.row,"sub":self.sub,"subActive":self.sub_row,
                 "events":{"onDismiss":["dismiss"]}}));
@@ -127,7 +166,10 @@ impl MenuBar {
         json!({"kind":"view","key":"menubar","style":{"position":"absolute","left":0,"top":0,"width":width,"height":height},"children":children})
     }
     fn items(&self) -> &[Value] {
-        self.open.as_ref().map(|o| o.items.as_slice()).unwrap_or(&[])
+        self.open
+            .as_ref()
+            .map(|o| o.items.as_slice())
+            .unwrap_or(&[])
     }
     fn run(&mut self, id: &Value) -> Value {
         self.close();
@@ -136,9 +178,21 @@ impl MenuBar {
 }
 
 impl NativeApp for MenuBar {
+    fn invalidated(&self) -> bool {
+        self.open.as_ref().is_some_and(|open| open.name == "window")
+            && self.window_menu.as_ref().is_some_and(|menu| menu.pending())
+    }
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
+                self.bar = input["args"]["bar"].clone();
+                self.width = input["context"]["width"].as_f64().unwrap_or(0.);
+                self.lang = input["lang"].as_str().unwrap_or("en").to_owned();
+                if let (Some(open), Some(menu)) = (&mut self.open, &mut self.window_menu) {
+                    if open.name == "window" {
+                        open.items = menu.items(input);
+                    }
+                }
                 let tree = self.tree(input);
                 if tree == self.last {
                     return json!({"same":true});
@@ -152,10 +206,17 @@ impl NativeApp for MenuBar {
                     self.close();
                     return json!({});
                 }
-                let bar = &input["args"]["bar"];
+                let bar = if input["args"]["bar"].is_object() {
+                    &input["args"]["bar"]
+                } else {
+                    &self.bar
+                };
                 let items = bar["items"].as_array().map(Vec::as_slice).unwrap_or(&[]);
-                let width = input["context"]["width"].as_f64().unwrap_or(0.);
-                let rtl = matches!(input["lang"].as_str().unwrap_or(""), "ar" | "he" | "fa" | "ur");
+                let width = input["context"]["width"].as_f64().unwrap_or(self.width);
+                let rtl = matches!(
+                    input["lang"].as_str().unwrap_or(&self.lang),
+                    "ar" | "he" | "fa" | "ur"
+                );
                 let place = Self::places(items, width, rtl)
                     .into_iter()
                     .zip(items)
@@ -163,15 +224,32 @@ impl NativeApp for MenuBar {
                     .map(|((left, w), _)| if rtl { left + w } else { left })
                     .unwrap_or(0.);
                 self.close();
+                if name == "window" {
+                    if let Some(menu) = &mut self.window_menu {
+                        menu.open();
+                        self.open = Some(Open {
+                            name,
+                            items: Vec::new(),
+                            x: place,
+                        });
+                        return json!({"effects":[{"kind":"barPrepare"}]});
+                    }
+                }
                 self.asked = Some((name.clone(), place));
                 json!({"effects":[{"kind":"barOpen","name":name}]})
             }
             // the shell's answer to barOpen
             "next" => {
                 let open = &input["result"]["open"];
-                if let (Some((name, x)), Some(items)) = (self.asked.take(), open["items"].as_array()) {
+                if let (Some((name, x)), Some(items)) =
+                    (self.asked.take(), open["items"].as_array())
+                {
                     if open["name"].as_str() == Some(name.as_str()) {
-                        self.open = Some(Open { name, items: items.clone(), x });
+                        self.open = Some(Open {
+                            name,
+                            items: items.clone(),
+                            x,
+                        });
                         self.row = -1;
                         self.sub = -1;
                         self.sub_row = -1;
@@ -184,9 +262,13 @@ impl NativeApp for MenuBar {
                 json!({})
             }
             "run" => self.run(&input["key"]),
+            "windowMenu" => self.window_run(&input["key"]),
             "menuHover" => {
                 let i = input["key"].as_i64().unwrap_or(-1);
-                let has_sub = usize::try_from(i).ok().and_then(|i| self.items().get(i)).is_some_and(|it| it["submenu"].is_array());
+                let has_sub = usize::try_from(i)
+                    .ok()
+                    .and_then(|i| self.items().get(i))
+                    .is_some_and(|it| it["submenu"].is_array());
                 let row = if selectable(self.items(), i) { i } else { -1 };
                 let sub = if has_sub { i } else { -1 };
                 if (row, sub) != (self.row, self.sub) {
@@ -198,8 +280,15 @@ impl NativeApp for MenuBar {
             }
             "menuSubHover" => {
                 let i = input["key"].as_i64().unwrap_or(-1);
-                let sub = usize::try_from(self.sub).ok().and_then(|s| self.items().get(s)).and_then(|it| it["submenu"].as_array());
-                self.sub_row = if sub.is_some_and(|s| selectable(s, i)) { i } else { -1 };
+                let sub = usize::try_from(self.sub)
+                    .ok()
+                    .and_then(|s| self.items().get(s))
+                    .and_then(|it| it["submenu"].as_array());
+                self.sub_row = if sub.is_some_and(|s| selectable(s, i)) {
+                    i
+                } else {
+                    -1
+                };
                 json!({})
             }
             _ => Value::Null,
@@ -210,15 +299,31 @@ impl NativeApp for MenuBar {
         self.open.as_ref()?;
         let in_sub = self.sub >= 0;
         let list: Vec<Value> = if in_sub {
-            self.items().get(self.sub as usize).and_then(|it| it["submenu"].as_array()).cloned().unwrap_or_default()
+            self.items()
+                .get(self.sub as usize)
+                .and_then(|it| it["submenu"].as_array())
+                .cloned()
+                .unwrap_or_default()
         } else {
             self.items().to_vec()
         };
         let active = if in_sub { self.sub_row } else { self.row };
         match key {
             "ArrowDown" | "ArrowUp" | "Home" | "End" => {
-                let dir = if matches!(key, "ArrowUp" | "End") { -1 } else { 1 };
-                let from = if matches!(key, "Home" | "End") || active < 0 { if dir > 0 { -1 } else { 0 } } else { active };
+                let dir = if matches!(key, "ArrowUp" | "End") {
+                    -1
+                } else {
+                    1
+                };
+                let from = if matches!(key, "Home" | "End") || active < 0 {
+                    if dir > 0 {
+                        -1
+                    } else {
+                        0
+                    }
+                } else {
+                    active
+                };
                 if let Some(next) = advance(&list, from, dir) {
                     if in_sub {
                         self.sub_row = next;
@@ -229,7 +334,11 @@ impl NativeApp for MenuBar {
                 }
             }
             "ArrowRight" if !in_sub => {
-                if let Some(sub) = usize::try_from(self.row).ok().and_then(|i| list.get(i)).and_then(|it| it["submenu"].as_array()) {
+                if let Some(sub) = usize::try_from(self.row)
+                    .ok()
+                    .and_then(|i| list.get(i))
+                    .and_then(|it| it["submenu"].as_array())
+                {
                     self.sub = self.row;
                     self.sub_row = advance(sub, -1, 1).unwrap_or(-1);
                 }
@@ -245,7 +354,10 @@ impl NativeApp for MenuBar {
                     let item = list[active as usize].clone();
                     if !in_sub && item["submenu"].is_array() {
                         self.sub = self.row;
-                        self.sub_row = advance(item["submenu"].as_array().unwrap(), -1, 1).unwrap_or(-1);
+                        self.sub_row =
+                            advance(item["submenu"].as_array().unwrap(), -1, 1).unwrap_or(-1);
+                    } else if item["action"][0] == "windowMenu" {
+                        return Some(self.window_run(&item["action"][1]));
                     } else if item["action"][0] == "run" {
                         return Some(self.run(&item["action"][1]));
                     }
@@ -260,6 +372,15 @@ impl NativeApp for MenuBar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_actions_use_the_last_measured_bar_when_the_action_has_no_facts() {
+        let mut bar = MenuBar::default();
+        bar.request(&input("sync", Value::Null, "en"));
+        let response = bar.request(&json!({"cmd":"bar","key":"window"}));
+        assert_eq!(response["effects"][0]["kind"], "barOpen");
+        assert!(bar.asked.as_ref().unwrap().1 > 50.);
+    }
 
     fn input(cmd: &str, key: Value, lang: &str) -> Value {
         json!({"cmd":cmd,"key":key,"lang":lang,
@@ -279,10 +400,22 @@ mod tests {
 
     #[test]
     fn lays_the_items_out_from_the_left_or_the_right() {
-        let ltr = MenuBar::places(input("sync", Value::Null, "en")["args"]["bar"]["items"].as_array().unwrap(), 800., false);
+        let ltr = MenuBar::places(
+            input("sync", Value::Null, "en")["args"]["bar"]["items"]
+                .as_array()
+                .unwrap(),
+            800.,
+            false,
+        );
         assert_eq!(ltr[0], (0., 34.));
         assert_eq!(ltr[1].0, 34.);
-        let rtl = MenuBar::places(input("sync", Value::Null, "ar")["args"]["bar"]["items"].as_array().unwrap(), 800., true);
+        let rtl = MenuBar::places(
+            input("sync", Value::Null, "ar")["args"]["bar"]["items"]
+                .as_array()
+                .unwrap(),
+            800.,
+            true,
+        );
         assert_eq!(rtl[0], (766., 34.));
         assert!(rtl[1].0 + rtl[1].1 <= 766.);
     }
@@ -293,7 +426,10 @@ mod tests {
         let items = first["tree"]["children"].as_array().unwrap();
         assert_eq!(items.len(), 3);
         assert_eq!(items[0]["children"][0]["kind"], "image");
-        assert_eq!(items[0]["children"][0]["src"], "asset:icons/axia-glyph-light-16.png");
+        assert_eq!(
+            items[0]["children"][0]["src"],
+            "asset:icons/axia-glyph-light-16.png"
+        );
         assert_eq!(items[1]["children"][0]["style"]["fontWeight"], 700);
         assert_eq!(app.request(&input("sync", Value::Null, "en"))["same"], true);
     }
@@ -303,7 +439,14 @@ mod tests {
         let reply = app.request(&input("bar", json!("app"), "en"));
         assert_eq!(reply["effects"][0], json!({"kind":"barOpen","name":"app"}));
         let pending = app.request(&input("sync", Value::Null, "en"));
-        assert!(pending["tree"]["children"].as_array().unwrap().iter().all(|c| c["kind"] != "menu"), "no menu before its items");
+        assert!(
+            pending["tree"]["children"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|c| c["kind"] != "menu"),
+            "no menu before its items"
+        );
         app.request(&json!({"cmd":"next","result":menu(two())}));
         let tree = app.request(&input("sync", Value::Null, "en"))["tree"].clone();
         let menu = tree["children"].as_array().unwrap().last().unwrap().clone();
@@ -346,7 +489,10 @@ mod tests {
     #[test]
     fn the_keyboard_moves_over_rows_and_submenus() {
         let mut app = MenuBar::default();
-        assert!(app.key("ArrowDown", "", 0).is_none(), "closed: the shell keeps its keys");
+        assert!(
+            app.key("ArrowDown", "", 0).is_none(),
+            "closed: the shell keeps its keys"
+        );
         opened(&mut app);
         app.key("ArrowDown", "", 0);
         assert_eq!(app.row, 0);
@@ -364,7 +510,10 @@ mod tests {
         opened(&mut app);
         assert_eq!(app.key("Escape", "", 0), Some(json!({})));
         assert!(app.open.is_none());
-        assert!(app.key("a", "a", 0).is_none(), "closed again: the shell keeps its keys");
+        assert!(
+            app.key("a", "a", 0).is_none(),
+            "closed again: the shell keeps its keys"
+        );
     }
     #[test]
     fn hover_tracks_the_row_and_its_submenu() {

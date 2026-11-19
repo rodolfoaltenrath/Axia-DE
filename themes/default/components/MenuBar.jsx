@@ -1,6 +1,6 @@
 // Top menu bar: the L menu, the active app and its menus, Window and Help (drawn in Rust by the native
 // view host, sdk/nativemenubar.js), the keyboard layout, status items, network, Control Center and clock.
-import { View, BackgroundApps, NetworkConnectionIcon, NetworkPopover, useClock, wm, getApp, session, useAppMenus, t as tr, appName, keyboard, useSettings, screen, windowAppName, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, windowMenuItems, NativeView, NATIVE_MENUBAR, barBridge, NATIVE_TREE, treeOwners } from '@lordos/sdk';
+import { View, BackgroundApps, NetworkConnectionIcon, NetworkPopover, useClock, wm, getApp, session, useAppMenus, t as tr, appName, keyboard, useSettings, screen, windowAppName, spotlight, PrivacyIndicators, StatusItems, help, menuClock, appMenuItems, recentItems, storeUpdates, NativeView, NATIVE_MENUBAR, barBridge, NATIVE_TREE, treeOwners } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
 
 // Date and time with the region's format (sdk/i18n.js),
@@ -48,8 +48,7 @@ function barMenus({ app, focused, extra, onLaunchpad }) {
     ] }; },
     // the app menu under the app's name (About, Settings…, Hide, Quit; sdk/appcontrol.js)
     get app() { return { items: app ? appMenuItems(focused) : [{ label: tr('shell.menu.about'), onClick: () => wm.open('about') }] }; },
-    // Minimize, Zoom, Fill, Center, Move & Resize, Move to <display>, the open windows (sdk/windowmenu.js)
-    get window() { return { items: windowMenuItems(app ? focused : null) }; },
+    // The Window menu reads the session model directly in the native host.
     get help() { return { items: [
       ...(getApp('help') ? [{ label: tr('shell.help.open'), onClick: () => wm.open('help') }, { label: tr('shell.help.tour'), onClick: () => help.startTour() }, '-'] : []),
       { label: tr('shell.menu.about'), onClick: () => wm.open('about') },
@@ -109,7 +108,7 @@ function NativeMenuBar({ t, height, focused, onLaunchpad, onControlCenter, contr
         position: 'absolute', left: area.x, top: area.y, width: area.w, height, flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: 8, backgroundColor: t.menuBg, backdropFilter: `blur(${t.blur}px)`,
       }}>
-        <NativeView manifest={NATIVE_MENUBAR} args={{ bar: { items, height } }} style={{ height }} />
+        <NativeView manifest={NATIVE_MENUBAR} stateSource={lord.windowList} args={{ bar: { items, height }, displays: screen.displays }} style={{ height }} />
         <NativeBarGroup owner="bar-keyboard" onAction={() => keyboard.next()}
           tree={barNode('kb', t, [barLabel(t, keyboard.label(keyboard.active()))], { action: 'kb' })} />
         <StatusItems color={t.menuText} />

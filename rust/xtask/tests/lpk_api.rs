@@ -141,7 +141,7 @@ globalThis.__probe={windows,wm,getApp,onActiveDesktop:w=>w.desktop===1,activeDes
  launcherIdOf,dockIdOfWindow,quitApp,linuxAppFor:()=>null,shortAppName:app=>app.name,windowAppName:w=>w.app,
  t:key=>key,appName:app=>app.name,nativeCatalogFacts:deny,sameFacts:()=>false,openFileWithApps:()=>{},
  nativeAppRequest:deny,nativeAppEffects:deny,executeNativeEffect:deny};
-const names={ 'windows.js':['windows','wm','getApp','onActiveDesktop','activeDesktop','appMenus','applyNativeWindowState'],
+const names={ 'windows.js':['windows','wm','getApp','onActiveDesktop','activeDesktop','appMenus','applyNativeWindowState','windowModelFacts'],
  'dock.js':['launcherIdOf','dockIdOfWindow','quitApp'],'apps.js':['linuxAppFor','shortAppName','windowAppName'],
  'i18n.js':['t','appName'],'nativecatalog.js':['nativeCatalogFacts'],'nativeviewfacts.js':['sameFacts'],
  'sysopen.js':['openFileWithApps'],'nativeappmodel.js':['nativeAppRequest','nativeAppEffects','executeNativeEffect']};

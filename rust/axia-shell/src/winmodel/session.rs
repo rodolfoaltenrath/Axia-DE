@@ -666,7 +666,7 @@ impl WindowState {
         match op {
             "appControl" => {
                 let (command, ids) = control.ok_or("appControl requires a native owner")?;
-                self.app_command(command, ids);
+                self.app_command(command, ids, &facts);
             }
             "state" => {}
             // the mirror lost track: everything again, in full
@@ -907,7 +907,10 @@ impl Session {
     /// Typed native mutation. The response only updates the transitional SDK mirror;
     /// selection and grouping do not travel through JavaScript.
     pub fn app_command(&mut self, command: AppCommand, ids: &[&str]) -> Result<Value, String> {
-        self.state.update(|state| match state.call("appControl", &[], Some((command, ids))) {
+        self.app_command_with_facts(command, ids, &Value::Null)
+    }
+    pub fn app_command_with_facts(&mut self, command: AppCommand, ids: &[&str], facts: &Value) -> Result<Value, String> {
+        self.state.update(|state| match state.call("appControl", std::slice::from_ref(facts), Some((command, ids))) {
             Ok((reply, changed)) => (Ok(reply), changed),
             Err(error) => (Err(error), false),
         })
@@ -915,11 +918,17 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str) }
 
 impl WindowState {
-    fn app_command(&mut self, command: AppCommand, ids: &[&str]) {
+    fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) {
         match command {
+            AppCommand::BringAll => {
+                for id in ids { self.raise_unless_top(id); }
+            }
+            AppCommand::Arrange(layout) => {
+                self.arrange(facts, &ids.iter().map(|id| json!(id)).collect::<Vec<_>>(), layout);
+            }
             AppCommand::Cycle(back) => {
                 let mine: Vec<_> = self.wins.iter().filter(|w| ids.contains(&w.id()) && !w.on("minimized") && self.here(w))
                     .map(|w| w.id().to_owned()).collect();
@@ -992,6 +1001,8 @@ impl Window<'_> {
     pub fn desktop(&self) -> i64 { self.0.desktop() }
     pub fn minimized(&self) -> bool { self.0.on("minimized") }
     pub fn pip(&self) -> bool { self.0.on("pip") }
+    pub fn maximized(&self) -> bool { self.0.on("maximized") }
+    pub fn snapped(&self) -> Option<&str> { self.0.data.get("snapped").and_then(Value::as_str) }
     pub fn revision(&self) -> u64 { self.0.rev }
     pub fn args(&self) -> &Value { self.0.data.get("args").unwrap_or(&Value::Null) }
 }

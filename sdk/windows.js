@@ -106,9 +106,8 @@ const rect = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
 // lord.screen's order: an index into it names a display), the open apps' sizes, and whether the theme snaps.
 function facts() {
   const apps = {};
-  for (const w of windows.get()) {
-    const a = registry.get(w.app);
-    if (a && !apps[w.app]) apps[w.app] = { size: a.size || null, minSize: a.minSize || null };
+  for (const [id, a] of registry) {
+    apps[id] = { size: a.size || null, minSize: a.minSize || null };
   }
   const displays = (screen.displays || []).map((d) => ({ id: d.id, x: d.x, y: d.y, w: d.w, h: d.h, main: !!d.main, work: rect(workAreaOf(d)) }));
   return { displays, apps, snap: snapOn };
@@ -182,6 +181,7 @@ function run(op, ...args) {
 // Native session commands mutate the same owner and return its usual delta.
 // No mirror list is sent back into Rust to decide which windows to change.
 export function applyNativeWindowState(reply) { if (reply.state) apply(reply.state); }
+export const windowModelFacts = facts;
 
 // Is window `w` on desktop `d` (the one showing, without d)? Picture-in-picture is on all of them.
 export const onDesktopOf = (w, d) => !!w && !!windowViews.get().sets.desk.get(d ?? activeDesktop.get())?.has(w.id);

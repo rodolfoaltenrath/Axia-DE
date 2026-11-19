@@ -256,6 +256,48 @@ e quatro de comandos de janelas. Compositor e frontend recompilados; a validaç�
 offline do alternador passou na instalação preparada para RPM. Não houve RPM
 completo nem medição física nesta etapa.
 
+## Menu Janela da barra
+
+`native_view/window_menu.rs` pertence à barra vinculada ao leitor do contexto.
+Monta a lista, títulos, sufixos de desktop, estados habilitados e submenus no
+Rust. A montagem de `MenuBar.jsx` passa o proprietário opaco e metadados de
+telas/apps; o getter JS `window` foi retirado. As linhas não fazem uma viagem
+por `barOpen`/`barBridge` nem retornam como uma árvore JSON ao host.
+
+O menu mantém a janela de origem da abertura, inclusive se o foco mudar depois.
+Revisões atualizam título, ordem e pertencimento enquanto estiver aberto.
+Antes de enviar uma ação, o host consome mudanças pendentes e o menu verifica
+se a janela ainda existe. Fechar o menu desativa essa invalidação; a assinatura
+não estabelece timer. Idioma e revisões de catálogo também atualizam as legendas.
+
+Arranjar janelas e trazer todas à frente escolhem os alvos no controlador Rust,
+ignorando painéis e janelas minimizadas ou de outro desktop. Os IDs não são
+enviados pelo JS. Arranjos recebem somente geometria de telas e tamanhos de
+apps; esses fatos agora vêm do registro, sem percorrer o espelho de janelas.
+Cada comando publica no máximo uma revisão. Demais comandos ainda executam
+`wm` e guardas pelo adaptador, e o retorno do modelo mantém o espelho existente.
+
+As APIs públicas `windowMenuItems`/`moveResizeItems` continuam disponíveis ao SDK
+legado e aos `.lpk`; a barra da sessão não usa esses produtores. Menus de apps,
+logo e ajuda mantêm os callbacks transitórios. A barra guarda a última medição
+dos botões para posicionar menus recebidos por ações reais do host, que não
+carregam fatos; esse caso também está coberto por teste.
+
+`window_menu_runtime` verifica o proprietário correto, títulos/pertencimento
+com espelho parado, desktop de destino, ação sobre janela ausente do espelho,
+arranjo após fechar outro alvo, guarda de ação obsoleta e coexistência de um
+menu legado. São quatro cenários claro/escuro e 640/1000 px, exigidos pelo CI,
+com capturas em `build/validation/window-menu/` e artefato `axia-window-menu`.
+
+Validação desta etapa: 525 testes unitários da shell aprovados (sete testes
+especiais ignorados), três contratos LPK e quatro cenários gráficos do menu
+Janela. Passaram também as regressões de menus de app, menus de contexto,
+Forçar encerramento e comandos de janela (quatro cenários cada), além dos
+oito cenários do alternador. Compositor e frontend recompilados; instalação
+em diretório temporário e `switcher-check` usando os arquivos instalados
+aprovados. Arranjos recusam uma origem removida, em outro desktop ou que seja
+painel interno. Medições físicas e RPM completo continuam para o encerramento.
+
 ## Verificação
 
 ```sh

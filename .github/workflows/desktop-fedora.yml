@@ -108,6 +108,17 @@ jobs:
         env:
           AXIA_NATIVE_FOCUS_OUTPUT: ${{ runner.temp }}/axia-native-focus
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_focus_runtime -- --ignored --nocapture
+      - name: Rust native Window menu and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_WINDOW_MENU_OUTPUT: ${{ runner.temp }}/axia-window-menu
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test window_menu_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-window-menu
+          path: ${{ runner.temp }}/axia-window-menu/
+          if-no-files-found: warn
       - name: Rust application menus and graceful quit
         if: matrix.gpu == 1
         env:

@@ -5,6 +5,8 @@ use std::rc::Rc;
 mod quit;
 #[cfg(test)]
 mod quit_tests;
+#[cfg(test)]
+mod window_menu_tests;
 
 #[derive(Default)]
 pub struct Controller {
@@ -57,6 +59,15 @@ impl Controller {
             Some("hideOthers") => AppCommand::HideOthers,
             Some("showAll") => AppCommand::ShowAll,
             Some("desktop") => AppCommand::ToggleDesktop,
+            Some("bringAll") => AppCommand::BringAll,
+            Some("arrange") => AppCommand::Arrange(match input["layout"].as_str() {
+                Some("left-right") => "left-right",
+                Some("right-left") => "right-left",
+                Some("top-bottom") => "top-bottom",
+                Some("bottom-top") => "bottom-top",
+                Some("quarters") => "quarters",
+                _ => return json!({"error":"app.invalidRequest"}),
+            }),
             _ => return json!({"error":"app.invalidRequest"}),
         };
         let Some(windows) = &mut self.windows else {
@@ -93,6 +104,36 @@ impl Controller {
             })
             .flat_map(|group| group.windows.iter().map(|w| w.id.as_str()))
             .collect();
+        if matches!(command, AppCommand::BringAll | AppCommand::Arrange(_)) {
+            let mut stack: Vec<_> = state
+                .windows()
+                .filter(|w| {
+                    ids.contains(&w.id())
+                        && !w.minimized()
+                        && (w.pip() || w.desktop() == state.active_desktop())
+                })
+                .map(|w| w.id().to_owned())
+                .collect();
+            if let Some(anchor) = input["id"].as_str().filter(|id| stack.iter().any(|w| w == id)) {
+                stack.retain(|id| id != anchor);
+                if matches!(command, AppCommand::Arrange(_)) {
+                    stack.reverse();
+                    stack.insert(0, anchor.to_owned());
+                } else {
+                    stack.push(anchor.to_owned());
+                }
+            } else if matches!(command, AppCommand::Arrange(_)) {
+                return json!({"result":null,"state":null});
+            }
+            drop(state);
+            return windows
+                .app_command_with_facts(
+                    command,
+                    &stack.iter().map(String::as_str).collect::<Vec<_>>(),
+                    &input["facts"],
+                )
+                .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}));
+        }
         drop(state);
         windows
             .app_command(command, &ids)

@@ -14,6 +14,9 @@ mod launcher;
 mod menu;
 pub(crate) use menu::measure as measure_text;
 mod menubar;
+mod window_menu;
+#[cfg(test)]
+mod window_menu_tests;
 mod shell_icons;
 mod titlebar;
 mod switcher;
@@ -203,11 +206,14 @@ pub unsafe extern "C" fn axia_view_mount_windows(
 
 unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     windows: Option<axia_state::Reader<crate::winmodel::WindowState>>) -> u32 {
+    let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
     let app = if id == "shell:titlebar" {
         windows.clone().map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
     } else if id == "forcequit" {
         windows.clone().map(|reader| Box::new(crate::forcequit::App::with_windows(
             std::rc::Rc::new(crate::winmodel::WindowReader(reader)))) as Box<dyn NativeApp>).or_else(|| app(id))
+    } else if id == "shell:menubar" {
+        windows.clone().map(|reader| Box::new(menubar::MenuBar::with_windows(reader,&assets,home.as_deref())) as Box<dyn NativeApp>).or_else(||app(id))
     } else if id == "shell:switcher" {
         windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
     } else { app(id) };
@@ -218,7 +224,6 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         return 0;
     }
     let facts = json(facts);
-    let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
     let mut host = Host::new(node, app, &assets, home.as_deref());
     if facts["windowId"].as_str().is_some_and(|id| !id.is_empty()) && facts["icon"].is_null() {
         if let Some(reader) = windows { host.bind_window(reader); }
