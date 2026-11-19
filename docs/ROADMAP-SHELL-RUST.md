@@ -101,11 +101,11 @@ Uma fatia (um app, um painel ou um serviço) só é marcada como concluída quan
       testes implementados em Rust.
       O Actions foi calibrado com seis amostras de dois workflows e agora
       impõe 15 poll/s e 120 MiB por padrão; veja `SHELL-RUST-BASELINE.md`.
-- [ ] Opções de compilação do Rust (`lto`, `codegen-units`) em `rust/Cargo.toml`,
+- [x] Opções de compilação do Rust (`lto`, `codegen-units`) em `rust/Cargo.toml`,
       medidas contra a linha de base.
-      Protocolo e comandos preparados em
-      [RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md); comparação
-      interrompida para desligamento, sem resultado completo ou mudança de flags.
+      Três builds frios e integração real concluídos em
+      [RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md): vínculo,
+      nove amostras ociosas e paridade de pixels/texto. Mantidas as flags Fedora.
 - [x] Lista de arquivos do `sdk/` que o host dos `.lpk` (`runtime/app-host.js`)
       precisa: [LPK-SDK-BOUNDARY.md](LPK-SDK-BOUNDARY.md). O grafo atual traz
       **114/114 arquivos**: nenhum é exclusivamente da shell no bundle de hoje.
@@ -129,39 +129,39 @@ em [SHELL-RUST-BASELINE.md](SHELL-RUST-BASELINE.md). Nenhuma flag Rust foi alter
 O orçamento inicial proposto para o mesmo ambiente é 15 chamadas de poll/s
 e 120 MiB de RSS. Após conferir os artifacts de dois workflows, o coletor no CI
 impõe esses limites por padrão (`AXIA_IDLE_ENFORCE=false` permite calibração
-explícita). A comparação de
-`lto`/`codegen-units` também continua aberta. Não marcar a Fase 0 inteira como
-concluída nem remover chaves de transição com base nesses resultados parciais.
+explícita). A comparação de `lto`/`codegen-units` foi concluída, mantendo as flags
+Fedora; os números estão no relatório específico. Não marcar a Fase 0 inteira
+como concluída: primeira apresentação e frame completo em hardware ainda faltam.
 
 **Saída:** decisões fechadas, números registrados, orçamento de ociosidade no CI.
 
 ### Ponto de retomada — 2026-11-18
 
-Trabalho interrompido a pedido do usuário para desligar o computador. Continuamos
-na **Fase 0**; nenhuma chave nativa foi removida e a Fase 1 não começou.
+O desligamento interrompeu a primeira tentativa de comparar os perfis; aqueles
+registros parciais não entram nos resultados. A retomada concluiu três builds
+frios de `c5e595f1`, sem artefatos reaproveitados, em clone isolado Fedora 44 com
+Rust 1.99.1. Continuamos na **Fase 0**; nenhuma chave nativa foi removida e a
+Fase 1 não começou.
 
-- Preparado `cargo xtask profile-check` para três builds sequenciais da shell:
-  flags Fedora atuais (`fedora`), Thin LTO (`thin`) e oito unidades (`cgu8`).
-  Registra versões, flags, tempo, RSS, tamanho do arquivo estático e reutilização
-  de artefatos. Não altera o perfil de produção nem roda automaticamente no CI.
-- Preparado o driver de integração Rust `profile_runtime`: vincula cada variante
-  ao compositor e mede três sessões privadas. O driver compilou, mas **a execução
-  real dessa comparação ainda não foi realizada**.
-- A primeira compilação `fedora` foi cancelada antes de terminar. Seus registros
-  parciais não são uma linha de base válida; `thin` e `cgu8` não foram executadas.
-- Validação antes da parada: **43 testes Rust passaram**, com duas integrações
-  manuais ignoradas por padrão. Não foi executado um novo RPM completo.
+- `fedora`: 389,76 s e pico individual de 2,520 GiB; `thin`: 420,24 s e
+  2,961 GiB; `cgu8`: 426,73 s e 1,677 GiB. Uma compilação por variante.
+- Integração Rust real concluída: três vínculos, nove amostras ociosas válidas,
+  pixels idênticos entre perfis/threads e mesmas métricas de texto. Os arquivos
+  da shell medidos permaneceram inalterados durante o vínculo e os instrumentos.
+- **Decisão: manter as flags Fedora.** Oito unidades reduzem a memória do
+  compilador, mas aumentam tempo, artefatos e RSS da sessão; a pequena vantagem
+  de vazão precisa de rodadas independentes. Thin LTO não mostrou vantagem.
+- Calibração dos limites do runner concluída com seis amostras de dois
+  workflows. O CI impõe 15 poll/s e 120 MiB por padrão.
+- O RPM de referência do Actions passou: comando `rpmbuild` em 17min09s,
+  pico individual de 2,576 GiB e árvore de 4,534 GiB. Não é o tempo total do
+  workflow; veja [RUST-BUILD.md](RUST-BUILD.md).
 
-Para retomar, seguir [RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md).
-Executar novamente as três variantes, em diretórios de artefatos novos, depois
-a integração real, registrar resultados e só então decidir sobre as flags.
-O clone descartável local é `/var/tmp/axia-profile-20261118` no Fedora WSL;
-os relatórios parciais estão em `build/validation/profile-compare/`.
-Esses diretórios **não acompanham o push** e podem ser recriados pelo protocolo.
-
-Na retomada, a calibração dos limites do runner foi concluída com seis amostras
-de dois workflows. O CI impõe os limites por padrão; acompanhar os artifacts
-para detectar regressões. Essa mudança não altera as flags Rust.
+Protocolo e tabelas em [RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md).
+O clone local é `/var/tmp/axia-phase0-20261118-resume`, com relatórios em
+`build/validation/profile-compare-resume/`. Esses diretórios **não acompanham
+o push** e podem ser recriados. Não houve novo RPM completo nesta retomada;
+o RPM usado como referência é o artifact do Actions em `c5e595f1`.
 
 Continuam pendentes também:
 
@@ -336,3 +336,4 @@ mostraram.
 | 2026-11-18 | Fase 0: telemetria de compilação e seus testes em Rust (`cargo xtask build-memory`) | Commit desta linha | 41 testes Rust; coleta validada em compilação real do xtask com dois jobs. Desktop/RPM usam o coletor Rust; comparação de LTO/codegen-units permanece pendente. |
 | 2026-11-18 | Fase 0: protocolo e ferramentas para comparar perfis; ponto de parada | Commit desta linha | 43 testes Rust passaram; primeira compilação cancelada para desligamento. Thin LTO, cgu8 e integração comparativa não executados. Nenhuma flag alterada. |
 | 2026-11-18 | Fase 0: calibração confirmada no runner e orçamento obrigatório por padrão | Commit desta linha | Seis amostras válidas em dois workflows: medianas de 12,550/12,300 poll/s e 102,969/103,148 MiB. Mantidos os limites de 15 poll/s e 120 MiB. |
+| 2026-11-18 | Fase 0: comparação de perfis concluída com instrumentos e testes Rust | Commit desta linha | Três builds frios e três vínculos reais; nove amostras ociosas e paridade de pixels/texto. Mantidas as flags Fedora. Primeira apresentação e frame completo em hardware continuam pendentes. |

@@ -84,8 +84,10 @@ with two Cargo jobs and low priority, returned success in 10.11 s and recorded
 `build/validation/build-memory-rust/compile.json`. This validates collection;
 it is not a desktop performance comparison or a GitHub runner measurement.
 
-LTO/codegen-unit comparisons remain pending. Changing the collector does not
-justify changing Fedora's release flags or marking that roadmap item complete.
+The later LTO/codegen-unit comparison is recorded in
+[RUST-PROFILE-COMPARISON.md](RUST-PROFILE-COMPARISON.md). All three profiles
+linked and ran; the evidence supports keeping Fedora's existing release flags.
+Changing the collector alone does not justify changing those flags.
 
 ## Local validation, 2026-11-18
 
@@ -112,9 +114,25 @@ save disk space; the RPM used the complete Fedora flags above.
 The RPM took 41.19 minutes in this shared WSL session, with other validation
 running concurrently and temporarily taking CPU priority. This is not a clean
 before/after timing comparison or a GitHub runner benchmark. The CI target of
-less than 30 minutes still needs verification on the actual runner. Future CI
-artifacts provide the comparable measurements; the local reports and RPMs are
+less than 30 minutes still needed verification on the actual runner at that
+point; see the subsequent runner verification below. The local reports and RPMs are
 under the ignored `build/validation/shell-split/` directory.
+
+## GitHub runner verification, 2026-11-18
+
+The successful [workflow 44422355912](https://github.com/rodolfoaltenrath/Axia-DE/actions/runs/44422355912)
+at `c5e595f1` produced an `rpm-memory` report with exit code zero:
+
+| Measured command | Elapsed | Peak single rustc RSS | Peak process-tree RSS |
+| --- | ---: | ---: | ---: |
+| `rpmbuild --rebuild` on Fedora 44 | 1,029.05 s (17 min 9 s) | 2.576 GiB | 4.534 GiB |
+
+This is the measured RPM command, including its build/check/install work;
+it excludes workflow setup, the earlier desktop matrix, SRPM preparation and
+upload/publishing. It verifies a sub-30-minute RPM command on the actual runner,
+not a sub-30-minute end-to-end workflow. The same 200 ms sampling limitations
+apply. The downloaded report is preserved under the isolated checkout's ignored
+`build/validation/profile-compare-resume/rpm-memory-c5e595f1.zip`.
 
 ## Native benchmark artifact reuse, 2026-11-18
 

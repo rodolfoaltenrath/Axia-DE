@@ -30,6 +30,13 @@ path = "../../server/src/bench/main.rs"
 required-features = ["native-host"]
 
 [[bin]]
+name = "axia-profile-ui"
+path = "../../server/tests/profile_ui.rs"
+required-features = ["native-host"]
+test = false
+bench = false
+
+[[bin]]
 name = "lordbench-cli"
 path = "../../server/src/bench/cli.rs"
 
