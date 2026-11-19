@@ -195,22 +195,8 @@ def main():
             assert Path(image['src']).is_file()
             for error in ['ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)', 'switcher smoke:']:
                 assert error not in log, log
-            # Real Files UI, document images and disk-notification adapter. Only
-            # disk facts/volume replies are mocked; no host disk operation runs.
-            fixture = (REPO / 'tests/files-smoke.bundle.js').read_bytes()
-            target.write_bytes(fixture)
-            for entry in staged_manifest['files']:
-                if entry['path'] == 'themes/default/theme.bundle.js':
-                    entry['size'] = len(fixture)
-                    entry['sha256'] = hashlib.sha256(fixture).hexdigest()
-            (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
-            run(str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '12',
-                '--theme', '../themes/default/theme.bundle.js',
-                cwd=staged / 'bin', env=env, timeout=30, **opts)
-            log = (home / '.cache/axia/session.log').read_text()
-            assert 'files integration: passed' in log, log
-            for error in ['files smoke:', 'ReferenceError:', 'TypeError:', 'SyntaxError:', 'react (error)']:
-                assert error not in log, log
+            # Files browser/dialog integration is now owned by the Rust
+            # xtask files_runtime test, required explicitly by desktop CI.
             # A real legacy history, including PNG, then the full C/Rust/JS path.
             clipdir = home / '.local/share/axia/clipboard'
             clipdir.mkdir(parents=True, exist_ok=True)

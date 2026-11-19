@@ -94,6 +94,18 @@ jobs:
           AXIA_TITLEBAR_AXIA_OUTPUT: ${{ runner.temp }}/axia-titlebar/axia
           AXIA_TITLEBAR_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-titlebar/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test titlebar_runtime -- --ignored --nocapture
+      - name: Rust Files integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_FILES_AXIA_OUTPUT: ${{ runner.temp }}/axia-files/axia
+          AXIA_FILES_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-files/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test files_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-files
+          path: ${{ runner.temp }}/axia-files/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

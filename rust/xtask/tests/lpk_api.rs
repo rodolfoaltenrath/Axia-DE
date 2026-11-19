@@ -72,7 +72,7 @@ import path from 'node:path';
 import { build } from 'esbuild';
 const root = process.argv[1], reports = [];
 for (const appHost of [false, true]) {
-  const result = await build({ entryPoints: [path.join(root, 'sdk/index.js'),path.join(root, 'themes/default/components/Window.jsx')], outdir: '.lpk-contract', bundle: true, write: false,
+  const result = await build({ entryPoints: [path.join(root, 'sdk/index.js'),path.join(root, 'themes/default/components/Window.jsx'),path.join(root,'sdk/nativeapps.js')], outdir: '.lpk-contract', bundle: true, write: false,
     minify: true, format: 'esm', jsx: 'automatic', metafile: true,
     external: ['react', 'react/jsx-runtime', '@lordos/runtime'],
     alias: { '@lordos/sdk': path.join(root, 'sdk/index.js') },
@@ -82,7 +82,7 @@ for (const appHost of [false, true]) {
     .reduce((total, [, input]) => total + input.bytesInOutput, 0);
   reports.push({ appHost, reactMenu: bytes('runtime/lpk/menu.jsx'), nativeMenu: bytes('sdk/nativemenu.jsx'),
     reactBanner: bytes('runtime/lpk/notifications.js'), nativeBanner: bytes('sdk/nativebanner.js'),
-    runtimeFlag: result.outputFiles.some(file => ['menuNativeView','notificationsNativeView','dockNativeView','spotlightNativeView','launcherNativeView','titleBarNativeView'].some(flag => file.text.includes(flag))) });
+    runtimeFlag: result.outputFiles.some(file => ['menuNativeView','notificationsNativeView','dockNativeView','spotlightNativeView','launcherNativeView','titleBarNativeView','filesNativeView'].some(flag => file.text.includes(flag))) });
 }
 console.log(JSON.stringify(reports));
 "#;

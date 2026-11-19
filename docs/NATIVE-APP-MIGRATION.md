@@ -7,9 +7,11 @@ The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
 Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts, Calendar and Settings have compiled
-Rust implementations. Files still has a compatibility mount controlled by
-`filesNativeView`; its native implementation and shared dialogs need to remain
-part of the final integration audit.
+Rust implementations. Files browser windows and icons always use the native
+host; `filesNativeView` and the React browser path are removed. Its shared
+selectors and transfer windows still use the React widget adapter, pending
+shell roadmap phase 3. The complete application remains part of the final
+integration audit.
 
 PDF: geometry, navigation, cache, search/selection, annotation/form state and the
 sidebar are Rust. The sidebar mounts native widgets. The main window, page

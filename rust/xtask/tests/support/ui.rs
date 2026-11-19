@@ -39,6 +39,7 @@ fn owned(path: &Path) {
     }
 }
 
+#[allow(dead_code)] // Each integration chooses the plain or pixel-checked entry point.
 pub fn run_ui(
     repo: &Path,
     kind: &str,
@@ -47,12 +48,26 @@ pub fn run_ui(
     width: u32,
     image_name: &str,
 ) -> Value {
+    run_ui_with_capture(repo, kind, driver_source, mode, width, image_name, |_| {})
+}
+
+pub fn run_ui_with_capture(
+    repo: &Path,
+    kind: &str,
+    driver_source: &str,
+    mode: &str,
+    width: u32,
+    image_name: &str,
+    check_capture: impl FnOnce(&Path),
+) -> Value {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
+    // Files rejects /var as a volume root. Keep private fixture volumes under
+    // /tmp so mounting/ejecting exercises the production path policy too.
     let scratch = Scratch(PathBuf::from(format!(
-        "/var/tmp/axia-{kind}-{}-{stamp}",
+        "/tmp/axia-{kind}-{}-{stamp}",
         std::process::id()
     )));
     fs::create_dir(&scratch.0).unwrap();
@@ -203,9 +218,10 @@ pub fn run_ui(
             .expect(&log),
     )
     .unwrap();
-    let png = fs::read(image).unwrap();
+    let png = fs::read(&image).unwrap();
     assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
     assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), width);
     assert_eq!(u32::from_be_bytes(png[20..24].try_into().unwrap()), 700);
+    check_capture(&image);
     report
 }

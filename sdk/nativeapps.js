@@ -1,11 +1,10 @@
 // Shared shell mounts for compiled Rust apps. Rust owns their widgets, input and
-// icons; Files retains its own shared browser/dialog renderer until its next stage.
+// icons. Shared Files dialogs and transfers migrate separately from the browser.
 import { createElement as h } from 'react';
 import { useAppWindow } from './components.jsx';
-import { RustFiles, RustFileIcon, RustTransfers } from './rustfiles.js';
+import { RustTransfers } from './rustfiles.js';
 import { registerPrivacySection } from './privacy.js';
 import { NativeView } from './nativeview.js';
-import { useSettings } from './settings.js';
 import { registerDockActions } from './dock.js';
 import { standaloneDesktop } from './platform.js';
 
@@ -29,14 +28,10 @@ export function nativeApp(manifest) {
     return { ...manifest, system: true, native: true,
       Component: function FilesHost() {
         const { args } = useAppWindow();
-        const [prefs] = useSettings();
         if (args?.transferOwner) return h(RustTransfers, { owner: args.transferOwner });
-        // Files drawn by the native view host, with no React (settings.json "filesNativeView": true; off by
-        // default while it still lacks the media and PDF previews and dropping files into the window)
-        if (prefs.filesNativeView === true && manifest.mode === 'browser') return h(NativeView, { manifest: NATIVE_FILES, args });
-        return h(RustFiles, { mode: manifest.mode, args });
+        return h(NativeView, { manifest: NATIVE_FILES, args });
       },
-      Icon: RustFileIcon };
+      Icon: function FilesIcon({ size }) { return h(NativeView, { manifest: NATIVE_FILES, icon: size || 32 }); } };
   }
   if (manifest.nativeView !== 'rust') throw new Error('Unsupported compiled app view: ' + manifest.id);
   for (const section of manifest.privacy || []) registerPrivacySection({ id: section.id, order: section.order,

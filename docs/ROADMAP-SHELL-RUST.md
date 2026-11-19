@@ -67,8 +67,14 @@ viewport. O adaptador JS ainda executa abertura de apps e efeitos da Dock.
 **Barra de título definitiva no host Rust:** título e controles nos estilos
 Axia e Adwaita; a moldura e os efeitos do gerenciador ainda usam adaptadores JS.
 
-**Apps com versão nativa atrás de chave:** Arquivos e o item ainda a investigar
-`lordNativeView`. Chaves em uso: `filesNativeView`, `lordNativeView`.
+**Arquivos definitivo no host Rust:** navegador e ícone sem chave de transição.
+Seletores e transferências ainda usam o adaptador de widgets React e ficam na
+Fase 3. Efeitos e serviços seguem no adaptador JS até as fases seguintes.
+
+**Fase 1 concluída:** as chaves listadas foram retiradas dos caminhos ativos.
+O item `lordNativeView` foi auditado e documentado abaixo: não existe como
+preferência no código atual. O próximo trabalho é a Fase 2; validação física
+e medições continuam reservadas ao encerramento.
 
 **Já em Rust no lado dos modelos:** lista de janelas, desktops e encaixe
 (`winmodel/`, `snap/`), política da Dock, launcher e busca, clipboard, rede,
@@ -245,8 +251,18 @@ correspondentes, remover a chave.
       Oito cenários com os dois estilos, claro/escuro e 640/1000 px verificam
       foco, título, arraste, maximizar/restaurar, minimizar, fechamento com
       guarda e exceções CSD/ownFrame. Corrigido duplo clique nos controles.
-- [ ] `filesNativeView`.
-- [ ] `lordNativeView`: descobrir o que cobre e fechá-la ou documentá-la.
+- [x] `filesNativeView`: navegador e ícone sempre nativos; escolha por
+      preferência e renderer React do navegador removidos. Oito cenários
+      Axia/Adwaita, claro/escuro e 640/1000 px cobrem arquivos privados reais,
+      navegação, busca, criação, renomeação, prévia PDF e volumes simulados.
+      Pixels comprovam página inteira; seletores de abrir/salvar/pasta também
+      passam. Seletores e transferências continuam pendentes na Fase 3.
+- [x] `lordNativeView`: auditoria do estado atual não encontra essa preferência
+      em `sdk/`, `runtime/`, `themes/` ou no host. Apps compilados montam
+      `nativeView: 'rust'` diretamente; o navegador Arquivos tinha a chave
+      separada acima. `__lordNativeView` é o despachante de efeitos do host,
+      ainda necessário nesta fase, e não uma chave de transição. Portanto,
+      não há um segundo renderer a promover sob esse nome.
 
 **Saída:** nenhuma chave `...NativeView` restante para esses itens.
 
@@ -302,6 +318,10 @@ Fatias de interface (cada uma completa, com seus chamadores):
       `hardware.jsx`, `cooling.jsx`, `displaysui.jsx`, `brightness.jsx`).
 - [ ] Diálogo de impressão e seletor de arquivos (`printdialog.jsx`,
       `filepicker.jsx`).
+- [ ] Widgets compartilhados dos seletores e da janela de transferências de
+      Arquivos (`sdk/rustfiles.js`): preservar callbacks de abrir/salvar/pasta,
+      múltipla seleção e a sessão dona dos trabalhos de transferência. O
+      navegador já é nativo; isso não conclui os diálogos compartilhados.
 - [ ] Emoji, aviso de restauração de sessão, pré-visualizações da Dock.
 
 ## Fase 4: o tema
@@ -416,3 +436,4 @@ mostraram.
 | 2026-11-19 | Fase 1: Spotlight sempre no host Rust | Commit desta linha | Removido o renderer React substituído e a chave; catálogo de ícones enviado ao host e foco anterior suspenso/restaurado. Testes Rust cobrem entrada, seleção, provedores, clique externo e quatro capturas; regressão de busca residente preservada. Launcher continua pendente, incluindo a faixa fixa de rolagem. |
 | 2026-11-19 | Fase 1: launcher sempre no host Rust | Commit desta linha | Removido o renderer React; rolagem monta apenas viewport e margem, alcançando o fim de 2.048 apps. Corrigidos catálogo dinâmico, menu por teclado e conflito entre clique no fundo e encerramento do host. A pedido do usuário, grade sem limite de 780 px e com colunas conforme a tela. Seis capturas em 640/1000/1920 px e regressão ampla com 1.029 apps; testes Rust também cobrem touchpad e barra. Efeitos ainda usam o adaptador JS; métricas físicas continuam adiadas. |
 | 2026-11-19 | Fase 1: barra de título sempre no host Rust | Commit desta linha | Removida a escolha por preferência e o renderer React substituído. Corrigida a maximização indevida por duplo clique num controle, reproduzida e verificada em Rust. Oito cenários Axia/Adwaita, claro/escuro e 640/1000 px, com janelas reais e PNGs. A moldura, o fallback de arraste e os efeitos ainda usam o adaptador JS; validação de grab físico e métricas ficam para o encerramento. |
+| 2026-11-19 | Fase 1: navegador Arquivos sempre nativo; chaves encerradas | Commit desta linha | Removidos o renderer React do navegador e sua preferência; ícone nativo. Corrigido o recorte de PDFs com contain, reproduzido no compositor anterior e verificado por pixels do centro/topo/rodapé. Oito cenários em Rust cobrem arquivos privados, navegação, renomeação, PDF, seletores e volumes simulados. Smoke JS/Python substituído pela integração Rust exigida no CI. lordNativeView auditado como preferência inexistente no código atual; o despachante __lordNativeView permanece até as fases seguintes. Seletores e transferências registrados na Fase 3; validação física adiada ao encerramento. |

@@ -1,5 +1,5 @@
 // What the shell carries out for a Files window drawn as a native view (apps/files/native_app.rs,
-// sdk/nativeapps.js, the "filesNativeView" setting): opening files, mounting disks, archives,
+// sdk/nativeapps.js): opening files, mounting disks, archives,
 // previews, the window's title, menus and frame, and the drag out. The window itself, its listing and
 // its input are the app's, in Rust; this is the part that needs the shell, the same effects the
 // React host (rustfiles.js) carries out for its own session.
@@ -10,7 +10,7 @@ import { launchApp } from './apps.js';
 import { defaultOpenerId, nativeOf } from './defaults.js';
 import { clipboard } from './clipboard.js';
 import { startFileDrag } from './filedrag.js';
-import { hostEffect } from './rustfiles.js';
+import { hostEffect } from './fileshost.js';
 
 const caption = (value) => {
   if (value == null) return '';

@@ -170,6 +170,9 @@ pub fn convert(node: &Value, env: &Env) -> Value {
         "documentImage" => {
             out.insert("kind".into(),json!("documentImage"));
             out.insert("image".into(),obj["image"]["id"].clone());
+            // The scene defaults to cover, which crops a portrait PDF to the
+            // middle of the wide preview and hides text near the page edges.
+            out.insert("style".into(),json!([obj.get("style").cloned().unwrap_or(Value::Null),{"objectFit":"contain"}]));
         }
         _ => {
             out.insert("kind".into(), json!("view"));
@@ -291,13 +294,14 @@ mod tests {
     fn compositor_previews_and_drop_destinations_survive_translation() {
         let theme=json!({});let e=env(&theme);
         let tree=convert(&json!({"type":"view","dropPath":"/home/test","children":[
-            {"type":"media","media":23},{"type":"documentImage","image":{"id":45,"w":2,"h":2}},
+            {"type":"media","media":23},{"type":"documentImage","image":{"id":45,"w":2,"h":2},"style":{"width":240,"height":150}},
             {"type":"view","dropPath":"trash"}]}),&e);
         assert_eq!(tree["dropAction"],json!(["dropFiles","/home/test"]));
         assert_eq!(tree["children"][0]["kind"],"media");
         assert_eq!(tree["children"][0]["media"],23);
         assert_eq!(tree["children"][1]["kind"],"documentImage");
         assert_eq!(tree["children"][1]["image"],45);
+        assert_eq!(tree["children"][1]["style"],json!([{"width":240,"height":150},{"objectFit":"contain"}]));
         assert_eq!(tree["children"][2]["nativeMoveOnly"],true);
     }
 

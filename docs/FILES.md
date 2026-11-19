@@ -289,9 +289,12 @@ No test installed packages or replaced the running desktop session.
 
 ## Native view rollout
 
-The experimental `filesNativeView` setting remains off by default. Browser
-windows can use `FilesView` in Rust; file choosers and transfer windows still
-use `RustFiles` until the owner validates the native browser in a real session.
+Browser windows and their icons always mount `FilesView` in Rust. The
+`filesNativeView` preference and the React browser path have been removed.
+Old preferences cannot select the former renderer. File choosers and transfer
+windows still use the shared React widget adapter in `sdk/rustfiles.js`;
+their migration remains in shell roadmap phase 3. Asynchronous service effects
+are shared through `sdk/fileshost.js`, independently of that widget adapter.
 
 The native host binds video/audio previews to existing compositor media nodes.
 PDF/font previews and PDF thumbnails copy their document image once per changed
@@ -311,5 +314,20 @@ watcher. Catalog changes refresh installed apps and their MIME/desktop metadata.
 Context submenus support arrows, Home/End, Enter/Space and Escape/Left, skipping
 disabled rows and separators; their pointer hover retains the parent submenu.
 Rust tests cover these paths, including actual copy/move jobs in private homes.
+Document images use `contain`: a portrait PDF must show its page edges inside
+the wide preview instead of cropping away its heading and footer.
+
+`rust/xtask/tests/files_runtime.rs` replaces the former JavaScript smoke fixture
+and its Python runner section. Rust assertions exercise the actual compiled
+manifest/mount, a false legacy preference, native icon, pointer navigation,
+filtering, folders, rename with preserved bytes, list view, PDF thumbnail/cache
+and preview, disk notifications/mount/eject and window menu stability. The
+open/save/folder selectors remain covered through their existing UI adapter.
+The PDF fixture has known colored marks; PNG pixels prove that its center,
+top and bottom were painted. Axia/Adwaita, light/dark and 640/1000 px produce
+eight captures, published by desktop CI as `axia-files`.
+
 Visual spacing, physical hotplug and application-to-application dragging still
-require validation in the owner's desktop session before enabling the default.
+require validation in the owner's desktop session. The owner deferred physical
+measurements and real-session validation until the shell roadmap is finished;
+they do not block promoting this headless-tested browser.

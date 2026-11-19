@@ -145,13 +145,6 @@ if (!names.length) await build({
   define: defines, logLevel: 'warning',
 });
 if (!names.length) await build({
-  entryPoints: [path.join(root, 'server/tests/files_smoke.jsx')],
-  outfile: path.join(root, 'tests/files-smoke.bundle.js'),
-  bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',
-  alias: { '@lordos/runtime': path.join(root, 'runtime/index.js'), '@lordos/sdk': path.join(root, 'sdk/index.js') },
-  define: defines, logLevel: 'warning',
-});
-if (!names.length) await build({
   entryPoints: [path.join(root, 'server/tests/dock_preview_smoke.jsx')],
   outfile: path.join(root, 'tests/dock-preview-smoke.bundle.js'),
   bundle: true, format: 'iife', target: 'es2020', minify: true, jsx: 'automatic',

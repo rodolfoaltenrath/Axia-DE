@@ -1,8 +1,11 @@
+import { filesRequest, hostEffect } from './fileshost.js';
+export { filesRequest } from './fileshost.js';
 // Generic host adapter for Rust-owned widget trees and effects. There is no
-// filesystem/navigation state here: browser and every picker use lord.files.
+// filesystem/navigation state here: pickers and transfers use lord.files.
+// The browser mounts NativeView instead; shared dialogs migrate in roadmap phase 3.
 import { createElement as h, createContext, useContext, Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, MediaView, mainBox, addListener, screen } from '@lordos/runtime';
-import { Button, TextInput, ScrollView, useAppWindow, useKeyboard, hasTextFocus } from './components.jsx';
+import { Button, TextInput, ScrollView, useAppWindow, hasTextFocus } from './components.jsx';
 import { useTheme, ThemeScope } from './theme.js';
 import { Toolbar, ToolbarButton, ToolbarGroup } from './controls.jsx';
 import { t, locale, formatDate, formatTime, useLocale } from './i18n.js';
@@ -13,12 +16,10 @@ import { Layer } from './layers.js';
 import { useLauncherApps, launchApp } from './apps.js';
 import { defaultOpenerId, nativeOf } from './defaults.js';
 import { clipboard } from './clipboard.js';
-import { archive } from './archive.js';
-import { DocImage, pdfThumb, fontSample, releaseImage } from './doc.js';
-import { media, thumbRev } from './media.js';
+import { DocImage, releaseImage } from './doc.js';
+import { media } from './media.js';
 import { startFileDrag, useFileDrop } from './filedrag.js';
-import { lan } from './lan.js';
-import { useDisks, disks } from './disks.js';
+import { useDisks } from './disks.js';
 import { Menu } from './menu.jsx';
 const modalHandles = new Set();
 const FilesRootContext = createContext(null);
@@ -30,11 +31,6 @@ function appearanceContext(theme) {
   return { ...tokens, nativeAppearance: settings.get().nativeAppearance || 'adwaita' };
 }
 
-export function filesRequest(value) {
-  const result = lord.files.request(JSON.stringify(value));
-  if (result?.error) throw new Error(errorText(result.error));
-  return result;
-}
 const caption = (value) => {
   if (value == null) return '';
   if (typeof value !== 'object') return String(value);
@@ -190,64 +186,11 @@ function eventData(e, root) {
     button: e.button || 0, shift: !!(e.shift ?? e.shiftKey), ctrl: !!(e.ctrl ?? e.ctrlKey), meta: !!(e.meta ?? e.metaKey), alt: !!(e.alt ?? e.altKey), key: e.key || '' };
 }
 
-// These are integrations with existing desktop services, selected by Rust.
-// All requests/results go back through the owning Rust window handle.
-export async function hostEffect(effect) {
-  switch (effect.kind) {
-    case 'diskMount':
-    case 'diskRelease': {
-      const { job } = filesRequest({ op: 'volumeStart', action: effect.kind === 'diskMount' ? 'mount' : 'release', device: effect.device });
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        const result = filesRequest({ op: 'volumePoll', job });
-        if (!result.done) continue;
-        if (result.failure) throw new Error(errorText(result.failure));
-        return { result: result.result, disks: disks.list() };
-      }
-    }
-    case 'videoThumbnail': {
-      if (!media.available()) return { result: null };
-      // The confined worker signals completion. Avoid repeatedly stat'ing
-      // videos on slow USB/network mounts from the UI's polling timer.
-      return new Promise((resolve) => {
-        let timer = 0, off = null;
-        const finish = (path) => { clearTimeout(timer); off?.(); resolve({ result: path }); };
-        const check = () => { const path = media.thumb(effect.path, 320); if (path) finish(path); };
-        off = thumbRev.subscribe(check);
-        timer = setTimeout(() => finish(null), 15000);
-        check();
-      });
-    }
-    case 'pdfThumbnail': { const result = await pdfThumb(effect.path, { width: 128, height: 176 }); return { result: { id: result.image, w: result.w, h: result.h } }; }
-    case 'networkScan': {
-      if (!lan.available()) return { result: { state: 'no-connector', hosts: [] } };
-      lan.start();
-      const deadline = lord.now() + 30000;
-      let state = lan.poll();
-      while (state.running && lord.now() < deadline) { await new Promise((resolve) => setTimeout(resolve, 500)); state = lan.poll(); }
-      return { result: state };
-    }
-    case 'archiveList': return { result: await archive.list(effect.path) };
-    case 'archiveExtract': return { result: await archive.extract(effect.path, effect.destination) };
-    case 'archiveCreate': return { result: await archive.create(effect.paths, effect.destination) };
-    case 'archivePreview':
-    case 'archiveOpen': {
-      const destination = `${lord.fs.home()}/.cache/axia/files/extract/${Date.now()}`;
-      lord.fs.mkdir('.cache'); lord.fs.mkdir('.cache/axia'); lord.fs.mkdir('.cache/axia/files'); lord.fs.mkdir('.cache/axia/files/extract');
-      await archive.extract(effect.path, destination, { only: [effect.entry] });
-      return { path: `${destination}/${effect.entry}` };
-    }
-    case 'documentPreview': { const result = effect.format === 'pdf' ? await pdfThumb(effect.path, { width: 600, height: 500 }) : await fontSample(effect.path, { width: 600, lines: ['Axia', 'Aa Bb Cc 0123456789'] }); return { result: { id: result.image, w: result.w, h: result.h } }; }
-    case 'mediaPreview': return { result: media.play('files', effect.path, { audio: 1 }) };
-    default: return null;
-  }
-}
-
 const appMetadata = (apps) => apps.map(({ id, name, desktopId, kind, mimeTypes }) => ({ id, name, kind,
   desktopId: desktopId ? (desktopId.endsWith('.desktop') ? desktopId : `${desktopId}.desktop`) : `lordos-${id}.desktop`,
   mimeTypes: Array.isArray(mimeTypes) ? mimeTypes : String(mimeTypes || '').split(';').filter(Boolean) }));
 
-export function RustFiles({ mode = 'browser', args = {}, title = '', start = '', filter = null, multiple = false, name = '', onPick, onClose }) {
+function FileDialogBody({ mode = 'open', args = {}, title = '', start = '', filter = null, multiple = false, name = '', onPick, onClose }) {
   useLocale(); // Captions must update even when the native poll has no changes.
   const theme = useTheme();
   const win = useAppWindow();
@@ -293,16 +236,14 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     if (!live.current || !action) return;
     accept(filesRequest({ op: 'event', id: handle, action, ...eventData(e, root), ...extra }));
   }).current;
-  useFileDrop(root, mode === 'browser' ? (drop) => send(['dropFiles'], null, { paths: drop.paths, internalMove: drop.internalMove }) : null);
   latest.current = { theme, send, onPick, onClose, win };
   useEffect(() => { send(['disks'], null, { disks: volumes }); }, [volumes]);
   const metadata = useMemo(() => JSON.stringify(appMetadata(apps)), [apps]);
   useEffect(() => { send(['apps'], null, { apps: JSON.parse(metadata) }); }, [metadata]);
-  useKeyboard((e) => { if (mode === 'browser' && !modalHandles.size) send(['key'], e); });
 
   useEffect(() => {
     live.current = true;
-    if (mode !== 'browser') modalHandles.add(handle);
+    modalHandles.add(handle);
     const poll = () => {
       if (!root.current) return;
       const [, , width, height] = lord.getLayout(root.current.id);
@@ -313,7 +254,7 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     const up = addListener('pointerup', () => { if (capture.current) setTimeout(() => { if (live.current) latest.current.send(['dragEnd']); }, 0); });
     pace.current.poll = () => { try { poll(); } finally { if (live.current) armPoll(); } };
     pace.current.poll();
-    const keys = mode !== 'browser' ? addListener('keydown', (e) => { if (!hasTextFocus() && [...modalHandles].at(-1) === handle) latest.current.send(['key'], e); }) : null;
+    const keys = addListener('keydown', (e) => { if (!hasTextFocus() && [...modalHandles].at(-1) === handle) latest.current.send(['key'], e); });
     return () => { live.current = false; clearTimeout(pace.current.timer); pace.current.poll = null; keys?.(); move(); up(); for (const id of resources.current.media) media.close(id); for (const id of resources.current.images) releaseImage(id); modalHandles.delete(handle); filesRequest({ op: 'close', id: handle }); };
   }, [handle]);
 
@@ -324,25 +265,10 @@ export function RustFiles({ mode = 'browser', args = {}, title = '', start = '',
     shown.current = { ...shown.current, tree, format };
     setSnapshot((previous) => ({ ...previous, tree }));
   }, [format]);
-  const menuLocale = locale.get();
-  const windowTitle = caption(snapshot.title);
-  const chromeKey = JSON.stringify(snapshot.chrome);
-  useEffect(() => {
-    if (mode === 'browser' && win?.id) wm.setArgs(win.id, { nativeChrome: snapshot.chrome || null });
-  }, [chromeKey, win?.id, mode]);
-  useEffect(() => {
-    if (mode !== 'browser' || !win?.id) return;
-    wm.setMenus(win.id, (snapshot.menus || []).map((menu) => ({ label: caption(menu.label), items: menu.items.map((item) =>
-      typeof item === 'string' ? item : { ...item, label: caption(item.label), onClick: () => latest.current.send(item.action) }) })));
-  }, [snapshot.menus, menuLocale, win?.id, mode]);
-  useEffect(() => {
-    if (mode === 'browser' && win?.id) wm.setTitle(win.id, windowTitle);
-  }, [windowTitle, win?.id, mode]);
-
   useEffect(() => {
     for (const effect of effectQueue.current.splice(0)) {
       if (effect.kind === 'choose') { latest.current.onPick?.(multiple ? effect.paths : effect.paths[0]); continue; }
-      if (effect.kind === 'cancel' || effect.kind === 'close') { if (mode === 'browser') wm.close(latest.current.win.id); else latest.current.onClose?.(); continue; }
+      if (effect.kind === 'cancel' || effect.kind === 'close') { latest.current.onClose?.(); continue; }
       if (effect.kind === 'dragFiles') {
         if (startFileDrag(effect.paths, root.current?.id, !effect.copy)) latest.current.send(['dragEnd']);
         continue;
@@ -389,11 +315,7 @@ export function RustFileDialog(props) {
   const box = mainBox();
   const win = useAppWindow();
   return h(Layer, { name: 'system' }, h(View, { protected: !!win?.protected, onMouseDown: (e) => e.stopPropagation?.(), style: { position: 'absolute', ...box, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' } },
-    h(View, { style: { width: Math.min(920, box.width - 40), height: Math.min(620, box.height - 80), borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' } }, h(RustFiles, props))));
-}
-
-export function RustFileIcon({ size = 32 }) {
-  return h(Widget, { node: iconTree('files', size), send: () => {} });
+    h(View, { style: { width: Math.min(920, box.width - 40), height: Math.min(620, box.height - 80), borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' } }, h(FileDialogBody, props))));
 }
 
 // The secondary window shares the originating Rust session. No second browser,

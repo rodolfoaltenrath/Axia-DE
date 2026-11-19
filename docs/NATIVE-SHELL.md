@@ -272,3 +272,45 @@ controladores e a cena Rust. `native_apps_runtime` é a integração com o compo
 headless, teclado real da ponte, remontagem e ausência de textos React na
 Calculadora e no Monitor. Os testes do host Rust também exercitam cliques,
 limites entre ancestrais no hover, liberação fora do controle e atalhos/foco.
+
+## Arquivos definitivo (2026-11-19)
+
+O navegador e o ícone de Arquivos montam sempre `FilesView`, independentemente
+do valor antigo de `filesNativeView`. O renderer React do navegador foi
+removido. Os seletores compartilhados e a janela de transferências ainda
+dependem de `sdk/rustfiles.js` e estão explicitamente pendentes na Fase 3.
+Os efeitos assíncronos comuns ficam em `sdk/fileshost.js`, sem importar esse
+renderer; a sessão ainda usa JS para executar efeitos até as próximas fases.
+
+A integração `rust/xtask/tests/files_runtime.rs` usa o manifesto compilado e
+o mount real, com uma pasta privada. Cobre preferência antiga falsa, ícone,
+navegação por ponteiro, busca, criação, renomeação e bytes preservados,
+listagem, cache de miniatura e prévia PDF, menus estáveis durante rolagem,
+seletores de abrir/salvar/pasta e notificações de volumes. Somente os fatos e
+resultados de montagem/ejeção de disco são simulados; arquivos e helper de
+documentos são reais. Nenhum disco da máquina é alterado.
+
+O teste substitui o smoke de Arquivos em JS/Python e preserva também suas
+verificações de migração de preferências e cache do plano de aparência. As
+asserções, o processo e a inspeção dos PNGs pertencem ao Rust; o fixture JS
+somente exercita os adaptadores que ainda existem.
+
+Foi reproduzido um recorte de documentos: o ajuste padrão `cover` escondia o
+topo e o rodapé de páginas verticais na área larga de prévia. As imagens de
+documentos agora usam `contain`. Marcas conhecidas no centro e nas duas bordas
+do PDF precisam aparecer nos pixels da captura, além de a operação retornar
+um handle válido. O teste falha no compositor anterior e passa com a correção.
+
+```sh
+AXIA_FILES_AXIA_OUTPUT=build/validation/native-files/axia AXIA_FILES_ADWAITA_OUTPUT=build/validation/native-files/adwaita cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test files_runtime -- --ignored --nocapture
+```
+
+São oito cenários: Axia/Adwaita, claro/escuro e 640/1000 px. O CI GPU=1 exige
+essa integração e publica `axia-files`. Validação com periféricos, sessão
+gráfica física e medições continuam para o encerramento, conforme solicitado.
+
+Verificação local desta etapa: compositor e frontend recompilados; 119 testes
+do app Arquivos, 106 do host nativo, 47 leves do xtask, dois contratos LPK,
+integração dos apps compilados e os oito cenários de Arquivos passaram.
+Três testes dependentes do ambiente do crate Arquivos ficaram ignorados;
+não houve novo RPM completo nem medição em hardware físico.
