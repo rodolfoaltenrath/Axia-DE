@@ -23,6 +23,8 @@ export function executeNativeEffect(effect, manifest = {}) {
         break;
       case 'closeSurface': lord.wayland.close(effect.surface); break;
       case 'closeWindow': wm.close(effect.id, true); break;
+      case 'requestCloseWindow': result = wm.close(effect.id); break;
+      case 'quitPackage': result = typeof lord.broker?.quit === 'function' && !!lord.broker.quit(effect.app); break;
       default: result = 'app.forceQuitFailed';
     }
   } catch (error) {

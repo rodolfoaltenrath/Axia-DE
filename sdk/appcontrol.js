@@ -12,33 +12,31 @@
 // Lord Flow shows the app menu under the app's name in its menu bar and the rest in the crown menu;
 // a theme without a menu bar can offer About in each window's Help menu. About <app> and Force Quit are system windows
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
-import { windows, wm, getApp, appMenus, applyNativeWindowState } from './windows.js';
-import { launcherIdOf, quitApp } from './dock.js';
-import { linuxAppFor, shortAppName, windowAppName } from './apps.js';
+import { windows, wm, appMenus, applyNativeWindowState } from './windows.js';
 import { nativeCatalogFacts } from './nativecatalog.js';
 import { sameFacts } from './nativeviewfacts.js';
 import { openFileWithApps } from './sysopen.js';
 import * as fs from './fs.js';
-import { nativeAppRequest, nativeAppEffects } from './nativeappmodel.js';
-import { t, appName } from './i18n.js';
+import { nativeAppRequest, nativeAppEffects, executeNativeEffect } from './nativeappmodel.js';
+import { t } from './i18n.js';
+import * as localControl from '../runtime/lpk/appcontrol.js';
 
-// the theme's own panels; a Linux window also runs under a built-in app id, but it is an app
-const isShellPanel = (w) => !!getApp(w.id)?.builtin && !String(w.id).startsWith('linux#');
-
-function groupName(key, w) {
-  const a = getApp(key);
-  if (a) return appName(a);
-  const lin = linuxAppFor(String(key).replace(/^desktop:/, ''));
-  if (lin) return shortAppName(lin);
-  return w ? windowAppName(w) : String(key);
-}
-
+// Compatibility API for SDK consumers that still expect mirror objects.
 export function appGroup(winId) {
-  const w = wm.get(winId);
-  if (!w) return null;
-  const key = launcherIdOf(w);
-  const wins = windows.get().filter((x) => launcherIdOf(x) === key && !isShellPanel(x));
-  return { key, name: groupName(key, w), windows: wins };
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.appGroup(winId);
+  if (typeof winId !== 'string' || !winId) return null;
+  const group = controlRequest({ cmd: 'group', id: winId }).group;
+  return group ? { ...group, windows: group.windows.map(id => wm.get(id)).filter(Boolean) } : null;
+}
+export function quitAppGroup(identity = {}) {
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.quitAppGroup(identity);
+  const owner = lord.nativeApps;
+  let reply = controlRequest({ cmd: 'quitApp', ...identity });
+  while (reply.effect) {
+    const result = executeNativeEffect(reply.effect);
+    reply = nativeAppRequest(owner, { cmd: 'quitAppNext', ticket: reply.ticket, result });
+  }
+  return reply.error || '';
 }
 
 // the app's own settings item: by convention the one with the ❖, shortcut (Passwords, Terminal)
@@ -53,19 +51,36 @@ function settingsItemOf(winId) {
 }
 
 // Hide <app>: every window of the app goes away; Hide Others: every other app's on this desktop.
-export function hideApp(id) { windowCommand({ action: 'hide', id }); }
-export function hideOthers(id) { windowCommand({ action: 'hideOthers', id }); }
-export function showAllApps() { windowCommand({ action: 'showAll' }); }
-export function cycleAppWindows(back = false) { windowCommand({ action: 'cycle', back }); }
+export function hideApp(id) {
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.hideApp(id);
+  windowCommand({ action: 'hide', id });
+}
+export function hideOthers(id) {
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.hideOthers(id);
+  windowCommand({ action: 'hideOthers', id });
+}
+export function showAllApps() {
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.showAllApps();
+  windowCommand({ action: 'showAll' });
+}
+export function cycleAppWindows(back = false) {
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.cycleAppWindows(back);
+  windowCommand({ action: 'cycle', back });
+}
 // The app's own Settings… item, if it has one (❖,).
 export const appSettingsItem = settingsItemOf;
 
 // Show desktop: everything visible on this desktop goes away, and the next time what it took away
 // comes back (each desktop remembers its own).
-export function toggleShowDesktop() { windowCommand({ action: 'desktop' }); }
+export function toggleShowDesktop() {
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.toggleShowDesktop();
+  windowCommand({ action: 'desktop' });
+}
 
 export function appMenuItems(winId) {
-  const g = appGroup(winId);
+  if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) return localControl.appMenuItems(winId, settingsItemOf);
+  if (typeof winId !== 'string' || !winId) return [];
+  const g = controlRequest({ cmd: 'groupInfo', id: winId }).group;
   if (!g) return [];
   const settingsItem = settingsItemOf(winId);
   return [
@@ -77,7 +92,7 @@ export function appMenuItems(winId) {
     { label: t('shell.app.hideOthers'), hint: '❖⌥H', onClick: () => hideOthers(winId) },
     { label: t('shell.app.showAll'), onClick: showAllApps },
     '-',
-    { label: t('shell.app.quit', { app: g.name }), hint: '❖Q', onClick: () => quitApp(g.windows) },
+    { label: t('shell.app.quit', { app: g.name }), hint: '❖Q', onClick: () => quitAppGroup({ id: winId }) },
   ];
 }
 

@@ -2,11 +2,15 @@
 use crate::winmodel::{AppCommand, Session, WindowReader};
 use serde_json::{json, Value};
 use std::rc::Rc;
+mod quit;
+#[cfg(test)]
+mod quit_tests;
 
 #[derive(Default)]
 pub struct Controller {
     app: crate::forcequit::App,
     windows: Option<Session>,
+    quit: quit::GracefulQuit,
 }
 impl Controller {
     pub fn new(windows: Session) -> Self {
@@ -14,9 +18,36 @@ impl Controller {
         Self {
             app,
             windows: Some(windows),
+            quit: Default::default(),
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        match input["cmd"].as_str() {
+            Some("groupInfo" | "group" | "quitApp" | "quitAppNext") => {
+                let Some(windows) = &self.windows else {
+                    return json!({"error":"app.invalidRequest"});
+                };
+                if matches!(input["cmd"].as_str(), Some("quitApp" | "quitAppNext")) {
+                    return self.quit.request(input, windows, &self.app);
+                }
+                let groups = self.app.command_groups();
+                let reader = windows.reader();
+                let state = reader.read();
+                let Some(group) = selected_group(&groups, &state, input) else {
+                    return json!({"group":null});
+                };
+                let mut result = json!({"key":group.key,"name":group.name});
+                if input["cmd"] == "group" {
+                    result["windows"] = json!(group
+                        .windows
+                        .iter()
+                        .map(|w| w.id.as_str())
+                        .collect::<Vec<_>>());
+                }
+                return json!({"group":result});
+            }
+            _ => {}
+        }
         if input["cmd"] != "windowCommand" {
             return self.app.request(input);
         }
@@ -67,6 +98,20 @@ impl Controller {
             .app_command(command, &ids)
             .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}))
     }
+}
+
+fn selected_group<'a>(
+    groups: &'a [crate::forcequit::Group],
+    state: &crate::winmodel::WindowState,
+    input: &Value,
+) -> Option<&'a crate::forcequit::Group> {
+    if let Some(key) = input["key"].as_str() {
+        return groups.iter().find(|group| group.key == key);
+    }
+    let id = input["id"].as_str().or_else(|| state.focused_window())?;
+    groups
+        .iter()
+        .find(|group| group.windows.iter().any(|w| w.id == id))
 }
 
 #[cfg(test)]

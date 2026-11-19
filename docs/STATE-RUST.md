@@ -189,7 +189,8 @@ os metadados já armazenados; nenhum pedido leva listas de janelas ou grupos.
 A resposta ainda contém o delta habitual de `WindowState`, aplicado pelo SDK
 para manter a interface React restante. Portanto, esta entrega retira as regras
 e a memória desses comandos do JS, mas não elimina o espelho nem seu retorno JSON.
-`appGroup`, apresentação dos menus e encerramento continuam pendentes.
+Consulta dos menus e escolha dos alvos de encerramento migraram na etapa abaixo;
+apresentação dos menus, callbacks e APIs de compatibilidade ainda usam JS.
 
 `window_commands_runtime` executa os comandos e o atalho de ocultação no
 compositor real, com espelho desatualizado, janelas recém-criadas, remoção,
@@ -203,6 +204,57 @@ também passaram. Passaram os quatro cenários gráficos
 novos, oito do alternador, quatro de Forçar encerramento e dois contratos LPK.
 Compositor e frontend recompilados; o contrato offline do alternador passou na
 instalação preparada para RPM. RPM completo e medições físicas ficam pendentes.
+
+## Grupos dos menus e encerramento normal
+
+O menu de aplicativo consulta `groupInfo` no controlador do contexto. Rust
+resolve identidade e nome atual; a resposta não contém uma lista de janelas.
+A antiga resolução de grupo/nome em `appcontrol.js` foi retirada. A API pública
+`appGroup(id)` na sessão conserva objetos do espelho, obtidos por uma consulta
+separada `group`; `runningApps` também mantém seu contrato de compatibilidade.
+Esses wrappers não são usados para escolher os alvos dos menus ativos.
+
+Sair no menu de app, no menu da Dock e no atalho passa identidade ou pede o foco
+atual ao controlador Rust. `GracefulQuit` escolhe o grupo no momento da ação,
+incluindo janelas abertas depois da construção do menu. A fila guarda IDs;
+antes de cada efeito, consulta novamente pertencimento, existência e superfície.
+Janelas fechadas ou que mudaram de grupo são ignoradas. Um ticket distingue as
+tentativas: uma resposta atrasada não avança a fila de uma tentativa posterior.
+
+Apps isolados recebem primeiro `quitPackage`; confirmação do broker conclui
+a tentativa sem fechar superfícies à força. Sem confirmação, segue o fechamento
+normal. Janelas Linux recebem `closeSurface` com o identificador atual; janelas
+da sessão recebem `requestCloseWindow`, que chama `wm.close` com suas guardas.
+Recusar fechamento mantém aquela janela e permite processar as demais. Nenhum
+desses caminhos usa `kill` nem o fechamento forçado do Forçar encerramento.
+
+Execução de IPC, guardas, callbacks e aplicação do fechamento permanecem no
+adaptador JS. A função pública `quitApp(windows)` conserva sua semântica legada
+para listas explícitas; os menus da sessão e o atalho não a usam mais. A barra
+e a Dock ainda leem o espelho para outros estados e apresentações; a Fase 2
+continua aberta.
+
+No host `.lpk`, `runtime/lpk/appcontrol.js` conserva consulta de grupo, menus,
+ocultação, ciclo e memória da área de trabalho sobre as janelas locais do app.
+A seleção ocorre no build por `__AXIA_APP_HOST__`; esse módulo é excluído do
+bundle da sessão. O contrato Rust/Node verifica a entrega nos dois bundles,
+identidade dos objetos de janela, ações locais e ausência de chamadas ao
+controlador privilegiado. Isso também preserva os comandos locais migrados
+na etapa anterior, sem dar ao processo isolado acesso ao estado da sessão.
+
+`app_menus_runtime` cobre consulta com espelho parado, clique no menu nativo,
+novas janelas após abrir o menu, guarda em outro desktop, menu da Dock de app
+Linux sem catálogo, atualização de superfícies, confirmação/fallback do broker
+e atalho com foco JS desatualizado. As verificações são Rust, em claro/escuro e
+640/1000 px. O CI exige o teste e publica `axia-app-menus`; evidências locais
+em `build/validation/app-menus/`.
+
+Validação local: 520 testes da shell aprovados, sete ignorados; três contratos
+LPK aprovados. Passaram os quatro cenários novos de menus, quatro da Dock
+(cada um com três posições), oito do alternador, quatro de Forçar encerramento
+e quatro de comandos de janelas. Compositor e frontend recompilados; a validação
+offline do alternador passou na instalação preparada para RPM. Não houve RPM
+completo nem medição física nesta etapa.
 
 ## Verificação
 

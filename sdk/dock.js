@@ -27,6 +27,7 @@ import { desktopSuffix } from './desktops.js';
 import { screen, onScreenChange } from '@lordos/runtime';
 import { useLauncherApps, launchApp, linuxAppFor, shortAppName, windowAppName, LetterIcon, windowIcon } from './apps.js';
 import { t, locale } from './i18n.js';
+import { quitAppGroup } from './appcontrol.js';
 import { restoredIds } from './sessionrestore.jsx';
 import * as fs from './fs.js';
 import {
@@ -247,10 +248,7 @@ export function quitApp(wins) {
 
 // ❖Q quits the app in front (sdk/shortcuts.js: only in the session, an isolated app never receives ❖Q).
 export function quitFrontApp() {
-  const top = wm.get(wm.focused());
-  if (!top) return;
-  const key = launcherIdOf(top);
-  quitApp(windows.get().filter((w) => launcherIdOf(w) === key));
+  return quitAppGroup();
 }
 
 // ---- quick actions ----
@@ -331,7 +329,7 @@ export function dockMenu(e, opts = {}) {
     items.push(
       { label: t('shell.dock.showAll'), onClick: () => { for (const w of e.windows) wm.focus(w.id); } },
       { label: t('shell.dock.hide'), onClick: () => { for (const w of e.windows) wm.minimize(w.id); } },
-      { label: t('shell.dock.quit'), onClick: () => quitApp(e.windows) },
+      { label: t('shell.dock.quit'), onClick: () => quitAppGroup({ key: e.launcherId || e.id }) },
     );
   } else items.push({ label: t('shell.dock.open'), onClick: () => dockActivate(e) });
   while (items[items.length - 1] === '-') items.pop();

@@ -27,6 +27,13 @@ do host isolado. O contrato do SDK continua exportando `NotificationBanner` e
 as funções/lojas de notificações. Estado e timers da sessão ainda são JS;
 essa separação de apresentação não conclui a migração dos serviços.
 
+Na migração dos comandos de janelas e menus, `runtime/lpk/appcontrol.js`
+preserva as operações sobre as janelas locais do processo isolado. A sessão
+usa seu controlador Rust; o host `.lpk` não precisa nem recebe essa autoridade.
+O teste Rust/Node de `lpk_api` verifica os comandos locais e a exclusão desse
+módulo do bundle da shell por metafile. Os entry points do SDK completo ainda
+não foram separados; isso não conclui a Fase 7.
+
 ## Contrato que a opção A preserva
 
 Cada app continua no processo `axia-server --app <id>`, com QuickJS, React e

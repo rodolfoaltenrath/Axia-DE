@@ -296,8 +296,8 @@ views nativas lerem direto, sem JSON.
       foco e prioridade de campos JS e sobreposições, com capturas no CI.
       O painel Forçar encerramento também lê a lista por referências Rust;
       retirados sua assinatura do espelho e o envio de `windows` pelo mount.
-      Metadados de apps seguem no catálogo compartilhado. Menus, `runningApps`
-      e efeitos de encerramento ainda usam o adaptador `appcontrol.js`.
+      Metadados de apps seguem no catálogo compartilhado. Apresentação dos menus,
+      APIs de compatibilidade e efeitos ainda usam adaptadores JS.
       O controlador `groups`/`quit` da sessão também lê o modelo Rust, sem
       `appControlFacts` nem janelas nos pedidos. Metadados são compartilhados
       com a view e enviados só quando muda o catálogo/idioma. `runningApps`
@@ -310,7 +310,11 @@ views nativas lerem direto, sem JSON.
       Ocultar app/outros, mostrar todos e mostrar área de trabalho executam uma
       mutação nativa por comando; a memória por desktop pertence ao modelo.
       A resposta ainda atualiza o espelho para a interface legada, mas não envia
-      janelas ao Rust para decidir os alvos. Menus e `appGroup` seguem pendentes.
+      janelas ao Rust para decidir os alvos. Menus consultam `groupInfo`, que
+      devolve somente nome e chave. A escolha dos alvos de Sair nos menus de app,
+      da Dock e no atalho também é nativa, preservando guardas e IPC de saída.
+      `appGroup`/`runningApps` mantêm objetos do espelho por compatibilidade;
+      apresentação da barra, callbacks e execução de efeitos continuam em JS.
       Alternador com integração Rust e capturas Axia/Adwaita em claro/escuro e
       640/1000 px; comandos com quatro cenários gráficos. Detalhes em `STATE-RUST.md`.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
