@@ -97,10 +97,33 @@ atualizar o espelho JS. Antes de despachar uma ação, o host sincroniza qualque
 invalidação pendente: uma seleção removida não pode iniciar encerramento entre
 a mutação do modelo e o próximo quadro. A assinatura não adiciona polling.
 
-Esta etapa migra a leitura da lista no painel. `runningApps()`, menus e a
-execução dos efeitos de encerramento ainda usam `sdk/appcontrol.js` e seu
-adaptador transitório; o catálogo de apps, a moldura e o espelho JS também
-continuam no escopo das próximas etapas. Não é uma sessão sem JavaScript.
+O catálogo de apps, a moldura e o espelho JS continuam no escopo das próximas
+etapas. Não é uma sessão sem JavaScript.
+
+## Controlador de encerramento da sessão
+
+O serviço `lord.nativeApps` da sessão também é vinculado à lista Rust do seu
+contexto durante a inicialização C, depois de `lord.windowList`. Esse vínculo
+não depende de um objeto global Rust e não expõe uma nova operação ao JS.
+Modelos puros criados com `nativeApps.create()` mantêm o protocolo independente
+usado pelos adaptadores e pelos apps isolados.
+
+`sdk/appcontrol.js` retirou `appControlFacts()`: pedidos `groups` e `quit` não
+carregam janelas, superfícies ou argumentos. O controlador visita o modelo atual
+e resolve o grupo no momento do pedido. Assim, uma superfície alterada ou uma
+janela recém-aberta no modelo não depende do espelho JS para ser encerrada.
+
+`sdk/nativecatalog.js` compartilha os metadados de apps com a view. O adaptador
+envia um pedido `metadata` quando muda o catálogo, o registro ou o idioma;
+o controlador guarda esse catálogo e o empresta aos pedidos seguintes.
+Atualizações inválidas preservam os dados anteriores e o limite do transporte
+JSON continua valendo. O catálogo ainda precisa migrar para estado nativo.
+
+A execução final dos efeitos Wayland e `wm.close` ainda passa pelo adaptador
+JS. `runningApps()` conserva o contrato dos consumidores legados: converte IDs
+em objetos do espelho, omitindo entradas cujo objeto ainda não chegou.
+Portanto, o alternador e os menus ainda precisam migrar; essa adaptação não é
+evidência de que o espelho inteiro foi retirado.
 
 ## Verificação
 
@@ -151,3 +174,13 @@ publica `axia-forcequit`.
 Compositor e frontend foram recompilados. Também passaram a integração dos
 apps compilados, seis cenários gráficos do launcher, quatro de foco e dois
 contratos LPK. Medições físicas e RPM completo não foram executados nesta fatia.
+
+Na migração do controlador da sessão, passaram 13 testes do app e três da
+ponte Rust, incluindo referências dos modelos antigos e isolamento de contexto.
+Os quatro cenários de `forcequit_runtime` agora exigem grupos e superfícies
+atuais com espelho JS parado, fechamento de janela ausente desse espelho,
+ausência de `windows` nos pedidos, cache de metadados reutilizado após desmontar
+a view e atualização após trocar idioma. Compositor/frontend recompilados;
+integração dos apps compilados, oito cenários de Arquivos, seis do launcher,
+quatro de foco e dois contratos LPK também passaram. Capturas e logs continuam
+em `build/validation/forcequit/`, com o mesmo teste obrigatório no CI.

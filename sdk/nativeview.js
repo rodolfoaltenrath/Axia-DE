@@ -15,12 +15,13 @@ import { textFieldActive, onTextField } from './textfocus.js';
 import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
-import { locale, useLocale, formatNumber } from './i18n.js';
-import { appRegistry, wm, appCatalogSource } from './windows.js';
-import { launcherCatalog, launchApp, appIconFacts, shortAppName } from './apps.js';
+import { useLocale, formatNumber } from './i18n.js';
+import { wm } from './windows.js';
+import { launchApp } from './apps.js';
+import { nativeCatalogFacts } from './nativecatalog.js';
+export { appFacts } from './nativecatalog.js';
 import { refreshPackages } from './packages.js';
 import { settings } from './settings.js';
-import { appName } from './i18n.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { forceQuit } from './appcontrol.js';
@@ -41,29 +42,9 @@ const screenFacts = {
   subscribe: fn => onScreenChange(fn),
 };
 
-// Serializable facts of an app; localized names and callable icons belong to the host.
-export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
-  desktopId: app.desktopId, wmClass: app.wmClass, mimeTypes: app.mimeTypes,
-  builtin: !!app.builtin, shortName: app.kind === 'linux' ? shortAppName(app) : undefined,
-  comment: app.comment, description: app.description, genericName: app.genericName,
-  iconPath: typeof app.icon === 'string' ? app.icon : '',
-  package: !!app.package, system: !!app.system, isolated: !!app.isolated, icon: !!app.Icon,
-  iconData: appIconFacts(app),
-  category: typeof app.category === 'string' ? app.category : undefined });
-
 // Only consumers of these facts subscribe. Geometry/focus changes do not
 // prepare Force Quit's app metadata; catalogs are shared across all mounts.
 const preferenceFacts = createFactsStore([settings], () => settings.get(), () => settings.get());
-const catalogFacts = createFactsStore([launcherCatalog, appRegistry, locale],
-  () => [launcherCatalog.get(), appRegistry.get(), locale.get()],
-  () => ({ catalog: launcherCatalog.get().apps.map(appFacts),
-    registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) }));
-// Identity matching uses source order, as lord.launcher does. The visible
-// catalog is name-sorted and could pick a different app for an ambiguous WM_CLASS.
-const appControlCatalogFacts = createFactsStore([launcherCatalog, appRegistry, locale],
-  () => [launcherCatalog.get(), appRegistry.get(), locale.get()],
-  () => ({ catalog: [...launcherCatalog.get().byId.values()].map(appFacts),
-    registry: appCatalogSource().map(app => appFacts({ ...app, name: appName(app) })) }));
 
 const runners = new Map();          // handle → runs one effect
 // A shell component that runs the effects of its own view (the title bar): returns the way to stop.
@@ -192,7 +173,7 @@ function NativeApp(props) {
 }
 const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
   const preferences = useStore(manifest.settings ? preferenceFacts : emptyFactsStore);
-  const apps = useStore(manifest.id === 'forcequit' ? appControlCatalogFacts : manifest.facts === 'apps' ? catalogFacts : emptyFactsStore);
+  const apps = useStore(manifest.id === 'forcequit' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
   const clock = useStore(manifest.facts === 'clock' ? clockState : emptyFactsStore);
   useStore(manifest.facts === 'system' ? screenFacts : emptyFactsStore);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });

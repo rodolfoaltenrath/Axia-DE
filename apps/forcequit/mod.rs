@@ -31,6 +31,7 @@ pub struct App {
     isolated_killed: bool,
     source: Option<Rc<dyn WindowSource>>,
     revision: Option<u64>,
+    metadata: Value,
 }
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
@@ -140,7 +141,8 @@ impl App {
     }
     fn refresh(&mut self, input: &Value) {
         self.groups = if let Some(source) = &self.source {
-            let groups = native_groups(source.as_ref(), input);
+            let facts = if input["registry"].is_array() { input } else { &self.metadata };
+            let groups = native_groups(source.as_ref(), facts);
             self.revision = Some(source.revision());
             groups
         } else { groups(&input["windows"]) };
@@ -199,6 +201,16 @@ impl App {
     }
     pub fn request(&mut self, input: &Value) -> Value {
         match s(input, "cmd") {
+            "metadata" => {
+                if !input["registry"].as_array().is_some_and(|apps| apps.len() <= 4096)
+                    || !input["catalog"].as_array().is_some_and(|apps| apps.len() <= 4096) {
+                    return json!({"error":"app.invalidRequest"});
+                }
+                // Updated once per catalog/locale generation by the adapter;
+                // group/quit requests borrow these facts without another copy.
+                self.metadata = json!({"registry":input["registry"],"catalog":input["catalog"]});
+                json!({"ok":true})
+            }
             "groups" => {
                 self.refresh(input);
                 json!({"groups":self.summaries()})

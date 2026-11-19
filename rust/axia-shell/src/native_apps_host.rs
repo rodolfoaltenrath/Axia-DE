@@ -61,6 +61,20 @@ pub unsafe extern "C" fn axia_native_app_new(id: *const c_char) -> *mut NativeAp
     };
     Box::into_raw(Box::new(app))
 }
+/// Session controller bound to the authoritative windows of this context.
+/// The C/QuickJS owner is borrowed only during this call; Rust retains a reader.
+#[no_mangle]
+pub unsafe extern "C" fn axia_native_app_new_windows(
+    id: *const c_char,
+    windows: *const crate::winmodel::Session,
+) -> *mut NativeApp {
+    if id.is_null() || windows.is_null() || CStr::from_ptr(id).to_bytes() != b"forcequit" {
+        return std::ptr::null_mut();
+    }
+    crate::native_view::install_services();
+    let source = std::rc::Rc::new(crate::winmodel::WindowReader((*windows).reader()));
+    Box::into_raw(Box::new(NativeApp::Control(crate::forcequit::App::with_windows(source))))
+}
 #[no_mangle]
 pub unsafe extern "C" fn axia_native_app_free(app: *mut NativeApp) {
     if !app.is_null() {
@@ -98,6 +112,40 @@ pub unsafe extern "C" fn axia_native_app_reply_free(reply: *mut c_char) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bound_controllers_borrow_their_context_and_ignore_legacy_window_payloads() {
+        unsafe {
+            let mut a = crate::winmodel::Session::default();
+            let mut b = crate::winmodel::Session::default();
+            for (session, instance) in [(&mut a, "a"), (&mut b, "b")] {
+                session.call("open", &[json!({}), json!({"app":"notes","instance":instance})]).unwrap();
+            }
+            let first = axia_native_app_new_windows(c"forcequit".as_ptr(), &a);
+            let second = axia_native_app_new_windows(c"forcequit".as_ptr(), &b);
+            assert!(!first.is_null() && !second.is_null());
+            assert!(axia_native_app_new_windows(c"settings".as_ptr(), &a).is_null());
+            assert!(axia_native_app_new_windows(c"forcequit".as_ptr(), std::ptr::null()).is_null());
+            let call = |app, input: Value| {
+                let input = CString::new(input.to_string()).unwrap();
+                let reply = axia_native_app_request(app, input.as_ptr());
+                let value: Value = serde_json::from_slice(CStr::from_ptr(reply).to_bytes()).unwrap();
+                axia_native_app_reply_free(reply);value
+            };
+            for app in [first, second] {
+                assert_eq!(call(app, json!({"cmd":"metadata","registry":[{"id":"notes","name":"Notes"}],"catalog":[]}))["ok"], true);
+            }
+            let groups = json!({"cmd":"groups","windows":[{"id":"stale","app":"notes","key":"notes"}]});
+            assert_eq!(call(first, groups.clone())["groups"][0]["windows"], json!(["notes#a"]));
+            assert_eq!(call(second, groups.clone())["groups"][0]["windows"], json!(["notes#b"]));
+            a.call("close", &[json!({}), json!("notes#a")]).unwrap();
+            a.call("open", &[json!({}), json!({"app":"notes","instance":"fresh"})]).unwrap();
+            assert_eq!(call(first, json!({"cmd":"quit","key":"notes"}))["effect"], json!({"kind":"closeWindow","id":"notes#fresh"}));
+            drop(a);
+            assert_eq!(call(first, groups.clone())["groups"][0]["windows"], json!(["notes#fresh"]));
+            assert_eq!(call(second, groups)["groups"][0]["windows"], json!(["notes#b"]));
+            axia_native_app_free(first);axia_native_app_free(second);
+        }
+    }
     #[test]
     fn pdf_models_are_available_through_the_ffi_and_have_independent_lifetimes() {
         unsafe {

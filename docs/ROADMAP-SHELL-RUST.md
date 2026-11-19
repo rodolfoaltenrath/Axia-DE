@@ -84,7 +84,8 @@ brilho e energia, método de entrada, aparência.
 
 - 9 apps: `disks`, `editor`, `mail`, `passwords`, `pdf`, `player`,
   `screenshots`, `sysinfo`, `terminal`.
-- `sdk/`: 114 arquivos (60 com interface React e 54 só de lógica).
+- `sdk/`: 116 arquivos JS/JSX. A divisão histórica da Fase 0 está em
+  `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
 - `themes/default/` (a montagem da shell) e `runtime/` (reconciler React e eventos).
 - A captura da Fase 0 encontrou 386 caminhos `lord.*` distintos na AST do JS
   e 491 entradas ao incluir wrappers, manifestos e o prelude. São métodos,
@@ -268,7 +269,7 @@ correspondentes, remover a chave.
 
 ## Fase 2: estado e serviços, sem interface
 
-Os 54 arquivos de `sdk/` que são só lógica. O trabalho central é um **mecanismo de
+Os módulos de lógica de `sdk/` (54 na captura da Fase 0). O trabalho central é um **mecanismo de
 estado em Rust** que substitua `createStore` e `useSyncExternalStore`, para as
 views nativas lerem direto, sem JSON.
 
@@ -297,6 +298,11 @@ views nativas lerem direto, sem JSON.
       retirados sua assinatura do espelho e o envio de `windows` pelo mount.
       Metadados de apps seguem no catálogo compartilhado. Menus, `runningApps`
       e efeitos de encerramento ainda usam o adaptador `appcontrol.js`.
+      O controlador `groups`/`quit` da sessão também lê o modelo Rust, sem
+      `appControlFacts` nem janelas nos pedidos. Metadados são compartilhados
+      com a view e enviados só quando muda o catálogo/idioma. `runningApps`
+      ainda adapta IDs para objetos do espelho; os consumidores dessa API e
+      a execução final dos efeitos permanecem em JS.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
@@ -462,3 +468,4 @@ mostraram.
 | 2026-11-19 | Fase 2: cabeçalhos consomem título e foco do estado observável | Commit desta linha | Mount vincula leitor Rust à lista de janelas do contexto, validando o objeto opaco sem reter ponteiro C/JS. Revisões pendentes pedem tick imediato; não há timer de assinatura após consumo. Removidos título/foco dinâmicos dos fatos JSON do cabeçalho. Oito cenários gráficos comprovam título atualizado com espelho JS parado e fonte inválida rejeitada; 108 testes do host, 34 do modelo, contratos LPK e integração dos apps passaram. Espelho JS, ABI JSON e demais consumidores continuam pendentes; sem medição física. |
 | 2026-11-19 | Fase 2: conteúdo nativo lê foco do modelo Rust | Commit desta linha | Apps com janela recebem leitor tipado e identidade; o JS só fornece bloqueios de entrada para campos e painéis. Troca de foco vale antes do próximo quadro, sem foco dinâmico nos fatos. Quatro cenários gráficos e capturas, 109 testes do host, integração dos apps, dois contratos LPK e oito cenários de Arquivos e de cabeçalhos passaram. CI GPU=1 exige native_focus_runtime e publica as capturas. Espelho JS, moldura e demais serviços continuam pendentes; medições físicas no encerramento. |
 | 2026-11-19 | Fase 2: lista nativa do Forçar encerramento | Commit desta linha | Leitura emprestada do modelo por contexto, sem enviar lista de janelas à view. Retirado windowFacts do NativeView; catálogo de apps resolve nomes, ícones e identidade desktop com a regra compartilhada do launcher. Host revalida seleção antes de ações com revisões pendentes. Passaram 12 testes do app, 110 do host, 34 do modelo, 51 do launcher, contrato desktop, quatro cenários novos, regressões de foco/launcher, integração dos apps e dois contratos LPK. CI publica axia-forcequit. Efeitos de encerramento, menus, runningApps, espelho JS e demais serviços continuam pendentes. |
+| 2026-11-19 | Fase 2: controlador da sessão consulta janelas Rust | Commit desta linha | O serviço groups/quit usa leitor do próprio contexto; removido appControlFacts e o transporte de janelas nos pedidos. Catálogo compartilhado com a view e atualizado apenas quando os metadados mudam, inclusive após desmontar a interface. Passaram 13 testes do app, três da ponte, quatro cenários gráficos com superfície atual e janela ausente do espelho, integração dos apps, regressões de Arquivos/launcher/foco e dois contratos LPK. Execução final dos efeitos, adaptador de objetos de runningApps, menus e espelho JS seguem pendentes. |

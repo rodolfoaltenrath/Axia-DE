@@ -1,9 +1,11 @@
 /* Rust session app control and compiled-app metadata; QuickJS owns only handles. */
 #include "js_native_apps.h"
+#include "js_winmodel.h"
 #include <stdio.h>
 #include <string.h>
 typedef struct AxiaNativeApp AxiaNativeApp;
 extern AxiaNativeApp *axia_native_app_new(const char *);
+extern AxiaNativeApp *axia_native_app_new_windows(const char *, const AxiaWindows *);
 extern void axia_native_app_free(AxiaNativeApp *);
 extern char *axia_native_app_request(AxiaNativeApp *, const char *);
 extern void axia_native_app_reply_free(char *);
@@ -30,8 +32,8 @@ static JSValue request(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     axia_native_app_reply_free(reply);
     return result;
 }
-static JSValue make(JSContext *ctx, const char *id) {
-    AxiaNativeApp *state = axia_native_app_new(id);
+static JSValue make(JSContext *ctx, const char *id, const AxiaWindows *windows) {
+    AxiaNativeApp *state = windows ? axia_native_app_new_windows(id, windows) : axia_native_app_new(id);
     if (!state) return JS_ThrowRangeError(ctx, "unknown native widget app");
     JSValue object = JS_NewObjectClass(ctx, class_id);
     if (JS_IsException(object)) { axia_native_app_free(state); return object; }
@@ -56,7 +58,7 @@ static JSValue create(JSContext *ctx, JSValueConst self, int argc, JSValueConst 
         JS_FreeCString(ctx, id);
         return JS_ThrowRangeError(ctx, "an isolated app can only use its own native model");
     }
-    JSValue result = make(ctx, id);
+    JSValue result = make(ctx, id, NULL);
     JS_FreeCString(ctx, id);
     return result;
 }
@@ -82,7 +84,11 @@ void js_native_apps_register_isolated(JSContext *ctx, JSValue lord, const char *
 
 void js_native_apps_register(JSContext *ctx, JSValue lord) {
     if (register_class(ctx)) return;
-    JSValue object = make(ctx, "forcequit");
+    JSValue source = JS_GetPropertyStr(ctx, lord, "windowList");
+    AxiaWindows *windows = js_windows_borrow(ctx, source);
+    if (!windows) { JS_FreeValue(ctx, source); return; }
+    JSValue object = make(ctx, "forcequit", windows);
+    JS_FreeValue(ctx, source);
     if (JS_IsException(object)) {                /* no compiled apps; the exception is not left pending */
         JS_FreeValue(ctx, JS_GetException(ctx));
         fprintf(stderr, "native apps: the shared host could not start\n");

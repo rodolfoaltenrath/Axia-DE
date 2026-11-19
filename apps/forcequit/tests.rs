@@ -74,6 +74,20 @@ fn borrowed_membership_invalidates_selection_and_reads_fresh_surface_handles() {
     drop(source);
     assert!(app.source.is_some(), "reader owns its source lifetime");
 }
+
+#[test]
+fn cached_metadata_is_reused_and_invalid_updates_cannot_replace_it() {
+    let source = Rc::new(Source::default());
+    source.set(vec![json!({"id":"notes#a","app":"notes"})]);
+    let mut app = App::with_windows(source.clone());
+    assert_eq!(app.request(&json!({"cmd":"metadata","registry":[{"id":"notes","name":"Notas"}],"catalog":[]}))["ok"], true);
+    assert_eq!(app.request(&json!({"cmd":"groups"}))["groups"][0]["name"], "Notas");
+    assert_eq!(app.request(&json!({"cmd":"metadata","registry":null,"catalog":[]}))["error"], "app.invalidRequest");
+    assert_eq!(app.request(&json!({"cmd":"groups"}))["groups"][0]["name"], "Notas");
+    source.set(vec![json!({"id":"notes#b","app":"notes"})]);
+    let result = app.request(&json!({"cmd":"quit","key":"notes","windows":[{"id":"stale","key":"notes"}]}));
+    assert_eq!(result["effect"], json!({"kind":"closeWindow","id":"notes#b"}));
+}
 fn snapshot() -> Value {
     json!([
         {"id":"panel","key":"panel","name":"Panel","builtin":true},

@@ -24,6 +24,14 @@ claro/escuro e 640/1000 px. Artefato CI: `axia-forcequit`; captura local:
 `build/validation/forcequit/`. Os efeitos de encerramento e outros consumidores
 de `appcontrol.js` continuam no adaptador transitório.
 
+O controlador da sessão que resolve `groups`/`quit` também lê o modelo Rust.
+`appControlFacts()` foi removido; os pedidos já não incluem a lista de janelas.
+Metadados de apps são compartilhados por `nativecatalog.js` e enviados uma vez
+por alteração de catálogo/idioma. A integração verifica superfícies atualizadas
+e fechamento de janelas ausentes do espelho JS. A execução final dos efeitos
+continua em JS, assim como o adaptador de objetos de `runningApps()` para o
+alternador e demais consumidores legados.
+
 - Monitor: árvore, rasters, entrada e atualização periódica nativos.
 - Calculadora: árvore e ícone nativos, cálculo por teclado e ponteiro, foco,
   separador decimal e feedback de pressão/hover em Rust.

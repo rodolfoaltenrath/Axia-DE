@@ -14,7 +14,9 @@
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
 import { windows, wm, getApp, appMenus, onActiveDesktop, activeDesktop } from './windows.js';
 import { launcherIdOf, quitApp } from './dock.js';
-import { linuxAppFor, shortAppName, windowAppName, windowIconFacts } from './apps.js';
+import { linuxAppFor, shortAppName, windowAppName } from './apps.js';
+import { nativeCatalogFacts } from './nativecatalog.js';
+import { sameFacts } from './nativeviewfacts.js';
 import { openFileWithApps } from './sysopen.js';
 import * as fs from './fs.js';
 import { nativeAppRequest, nativeAppEffects } from './nativeappmodel.js';
@@ -89,24 +91,27 @@ export function appMenuItems(winId) {
   ];
 }
 
-// Host facts resolve registry/localized names and window handles. Rust owns filtering and grouping.
-export function appControlFacts() {
-  return windows.get().map(w => {
-    const icon = String(w.id).startsWith('linux#') ? linuxAppFor(w.args?.appId) : getApp(w.id);
-    return { id: String(w.id), app: w.app, builtin: !!getApp(w.id)?.builtin,
-      key: launcherIdOf(w), name: groupName(launcherIdOf(w), w), surface: w.args?.surface,
-      iconApp: icon?.id, iconPath: typeof icon?.icon === 'string' ? icon.icon : '',
-      x11: !!w.args?.x11, isolated: !!w.args?.pkg, iconData: windowIconFacts(w) };
-  });
+let metadataOwner, sentMetadata;
+function controlRequest(request) {
+  const owner = lord.nativeApps, metadata = nativeCatalogFacts(true).get();
+  if (metadataOwner !== owner || (sentMetadata !== metadata && !sameFacts(sentMetadata, metadata))) {
+    const reply = nativeAppRequest(owner, { cmd: 'metadata', ...metadata });
+    if (!reply.ok) throw new Error(reply.error || 'app.invalidRequest');
+  }
+  metadataOwner = owner; sentMetadata = metadata;
+  return nativeAppRequest(owner, request);
 }
 export function runningApps() {
   const snapshot = windows.get(), byId = new Map(snapshot.map(w => [String(w.id), w]));
-  return nativeAppRequest(lord.nativeApps, { cmd: 'groups', windows: appControlFacts() }).groups
-    .map(group => ({ ...group, windows: group.windows.map(id => byId.get(id)) }));
+  // Legacy JS callers still consume mirror objects. Native consumers use IDs
+  // directly; omit entries whose mirror has not arrived yet, rather than undefined windows.
+  return controlRequest({ cmd: 'groups' }).groups
+    .map(group => ({ ...group, windows: group.windows.map(id => byId.get(id)).filter(Boolean) }))
+    .filter(group => group.windows.length);
 }
 // Rust owns retry, deduplication and error aggregation. The compositor checks client credentials.
 export function forceQuit(key) {
-  return nativeAppEffects(lord.nativeApps, nativeAppRequest(lord.nativeApps, { cmd: 'quit', key, windows: appControlFacts() }));
+  return nativeAppEffects(lord.nativeApps, controlRequest({ cmd: 'quit', key }));
 }
 
 export function recentItems(n = 10) {

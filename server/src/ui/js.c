@@ -32,6 +32,7 @@
 #include "js_switcher.h"
 #include "js_snap.h"
 #include "js_winmodel.h"
+#include "js_native_apps.h"
 #include "js_disk.h"
 #include "js_imager.h"
 #include "js_logs.h"
@@ -466,6 +467,7 @@ static void session_context(void) {
     js_snap_register(ctx, lord);       /* lord.snap: window snapping's geometry in Rust */
     js_winmodel_register(ctx, lord);   /* lord.winmodel: the window manager's pure rules in Rust */
     js_windows_register(ctx, lord);    /* lord.windowList: the session's windows in Rust */
+    js_native_apps_register(ctx, lord); /* session app control borrows this context's windows */
     js_input_register(ctx, lord);      /* lord.input: touchpads and touchscreens (tp/) */
     js_fw_register(ctx, lord);         /* lord.fw: per-app network permissions (axia-netperm, docs/FIREWALL.md) */
     js_disk_register(ctx, lord);       /* lord.disks: disks and partitions (Disks app) */
