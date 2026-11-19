@@ -155,3 +155,28 @@ Validation passed 31 Python tests, the compositor/testbench links, the switcher,
 snap and window-model C/Rust ABI tests, and all four native benchmark integration
 tests with `GPU=1`. The copied `build/lordbench-test` executable also passed all
 four tests. The shell archive remained unchanged after these builds and tests.
+
+## Build partition tests in Rust, 2026-11-18
+
+`rust/xtask/tests/build_partition.rs` replaces
+`tools/desktop/tests/test_rust_build_partition.py`. Cargo metadata checks every
+app's normal dependencies, including target-specific dependencies and renamed
+packages, to prevent dependencies on the shell or another app. This check runs
+in the ordinary `xtask` test suite without desktop build dependencies.
+
+Two additional checks exercise Make's expanded graph with the Fedora desktop
+build dependencies present: native benchmark builds/tests must reuse the shell
+target without overwriting the separate C-consumer benchmark archive, and RPM
+platform checks must retain their C/ABI gates without compiling Rust test
+profiles. These are ignored in the lightweight suite and explicitly required
+by the desktop CI packaging step:
+
+```text
+cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test build_partition -- --include-ignored
+```
+
+All three checks passed in the Fedora 44 container. The ordinary suite passed
+47 tests on both the Fedora host and container; four environment-dependent
+tests remain ignored there by default. The real profile and idle-budget
+integrations were also run separately and passed. The remaining Python
+packaging/session checks retain their existing CI step until migrated.

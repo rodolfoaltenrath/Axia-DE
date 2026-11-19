@@ -81,7 +81,9 @@ jobs:
         run: |
           make -C server build/tp-test
           server/build/tp-test
-      - name: Packaging tests
+      - name: Rust build partition tests
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test build_partition -- --include-ignored
+      - name: Remaining Python packaging tests
         run: python3 -m unittest discover -s tools/desktop/tests -v
       - name: Stage installation
         run: make install PREFIX=/usr DESTDIR="$RUNNER_TEMP/axia-de"
