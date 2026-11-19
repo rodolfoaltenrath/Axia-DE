@@ -37,6 +37,7 @@ members = [
     "axia-netperm",
     "axia-session",
     "axia-shell",
+    "axia-state",
     "xtask",
 ]
 # The compositor build compiles only the library; xtask is asked for by name.

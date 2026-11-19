@@ -10,6 +10,7 @@
 use super::{get, js_round, num, number, same, truthy, Rect};
 use crate::snap::{self, Dir, Next, Zone};
 use serde_json::{json, Map, Value};
+use axia_state::{Reader, Store};
 
 pub const FIRST_DESKTOP: i64 = 1;
 const MAX_DESKTOPS: usize = super::desktops::MAX_DESKTOPS;
@@ -168,7 +169,7 @@ impl Facts {
 }
 
 #[derive(Debug)]
-pub struct Session {
+pub struct WindowState {
     wins: Vec<Win>,
     desktops: Vec<i64>,
     active: i64,
@@ -178,9 +179,9 @@ pub struct Session {
     sent: u64,
 }
 
-impl Default for Session {
+impl Default for WindowState {
     fn default() -> Self {
-        Session { wins: Vec::new(), desktops: vec![FIRST_DESKTOP], active: FIRST_DESKTOP, overview: false, seq: 2, clock: 0, sent: 0 }
+        WindowState { wins: Vec::new(), desktops: vec![FIRST_DESKTOP], active: FIRST_DESKTOP, overview: false, seq: 2, clock: 0, sent: 0 }
     }
 }
 
@@ -188,7 +189,7 @@ fn rect_value(r: Rect) -> Value {
     r.to_value()
 }
 
-impl Session {
+impl WindowState {
     fn find(&self, id: &str) -> Option<usize> {
         self.wins.iter().position(|w| w.id() == id)
     }
@@ -653,7 +654,7 @@ impl Session {
 
     /// Runs one rule: `args` [facts, op arguments…]. Returns { result, state } (state: the snapshot,
     /// only when something changed or was asked for).
-    pub fn call(&mut self, op: &str, args: &[Value]) -> Result<Value, String> {
+    fn call(&mut self, op: &str, args: &[Value]) -> Result<(Value, bool), String> {
         let facts = Facts::from_value(args.first().unwrap_or(&Value::Null));
         let a = |i: usize| args.get(i + 1).unwrap_or(&Value::Null);
         let before = self.wins.clone();
@@ -848,12 +849,51 @@ impl Session {
             _ => return Err(format!("unknown window op '{op}'")),
         }
         self.stamp(&before);
-        let changed = self.clock > self.sent || self.wins.len() != before.len()
-            || self.wins.iter().zip(&before).any(|(w, b)| w.id() != b.id())
+        let changed = self.wins.len() != before.len()
+            || self.wins.iter().zip(&before).any(|(w, b)| w.id() != b.id() || w.rev != b.rev)
             || self.desktops != desktops || self.active != active || self.overview != overview;
-        let state = if changed || op == "state" || op == "resync" { self.snapshot() } else { Value::Null };
-        Ok(json!({ "result": result, "state": state }))
+        let state = if changed || self.clock > self.sent || op == "state" || op == "resync" { self.snapshot() } else { Value::Null };
+        Ok((json!({ "result": result, "state": state }), changed))
     }
+}
+
+/// The authoritative model lives in a typed observable store. The JSON response
+/// below remains the transitional JS/LPK adapter; native consumers use `reader`.
+#[derive(Default)]
+pub struct Session {
+    state: Store<WindowState>,
+}
+
+impl Session {
+    pub fn reader(&self) -> Reader<WindowState> { self.state.reader() }
+
+    pub fn call(&mut self, op: &str, args: &[Value]) -> Result<Value, String> {
+        self.state.update(|state| match state.call(op, args) {
+            Ok((reply, changed)) => (Ok(reply), changed),
+            Err(error) => (Err(error), false),
+        })
+    }
+}
+
+/// Borrowed window data for native readers. App arguments retain their existing
+/// dynamic representation; geometry and window identity need no JSON transport.
+pub struct Window<'a>(&'a Win);
+impl Window<'_> {
+    pub fn id(&self) -> &str { self.0.id() }
+    pub fn app(&self) -> &str { self.0.app() }
+    pub fn title(&self) -> &str { self.0.data.get("title").and_then(Value::as_str).unwrap_or("") }
+    pub fn frame(&self) -> Rect { self.0.rect() }
+    pub fn desktop(&self) -> i64 { self.0.desktop() }
+    pub fn minimized(&self) -> bool { self.0.on("minimized") }
+    pub fn revision(&self) -> u64 { self.0.rev }
+    pub fn args(&self) -> &Value { self.0.data.get("args").unwrap_or(&Value::Null) }
+}
+impl WindowState {
+    pub fn windows(&self) -> impl Iterator<Item = Window<'_>> { self.wins.iter().map(Window) }
+    pub fn window(&self, id: &str) -> Option<Window<'_>> { self.find(id).map(|i| Window(&self.wins[i])) }
+    pub fn desktops(&self) -> &[i64] { &self.desktops }
+    pub fn active_desktop(&self) -> i64 { self.active }
+    pub fn overview(&self) -> bool { self.overview }
 }
 
 fn get_value(w: &Win, k: &str) -> Value {
@@ -864,15 +904,22 @@ fn get_value(w: &Win, k: &str) -> Value {
 impl Session {
     /// Tests: windows as they are (bottom to top), appended.
     pub fn debug_load(&mut self, list: &[Value]) {
+        self.state.update(|state| { state.debug_load(list); ((), !list.is_empty()) });
+    }
+    pub fn debug_window(&self, id: &str) -> Value {
+        let state = self.state.read();
+        state.find(id).map_or(Value::Null, |i| Value::Object(state.wins[i].data.clone()))
+    }
+}
+
+#[cfg(test)]
+impl WindowState {
+    fn debug_load(&mut self, list: &[Value]) {
         for w in list {
             if let Value::Object(data) = w {
                 self.clock += 1;
                 self.wins.push(Win { rev: self.clock, data: data.clone() });
             }
         }
-    }
-    /// Tests: a window as it is now.
-    pub fn debug_window(&self, id: &str) -> Value {
-        self.find(id).map_or(Value::Null, |i| Value::Object(self.wins[i].data.clone()))
     }
 }

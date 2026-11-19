@@ -80,7 +80,7 @@ mod external_style;
 mod native_style;
 mod backdrop;
 mod snap;
-mod winmodel;
+pub mod winmodel;
 use std::ffi::{c_char, CStr};
 
 const LIMIT: usize = 512;

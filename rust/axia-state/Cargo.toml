@@ -1,0 +1,7 @@
+[package]
+name = "axia-state"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "UI-thread observable state for native Axia services"
+

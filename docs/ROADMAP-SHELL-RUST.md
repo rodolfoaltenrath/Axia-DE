@@ -73,7 +73,7 @@ Fase 3. Efeitos e serviços seguem no adaptador JS até as fases seguintes.
 
 **Fase 1 concluída:** as chaves listadas foram retiradas dos caminhos ativos.
 O item `lordNativeView` foi auditado e documentado abaixo: não existe como
-preferência no código atual. O próximo trabalho é a Fase 2; validação física
+preferência no código atual. O trabalho atual é a Fase 2; validação física
 e medições continuam reservadas ao encerramento.
 
 **Já em Rust no lado dos modelos:** lista de janelas, desktops e encaixe
@@ -273,9 +273,17 @@ estado em Rust** que substitua `createStore` e `useSyncExternalStore`, para as
 views nativas lerem direto, sem JSON.
 
 - [ ] Mecanismo de estado observável em Rust, com notificação de mudança.
+      Base `axia-state` implementada e usada pelo proprietário do modelo de
+      janelas: leitura por empréstimo, revisão numérica, assinaturas canceláveis
+      e invalidações agrupadas, sem dependências externas. Ainda falta ligar
+      as views ao despacho de invalidações e substituir os stores JS dos
+      demais serviços. Contrato e limites em `STATE-RUST.md`.
 - [ ] Lista de janelas: trocar o espelho em JS (`sdk/windows.js`) e o ciclo
       `JSON.stringify` / `JSON.parse` por revisões numéricas (o campo `rev` já
       existe) lidas pelo Rust.
+      `Session.reader()` já expõe o estado diretamente para consumidores Rust;
+      ordem, remoção, desktops e overview também invalidam essa revisão.
+      ABI JSON, espelho JS e envio de fatos às views continuam pendentes.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
@@ -437,3 +445,4 @@ mostraram.
 | 2026-11-19 | Fase 1: launcher sempre no host Rust | Commit desta linha | Removido o renderer React; rolagem monta apenas viewport e margem, alcançando o fim de 2.048 apps. Corrigidos catálogo dinâmico, menu por teclado e conflito entre clique no fundo e encerramento do host. A pedido do usuário, grade sem limite de 780 px e com colunas conforme a tela. Seis capturas em 640/1000/1920 px e regressão ampla com 1.029 apps; testes Rust também cobrem touchpad e barra. Efeitos ainda usam o adaptador JS; métricas físicas continuam adiadas. |
 | 2026-11-19 | Fase 1: barra de título sempre no host Rust | Commit desta linha | Removida a escolha por preferência e o renderer React substituído. Corrigida a maximização indevida por duplo clique num controle, reproduzida e verificada em Rust. Oito cenários Axia/Adwaita, claro/escuro e 640/1000 px, com janelas reais e PNGs. A moldura, o fallback de arraste e os efeitos ainda usam o adaptador JS; validação de grab físico e métricas ficam para o encerramento. |
 | 2026-11-19 | Fase 1: navegador Arquivos sempre nativo; chaves encerradas | Commit desta linha | Removidos o renderer React do navegador e sua preferência; ícone nativo. Corrigido o recorte de PDFs com contain, reproduzido no compositor anterior e verificado por pixels do centro/topo/rodapé. Oito cenários em Rust cobrem arquivos privados, navegação, renomeação, PDF, seletores e volumes simulados. Smoke JS/Python substituído pela integração Rust exigida no CI. lordNativeView auditado como preferência inexistente no código atual; o despachante __lordNativeView permanece até as fases seguintes. Seletores e transferências registrados na Fase 3; validação física adiada ao encerramento. |
+| 2026-11-19 | Fase 2 iniciada: base observável e proprietário do estado de janelas | Commit desta linha | Crate axia-state sem dependências externas; leitores por empréstimo, revisões e assinaturas canceláveis com invalidações agrupadas. Session guarda WindowState nessa base e expõe leitura nativa. Testes distinguem mutações, ordem e remoção de leituras, resync e operações sem efeito. ABI JSON, espelho JS e consumidores gráficos ainda pendentes; sem nova medição física. |

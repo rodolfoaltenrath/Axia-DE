@@ -331,7 +331,7 @@ fn bad_calls_say_why() {
 
 // ---- the session's windows (session.rs; the predicates were server/tests/desktop_model_test.mjs) ----
 
-use super::session::Session;
+use super::Session;
 
 fn facts() -> Value {
     json!({
@@ -705,4 +705,59 @@ fn the_mirror_gets_only_what_changed() {
     assert!(s.call("nothing", &[facts()]).is_err());
     let again = op(&mut s, "resync", json!([]));
     assert!(again["state"]["windows"].as_array().unwrap().iter().all(|w| w.get("w").is_some()), "resync sends everything");
+}
+
+#[test]
+fn native_readers_observe_committed_windows_without_using_the_js_snapshot() {
+    let mut s = session(json!([win("a", 1, json!({"app":"files"})), win("b", 1, json!({}))]), json!([1, 2]), 1);
+    let reader = s.reader();
+    let initial = reader.revision();
+    let changes = reader.subscribe();
+    op(&mut s, "patch", json!(["a", {"title":"Native title"}]));
+    assert_eq!(changes.take(), Some(initial + 1));
+    op(&mut s, "move", json!(["a", 25, 70]));
+    op(&mut s, "setArgs", json!(["a", {"path":"/home/test"}]));
+    assert_eq!(changes.take(), Some(initial + 3));
+    {
+        let state = reader.read();
+        let w: super::Window<'_> = state.window("a").unwrap();
+        assert_eq!((w.id(), w.app(), w.title()), ("a", "files", "Native title"));
+        assert_eq!((w.frame().x, w.frame().y, w.desktop()), (25., 70., 1));
+        assert_eq!(w.args()["path"], "/home/test");
+        assert!(!w.minimized());
+        assert!(w.revision() > 0);
+        assert_eq!(state.desktops(), &[1, 2]);
+        assert_eq!(state.active_desktop(), 1);
+        assert!(!state.overview());
+    }
+    op(&mut s, "setActiveDesktop", json!([2]));
+    op(&mut s, "setOverview", json!([true]));
+    assert_eq!(changes.take(), Some(initial + 5), "a slow native reader receives the latest revision");
+    assert_eq!(reader.read().active_desktop(), 2);
+    assert!(reader.read().overview());
+    assert_eq!(changes.take(), None);
+}
+
+#[test]
+fn native_invalidation_includes_removal_and_stacking_but_excludes_resync_and_noops() {
+    let mut s = session(json!([win("a", 1, json!({})), win("b", 1, json!({}))]), json!([1]), 1);
+    let reader = s.reader();
+    let changes = reader.subscribe();
+    let initial = reader.revision();
+    op(&mut s, "state", json!([]));
+    op(&mut s, "resync", json!([]));
+    op(&mut s, "raise", json!(["b"]));
+    op(&mut s, "close", json!(["missing"]));
+    assert!(s.call("invalid", &[facts()]).is_err());
+    assert_eq!(changes.take(), None);
+    assert_eq!(reader.revision(), initial);
+    op(&mut s, "raise", json!(["a"]));
+    assert_eq!(changes.take(), Some(initial + 1));
+    assert_eq!(reader.read().windows().map(|w| w.id().to_owned()).collect::<Vec<_>>(), ["b", "a"]);
+    op(&mut s, "close", json!(["a"]));
+    assert_eq!(changes.take(), Some(initial + 2));
+    assert!(reader.read().window("a").is_none());
+    op(&mut s, "close", json!(["b"]));
+    assert_eq!(changes.take(), Some(initial + 3));
+    assert_eq!(reader.read().windows().count(), 0);
 }

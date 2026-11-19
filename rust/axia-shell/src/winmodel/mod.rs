@@ -14,6 +14,7 @@ mod session;
 mod tests;
 
 pub use layout::{grid, ASSIST_GRID, OVERVIEW_GRID};
+pub use session::{Session, Window, WindowState};
 
 use serde_json::Value;
 

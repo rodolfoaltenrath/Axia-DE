@@ -47,6 +47,9 @@ jobs:
       - name: Desktop model regression tests
         run: |
           node server/tests/shortcut_profile_test.mjs
+      - name: Rust observable state contracts
+        if: matrix.gpu == 1
+        run: cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --locked --offline -p axia-state
       - name: Build and test desktop with memory telemetry
         run: cargo xtask build-memory --output "$RUNNER_TEMP/desktop-memory.json" -- make -j2 check GPU=${{ matrix.gpu }} CFLAGS='-O2 -g -D_FORTIFY_SOURCE=3 -fstack-protector-strong'
       - uses: actions/upload-artifact@v4

@@ -409,12 +409,17 @@ dependencies = [
  "axia-clock",
  "axia-codecs",
  "axia-native",
+ "axia-state",
  "image",
  "libc",
  "regex",
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "axia-state"
+version = "0.1.0"
 
 [[package]]
 name = "base64ct"
