@@ -298,6 +298,34 @@ em diretório temporário e `switcher-check` usando os arquivos instalados
 aprovados. Arranjos recusam uma origem removida, em outro desktop ou que seja
 painel interno. Medições físicas e RPM completo continuam para o encerramento.
 
+## Indicador de desktop
+
+`shell:desktop-hud` exige a fonte nativa do contexto e observa as revisões de
+`WindowState`. O próprio app compara o desktop ativo, monta o nome e os pontos
+e mantém um prazo monotônico de 800 ms após a última troca. A primeira leitura
+estabelece a referência sem mostrar o indicador. Overview e desktop único
+cancelam o prazo; sair do Overview não repete a indicação. Oculto, o app não
+pede atualização periódica. O assinante e o prazo acabam ao desmontar a view.
+
+`sdk/desktops.js` fornece apenas o mount, aparência e geometria do monitor
+principal, com assinatura de eventos de tela. A tentativa de avançar além do
+limite encaminha um comando `show`; não envia desktop ativo, lista ou árvores.
+Removidos `hudState`, `hudTimer` e a assinatura JS que mostrava o indicador.
+Animação de janelas, escolha do vizinho, configuração da quantidade e
+restauração ainda estão nos adaptadores das fases seguintes.
+
+O teste Rust `desktop_hud_runtime` monta o componente real e exige fonte opaca
+correta, troca com espelho parado, extensão/expiração do prazo, indicação no
+limite, supressão no Overview/desktop único e desmontagem. Quatro cenários,
+claro/escuro em 640/1000 px, produzem capturas em
+`build/validation/desktop-hud/`; o CI GPU=1 exige o teste e publica
+`axia-desktop-hud`. O teste unitário usa instantes explícitos para verificar
+extensão e expiração sem espera. Não houve medição física nesta etapa.
+
+Compositor/frontend recompilados; passaram 526 testes unitários da shell (sete
+especiais ignorados), três contratos LPK e as regressões gráficas dos comandos
+de janela e menu Janela, em quatro cenários cada.
+
 ## Verificação
 
 ```sh

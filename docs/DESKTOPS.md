@@ -9,7 +9,8 @@ window is *parked*.
 | `rust/axia-shell/src/winmodel/session.rs` | The windows, the desktops and the one showing, and the rules: what shows, what is mounted, what is in front (who has the keyboard), what is parked. `winmodel/tests.rs`, `server/tests/windows_bridge_test.mjs` |
 | `rust/axia-shell/src/winmodel` (`sdk/winmodel.js`) | The list of desktops (add, close, neighbors, arrows and swipes in RTL), the saved count and position, and the Overview's grid and strip. `winmodel/tests.rs` |
 | `sdk/windows.js` | The mirror of Rust's list for React: `windows`, `activeDesktop`, `desktopList`, `windowViews`; `wm.moveToDesktop`, `wm.raise`, `useWindows`, `useWindowHidden`, `onActiveDesktop` |
-| `sdk/desktops.js` | Switching, the keys, the saved count, the indicator, the animation |
+| `sdk/desktops.js` | Switching, the keys, the saved count, the indicator mount, the animation |
+| `rust/axia-shell/src/native_view/desktop_hud.rs` | The indicator's native state subscription, caption, dots and expiry |
 | `sdk/overview.jsx` | The Overview, the SDK's own, for every theme |
 | `sdk/windowshell.jsx` | `display: none` on a hidden desktop, the window's place in the Overview |
 | `sdk/wayland.js`, `server/src/wl/wl.c` | The keyboard and the parked state of Linux windows |
@@ -110,6 +111,14 @@ The windows arriving slide 56 px and fade in over 170 ms, on their cached raster
 node, no React render per frame. The windows leaving are gone at once. A small indicator shows the desktop's name for
 800 ms. With Reduce motion there is no animation, and when nothing is switching, no timer runs. In a session left
 alone, `axia-server` used 0 CPU ticks in 10 s with three desktops and windows open (VM 116).
+
+The indicator reads the session's `WindowState` directly through a cancellable
+subscription. It does not receive the JS desktop list or active desktop. Native
+revisions detect a switch even with a stale JS mirror; a single native deadline
+hides it 800 ms after the latest switch. Initial mounting, a single desktop and
+the Overview do not show it. At either end of the list, the shortcut forwards a
+`show` command to the native view. There is no JS store or timer for this UI.
+The adapter supplies display geometry and follows display configuration events.
 
 ## What is kept
 

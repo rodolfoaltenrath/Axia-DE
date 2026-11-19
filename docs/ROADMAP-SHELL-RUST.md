@@ -325,6 +325,10 @@ views nativas lerem direto, sem JSON.
       640/1000 px; comandos com quatro cenários gráficos. Detalhes em `STATE-RUST.md`.
 - [ ] Desktops, sessão e restauração (`desktops.js`, `windowmemory.js`,
       `sessionrestore.jsx`).
+      Indicador de troca de desktop agora lê o modelo Rust diretamente: nome,
+      posição e pontos são nativos, assim como a expiração de 800 ms. Retirados
+      o store, a assinatura JS de apresentação e o temporizador desse indicador.
+      Atalhos, animação, persistência e restauração ainda usam adaptadores JS.
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
 - [ ] Notificações, relógio e alarmes (`notify.js`, `alarms.js`).
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores

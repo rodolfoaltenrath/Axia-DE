@@ -9,12 +9,11 @@
 // The animation: the windows arriving slide a little and fade in, stepped by the native animator
 // (lord.anim.slide, rust/axia-shell/src/anim.rs): no JS and no relayout per frame, and none at all
 // with Reduce motion.
-import { createElement as h } from 'react';
-import { View, Text, mainDisplay } from '@lordos/runtime';
-import { createStore, useStore } from './store.js';
+import { createElement as h, useSyncExternalStore } from 'react';
+import { mainDisplay, onScreenChange } from '@lordos/runtime';
 import { t, direction } from './i18n.js';
 import { settings } from './settings.js';
-import { useTheme } from './theme.js';
+import { NativeView } from './nativeview.js';
 import { Layer } from './layers.js';
 import { windows, wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows } from './windows.js';
 import { MAX_DESKTOPS } from './desktopmodel.js';
@@ -23,7 +22,8 @@ import { cycleWindows } from './trackpad.js';
 import { nativeAnim, whenAnimDone } from './anim.js';
 import { toggleOverview, toggleAppWindows } from './overview.jsx';
 
-const HUD_MS = 800;
+const NATIVE_DESKTOP_HUD = { id: 'shell:desktop-hud', shell: true, fullTheme: true };
+const hudHandle = { current: 0 };
 
 // ---- names and positions ----
 
@@ -138,13 +138,8 @@ desktopList.subscribe(() => {
 
 // ---- the brief indicator and the animation ----
 
-const hudState = createStore(false);
-let hudTimer = 0;
 function showHud() {
-  if (desktopList.get().length < 2 || overviewShowing.get()) return;
-  hudState.set(true);
-  clearTimeout(hudTimer);
-  hudTimer = setTimeout(() => hudState.set(false), HUD_MS);
+  if (hudHandle.current) lord.nativeViews.action(hudHandle.current, { action: ['show'] });
 }
 
 // Switching desktops: the windows that appear slide in, natively (lord.anim.slide,
@@ -171,21 +166,12 @@ activeDesktop.subscribe(() => {
   if (!started || to === from) return;
   const list = desktopList.get();
   animate(list.indexOf(to) >= list.indexOf(from) ? 1 : -1);
-  showHud();
 });
 
 export function DesktopHud() {
-  const on = useStore(hudState);
-  const active = useStore(activeDesktop);
-  const list = useStore(desktopList);
-  const th = useTheme();
-  if (!on) return null;
-  const d = mainDisplay();
+  const d = useSyncExternalStore(onScreenChange, mainDisplay);
   return h(Layer, { name: 'tooltip' },
-    h(View, { style: { position: 'absolute', left: d.x, top: d.y + Math.round(d.h * 0.14), width: d.w, alignItems: 'center', pointerEvents: 'none' } },
-      h(View, { style: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', borderRadius: (th.groupRadius ?? 10) + 4,
-        backgroundColor: th.mode === 'dark' ? 'rgba(30,30,34,0.92)' : 'rgba(245,245,247,0.94)', border: `1px solid ${th.separator}`, boxShadow: '0 10px 28px rgba(0,0,0,0.35)' } },
-      h(Text, { style: { fontSize: 13, fontWeight: 600, color: th.text, whiteSpace: 'nowrap' } }, desktopName(active)),
-      h(View, { style: { flexDirection: 'row', gap: 6 } }, list.map((id) => h(View, { key: id,
-        style: { width: 18, height: 6, borderRadius: 3, backgroundColor: id === active ? th.accent : th.separator } }))))));
+    h(NativeView, { manifest: NATIVE_DESKTOP_HUD, stateSource: lord.windowList, handleRef: hudHandle,
+      args: { display: { x: d.x, y: d.y, w: d.w, h: d.h } },
+      style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'none' } }));
 }
