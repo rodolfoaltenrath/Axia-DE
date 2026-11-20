@@ -435,7 +435,7 @@ por app/legenda e conta os demais; dispensá-lo revela o anterior. A view
 revalida a ação contra IDs e índices atuais; um clique antigo não aciona uma
 notificação removida ou reutilizada. Fechamento precede o callback da ação.
 
-`sdk/notify.js` fornece metadados, preferências, permissão efetiva e bloqueio
+`sdk/notify.js` fornece metadados, preferências brutas, estado da permissão e bloqueio
 de firewall; executa patches e callbacks genéricos. Os stores públicos recebem
 snapshots por revisão para compatibilidade, sem alimentar a view nativa.
 O adaptador descarta snapshots com revisão anterior ou igual à já aplicada;
@@ -453,7 +453,8 @@ recebe um prazo monotônico de 60 segundos e um próximo pulso a cada 2,5 segund
 Não Perturbe, estilo sem banner, recusa, silêncio e firewall impedem o início;
 mudanças de preferências cancelam o toque ativo. A agenda DND é reavaliada com
 a hora local nos pulsos, inclusive quando cruza meia-noite. O adaptador publica
-as preferências efetivas ao modelo; o native view não recebe lista ou política.
+as preferências brutas e o estado da permissão; o Rust resolve os padrões e
+opções efetivas. O native view não recebe lista ou política.
 
 O prazo pertence à notificação no contexto. Remontar a view preserva a cadência;
 um atraso produz no máximo um pulso, sem recuperar sons perdidos em rajada.
@@ -476,6 +477,28 @@ real exige zero efeitos de som na ponte e zero chamadas JS, inclusive após
 remontagem. Saída física de áudio segue reservada à validação final.
 Logs e capturas desta etapa: `build/validation/native-notification-audio/`.
 
+## Resolução de preferências de notificações
+
+`notifications/preferences.rs` aplica os padrões globais e por app, a precedência
+da permissão de pacotes e a mesclagem de alterações. Campos desconhecidos,
+opções de outros apps e histórico de apps vistos são preservados. A mesclagem
+global continua rasa, conservando o formato já persistido pelo SDK. Pacotes usam
+o estado da permissão informado pelo host; apps internos usam o campo `allow`.
+
+Entrega, toque de alarmes e as APIs `notifyPrefs`/`appNotifyPrefs` da sessão
+usam essas funções Rust. Pedidos de entrega não transportam `appPrefs`
+pré-calculados, e o relógio não recebe opções efetivas produzidas pelo JS.
+`setAppNotifyPrefs` pede ao proprietário a alteração mesclada. Consultas e
+mesclagem são puras: não expiram banners, não drenam efeitos nem invalidam
+leitores. A persistência, a leitura/escrita da permissão, metadados de catálogo
+e o snapshot de configurações ainda passam pelo adaptador; a migração completa
+de `settings.js` permanece pendente. O host `.lpk` conserva as funções locais.
+
+`notifications_runtime` modifica os padrões JS durante uma consulta para provar
+que a sessão usa o Rust, verifica a edição sem perder opções e exige transporte
+de preferências brutas. O contrato isolado mantém a compatibilidade legada.
+Logs e capturas desta etapa: `build/validation/native-notification-preferences/`.
+
 ## Templates e ações de alarmes no proprietário Rust
 
 `notifications/clock_delivery.rs` transforma os efeitos do engine diretamente
@@ -496,7 +519,7 @@ no adaptador de compatibilidade.
 A entrega e os pulsos consultam a restrição atual de notificações do firewall
 pela API nativa `restrict_blocks`, sobre o mesmo armazenamento usado pelo SDK.
 Uma alteração entre o início e o vencimento do timer não depende de um novo
-snapshot JS. Preferências e persistência continuam transitórias. O som já é
+snapshot JS. Transporte de preferências e persistência continuam transitórios. O som já é
 executado nativamente pelo serviço. O host `.lpk` mantém templates, reprodução
 e callbacks locais.
 

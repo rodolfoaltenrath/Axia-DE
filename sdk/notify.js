@@ -81,9 +81,13 @@ function command(action, extra = {}) { return applyReply(rawRequest(action, extr
 // (org.freedesktop.Notifications, server/src/hw/notifyd.c). For .lpk packages "allow" is the
 // sandbox's "notifications" permission (the same switch as in Privacy & Security).
 export const NOTIFY_DEFAULTS = { dnd: false, schedule: { on: false, from: 22 * 60, to: 7 * 60 }, grouping: 'app', apps: {}, seen: [] };
-export const notifyPrefs = (s = settings.get()) => ({ ...NOTIFY_DEFAULTS, ...(s.notifications || {}) });
+export const notifyPrefs = (s = settings.get()) => appHost
+  ? ({ ...NOTIFY_DEFAULTS, ...(s.notifications || {}) })
+  : command('preferences', { prefs: s.notifications });
 const isPackage = (app) => { try { return !!getApp(app)?.package; } catch (e) { return false; } };
+const packagePermission = app => isPackage(app) ? perms.get(app, 'notifications') : null;
 export function appNotifyPrefs(app, s = settings.get()) {
+  if (!appHost) return command('appPreferences', { prefs: s.notifications, app, permission: packagePermission(app) });
   const p = { allow: true, style: 'banner', sound: true, lock: true, ...(notifyPrefs(s).apps[app] || {}) };
   if (isPackage(app)) p.allow = perms.get(app, 'notifications') !== 'deny';
   return p;
@@ -91,12 +95,13 @@ export function appNotifyPrefs(app, s = settings.get()) {
 export function setAppNotifyPrefs(app, patch) {
   if (isPackage(app) && 'allow' in patch) perms.set(app, 'notifications', patch.allow ? 'allow' : 'deny');
   settings.set((s) => {
+    if (!appHost) return { ...s, notifications: command('preferencesPatch', { prefs: s.notifications, app, patch }) };
     const p = notifyPrefs(s);
     return { ...s, notifications: { ...p, apps: { ...p.apps, [app]: { ...(p.apps[app] || {}), ...patch } } } };
   });
 }
 export function dndActive(now = new Date(), s = settings.get()) {
-  if (!appHost) return command('policy', { prefs: notifyPrefs(s), wallMs: now.getTime(), minute: now.getHours() * 60 + now.getMinutes() });
+  if (!appHost) return command('policy', { prefs: s.notifications, wallMs: now.getTime(), minute: now.getHours() * 60 + now.getMinutes() });
   const p = notifyPrefs(s);
   if (p.dnd === true || (typeof p.dnd === 'number' && now.getTime() < p.dnd)) return true;
   if (!p.schedule?.on) return false;
@@ -122,15 +127,14 @@ function fwNotifyBlocked(app) {
   } catch (e) { return false; }
 }
 // Transitional permission/settings adapter for native Clock delivery.
-export const clockNotificationPolicy = () => ({ prefs: notifyPrefs(), clock: appNotifyPrefs('clock'), blocked: fwNotifyBlocked('clock') });
+export const clockNotificationPolicy = () => ({ prefs: settings.get().notifications, permission: packagePermission('clock'), blocked: fwNotifyBlocked('clock') });
 
 export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null, _ring = false } = {}) {
   app = String(app);
-  const ap = appNotifyPrefs(app);
   if (!appHost) {
     const at = new Date(), registered = getApp(app);
     const selected = Array.isArray(actions) ? actions.slice(0, 3) : [];
-    const reply = rawRequest('push', { prefs: notifyPrefs(), appPrefs: ap, blocked: fwNotifyBlocked(app),
+    const reply = rawRequest('push', { prefs: settings.get().notifications, permission: packagePermission(app), blocked: fwNotifyBlocked(app),
       wallMs: at.getTime(), minute: at.getHours() * 60 + at.getMinutes(),
       notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
         sound: !!withSound, ring: !!_ring, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),
@@ -139,6 +143,7 @@ export function notify({ app = '', title = '', body = '', actions = [], sound: w
     applyReply(reply);
     return reply.result;
   }
+  const ap = appNotifyPrefs(app);
   remember(app);
   if (!ap.allow || fwNotifyBlocked(app)) return 0;          // not delivered at all
   const id = seq++;
@@ -193,7 +198,7 @@ if (!appHost) {
     if (typeof lord === 'undefined' || typeof lord.greeter !== 'undefined' || typeof lord.appId === 'string'
       || typeof lord.nativeApps?.request !== 'function') return;
     previous = current;
-    command('ringPolicy', { prefs: notifyPrefs(), clock: appNotifyPrefs('clock'), blocked: fwNotifyBlocked('clock') });
+    command('ringPolicy', clockNotificationPolicy());
   });
 }
 

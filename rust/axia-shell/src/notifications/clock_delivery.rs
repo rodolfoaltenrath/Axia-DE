@@ -222,7 +222,7 @@ mod tests {
     fn clock_command_delivers_once_and_obeys_dnd_and_permission() {
         for policy in [
             json!({"prefs":{"dnd":true}}),
-            json!({"clock":{"allow":false}}),
+            json!({"prefs":{"apps":{"clock":{"allow":false}}}}),
         ] {
             let (mut s, now, wall) = setup();
             s.clock_command(
@@ -320,9 +320,7 @@ mod tests {
 impl Service {
     pub(crate) fn clock_command(&mut self, input: &Value, wall: i64, now: Instant) -> Value {
         if let Some(policy) = input.get("notificationPolicy") {
-            self.ring_prefs = policy["prefs"].clone();
-            self.clock_prefs = policy["clock"].clone();
-            self.ring_blocked = policy["blocked"] == true;
+            self.policy(policy);
         }
         let mut command = input.clone();
         command["cmd"] = input["action"].clone();
@@ -350,7 +348,7 @@ impl Service {
                 let local = axia_clock::local(wall);
                 let delivered = self.command(
                     &json!({"action":"push","notice":notice,"prefs":self.ring_prefs,
-                    "appPrefs":self.clock_prefs,"blocked":self.ring_blocked,"wallMs":wall,
+                    "permission":self.clock_permission,"blocked":self.ring_blocked,"wallMs":wall,
                     "minute":local.tm_hour*60+local.tm_min}),
                     now,
                 );

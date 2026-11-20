@@ -37,6 +37,8 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "ringGuard",
                 "nativeRing",
                 "nativeSound",
+                "nativePreferences",
+                "rawPolicy",
                 "revisionOrder",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -69,7 +71,7 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { NotificationBanner } from '@ROOT@/sdk/nativebanner.js';
-import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement } from '@ROOT@/sdk/notify.js';
+import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement, NOTIFY_DEFAULTS, notifyPrefs, appNotifyPrefs, setAppNotifyPrefs } from '@ROOT@/sdk/notify.js';
 import { clockRequest, ringing } from '@ROOT@/sdk/alarms.js';
 import { sound } from '@ROOT@/sdk/sound.js';
 import { notificationBridge } from '@ROOT@/sdk/nativenotifications.js';
@@ -84,10 +86,10 @@ const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeV
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 const ran=[], reasons=[];
 let bannerHandle=0,bound=false,noPayload=true,toggle;
-let noSoundEffects=true;
+let noSoundEffects=true,rawPolicy=true;
 const perform=notificationBridge.perform,request=lord.nativeApps.request;
 notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
-lord.nativeApps.request=text=>{const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'&&input.action==='push')rawPolicy&&=!('appPrefs'in input);if(input.notificationPolicy)rawPolicy&&=!('clock'in input.notificationPolicy);if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
 function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
@@ -101,6 +103,16 @@ configureWindows({apps:[],workArea:{x:20,y:28,w:@WIDTH@-40,h:644}});
 function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},on?h(NotificationBanner):null));}
 render(h(App));
 async function run(){
+ const grouping=NOTIFY_DEFAULTS.grouping;NOTIFY_DEFAULTS.grouping='off';
+ const defaults=notifyPrefs({}),options=appNotifyPrefs('clock',{notifications:{apps:{clock:{sound:false}}}});
+ NOTIFY_DEFAULTS.grouping=grouping;
+ const original=settings.get().notifications;
+ settings.set({notifications:{...original,extra:'keep',apps:{notes:{lock:false},clock:{sound:false,custom:3}}}});
+ setAppNotifyPrefs('clock',{style:'alert'});
+ const edited=settings.get().notifications;
+ const nativePreferences=defaults.grouping==='app'&&defaults.schedule.from===1320&&options.allow&&options.style==='banner'&&!options.sound
+   &&edited.apps.clock.style==='alert'&&edited.apps.clock.custom===3&&!edited.apps.clock.sound&&!edited.apps.notes.lock&&edited.extra==='keep';
+ settings.set({notifications:original});
  push('Grouped','Grouped old');push('Grouped','Grouped latest');
  await until(()=>find('Grouped latest'));const grouped=!!find('Grouped · +1')&&!find('Grouped old');
  push('Actions','Action primary',{actions:[{id:'first',label:'First',run:()=>ran.push('first')},{id:'second',label:'Second',run:()=>ran.push('second')}]});
@@ -119,7 +131,7 @@ async function run(){
  await until(()=>find('Timed banner'));await sleep(1700);
  const timerGone=notifications.get().length===0&&!find('Timed banner');
  // Discard the compatibility snapshot: the native surface must still see the new notice.
- const direct=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',prefs:{},appPrefs:{},
+ const direct=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',prefs:{},
    wallMs:Date.now(),minute:0,notice:{title:'Direct native',label:'Direct',displayLabel:'Direct',sticky:true,sound:false}}));
  const nativeDirect=await until(()=>find('Direct native'));
  const mirrorStale=!notifications.get().some(n=>n.title==='Direct native');
@@ -158,7 +170,7 @@ async function run(){
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,revisionOrder,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,revisionOrder,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

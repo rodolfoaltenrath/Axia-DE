@@ -309,7 +309,11 @@ it from LordOS would make dpkg ask about it on every package update (or drop the
 
 ![Notifications](settings-notifications-dark.png)
 
-`sdk/notify.js` gained a policy, applied to every `notify()`:
+The main shell applies notification policy in the context-owned Rust service
+(`rust/axia-shell/src/notifications/`). Defaults, app overrides and preference
+patches are resolved natively from raw preferences and the host permission state.
+`sdk/notify.js` transports those inputs and persists patches; the isolated `.lpk`
+host keeps its local policy implementation. This applies to every `notify()`:
 
 - **Per app:** allow, style (none / banners / alerts: alerts stay until dismissed), sound, and
   "show on lock screen" (stored, shown disabled: the lock screen is the greeter and does not show

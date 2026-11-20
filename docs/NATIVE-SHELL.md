@@ -106,7 +106,9 @@ emoji. A contagem tem atualização nativa apenas enquanto o timer executa; o
 estado não entra nos fatos JS. Templates e ações Parar/Adiar/Repetir também
 pertencem ao serviço Rust, inclusive no histórico. Repetir usa a duração do
 engine atual; a entrega consulta a regra atual do firewall por API nativa.
-Preferências e snapshots de compatibilidade ainda usam o adaptador.
+Padrões e opções de notificações por app são resolvidos no Rust. O adaptador
+transporta preferências brutas e estado de permissão, persiste alterações e
+mantém snapshots de compatibilidade.
 O serviço chama o cliente de áudio diretamente pela ABI nativa; não há efeito
 de som na ponte JS nem callback de reprodução para alarmes/notificações.
 A repetição do toque já pertence ao

@@ -49,11 +49,11 @@ fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
     let initial = sound::attempts();
     let now = Instant::now();
     for extra in [
-        json!({"appPrefs":{"allow":false}}),
+        json!({"prefs":{"apps":{"clock":{"allow":false}}}}),
         json!({"blocked":true}),
         json!({"prefs":{"dnd":true}}),
-        json!({"appPrefs":{"sound":false}}),
-        json!({"appPrefs":{"style":"none"}}),
+        json!({"prefs":{"apps":{"clock":{"sound":false}}}}),
+        json!({"prefs":{"apps":{"clock":{"style":"none"}}}}),
     ] {
         let mut service = Service::default();
         let reply = ring(&mut service, now, extra);
@@ -78,16 +78,16 @@ fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
 fn muting_dnd_denial_and_firewall_cancel_native_ringing_without_resuming_old_alarms() {
     let now = Instant::now();
     for policy in [
-        json!({"clock":{"sound":false}}),
-        json!({"clock":{"allow":false}}),
-        json!({"clock":{"style":"none"}}),
+        json!({"prefs":{"apps":{"clock":{"sound":false}}}}),
+        json!({"prefs":{"apps":{"clock":{"allow":false}}}}),
+        json!({"prefs":{"apps":{"clock":{"style":"none"}}}}),
         json!({"prefs":{"dnd":true}}),
         json!({"blocked":true}),
     ] {
         let mut service = Service::default();
         ring(&mut service, now, json!({}));
         let played = sound::attempts();
-        let mut input = json!({"action":"ringPolicy","prefs":{},"clock":{}});
+        let mut input = json!({"action":"ringPolicy","prefs":{}});
         for (key, value) in policy.as_object().unwrap() {
             input[key] = value.clone();
         }
@@ -96,7 +96,7 @@ fn muting_dnd_denial_and_firewall_cancel_native_ringing_without_resuming_old_ala
         assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
         assert!(service.wait_ms(now).is_none());
         service.command(
-            &json!({"action":"ringPolicy","prefs":{},"clock":{}}),
+            &json!({"action":"ringPolicy","prefs":{}}),
             now + Duration::from_secs(3),
         );
         service.expire_at(now + Duration::from_secs(10), 0., 0.);
@@ -162,7 +162,7 @@ fn dnd_schedule_is_rechecked_by_the_native_pulse_at_midnight() {
 
 fn push(service: &mut Service, now: Instant, title: &str, extra: Value) -> Value {
     let mut input = json!({"action":"push","notice":{"app":"notes","title":title,"label":"Notes","sound":true},
-        "prefs":{},"appPrefs":{},"wallMs":10000.,"minute":60.});
+        "prefs":{},"wallMs":10000.,"minute":60.});
     for (key, value) in extra.as_object().into_iter().flatten() {
         input[key] = value.clone();
     }
@@ -182,7 +182,10 @@ fn permission_firewall_dnd_and_history_have_distinct_delivery_effects() {
     let initial = sound::attempts();
     let now = Instant::now();
     let mut service = Service::default();
-    for extra in [json!({"appPrefs":{"allow":false}}), json!({"blocked":true})] {
+    for extra in [
+        json!({"prefs":{"apps":{"notes":{"allow":false}}}}),
+        json!({"blocked":true}),
+    ] {
         let reply = push(&mut service, now, "Denied", extra);
         assert_eq!(reply["result"], 0);
         assert!(kinds(&reply).contains(&"settings"));
@@ -191,7 +194,7 @@ fn permission_firewall_dnd_and_history_have_distinct_delivery_effects() {
     }
     for extra in [
         json!({"prefs":{"dnd":true}}),
-        json!({"appPrefs":{"style":"none"}}),
+        json!({"prefs":{"apps":{"notes":{"style":"none"}}}}),
     ] {
         let reply = push(&mut service, now, "History", extra);
         assert!(reply["result"].as_u64().unwrap() > 0);
@@ -259,7 +262,7 @@ fn grouping_limits_eviction_sticky_and_clear_history_preserve_live_banners() {
             &mut service,
             now,
             &i.to_string(),
-            json!({"appPrefs":{"style":"alert"}}),
+            json!({"prefs":{"apps":{"notes":{"style":"alert"}}}}),
         );
     }
     let reader = service.reader();
@@ -371,5 +374,55 @@ fn observable_revisions_are_quiet_when_idle_and_sessions_do_not_share_notificati
         crate::app_control::Controller::default()
             .request(&json!({"cmd":"notifications","action":"snapshot"}))["error"],
         "app.invalidRequest"
+    );
+}
+
+#[test]
+fn preference_queries_do_not_expire_banners_drain_effects_or_invalidate_readers() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    push(&mut service, now, "Live", json!({"notice":{"sound":false}}));
+    let reader = service.reader();
+    let changes = reader.subscribe();
+    let revision = reader.revision();
+    for action in ["preferences", "appPreferences", "preferencesPatch"] {
+        let reply = service.command(
+            &json!({"action":action,"prefs":{},"app":"clock","patch":{"sound":false}}),
+            now + Duration::from_secs(30),
+        );
+        assert!(reply["effects"].as_array().unwrap().is_empty());
+        assert!(!changes.pending());
+        assert_eq!(reader.revision(), revision);
+        assert_eq!(reader.read().shown.len(), 1);
+    }
+    service.expire(now + Duration::from_secs(30));
+    assert!(reader.read().shown.is_empty());
+}
+
+#[test]
+fn delivery_resolves_raw_preferences_instead_of_trusting_precomputed_app_options() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    let raw = json!({"prefs":{"apps":{"notes":{"allow":false}}},"appPrefs":{"allow":true}});
+    assert_eq!(push(&mut service, now, "Denied", raw)["result"], 0);
+    assert_eq!(
+        push(
+            &mut service,
+            now,
+            "Package denied",
+            json!({"permission":"deny"})
+        )["result"],
+        0
+    );
+    let granted = push(
+        &mut service,
+        now,
+        "Package allowed",
+        json!({"permission":"allow","prefs":{"apps":{"notes":{"allow":false,"sound":false}}}}),
+    );
+    assert!(granted["result"].as_u64().unwrap() > 0);
+    assert_eq!(
+        service.reader().read().shown[0].data["title"],
+        "Package allowed"
     );
 }

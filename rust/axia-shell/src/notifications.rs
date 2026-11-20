@@ -3,6 +3,7 @@ use axia_state::{Reader, Store};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 mod clock_delivery;
+mod preferences;
 mod sound;
 
 const MAX_SHOWN: usize = 4;
@@ -74,6 +75,7 @@ pub struct Service {
     effects: Vec<Value>,
     ring_prefs: Value,
     clock_prefs: Value,
+    clock_permission: Value,
     ring_blocked: bool,
     clock_delivery: clock_delivery::Delivery,
     clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
@@ -97,6 +99,12 @@ pub fn dnd(prefs: &Value, wall_ms: f64, minute: f64) -> bool {
 }
 
 impl Service {
+    fn policy(&mut self, input: &Value) {
+        self.ring_prefs = preferences::normalize(&input["prefs"]);
+        self.clock_permission = input["permission"].clone();
+        self.clock_prefs = preferences::app(&self.ring_prefs, "clock", &self.clock_permission);
+        self.ring_blocked = input["blocked"] == true;
+    }
     pub fn reader(&self) -> Reader<State> {
         self.state.reader()
     }
@@ -207,14 +215,22 @@ impl Service {
         effects
     }
     pub fn command(&mut self, input: &Value, now: Instant) -> Value {
+        match input["action"].as_str() {
+            Some("preferences") => {
+                return json!({"result":preferences::normalize(&input["prefs"]),"effects":[]})
+            }
+            Some("appPreferences") => {
+                return json!({"result":preferences::app(&input["prefs"],input["app"].as_str().unwrap_or(""),&input["permission"]),"effects":[]})
+            }
+            Some("preferencesPatch") => {
+                return json!({"result":preferences::patch(&input["prefs"],input["app"].as_str().unwrap_or(""),&input["patch"]),"effects":[]})
+            }
+            _ => {}
+        }
         if input["action"] == "ringPolicy" {
-            self.ring_prefs = input["prefs"].clone();
-            self.clock_prefs = input["clock"].clone();
-            self.ring_blocked = input["blocked"] == true;
+            self.policy(input);
         } else if input["action"] == "push" && input["notice"]["app"] == "clock" {
-            self.ring_prefs = input["prefs"].clone();
-            self.clock_prefs = input["appPrefs"].clone();
-            self.ring_blocked = input["blocked"] == true;
+            self.policy(input);
         }
         self.expire(now);
         let result = match input["action"].as_str() {
@@ -226,9 +242,9 @@ impl Service {
             )),
             Some("push") => {
                 let n = &input["notice"];
-                let prefs = &input["prefs"];
-                let ap = &input["appPrefs"];
+                let prefs = &preferences::normalize(&input["prefs"]);
                 let app = n["app"].as_str().unwrap_or("");
+                let ap = &preferences::app(prefs, app, &input["permission"]);
                 // Remember attempted apps even when permission/firewall denies delivery.
                 let mut seen: Vec<Value> = prefs["seen"].as_array().cloned().unwrap_or_default();
                 if !app.is_empty() && !seen.iter().any(|id| id == app) {
