@@ -45,10 +45,7 @@ function load() {
 }
 
 function initializeNative() {
-  let text = null;
-  try { text = lord.settings.load(); }
-  catch (e) { console.warn('unreadable settings, using the defaults:', e); }
-  const reply = nativeSettings({ cmd: 'initialize', text });
+  const reply = nativeSettings({ cmd: 'initialize' });
   if (reply.invalid) console.warn('unreadable settings, using the defaults');
   return reply;
 }
@@ -91,25 +88,19 @@ settings.subscribe(() => { preferenceRevision++; });
 globalThis.__lordTiming = !!settings.get().debugTiming;
 
 let pending = 0;
-function persist(durable = false) {
-  if (appHost) return lord.settings.save(JSON.stringify(settings.get(), null, 2), durable);
-  const current = nativeSettings({ cmd: 'snapshot' });
-  const saved = lord.settings.save(JSON.stringify(current.state, null, 2), durable);
-  if (saved) nativeSettings({ cmd: 'saved', revision: current.revision });
-  return saved;
+if (appHost) {
+  settings.subscribe(() => {
+    clearTimeout(pending);
+    pending = setTimeout(() => lord.settings.save(JSON.stringify(settings.get(), null, 2)), 300);
+  });
 }
-function queueSave() {
-  clearTimeout(pending);
-  pending = setTimeout(() => persist(), 300);
-}
-settings.subscribe(queueSave);
-if (initial?.dirty) queueSave();
 
 // Now, not in 300 ms; durable: on the disk before this returns (session restore's marker must survive
 // a power cut). Blocks the frame for that write, so it's only for that.
 export function saveSettingsNow(durable = false) {
+  if (!appHost) return nativeSettings({ cmd: 'save', durable: !!durable }).saved;
   clearTimeout(pending);
-  return persist(durable);
+  return lord.settings.save(JSON.stringify(settings.get(), null, 2), durable);
 }
 
 export function useSettings() {

@@ -390,21 +390,30 @@ pub unsafe extern "C" fn axia_view_key(key: *const c_char, chr: *const c_char, f
 }
 #[no_mangle]
 pub extern "C" fn axia_view_tick(now: f64) {
+    crate::settings::tick();
     for handle in handles() {
         with_host(handle, |h| h.tick(now));
     }
 }
-/// Milliseconds until a view needs a tick, or -1.
+/// Milliseconds until a view or resident settings need a tick, or -1.
 #[no_mangle]
 pub extern "C" fn axia_view_timeout(now: f64) -> f64 {
-    with(|r| {
+    let preferences = crate::settings::timeout().unwrap_or(-1.);
+    let views = with(|r| {
         r.hosts
             .values()
             .filter_map(|h| h.deadline())
             .map(|d| (d - now).max(0.))
             .reduce(f64::min)
             .unwrap_or(-1.)
-    })
+    });
+    if preferences < 0. {
+        views
+    } else if views < 0. {
+        preferences
+    } else {
+        preferences.min(views)
+    }
 }
 /// Effects are waiting for the shell (it calls `__lordNativeView`).
 #[no_mangle]

@@ -33,7 +33,7 @@ perfil vem do adaptador C, não do pedido JSON. Padrões usam uma fonte de dados
 comum em `sdk/settings-defaults.json`, incluída no Rust e no SDK isolado; o
 Makefile acompanha esse arquivo como dependência do arquivo estático Rust.
 
-O bootstrap recebe o texto carregado pela API existente, aplica os mesmos
+O bootstrap lê o arquivo pela ABI nativa, aplica os mesmos
 schemas 1–3 e preserva campos desconhecidos e versões futuras. Migração pública
 continua pura. Arquivos ilegíveis recebem os padrões, com aviso; não são gravados
 durante a inicialização. O modelo inicializa uma vez por perfil e preserva
@@ -52,19 +52,33 @@ somente quando a revisão muda, sem polling. Os demais apps ainda recebem
 preferências nos fatos JSON; a leitura direta nesses consumidores está pendente.
 O host `.lpk` preserva o store e as migrações locais.
 
-A gravação de 300 ms e a serialização para a API de arquivo ainda são feitas
-pelo adaptador JS. A gravação usa o snapshot nativo atual; confirmação de uma
-revisão antiga não limpa alterações posteriores. `saveSettingsNow(true)` mantém
-o caminho durável existente. Mudanças pendentes sobrevivem à recriação do
-adaptador, que rearma sua gravação. Transferir o prazo e a persistência para
-Rust, assim como idioma/região e demais consumidores, continua pendente.
+O modelo também possui o prazo monotônico de 300 ms, serialização e confirmação
+da gravação. A fila participa do tick/timeout nativo mesmo sem nenhuma view
+montada, inclusive no greeter e com a sessão em segundo plano. Não há leitura/gravação
+de arquivo ou timer de gravação JS na sessão principal.
+`saveSettingsNow(true)` chama a operação nativa durável e cancela o prazo anterior.
+Leitura, limite de 1 MiB, arquivo temporário/rename e fsync reutilizam as primitivas
+C existentes. O host `.lpk` mantém seu caminho local.
+
+Falha de gravação conserva as alterações e desarma o prazo, sem repetir I/O a
+cada quadro. Uma nova alteração, inicialização/remontagem do adaptador ou pedido
+explícito pode tentar novamente. Salvar não altera a revisão das preferências.
+A API de arquivo legada continua disponível; uma gravação bem-sucedida de objeto
+válido atualiza o proprietário e cancela sua gravação pendente. O gravador C
+compartilhado não chama de volta ao modelo durante um save nativo.
+Idioma/região, bootstrap de outros serviços e demais consumidores de fatos de
+preferências continuam pendentes.
 
 `native_settings_runtime` exige quatro cenários claro/escuro e 640/1000 px:
 observador sem preferências nos fatos, espelho parado, updater com dados nativos,
 descarte de respostas antigas, referências preservadas, nomes de propriedades
 próprios, alterações sem efeito, gravação durável e remontagem sem nova gravação.
+Bloqueia as funções JS de leitura/gravação antes de importar o SDK, observa a
+ausência de timers JS de 300 ms e exige gravação automática antes de montar views.
+Também verifica atualização do proprietário após gravação pela API legada.
 O CI GPU=1 exige essa integração e publica `axia-native-settings`.
-Evidências locais em `build/validation/native-settings/`. A regressão de Arquivos
+Evidências locais da persistência em `build/validation/native-settings-io/`
+(a entrega inicial está em `build/validation/native-settings/`). A regressão de Arquivos
 também exige que a migração pública preserve a referência do campo `files`,
 além dos valores migrados. Configurações, Arquivos, notificações e relógio
 foram verificados em vinte cenários gráficos, além dos apps compilados e do

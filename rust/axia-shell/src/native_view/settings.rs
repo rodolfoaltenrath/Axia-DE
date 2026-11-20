@@ -2,6 +2,7 @@
 use axia_native::NativeApp;
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
+use std::time::Instant;
 pub struct Observer {
     home: String,
     reader: Reader<Value>,
@@ -11,7 +12,10 @@ pub struct Observer {
 impl Observer {
     pub fn new(home: &str) -> Self {
         let home = crate::settings::profile(home);
-        let reader = crate::settings::with(&home, |s| s.reader());
+        let reader = crate::settings::with(&home, |s| {
+            s.rearm(Instant::now());
+            s.reader()
+        });
         let changes = reader.subscribe();
         Self {
             home,

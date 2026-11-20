@@ -378,10 +378,6 @@ static JSValue f_sys_cpu(JSContext *c, JSValueConst this_val, int argc, JSValueC
 
 /* ---- lord.settings ---- */
 
-static void settings_path(char *out, size_t size, const char *suffix) {
-    snprintf(out, size, "%s/.config/axia/settings.json%s", home, suffix);
-}
-
 /* Rust owns the imported file and its bounds checks. Decode validation uses the same
  * image library as rendering, before the immutable copy is offered to JavaScript. */
 static int wallpaper_png(const char *path, int w, int h, const unsigned char *rgba) {
@@ -431,12 +427,16 @@ static JSValue f_glass_material(JSContext *c, JSValueConst self, int argc, JSVal
     return value;
 }
 
+char *axia_settings_read(const char *base, size_t *len) {
+    if (!base || !len) return NULL;
+    char path[PATH_MAX + 64];
+    snprintf(path, sizeof path, "%s/.config/axia/settings.json", base);
+    return read_small(path, SETTINGS_MAX, len);
+}
 static JSValue f_settings_load(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val; (void)argc; (void)argv;
-    char path[PATH_MAX + 64];
-    settings_path(path, sizeof path, "");
     size_t len;
-    char *txt = read_small(path, SETTINGS_MAX, &len);
+    char *txt = axia_settings_read(home, &len);
     if (!txt) return JS_NULL;
     JSValue s = JS_NewStringLen(c, txt, len);
     free(txt);
@@ -457,23 +457,18 @@ static JSValue f_settings_state(JSContext *c, JSValueConst self, int argc, JSVal
     return value;
 }
 
-static JSValue f_settings_save(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
-    (void)this_val;
-    size_t len;
-    const char *txt = JS_ToCStringLen(c, &len, argv[0]);
-    if (!txt) return JS_EXCEPTION;
-    if (len > SETTINGS_MAX) { JS_FreeCString(c, txt); return js_throw_code(c, "settings.tooLarge", NULL); }
+int axia_settings_write(const char *base, const char *txt, size_t len, int durable) {
+    if (!base || !txt || len > SETTINGS_MAX) return 0;
     char dir[PATH_MAX + 64], tmp[PATH_MAX + 64], path[PATH_MAX + 64];
-    snprintf(dir, sizeof dir, "%s/.config", home);
+    snprintf(dir, sizeof dir, "%s/.config", base);
     mkdir(dir, 0700);
-    snprintf(dir, sizeof dir, "%s/.config/axia", home);
+    snprintf(dir, sizeof dir, "%s/.config/axia", base);
     mkdir(dir, 0700);
-    settings_path(tmp, sizeof tmp, ".tmp");
-    settings_path(path, sizeof path, "");
+    snprintf(tmp, sizeof tmp, "%s/.config/axia/settings.json.tmp", base);
+    snprintf(path, sizeof path, "%s/.config/axia/settings.json", base);
     FILE *f = fopen(tmp, "wb");
     int ok = f && fwrite(txt, 1, len, f) == len;
     /* second argument true: on the disk before this returns (session restore, sdk/sessionrestore.jsx) */
-    int durable = argc > 1 && JS_ToBool(c, argv[1]) == 1;
     if (f && durable) ok = fflush(f) == 0 && fsync(fileno(f)) == 0 && ok;
     if (f) ok = (fclose(f) == 0) && ok;
     if (ok) ok = rename(tmp, path) == 0;
@@ -481,6 +476,17 @@ static JSValue f_settings_save(JSContext *c, JSValueConst this_val, int argc, JS
         int d = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
         if (d >= 0) { fsync(d); close(d); }
     }
+    return ok;
+}
+static JSValue f_settings_save(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    size_t len;
+    const char *txt = JS_ToCStringLen(c, &len, argv[0]);
+    if (!txt) return JS_EXCEPTION;
+    if (len > SETTINGS_MAX) { JS_FreeCString(c, txt); return js_throw_code(c, "settings.tooLarge", NULL); }
+    int durable = argc > 1 && JS_ToBool(c, argv[1]) == 1;
+    int ok = axia_settings_write(home, txt, len, durable);
+    if (ok) axia_settings_written(home, txt, len);
     JS_FreeCString(c, txt);
     return JS_NewBool(c, ok);
 }

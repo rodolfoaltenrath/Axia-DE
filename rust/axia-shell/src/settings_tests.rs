@@ -51,25 +51,106 @@ fn observable_updates_are_atomic_and_noops_and_queries_are_quiet() {
     assert_eq!(model.snapshot(), before);
 }
 #[test]
-fn dirty_state_survives_remount_and_stale_save_acknowledgements() {
+fn dirty_state_survives_remount_until_the_native_save_succeeds() {
     let mut model = initialized(Value::Null);
-    let first = model.command(&json!({"cmd":"patch","patch":{"accent":"green"}}));
+    model.command(&json!({"cmd":"patch","patch":{"accent":"green"}}));
     let second = model.command(&json!({"cmd":"patch","patch":{"mode":"light"}}));
     assert_eq!(
         model.command(&json!({"cmd":"initialize","text":"{}"})),
         second
     );
-    assert_eq!(
-        model.command(&json!({"cmd":"saved","revision":first["revision"]}))["dirty"],
-        true
-    );
     let reader = model.reader();
     let changes = reader.subscribe();
-    assert_eq!(
-        model.command(&json!({"cmd":"saved","revision":second["revision"]}))["dirty"],
-        false
-    );
+    assert_eq!(model.save("dirty-profile", true)["dirty"], false);
     assert!(!changes.pending());
+    assert!(model.wait_ms(Instant::now()).is_none());
+    assert!(io::host::writes()[0].2);
+}
+
+#[test]
+fn native_bootstrap_reads_the_private_profile_file_instead_of_js_text() {
+    io::host::set_file("profile-read", br#"{"schema":3,"custom":{"value":7}}"#);
+    let mut model = Model::default();
+    let reply = model.request("profile-read", &json!({"cmd":"initialize","text":"{bad"}));
+    assert_eq!(reply["state"]["custom"]["value"], 7);
+    assert_eq!(reply["dirty"], false);
+    assert_eq!(reply["pending"], false);
+}
+#[test]
+fn native_deadline_coalesces_changes_without_extending_for_noops_and_flushes_once() {
+    let now = Instant::now();
+    let mut model = initialized(Value::Null);
+    model.command_at(&json!({"cmd":"patch","patch":{"mode":"light"}}), now);
+    model.command_at(
+        &json!({"cmd":"patch","patch":{"accent":"green"}}),
+        now + Duration::from_millis(100),
+    );
+    model.command_at(
+        &json!({"cmd":"patch","patch":{"accent":"green"}}),
+        now + Duration::from_millis(200),
+    );
+    model.rearm(now + Duration::from_millis(250));
+    model.flush_due("deadline-profile", now + Duration::from_millis(399));
+    assert!(io::host::writes().is_empty());
+    let reader = model.reader();
+    let changes = reader.subscribe();
+    let revision = reader.revision();
+    model.flush_due("deadline-profile", now + Duration::from_millis(400));
+    model.flush_due("deadline-profile", now + Duration::from_secs(10));
+    let writes = io::host::writes();
+    assert_eq!(writes.len(), 1);
+    assert!(!writes[0].2);
+    let stored: Value = serde_json::from_slice(&writes[0].1).unwrap();
+    assert_eq!(stored["mode"], "light");
+    assert_eq!(stored["accent"], "green");
+    assert!(!model.dirty);
+    assert!(model.wait_ms(now).is_none());
+    assert!(!changes.pending());
+    assert_eq!(reader.revision(), revision);
+}
+#[test]
+fn failed_or_oversized_saves_keep_dirty_state_without_a_retry_loop() {
+    let now = Instant::now();
+    let mut model = initialized(Value::Null);
+    model.command_at(&json!({"cmd":"patch","patch":{"mode":"light"}}), now);
+    io::host::set_file("failure-profile", b"previous bytes");
+    io::host::fail(true);
+    model.flush_due("failure-profile", now + SAVE_AFTER);
+    assert!(model.dirty);
+    assert!(model.until.is_none());
+    model.flush_due("failure-profile", now + Duration::from_secs(30));
+    assert_eq!(io::host::writes().len(), 1);
+    assert_eq!(io::load("failure-profile").unwrap(), b"previous bytes");
+    io::host::fail(false);
+    model.rearm(now + Duration::from_secs(30));
+    assert!(model.wait_ms(now + Duration::from_secs(30)).unwrap() >= 300.);
+    assert_eq!(model.save("failure-profile", true)["saved"], true);
+    assert!(!model.dirty);
+    assert!(model.until.is_none());
+    model.command(&json!({"cmd":"patch","patch":{"oversized":"x".repeat(MAX_BYTES)}}));
+    let count = io::host::writes().len();
+    assert_eq!(
+        model.save("failure-profile", false)["error"],
+        "settings.tooLarge"
+    );
+    assert_eq!(io::host::writes().len(), count);
+    assert!(model.dirty);
+    assert!(model.until.is_none());
+}
+#[test]
+fn successful_legacy_writes_update_the_owner_and_cancel_a_pending_save() {
+    let now = Instant::now();
+    let mut model = initialized(Value::Null);
+    model.command_at(&json!({"cmd":"patch","patch":{"mode":"light"}}), now);
+    let reader = model.reader();
+    let changes = reader.subscribe();
+    model.external_saved(r#"{"schema":3,"mode":"dark","legacy":7}"#);
+    assert!(changes.pending());
+    assert_eq!(reader.read()["legacy"], 7);
+    assert!(!model.dirty);
+    assert!(model.until.is_none());
+    model.flush_due("legacy-profile", now + Duration::from_secs(10));
+    assert!(io::host::writes().is_empty());
 }
 #[test]
 fn malformed_files_use_defaults_without_discarding_future_valid_updates() {

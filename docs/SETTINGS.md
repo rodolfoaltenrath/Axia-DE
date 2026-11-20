@@ -8,7 +8,9 @@ Preferences now have a resident Rust owner per profile (`axia-shell/src/settings
 Defaults come from `sdk/settings-defaults.json`; schema migrations and mutations
 run natively. The SDK is a revisioned compatibility mirror, updated by the root's
 `shell:settings` observer without polling. Its 300 ms save deadline, file
-serialization and the existing durable file API remain in the adapter for now.
+serialization and loading now run natively, even without a mounted view. The
+existing bounded atomic/durable C file primitives are shared with the legacy
+API. Main-session SDK code does not call the JS file API or arm a save timeout.
 
 ## Axia on Fedora: live battery status
 
