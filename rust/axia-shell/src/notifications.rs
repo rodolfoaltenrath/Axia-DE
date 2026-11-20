@@ -9,6 +9,9 @@ mod sound;
 #[cfg(test)]
 #[path = "notifications/settings_tests.rs"]
 mod settings_tests;
+#[cfg(test)]
+#[path = "notifications/catalog_tests.rs"]
+mod catalog_tests;
 
 const MAX_SHOWN: usize = 4;
 const HISTORY: usize = 50;
@@ -83,6 +86,7 @@ pub struct Service {
     clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
     sounds: Vec<(u64, bool)>,
     settings: Option<(String, Reader<Value>, Subscription)>,
+    catalog: Option<(Reader<Value>, Subscription)>,
 }
 
 // Wall time is used for user schedules/history; elapsed banner time is monotonic.
@@ -102,6 +106,30 @@ pub fn dnd(prefs: &Value, wall_ms: f64, minute: f64) -> bool {
 }
 
 impl Service {
+    pub(crate) fn bind_catalog(&mut self, reader: Reader<Value>) {
+        let changes = reader.subscribe();
+        self.catalog = Some((reader, changes));
+    }
+    pub(crate) fn catalog_pending(&self) -> bool {
+        self.catalog.as_ref().is_some_and(|(_, changes)| changes.pending())
+    }
+    fn source(&self, app: &str, fallback: &Value) -> access::Source {
+        if let Some((reader, _)) = &self.catalog {
+            let metadata = reader.read();
+            let entry = metadata["registry"].as_array().into_iter().flatten().rev()
+                .find(|entry| entry["id"].as_str() == Some(app));
+            access::Source::from(entry.unwrap_or(&Value::Null))
+        } else {
+            access::Source::from(fallback)
+        }
+    }
+    fn clock_source(&self) -> access::Source {
+        if self.catalog.is_some() {
+            self.source("clock", &Value::Null)
+        } else {
+            self.clock_source.clone()
+        }
+    }
     fn with_preferences<T>(&self, fallback: &Value, read: impl FnOnce(&Value) -> T) -> T {
         if let Some((_, reader, _)) = &self.settings {
             read(&reader.read()["notifications"])
@@ -163,17 +191,19 @@ impl Service {
     }
     pub fn expire(&mut self, now: Instant) {
         self.sync_preferences();
+        if let Some((_, changes)) = &self.catalog { changes.take(); }
         let wall = axia_clock::now();
         let local = axia_clock::local(wall);
         self.expire_at(now, wall as f64, (local.tm_hour * 60 + local.tm_min) as f64);
     }
     fn audible_policy(&self, wall: f64, minute: f64) -> bool {
+        let source = self.clock_source();
         let prefs = preferences::app(
             &self.ring_prefs,
             "clock",
-            &access::permission("clock", &self.clock_source),
+            &access::permission("clock", &source),
         );
-        access::allowed("clock", &self.clock_source)
+        access::allowed("clock", &source)
             && prefs["allow"] != false
             && prefs["sound"] != false
             && prefs["style"] != "none"
@@ -239,7 +269,7 @@ impl Service {
         // Drain audio directly, after commands have dismissed/evicted any due banner.
         // No pending sound crosses the JS bridge or survives a disconnected audio server.
         let state = self.state.read();
-        let clock_allowed = access::allowed("clock", &self.clock_source);
+        let clock_allowed = access::allowed("clock", &self.clock_source());
         for (id, repeat) in self.sounds.drain(..) {
             if (!repeat || clock_allowed)
                 && state
@@ -260,7 +290,7 @@ impl Service {
             }
             Some("appPreferences") => {
                 let app = input["app"].as_str().unwrap_or("");
-                let result = self.with_preferences(&input["prefs"], |prefs| preferences::app(prefs,app,&access::permission(app,&access::Source::from(&input["source"]))));
+                let result = self.with_preferences(&input["prefs"], |prefs| preferences::app(prefs,app,&access::permission(app,&self.source(app,&input["source"]))));
                 return json!({"result":result,"effects":[]});
             }
             Some("policy") => {
@@ -270,7 +300,7 @@ impl Service {
             }
             Some("setAppPreferences") => {
                 let app = input["app"].as_str().unwrap_or("");
-                let source = access::Source::from(&input["source"]);
+                let source = self.source(app, &input["source"]);
                 let result = self.with_preferences(&input["prefs"], |prefs| preferences::patch(prefs, app, &input["patch"]));
                 let permission = access::update(app, &source, &input["patch"]);
                 let state = self.settings.as_ref().and_then(|(home, _, _)| {
@@ -309,7 +339,7 @@ impl Service {
                     preferences::normalize(&input["prefs"])
                 };
                 let app = n["app"].as_str().unwrap_or("");
-                let source = access::Source::from(&input["source"]);
+                let source = self.source(app, &input["source"]);
                 let ap = &preferences::app(prefs, app, &access::permission(app, &source));
                 // Remember attempted apps even when permission/firewall denies delivery.
                 let mut seen: Vec<Value> = prefs["seen"].as_array().cloned().unwrap_or_default();

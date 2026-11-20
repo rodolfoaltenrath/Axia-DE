@@ -19,6 +19,7 @@ pub struct Controller {
 impl Controller {
     pub fn new(windows: Session) -> Self {
         let app = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.reader())));
+        windows.notification_service().borrow_mut().bind_catalog(app.metadata_reader());
         Self {
             app,
             windows: Some(windows),
@@ -43,7 +44,7 @@ impl Controller {
         if input["cmd"] == "sessionRestore" {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.restore_service();
-            return service.borrow_mut().command(windows,self.app.metadata(),input,std::time::Instant::now());
+            return service.borrow_mut().command(windows,&self.app.metadata(),input,std::time::Instant::now());
         }
         if input["cmd"] == "memoryMerge" {
             return if self.windows.is_some() {
@@ -57,7 +58,7 @@ impl Controller {
                 .windows
                 .as_ref()
                 .map(|windows| {
-                    crate::window_memory::restore(&windows.reader(), self.app.metadata(), input)
+                    crate::window_memory::restore(&windows.reader(), &self.app.metadata(), input)
                 })
                 .unwrap_or_else(|| json!({"error":"app.invalidRequest"}));
         }

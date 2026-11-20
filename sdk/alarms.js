@@ -5,7 +5,7 @@ import { View, Text } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
 import { t, formatTime, locale } from './i18n.js';
-import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive, ringingNotifications, clockNotificationPolicy } from './notify.js';
+import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive, ringingNotifications } from './notify.js';
 import { sound } from './sound.js';
 import { registerStatusItem } from './statusitems.js';
 import { wm } from './windows.js';
@@ -13,6 +13,7 @@ import { NativeView } from './nativeview.js';
 import { clockBridge } from './nativeclock.js';
 import { notificationBridge } from './nativenotifications.js';
 import { nativeAppRequest } from './nativeappmodel.js';
+import { syncNativeCatalog } from './nativecatalog.js';
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 const NATIVE_CLOCK = { id: 'shell:clock', shell: true };
 const NATIVE_CLOCK_STATUS = { id: 'shell:clock-status', shell: true };
@@ -30,8 +31,8 @@ export function clockRequest(cmd, extra = {}) {
   const input = { now: Date.now(), ...extra };
   if (!appHost) delete input.config;
   const reply = appHost ? lord.clock.request({ cmd, config: conf(), ...input })
-    : nativeAppRequest(lord.nativeApps, { cmd: 'clockCommand', action: cmd, ...input,
-      ...locale.get(), notificationPolicy: clockNotificationPolicy() });
+    : nativeAppRequest(syncNativeCatalog(), { cmd: 'clockCommand', action: cmd, ...input,
+      ...locale.get() });
   return applyClockReply(reply);
 }
 function applyClockReply(reply) {

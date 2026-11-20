@@ -13,8 +13,7 @@
 // a theme without a menu bar can offer About in each window's Help menu. About <app> and Force Quit are system windows
 // of their own (apps/appabout, apps/forcequit), the same in every theme.
 import { windows, wm, appMenus, applyNativeWindowState, windowModelFacts } from './windows.js';
-import { nativeCatalogFacts } from './nativecatalog.js';
-import { sameFacts } from './nativeviewfacts.js';
+import { syncNativeCatalog } from './nativecatalog.js';
 import { openFileWithApps } from './sysopen.js';
 import * as fs from './fs.js';
 import { nativeAppRequest, nativeAppEffects, executeNativeEffect } from './nativeappmodel.js';
@@ -96,15 +95,8 @@ export function appMenuItems(winId) {
   ];
 }
 
-let metadataOwner, sentMetadata;
 function controlRequest(request) {
-  const owner = lord.nativeApps, metadata = nativeCatalogFacts(true).get();
-  if (metadataOwner !== owner || (sentMetadata !== metadata && !sameFacts(sentMetadata, metadata))) {
-    const reply = nativeAppRequest(owner, { cmd: 'metadata', ...metadata });
-    if (!reply.ok) throw new Error(reply.error || 'app.invalidRequest');
-  }
-  metadataOwner = owner; sentMetadata = metadata;
-  return nativeAppRequest(owner, request);
+  return nativeAppRequest(syncNativeCatalog(), request);
 }
 function windowCommand(command) {
   const reply = controlRequest({ cmd: 'windowCommand', ...command });

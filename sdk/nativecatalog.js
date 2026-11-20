@@ -2,7 +2,8 @@
 import { appRegistry, appCatalogSource } from './windows.js';
 import { launcherCatalog, appIconFacts, shortAppName } from './apps.js';
 import { locale, appName } from './i18n.js';
-import { createFactsStore } from './nativeviewfacts.js';
+import { createFactsStore, sameFacts } from './nativeviewfacts.js';
+import { nativeAppRequest } from './nativeappmodel.js';
 
 export const appFacts = app => ({ id: app.id, name: app.name, kind: app.kind, version: app.version,
   desktopId: app.desktopId, wmClass: app.wmClass, mimeTypes: app.mimeTypes,
@@ -33,4 +34,21 @@ export function nativeCatalogFacts(appControl = false) {
     }));
   if (appControl) control = store; else visible = store;
   return store;
+}
+
+let metadataOwner, sentMetadata, observedCatalog, stopObserving;
+// One import per catalog/locale generation; native consumers share its reader.
+export function syncNativeCatalog() {
+  const owner = lord.nativeApps, source = nativeCatalogFacts(true), metadata = source.get();
+  if (metadataOwner !== owner || (sentMetadata !== metadata && !sameFacts(sentMetadata, metadata))) {
+    const reply = nativeAppRequest(owner, { cmd: 'metadata', ...metadata });
+    if (!reply.ok) throw new Error(reply.error || 'app.invalidRequest');
+  }
+  metadataOwner = owner; sentMetadata = metadata;
+  if (observedCatalog !== source) {
+    stopObserving?.();
+    observedCatalog = source;
+    stopObserving = source.subscribe(() => syncNativeCatalog());
+  }
+  return owner;
 }

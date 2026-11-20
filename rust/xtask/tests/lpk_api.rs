@@ -25,11 +25,12 @@ const probe={notifications,settings,sound,View:()=>null,Text:()=>null,t:key=>key
  notify:options=>{last=options;if(policy.allow===false)return 0;const id=++next;
    if(!policy.dnd&&policy.style!=='none'){notifications.set([...notifications.get(),{...options,id}]);if(policy.sound!==false)sound.play();}return id;},
  dismissNotification:()=>{},ringingNotifications:store([]),registerStatusItem:()=>{},wm:{},NativeView:()=>null,clockBridge:{}};
+probe.syncNativeCatalog=()=>{throw Error('isolated clock reached session catalog');};
 globalThis.__clockProbe=probe;
 globalThis.lord={clock:{request:()=>{const effects=event?[event]:[];event=null;return{timer:{state:'idle',duration:1000,endsAt:0,left:0},stopwatch:{running:false,start:0,acc:0,laps:[]},nextAlarm:null,wait:null,effects};}}};
 const names={runtime:['View','Text'],'settings.js':['settings'],'i18n.js':['t','formatTime','locale'],
- 'nativeappmodel.js':['nativeAppRequest'],'nativenotifications.js':['notificationBridge'],
- 'notify.js':['notify','dismissNotification','notifications','appNotifyPrefs','dndActive','ringingNotifications','clockNotificationPolicy'],
+ 'nativeappmodel.js':['nativeAppRequest'],'nativenotifications.js':['notificationBridge'],'nativecatalog.js':['syncNativeCatalog'],
+ 'notify.js':['notify','dismissNotification','notifications','appNotifyPrefs','dndActive','ringingNotifications'],
  'sound.js':['sound'],'statusitems.js':['registerStatusItem'],'windows.js':['wm'],'nativeview.js':['NativeView'],'nativeclock.js':['clockBridge']};
 const result=await build({entryPoints:[path.join(root,'sdk/alarms.js')],bundle:true,write:false,format:'esm',define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'clock-services',setup(build){
  build.onResolve({filter:/.*/},args=>{const name=args.path==='@lordos/runtime'?'runtime':path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
@@ -99,10 +100,10 @@ globalThis.clearTimeout=id=>timers.delete(id);
 const deny=()=>{privileged++;throw Error('isolated notification reached session authority');};
 const probe={getApp:()=>null,sound:{play:()=>{}},perms:{get:()=> 'allow',set:()=>{}},
  settings:{get:()=>preferences,set:patch=>{preferences=typeof patch==='function'?patch(preferences):{...preferences,...patch};}},
- appName:app=>app.name,formatTime:()=> '12:00',nativeAppRequest:deny};
+ appName:app=>app.name,formatTime:()=> '12:00',nativeAppRequest:deny,syncNativeCatalog:deny};
 globalThis.__notificationProbe=probe;
 const names={'windows.js':['getApp'],'sound.js':['sound'],'privacy.js':['perms','permsRev'],
- 'settings.js':['settings'],'i18n.js':['appName','formatTime'],'nativeappmodel.js':['nativeAppRequest']};
+ 'settings.js':['settings'],'i18n.js':['appName','formatTime'],'nativeappmodel.js':['nativeAppRequest'],'nativecatalog.js':['syncNativeCatalog']};
 const result=await build({entryPoints:[path.join(root,'sdk/notify.js')],bundle:true,write:false,format:'esm',
  define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-notifications',setup(build){
  build.onResolve({filter:/.*/},args=>{const name=path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
@@ -281,11 +282,11 @@ const deny=()=>{privileged++;throw Error('session authority used by isolated app
 globalThis.__probe={windows,wm,getApp,onActiveDesktop:w=>w.desktop===1,activeDesktop:{get:()=>1},
  appMenus:{get:()=>({'notes#a':[{items:[{hint:'❖,',onClick:()=>settingsCalls++}]}]})},applyNativeWindowState:deny,
  launcherIdOf,dockIdOfWindow,quitApp,linuxAppFor:()=>null,shortAppName:app=>app.name,windowAppName:w=>w.app,
- t:key=>key,appName:app=>app.name,nativeCatalogFacts:deny,sameFacts:()=>false,openFileWithApps:()=>{},
+ t:key=>key,appName:app=>app.name,syncNativeCatalog:deny,sameFacts:()=>false,openFileWithApps:()=>{},
  nativeAppRequest:deny,nativeAppEffects:deny,executeNativeEffect:deny};
 const names={ 'windows.js':['windows','wm','getApp','onActiveDesktop','activeDesktop','appMenus','applyNativeWindowState','windowModelFacts'],
  'dock.js':['launcherIdOf','dockIdOfWindow','quitApp'],'apps.js':['linuxAppFor','shortAppName','windowAppName'],
- 'i18n.js':['t','appName'],'nativecatalog.js':['nativeCatalogFacts'],'nativeviewfacts.js':['sameFacts'],
+ 'i18n.js':['t','appName'],'nativecatalog.js':['syncNativeCatalog'],'nativeviewfacts.js':['sameFacts'],
  'sysopen.js':['openFileWithApps'],'nativeappmodel.js':['nativeAppRequest','nativeAppEffects','executeNativeEffect']};
 const result=await build({entryPoints:[path.join(root,'sdk/appcontrol.js')],bundle:true,write:false,format:'esm',
  define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-host-observation',setup(build){

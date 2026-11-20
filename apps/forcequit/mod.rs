@@ -31,7 +31,7 @@ pub struct App {
     isolated_killed: bool,
     source: Option<Rc<dyn WindowSource>>,
     revision: Option<u64>,
-    metadata: Value,
+    metadata: axia_state::Store<Value>,
 }
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
@@ -134,11 +134,12 @@ fn native_groups(source: &dyn WindowSource, input: &Value, include_forcequit: bo
     sorted_groups(groups)
 }
 impl App {
-    pub fn metadata(&self) -> &Value { &self.metadata }
+    pub fn metadata(&self) -> std::cell::Ref<'_, Value> { self.metadata.read() }
+    pub fn metadata_reader(&self) -> axia_state::Reader<Value> { self.metadata.reader() }
     /// Window-management commands also operate on the Force Quit window itself.
     /// Keep their projection separate from the panel's selection/execution state.
     pub fn command_groups(&self) -> Vec<Group> {
-        self.source.as_ref().map_or_else(Vec::new, |source| native_groups(source.as_ref(), &self.metadata, true))
+        self.source.as_ref().map_or_else(Vec::new, |source| native_groups(source.as_ref(), &self.metadata.read(), true))
     }
     /// Native consumers share membership and metadata policy without JSON summaries.
     pub fn native_groups(&mut self, input: &Value) -> &[Group] {
@@ -150,7 +151,8 @@ impl App {
     }
     fn refresh(&mut self, input: &Value) {
         self.groups = if let Some(source) = &self.source {
-            let facts = if input["registry"].is_array() { input } else { &self.metadata };
+            let metadata = self.metadata.read();
+            let facts = if input["registry"].is_array() { input } else { &metadata };
             let groups = native_groups(source.as_ref(), facts, false);
             self.revision = Some(source.revision());
             groups
@@ -217,7 +219,7 @@ impl App {
                 }
                 // Updated once per catalog/locale generation by the adapter;
                 // group/quit requests borrow these facts without another copy.
-                self.metadata = json!({"registry":input["registry"],"catalog":input["catalog"]});
+                self.metadata.set(json!({"registry":input["registry"],"catalog":input["catalog"]}));
                 json!({"ok":true})
             }
             "groups" => {

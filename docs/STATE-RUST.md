@@ -174,9 +174,10 @@ janela recém-aberta no modelo não depende do espelho JS para ser encerrada.
 
 `sdk/nativecatalog.js` compartilha os metadados de apps com a view. O adaptador
 envia um pedido `metadata` quando muda o catálogo, o registro ou o idioma;
-o controlador guarda esse catálogo e o empresta aos pedidos seguintes.
+o controlador guarda esse catálogo num `axia-state::Store` e o empresta aos pedidos seguintes.
 Atualizações inválidas preservam os dados anteriores e o limite do transporte
-JSON continua valendo. O catálogo ainda precisa migrar para estado nativo.
+JSON continua valendo. O controlador expõe um leitor nativo para notificações;
+a descoberta e importação do catálogo ainda precisam sair do JS.
 
 A execução final dos efeitos Wayland e `wm.close` ainda passa pelo adaptador
 JS. `runningApps()` conserva o contrato dos consumidores legados: converte IDs
@@ -587,17 +588,32 @@ edições está em `build/validation/native-notification-edit/`.
 `notifications/access.rs` lê `perm_get` e `restrict_blocks` pela ABI do host,
 sobre os mesmos armazenamentos usados pelos controles de privacidade. A entrega
 e a consulta de opções não aceitam estado de permissão ou bloqueio calculado
-pelo JS. A identidade ainda chega do catálogo transitório: pacote, isolado ou
-app interno. O Rust deriva o escopo `lpk:<id>` ou `lordos` e preserva as exceções
+pelo JS. A identidade é consultada no leitor compartilhado do catálogo do
+controlador: pacote, isolado ou app interno. Pedidos do SDK não transportam
+`source` nem `notificationPolicy`. O Rust deriva o escopo `lpk:<id>` ou `lordos` e preserva as exceções
 de avisos de Configurações, notificações sem app e do namespace Linux, cuja
 verificação ocorre na entrada D-Bus.
 
-O toque conserva essa identidade no proprietário do contexto e reconsulta a
-permissão/firewall nos pulsos e antes de reproduzir uma tentativa enfileirada.
+O toque reconsulta a identidade atual, permissão e firewall nos pulsos e antes
+de reproduzir uma tentativa enfileirada. A assinatura do catálogo também
+invalida os banners: trocar a identidade durante o toque aplica a política
+atual no próximo tick, sem modificar settings nem enviar uma política JS.
 Revogar uma permissão sem alterar `settings` cancela o toque; reautorização não
 retoma um alarme já cancelado. Espelhos/avisos de revisão no SDK e a migração
 do catálogo continuam pendentes. A gravação de notificações também migrou,
 conforme a etapa abaixo.
+
+`sdk/nativecatalog.js` centraliza a importação dos metadados para o controlador,
+com uma assinatura compartilhada por controle de apps, notificações e relógio.
+Não reenvia dados iguais nem cria um timer. O proprietário validado do contexto
+retém o leitor; as notificações não mantêm uma segunda cópia da lista.
+O catálogo ainda é descoberto/codificado pelo adaptador JS, e a view do Forçar
+encerramento ainda recebe seus fatos próprios. Esses caminhos continuam pendentes.
+Testes Rust cobrem metadados inválidos/iguais, identidade do catálogo prevalecendo
+sobre fatos do pedido e cancelamento após mudança de identidade. A integração
+altera o catálogo durante um toque, exige ausência de identidade nos pedidos
+SDK e mantém os contratos isolados. Evidências em
+`build/validation/native-notification-catalog/`.
 
 A integração gráfica modifica os armazenamentos reais enquanto as consultas JS
 simulam liberação: exige recusa de pacote, isolamento dos escopos do firewall,

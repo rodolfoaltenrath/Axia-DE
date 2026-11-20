@@ -80,9 +80,16 @@ fn cached_metadata_is_reused_and_invalid_updates_cannot_replace_it() {
     let source = Rc::new(Source::default());
     source.set(vec![json!({"id":"notes#a","app":"notes"})]);
     let mut app = App::with_windows(source.clone());
+    let metadata = app.metadata_reader();
+    let changes = metadata.subscribe();
     assert_eq!(app.request(&json!({"cmd":"metadata","registry":[{"id":"notes","name":"Notas"}],"catalog":[]}))["ok"], true);
+    assert!(changes.take().is_some());
+    assert_eq!(metadata.read()["registry"][0]["name"], "Notas");
+    app.request(&json!({"cmd":"metadata","registry":[{"id":"notes","name":"Notas"}],"catalog":[]}));
+    assert!(!changes.pending());
     assert_eq!(app.request(&json!({"cmd":"groups"}))["groups"][0]["name"], "Notas");
     assert_eq!(app.request(&json!({"cmd":"metadata","registry":null,"catalog":[]}))["error"], "app.invalidRequest");
+    assert!(!changes.pending());
     assert_eq!(app.request(&json!({"cmd":"groups"}))["groups"][0]["name"], "Notas");
     source.set(vec![json!({"id":"notes#b","app":"notes"})]);
     let result = app.request(&json!({"cmd":"quit","key":"notes","windows":[{"id":"stale","key":"notes"}]}));

@@ -124,8 +124,10 @@ agrupamento e toque consultam o leitor nativo do perfil, sem preferências nos
 pedidos de entrega nem agrupamento nos fatos da view. O serviço atualiza o registro
 de apps vistos no proprietário de configurações. As consultas e edições do SDK
 também leem/mesclam/gravam no proprietário, sem transportar preferências nem
-reaplicar patches em JS. O adaptador ainda fornece identidade de catálogo e
-snapshots de compatibilidade para os controles legados.
+reaplicar patches em JS. A identidade de acesso vem do leitor compartilhado do
+catálogo do controlador, sem `source`/`notificationPolicy` nos pedidos. Mudanças
+do catálogo invalidam a política de toque sem alterar settings. O adaptador
+ainda importa o catálogo e publica snapshots para os controles legados.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

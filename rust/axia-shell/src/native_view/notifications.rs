@@ -89,7 +89,7 @@ impl Banners {
 }
 impl super::NativeApp for Banners {
     fn invalidated(&self) -> bool {
-        self.changes.pending() || self.service.borrow().settings_pending()
+        self.changes.pending() || self.service.borrow().settings_pending() || self.service.borrow().catalog_pending()
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.service.borrow().wait_ms(Instant::now())

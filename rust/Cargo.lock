@@ -148,6 +148,7 @@ name = "axia-app-forcequit"
 version = "0.1.0"
 dependencies = [
  "axia-native",
+ "axia-state",
  "serde_json",
 ]
 
