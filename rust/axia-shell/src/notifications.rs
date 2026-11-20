@@ -3,6 +3,7 @@ use axia_state::{Reader, Store};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 mod clock_delivery;
+mod sound;
 
 const MAX_SHOWN: usize = 4;
 const HISTORY: usize = 50;
@@ -76,6 +77,7 @@ pub struct Service {
     ring_blocked: bool,
     clock_delivery: clock_delivery::Delivery,
     clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
+    sounds: Vec<(u64, bool)>,
 }
 
 // Wall time is used for user schedules/history; elapsed banner time is monotonic.
@@ -158,11 +160,7 @@ impl Service {
             }
             (sounds, changed)
         });
-        self.effects.extend(
-            sounds
-                .into_iter()
-                .map(|id| json!({"kind":"notificationSound","id":id,"repeat":true})),
-        );
+        self.sounds.extend(sounds.into_iter().map(|id| (id, true)));
         self.effects.extend(
             ids.into_iter()
                 .map(|id| json!({"kind":"notificationClose","id":id,"reason":"closed"})),
@@ -182,37 +180,33 @@ impl Service {
     }
     pub fn effects(&mut self) -> Vec<Value> {
         let state = self.state.read();
-        self.clock_actions.retain(|id, _| state.shown.iter().any(|n| n.id() == *id)
-            || state.history.iter().any(|n| n["id"] == *id));
+        self.clock_actions.retain(|id, _| {
+            state.shown.iter().any(|n| n.id() == *id)
+                || state.history.iter().any(|n| n["id"] == *id)
+        });
         drop(state);
         let mut effects = Vec::new();
         if self.sent != Some(self.state.revision()) {
             self.sent = Some(self.state.revision());
             effects.push(json!({"kind":"notificationState","revision":self.state.revision(),"state":self.state.read().snapshot()}));
         }
-        // A command can dismiss/evict a banner in the same turn that its pulse becomes due.
+        // Drain audio directly, after commands have dismissed/evicted any due banner.
+        // No pending sound crosses the JS bridge or survives a disconnected audio server.
         let state = self.state.read();
-        self.effects.retain(|effect| {
-            effect["kind"] != "notificationSound"
-                || state.shown.iter().any(|n| {
-                    n.data["id"] == effect["id"] && (effect["repeat"] != true || n.ring.is_some())
-                })
-        });
+        for (id, repeat) in self.sounds.drain(..) {
+            if (!repeat || !clock_delivery::blocked())
+                && state
+                    .shown
+                    .iter()
+                    .any(|n| n.id() == id && (!repeat || n.ring.is_some()))
+            {
+                sound::notify();
+            }
+        }
         effects.append(&mut self.effects);
         effects
     }
     pub fn command(&mut self, input: &Value, now: Instant) -> Value {
-        if input["action"] == "ringAudible" {
-            let wall = axia_clock::now();
-            let local = axia_clock::local(wall);
-            let allowed =
-                self.audible_policy(wall as f64, (local.tm_hour * 60 + local.tm_min) as f64);
-            let active = allowed
-                && self.state.read().shown.iter().any(|n| {
-                    n.data["id"] == input["id"] && n.ring.as_ref().is_some_and(|r| now < r.until)
-                });
-            return json!({"result":active,"effects":[]});
-        }
         if input["action"] == "ringPolicy" {
             self.ring_prefs = input["prefs"].clone();
             self.clock_prefs = input["clock"].clone();
@@ -295,9 +289,7 @@ impl Service {
                         ((), true)
                     });
                     if visible && n["sound"] != false && ap["sound"] != false {
-                        self.effects.push(
-                            json!({"kind":"notificationSound","id":id,"repeat":ring_requested}),
-                        );
+                        self.sounds.push((id, ring_requested));
                     }
                     json!(id)
                 }
@@ -339,10 +331,16 @@ impl Service {
                             .filter(|s| !s.is_empty())
                             .unwrap_or("action"),
                     );
-                    if let Some(native) = self.clock_actions.get(&id).and_then(|a| a.get(index as usize)).cloned() {
+                    if let Some(native) = self
+                        .clock_actions
+                        .get(&id)
+                        .and_then(|a| a.get(index as usize))
+                        .cloned()
+                    {
                         native.run(axia_clock::now());
                     } else {
-                        self.effects.push(json!({"kind":"notificationAction","id":id,"index":index}));
+                        self.effects
+                            .push(json!({"kind":"notificationAction","id":id,"index":index}));
                     }
                 }
                 Value::Null

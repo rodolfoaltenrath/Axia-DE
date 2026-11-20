@@ -680,7 +680,8 @@ the `Date` of the whole theme (the bar, the other apps). Instead:
 
 Alarms, the timer and the stopwatch live in Rust session state, independently of the window.
 The native notification service builds alarm/timer notices and owns their actions;
-the SDK bridge executes sound and preference effects. `startShell` calls
+it calls the session audio client directly. The SDK bridge executes preference
+effects. `startShell` calls
 `startAlarms()` once per session. So they ring with Clock closed and also with the session in the
 background (fast user switching, or viewed only from the browser): the `axia-server` session keeps
 running, and so does its JS.
@@ -705,7 +706,7 @@ running, and so does its JS.
   rung less than 10 minutes ago still rings; older ones are dropped (yesterday's alarm does not ring
   after a long suspend). With no alarms and no timer there is no timer at all.
 - **When it rings:** a sticky [notification](#session-notifications-sdknotifyjs) with "Stop" and
-  "Snooze 9 min", plus the `notify` sound from `lord.sound.play` every 2.5 s for one minute or until
+  "Snooze 9 min", plus the `notify` sound from the native audio client every 2.5 s for one minute or until
   the notification is touched. One-time alarms switch themselves off. The timer notifies the same
   way, with "Repeat".
   Repetition starts only for an audible, delivered banner. Denied, history-only,
@@ -715,6 +716,8 @@ running, and so does its JS.
   the notification service owns the monotonic cadence/deadline, with no JS interval.
   Remounting the banner view keeps the original deadline; delayed frames never
   trigger catch-up bursts. Queued pulses are revalidated before playing sound.
+  Playback calls `snd_play` directly; no sound effect crosses the JS bridge.
+  An unavailable audio server drops that attempt without adding a retry timer.
   The isolated compatibility host retains its local interval and cleanup.
 - **Menu bar:** `registerStatusItem('clock', …)` mounts `shell:clock-status`, which
   reads the native engine and shows ⏱ with the time left on the timer (redrawn

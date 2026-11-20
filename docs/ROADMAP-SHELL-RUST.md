@@ -355,8 +355,8 @@ views nativas lerem direto, sem JSON.
       prazos de notificações pertencem ao contexto Rust. A view monta os
       banners diretamente desse proprietário, sem árvore/lista JS e sem
       timer JS. Ações revalidam IDs e índices antes dos callbacks; o host
-      LPK preserva o comportamento local. Preferências, permissões/firewall,
-      som, callbacks e stores de compatibilidade ainda usam o adaptador.
+      LPK preserva o comportamento local. Preferências, permissões/firewall
+      genéricos, callbacks e stores de compatibilidade ainda usam o adaptador.
       O relógio agora publica invalidações Rust. Um observador no root agenda
       a próxima ocorrência e entrega os efeitos sem setTimeout JS na sessão;
       o indicador da barra consulta o engine diretamente e atualiza a contagem
@@ -374,7 +374,10 @@ views nativas lerem direto, sem JSON.
       inclusive no histórico. Repetir consulta a duração atual do engine;
       entrega e pulsos verificam o firewall nativo atual. Catálogos do usuário,
       fallback e revisão de idioma preservados. Callbacks genéricos,
-      preferências e execução final do som continuam no adaptador.
+      preferências e espelhos continuam no adaptador. O serviço Rust agora
+      também executa o som diretamente no cliente de áudio nativo: fila tipada,
+      validação na drenagem e descarte de tentativas sem conexão, sem efeito
+      de som ou chamada de reprodução JS na sessão. Saída física no encerramento.
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
       e substituir ícones descritos por funções JS por recursos serializáveis;
       o host nativo ainda usa placeholder para esses ícones personalizados.
@@ -557,3 +560,4 @@ mostraram.
 | 2026-11-20 | Fase 2: agendamento e indicador do relógio no host Rust | Commit desta linha | Invalidações nativas do engine, prazo único no observador independente do tema e indicador que lê timer/alarmes por empréstimo, sem estado nos fatos nem timer JS de agendamento/apresentação. Engine preservado na remontagem; símbolos vetoriais. Passaram oito testes do core, 566 da shell, seis contratos LPK, quatro cenários novos com espelho parado, quatro de notificações, encerramento instalado, smoke agregado e integração dos apps compilados. Captura inspecionada; CI GPU=1 exige native_clock_runtime e publica evidências. Toque repetido, preferências, callbacks/templates e efeitos continuam pendentes. Alterações da Dock de 54d0e9ed preservadas. |
 | 2026-11-20 | Fase 2: repetição do toque no serviço Rust de notificações | Commit desta linha | Cadência de 2,5 s e prazo monotônico de 60 s vinculados ao banner; sem intervalo JS na sessão. Política, dispensa, ação e retirada cancelam o toque; pulsos atrasados são revalidados e não formam rajadas. Reproduzido e corrigido snapshot antigo que ressuscitava itens do espelho, agora protegido por revisão numérica. Passaram 571 testes unitários, seis contratos de compatibilidade, oito cenários gráficos de relógio/notificações, encerramento instalado, smoke agregado e integração dos apps compilados. Captura inspecionada. Templates, callbacks, preferências e execução final do som permanecem pendentes. |
 | 2026-11-20 | Fase 2: templates e ações de alarmes no serviço Rust | Commit desta linha | Conclusões do observador e comandos do SDK criam notificações diretamente no proprietário nativo. Textos, hora, catálogos do usuário e revisões de idioma no Rust; Parar/Adiar/Repetir são ações privadas, inclusive no histórico. Repetir usa a duração atual do engine. Reproduzida entrega após bloqueio tardio de firewall; corrigida com consulta ao armazenamento nativo na entrega e nos pulsos. Passaram 578 testes unitários, seis contratos LPK, oito cenários gráficos de relógio/notificações, encerramento instalado por timeout/SIGTERM e integração dos apps compilados. Evidências em build/validation/clock-delivery; captura inspecionada. Preferências, callbacks genéricos, espelhos e execução final do som continuam pendentes; medições físicas no encerramento. |
+| 2026-11-20 | Fase 2: execução nativa do som de notificações | Commit desta linha | Serviço Rust guarda IDs/tipo dos pulsos em fila privada e chama snd_play diretamente, validando retirada e firewall antes da reprodução. Eliminados efeito de som e reconsulta ringAudible pelo JS da sessão; host LPK preservado. Falha de áudio descarta a tentativa sem adicionar timer de recuperação. Passaram 578 testes unitários, 17 testes focados após reforço da guarda, seis contratos LPK, oito cenários gráficos com ausência de efeitos/chamadas JS de som e encerramento instalado por timeout/SIGTERM. Captura inspecionada; evidências em build/validation/native-notification-audio. Preferências, callbacks genéricos e espelhos continuam pendentes; áudio físico no encerramento. |

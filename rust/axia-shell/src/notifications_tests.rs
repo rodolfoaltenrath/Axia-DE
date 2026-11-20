@@ -10,10 +10,12 @@ fn ring(service: &mut Service, now: Instant, extra: Value) -> Value {
 
 #[test]
 fn ringing_has_one_monotonic_deadline_no_catch_up_burst_and_no_revisions_per_pulse() {
+    let initial = sound::attempts();
     let now = Instant::now();
     let mut service = Service::default();
     let reply = ring(&mut service, now, json!({}));
-    assert!(kinds(&reply).contains(&"notificationSound"));
+    assert!(!kinds(&reply).contains(&"notificationSound"));
+    assert_eq!(sound::attempts(), initial + 1);
     let reader = service.reader();
     let revision = reader.revision();
     assert!(service.wait_ms(now).unwrap() >= 2500.);
@@ -21,13 +23,12 @@ fn ringing_has_one_monotonic_deadline_no_catch_up_burst_and_no_revisions_per_pul
     service.expire_at(now + Duration::from_millis(2499), 0., 0.);
     assert!(service.effects().is_empty());
     service.expire_at(now + RING_STEP, 0., 0.);
-    assert_eq!(
-        service.effects(),
-        vec![json!({"kind":"notificationSound","id":1,"repeat":true})]
-    );
+    assert!(service.effects().is_empty());
+    assert_eq!(sound::attempts(), initial + 2);
     assert_eq!(reader.revision(), revision);
     service.expire_at(now + Duration::from_secs(30), 0., 0.);
-    assert_eq!(service.effects().len(), 1);
+    assert!(service.effects().is_empty());
+    assert_eq!(sound::attempts(), initial + 3);
     service.expire_at(now + RING_FOR, 0., 0.);
     let effects = service.effects();
     assert_eq!(effects.len(), 1);
@@ -40,10 +41,12 @@ fn ringing_has_one_monotonic_deadline_no_catch_up_burst_and_no_revisions_per_pul
     assert!(service.wait_ms(now + RING_FOR).is_none());
     service.expire_at(now + Duration::from_secs(120), 0., 0.);
     assert!(service.effects().is_empty());
+    assert_eq!(sound::attempts(), initial + 3);
 }
 
 #[test]
 fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
+    let initial = sound::attempts();
     let now = Instant::now();
     for extra in [
         json!({"appPrefs":{"allow":false}}),
@@ -57,6 +60,7 @@ fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
         assert!(!kinds(&reply).contains(&"notificationSound"));
         assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
         assert!(service.wait_ms(now).is_none());
+        assert_eq!(sound::attempts(), initial);
     }
     let mut service = Service::default();
     let reply = ring(
@@ -64,13 +68,8 @@ fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
         now,
         json!({"notice":{"app":"notes","ring":true,"sticky":true,"sound":true}}),
     );
-    assert!(kinds(&reply).contains(&"notificationSound"));
-    assert!(reply["effects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|e| e["kind"] == "notificationSound")
-        .all(|e| e["repeat"] == false));
+    assert!(!kinds(&reply).contains(&"notificationSound"));
+    assert_eq!(sound::attempts(), initial + 1);
     assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
     assert!(service.wait_ms(now).is_none());
 }
@@ -87,6 +86,7 @@ fn muting_dnd_denial_and_firewall_cancel_native_ringing_without_resuming_old_ala
     ] {
         let mut service = Service::default();
         ring(&mut service, now, json!({}));
+        let played = sound::attempts();
         let mut input = json!({"action":"ringPolicy","prefs":{},"clock":{}});
         for (key, value) in policy.as_object().unwrap() {
             input[key] = value.clone();
@@ -101,6 +101,7 @@ fn muting_dnd_denial_and_firewall_cancel_native_ringing_without_resuming_old_ala
         );
         service.expire_at(now + Duration::from_secs(10), 0., 0.);
         assert!(service.effects().is_empty());
+        assert_eq!(sound::attempts(), played);
     }
 }
 
@@ -109,17 +110,17 @@ fn dismissal_and_eviction_cancel_due_and_already_queued_pulses() {
     let now = Instant::now();
     let mut service = Service::default();
     ring(&mut service, now, json!({}));
+    let initial = sound::attempts();
     let reply = service.command(&json!({"action":"dismiss","id":1}), now + RING_STEP);
     assert_eq!(kinds(&reply), ["notificationState", "notificationClose"]);
     assert!(service.wait_ms(now).is_none());
+    assert_eq!(sound::attempts(), initial);
     ring(&mut service, now, json!({}));
     service.expire_at(now + RING_STEP, 0., 0.);
-    assert_eq!(service.effects()[0]["repeat"], true);
+    assert!(service.effects().is_empty());
+    assert_eq!(sound::attempts(), initial + 2);
     service.command(&json!({"action":"dismiss","id":2}), now + RING_STEP);
-    assert_eq!(
-        service.command(&json!({"action":"ringAudible","id":2}), now + RING_STEP)["result"],
-        false
-    );
+    assert_eq!(sound::attempts(), initial + 2);
     ring(&mut service, now, json!({}));
     for _ in 0..4 {
         push(
@@ -136,6 +137,7 @@ fn dismissal_and_eviction_cancel_due_and_already_queued_pulses() {
     assert!(service.wait_ms(now).is_none());
     service.expire_at(now + RING_STEP, 0., 0.);
     assert!(service.effects().is_empty());
+    assert_eq!(sound::attempts(), initial + 3);
 }
 
 #[test]
@@ -147,6 +149,7 @@ fn dnd_schedule_is_rechecked_by_the_native_pulse_at_midnight() {
         now,
         json!({"prefs":{"schedule":{"on":true,"from":1320,"to":420}},"minute":1319.}),
     );
+    let played = sound::attempts();
     service.expire_at(now + RING_STEP, 0., 1320.);
     assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
     assert!(!service
@@ -154,6 +157,7 @@ fn dnd_schedule_is_rechecked_by_the_native_pulse_at_midnight() {
         .iter()
         .any(|e| e["kind"] == "notificationSound"));
     assert!(service.wait_ms(now).is_none());
+    assert_eq!(sound::attempts(), played);
 }
 
 fn push(service: &mut Service, now: Instant, title: &str, extra: Value) -> Value {
@@ -175,6 +179,7 @@ fn kinds(reply: &Value) -> Vec<&str> {
 
 #[test]
 fn permission_firewall_dnd_and_history_have_distinct_delivery_effects() {
+    let initial = sound::attempts();
     let now = Instant::now();
     let mut service = Service::default();
     for extra in [json!({"appPrefs":{"allow":false}}), json!({"blocked":true})] {
@@ -194,6 +199,7 @@ fn permission_firewall_dnd_and_history_have_distinct_delivery_effects() {
         assert!(service.reader().read().shown.is_empty());
     }
     assert_eq!(service.reader().read().history.len(), 2);
+    assert_eq!(sound::attempts(), initial);
     assert!(service.wait_ms(now).is_none());
     let reply = push(
         &mut service,
@@ -201,7 +207,8 @@ fn permission_firewall_dnd_and_history_have_distinct_delivery_effects() {
         "Delivered",
         json!({"prefs":{"seen":["notes"]}}),
     );
-    assert!(kinds(&reply).contains(&"notificationSound"));
+    assert!(!kinds(&reply).contains(&"notificationSound"));
+    assert_eq!(sound::attempts(), initial + 1);
     assert!(!kinds(&reply).contains(&"settings"));
 }
 

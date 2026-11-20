@@ -142,6 +142,7 @@ mod tests {
     }
     #[test]
     fn native_templates_keep_settings_and_actions_out_of_the_js_callback_channel() {
+        let initial = sound::attempts();
         let (mut s, now, wall) = setup();
         let reply = s.clock_reply(json!({"config":{},"effects":[{"kind":"settings","patch":{"clock":{}}},{"kind":"timer"}]}), &json!({"lang":"en"}), wall, now);
         assert_eq!(
@@ -156,11 +157,12 @@ mod tests {
         assert_eq!(n["actions"][1]["id"], "again");
         assert!(n["actions"][1].get("run").is_none());
         assert!(state.shown[0].ring.is_some());
-        assert!(reply["notificationEffects"]
+        assert!(!reply["notificationEffects"]
             .as_array()
             .unwrap()
             .iter()
             .any(|e| e["kind"] == "notificationSound"));
+        assert_eq!(sound::attempts(), initial + 1);
     }
     #[test]
     fn repeat_from_history_uses_latest_native_duration_and_does_not_emit_a_callback() {
@@ -256,25 +258,27 @@ mod tests {
     }
     #[test]
     fn live_firewall_rules_block_delivery_and_cancel_an_existing_ring() {
+        let initial = sound::attempts();
         let (mut s, now, wall) = setup();
         BLOCKED.with(|v| v.set(true));
         complete(&mut s, now, wall, json!({"kind":"timer"}));
         assert!(s.reader().read().history.is_empty());
         assert!(s.clock_actions.is_empty());
+        assert_eq!(sound::attempts(), initial);
         BLOCKED.with(|v| v.set(false));
         complete(&mut s, now, wall, json!({"kind":"timer"}));
         assert_eq!(s.reader().read().snapshot()["ringing"], json!([1]));
-        BLOCKED.with(|v| v.set(true));
-        assert_eq!(
-            s.command(&json!({"action":"ringAudible","id":1}), now)["result"],
-            false
-        );
         s.expire(now + RING_STEP);
+        BLOCKED.with(|v| v.set(true));
+        s.effects();
+        assert_eq!(sound::attempts(), initial + 1);
+        s.expire(now + RING_STEP * 2);
         assert!(s.reader().read().snapshot()["ringing"]
             .as_array()
             .unwrap()
             .is_empty());
         assert!(!s.effects().iter().any(|e| e["kind"] == "notificationSound"));
+        assert_eq!(sound::attempts(), initial + 1);
         BLOCKED.with(|v| v.set(false));
     }
     #[test]

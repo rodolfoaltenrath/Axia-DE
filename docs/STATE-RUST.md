@@ -436,14 +436,14 @@ revalida a ação contra IDs e índices atuais; um clique antigo não aciona uma
 notificação removida ou reutilizada. Fechamento precede o callback da ação.
 
 `sdk/notify.js` fornece metadados, preferências, permissão efetiva e bloqueio
-de firewall; executa patches, som e callbacks. Os stores públicos recebem
+de firewall; executa patches e callbacks genéricos. Os stores públicos recebem
 snapshots por revisão para compatibilidade, sem alimentar a view nativa.
 O adaptador descarta snapshots com revisão anterior ou igual à já aplicada;
 efeitos atrasados da view não podem ressuscitar itens removidos por um comando.
 Referências de callbacks são limitadas aos banners/histórico mantidos, com
 liberação após drenar efeitos. Geometria do mount segue tema, área útil,
 direção e posicionamento. O host LPK mantém seu serviço local sem acessar o
-controlador privilegiado. Configurações, permissões, som, alarmes e os
+controlador privilegiado. Configurações, permissões e os
 consumidores dos stores continuam como pendências da migração completa.
 
 ### Repetição do toque de alarmes
@@ -462,12 +462,19 @@ termina e o banner continua para reconhecimento. Reativar o som/DND não retoma
 alarmes já cancelados. Sem toques ou banners temporários, não há prazo de refresh.
 
 Pulsos atualizam apenas o próximo instante interno, sem revisão de apresentação
-ou snapshot JS a cada som. O efeito identifica a notificação, e `ringAudible`
-revalida no Rust um pulso já enfileirado antes de `sound.play`; um banner
-dispensado ou silenciado não continua tocando por efeitos antigos. `ringing`
+ou snapshot JS a cada som. A fila interna de áudio contém ID e tipo do pulso;
+o serviço valida o banner e o firewall antes de chamar `snd_play("notify")`
+diretamente pela ABI nativa. Não há efeito `notificationSound`, pedido
+`ringAudible` ou reprodução pelo adaptador JS na sessão. Um banner dispensado
+ou silenciado não continua tocando por efeitos antigos. `ringing`
 agora é apenas um espelho de compatibilidade. O host isolado mantém o caminho
-local corrigido anteriormente. Callbacks genéricos, configurações e execução
-final do som permanecem pendentes.
+local corrigido anteriormente. Callbacks genéricos e configurações permanecem
+pendentes. O cliente de áudio existente continua no C; falha/desconexão descarta
+a tentativa, sem fila para tocar sons antigos nem novo timer de recuperação.
+Testes unitários observam as chamadas de áudio com prazos explícitos; a integração
+real exige zero efeitos de som na ponte e zero chamadas JS, inclusive após
+remontagem. Saída física de áudio segue reservada à validação final.
+Logs e capturas desta etapa: `build/validation/native-notification-audio/`.
 
 ## Templates e ações de alarmes no proprietário Rust
 
@@ -489,8 +496,9 @@ no adaptador de compatibilidade.
 A entrega e os pulsos consultam a restrição atual de notificações do firewall
 pela API nativa `restrict_blocks`, sobre o mesmo armazenamento usado pelo SDK.
 Uma alteração entre o início e o vencimento do timer não depende de um novo
-snapshot JS. Preferências, persistência e execução final do som continuam
-transitórias. O host `.lpk` mantém seus templates e callbacks locais.
+snapshot JS. Preferências e persistência continuam transitórias. O som já é
+executado nativamente pelo serviço. O host `.lpk` mantém templates, reprodução
+e callbacks locais.
 
 `native_clock_runtime` também exige textos nativos, ação Repetir com duração
 JS incorreta e bloqueio de firewall alterado durante a espera. O teste do

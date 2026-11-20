@@ -36,6 +36,7 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "remounted",
                 "ringGuard",
                 "nativeRing",
+                "nativeSound",
                 "revisionOrder",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -83,6 +84,10 @@ const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeV
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 const ran=[], reasons=[];
 let bannerHandle=0,bound=false,noPayload=true,toggle;
+let noSoundEffects=true;
+const perform=notificationBridge.perform,request=lord.nativeApps.request;
+notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
+lord.nativeApps.request=text=>{const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
 function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
@@ -124,34 +129,36 @@ async function run(){
  notify({title:'Survives remount',sticky:false,timeout:1500,sound:false});await until(()=>find('Survives remount'));
  toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>find('Survives remount'));
  const remounted=!!find('Survives remount')&&await until(()=>!find('Survives remount'));
- const play=sound.play,repeat=globalThis.setInterval;let sounds=0;sound.play=()=>{sounds++;};
- let ringGuard=false,nativeRing=false;
+ const play=sound.play,repeat=globalThis.setInterval;let jsSounds=0;sound.play=()=>{jsSounds++;};
+ let ringGuard=false,nativeRing=false,ordinary=0;
  globalThis.setInterval=()=>{throw Error('alarm armed a JS ringing interval');};
  try{
    const fire=()=>{clockRequest('timerStart',{seconds:1,now:Date.now()-2000});clockRequest('arm');};
    settings.set(s=>({...s,notifications:{...s.notifications,dnd:true}}));fire();
-   const quietDnd=ringing.get().length===0&&sounds===0;
+   const quietDnd=ringing.get().length===0&&jsSounds===0;
    settings.set(s=>({...s,notifications:{...s.notifications,dnd:false,apps:{clock:{sound:false}}}}));fire();
-   const quietMuted=ringing.get().length===0&&sounds===0;
+   const quietMuted=ringing.get().length===0&&jsSounds===0;
    for(const n of notifications.get())dismissNotification(n.id);
    settings.set(s=>({...s,notifications:{...s.notifications,apps:{}}}));fire();
-   const armed=ringing.get().length===1&&sounds===1;
+   const armed=ringing.get().length===1&&jsSounds===0;
    toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>bannerHandle);
-   nativeRing=await until(()=>sounds>=2)&&sounds===2&&ringing.get().length===1;
+   await sleep(2000);nativeRing=ringing.get().length===1&&jsSounds===0;
    for(let i=0;i<4;i++)notify({title:'Eviction '+i,sticky:true,sound:false});
    await sleep(2700);
-   const evicted=ringing.get().length===0&&sounds===2;
-   fire();const restarted=ringing.get().length===1&&sounds===3;
+   const evicted=ringing.get().length===0&&jsSounds===0;
+   fire();const restarted=ringing.get().length===1&&jsSounds===0;
    settings.set(s=>({...s,notifications:{...s.notifications,apps:{clock:{sound:false}}}}));
-   const mutedWhileRinging=ringing.get().length===0&&sounds===3;
+   const mutedWhileRinging=ringing.get().length===0&&jsSounds===0;
    ringGuard=quietDnd&&quietMuted&&armed&&evicted&&restarted&&mutedWhileRinging;
    for(const n of notifications.get())dismissNotification(n.id);
+   ordinary=notify({title:'Native audio',sound:true,sticky:true});dismissNotification(ordinary);
  }finally{sound.play=play;globalThis.setInterval=repeat;}
+ const nativeSound=ordinary>0&&jsSounds===0&&noSoundEffects;
  setBannerPlacement('bottom');locale.set({lang:'en',region:'',dir:'rtl'});
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,revisionOrder,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,revisionOrder,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

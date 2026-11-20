@@ -60,10 +60,6 @@ function perform(effect) {
       }
     });
   } else if (effect.kind === 'settings') settings.set(effect.patch);
-  else if (effect.kind === 'notificationSound') {
-    // A queued native pulse may have been dismissed before the shell drained it.
-    if (!effect.repeat || command('ringAudible', { id: effect.id })) sound.play('notify');
-  }
   else if (effect.kind === 'notificationClose') {
     const callback = callbacks.get(effect.id), close = callback?.onClose;
     if (callback) callback.onClose = null;

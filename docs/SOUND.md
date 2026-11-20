@@ -64,6 +64,13 @@ That code was only read to follow the format: it isn't linked or copied.
 
 ## API: `lord.sound`
 
+The main shell's notification service calls `snd_play("notify")` directly from
+Rust (`rust/axia-shell/src/notifications/sound.rs`). Initial sounds and alarm
+pulses stay inside the native owner, with banner/firewall validation before
+playback. No notification sound crosses the JS effect bridge. The isolated
+`.lpk` compatibility host still uses the public API below. Other sound controls
+and the underlying C audio client remain unchanged.
+
 | Function | What it does |
 |---|---|
 | `state()` | the full state (shape below) |
