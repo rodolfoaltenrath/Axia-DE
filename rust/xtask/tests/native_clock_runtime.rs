@@ -35,6 +35,9 @@ fn clock_deadlines_and_status_read_the_resident_engine() {
                 "nativeActions",
                 "nativeTemplates",
                 "liveFirewall",
+                "nativeConfig",
+                "nativeWrite",
+                "noConfigTransport",
                 "saved",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -46,7 +49,7 @@ fn clock_deadlines_and_status_read_the_resident_engine() {
 const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
 import {render,View} from '@lordos/runtime';
-import {ClockSession,startAlarms,clockTimer,arm} from '@ROOT@/sdk/alarms.js';
+import {ClockSession,startAlarms,clockTimer,clockRequest,clockAlarms,arm} from '@ROOT@/sdk/alarms.js';
 import {StatusItems} from '@ROOT@/sdk/statusitems.js';
 import {clockBridge} from '@ROOT@/sdk/nativeclock.js';
 import {NotificationBanner} from '@ROOT@/sdk/nativebanner.js';
@@ -61,6 +64,9 @@ const timeout=globalThis.setTimeout,interval=globalThis.setInterval;
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<200&&!fn();i++)await sleep(20);return!!fn();}
 let scheduler=0,status=0,bound=true,noPayload=true,remount,noJsTimers=true,completions=0;
+let noConfigTransport=true;
+const request=lord.nativeApps.request;
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='clockCommand')noConfigTransport&&=!('config'in input);const reply=request.call(lord.nativeApps,text);if(input.cmd==='clockCommand')noConfigTransport&&=!(reply.effects||[]).some(e=>e.kind==='settings');return reply;};
 const completionIds=new Set();
 const mount=lord.nativeViews.mount,send=lord.nativeViews.facts;
 function inspect(text){const facts=JSON.parse(text);for(const key of ['clock','timer','stopwatch','nextAlarm','config'])noPayload&&=!(key in facts)&&!(key in(facts.args||{}));}
@@ -112,10 +118,17 @@ async function run(){
   const expired=await until(()=>direct('snapshot').timer.state==='idle');
   const liveFirewall=expired&&notifyHistory.get().length===before;
   lord.fw.setRestricted('lordos',[]);
-  settings.set({clock:{alarms:[{id:'probe',on:true,snooze:Date.now()+600000}],hour24:'24'}});
+  lord.settings.state({cmd:'patch',patch:{clock:{alarms:[{id:'probe',on:true,snooze:Date.now()+600000}],hour24:'24',future:'keep'}}});
+  const staleConfig=!settings.get().clock.alarms;
   const alarm=await until(()=>text().includes(':'));
+  const nativeConfig=staleConfig&&alarm&&clockAlarms.list().some(a=>a.id==='probe');
+  const beforeClock=settings.get().clock;
+  clockRequest('cities',{cities:['UTC'],config:{alarms:[]}});
+  const resident=lord.settings.state({cmd:'snapshot'});
+  const nativeWrite=resident.state.clock.cities[0]==='UTC'&&resident.state.clock.future==='keep'&&resident.state.clock.alarms[0].id==='probe'
+    &&settings.get().clock===beforeClock&&resident.dirty;
   const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
-  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,completions,saved:!!saved?.ok}));
+  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,nativeConfig,nativeWrite,noConfigTransport,completions,saved:!!saved?.ok}));
  }finally{globalThis.setTimeout=timeout;globalThis.setInterval=interval;}
 }
 timeout(()=>run().catch(error=>console.error('native_clock driver: '+(error.stack||error))),150);

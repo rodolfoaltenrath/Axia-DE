@@ -215,6 +215,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     owner: Option<crate::winmodel::Session>) -> u32 {
     let windows=owner.as_ref().map(crate::winmodel::Session::reader);
     let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
+    if matches!(id, "clock" | "shell:clock" | "shell:clock-status") && owner.is_some() {
+        crate::clock_settings::bind(home.as_deref().unwrap_or(""));
+    }
     if matches!(id, "shell:notifications" | "shell:clock") {
         if let Some(session) = &owner {
             session.notification_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));

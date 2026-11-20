@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn native_preferences_ignore_stale_input_and_save_without_settings_effects() {
+    struct Config(RefCell<Value>);
+    impl Preferences for Config {
+        fn read(&self, visit: &mut dyn FnMut(&Value)) { visit(&self.0.borrow()); }
+        fn write(&self, config: &Value) { *self.0.borrow_mut() = config.clone(); }
+    }
+    let source = std::rc::Rc::new(Config(RefCell::new(json!({"cities":["UTC"],"future":7}))));
+    let mut engine = Engine::default();
+    engine.bind_preferences(source.clone());
+    let reply = engine.command(&json!({"cmd":"cities","cities":["Europe/Berlin"],"config":{"future":0}}), 0);
+    assert_eq!(source.0.borrow()["future"], 7);
+    assert_eq!(source.0.borrow()["cities"], json!(["Europe/Berlin"]));
+    assert!(!reply["effects"].as_array().unwrap().iter().any(|e|e["kind"]=="settings"));
+    *source.0.borrow_mut() = json!({"cities":["UTC"],"future":7});
+    let reverted = engine.command(&json!({"cmd":"snapshot"}), 0);
+    assert_eq!(reverted["config"]["cities"], json!(["UTC"]));
+    *source.0.borrow_mut() = json!({"hour24":"24"});
+    let reply = engine.command(&json!({"cmd":"snapshot","config":{"hour24":"12"}}), 0);
+    assert_eq!(reply["config"], json!({"hour24":"24"}));
+}
+
+#[test]
 fn native_subscriptions_coalesce_writes_and_read_only_access_is_quiet() {
     with(|s|*s=Default::default());
     let changes=subscribe();

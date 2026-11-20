@@ -80,6 +80,24 @@ pub(crate) struct Model {
     save_error: Option<&'static str>,
 }
 impl Model {
+    /// Native services update one field without constructing a compatibility snapshot.
+    pub(crate) fn set(&mut self, key: &str, value: &Value) -> bool {
+        if !self.initialized {
+            return false;
+        }
+        let changed = self.state.update(|state| {
+            let changed = state.get(key) != Some(value);
+            if changed {
+                state[key] = value.clone();
+            }
+            (changed, changed)
+        });
+        if changed {
+            self.dirty = true;
+            self.until = Some(Instant::now() + SAVE_AFTER);
+        }
+        changed
+    }
     pub fn reader(&self) -> Reader<Value> {
         self.state.reader()
     }

@@ -23,6 +23,7 @@ use axia_app_contacts as contacts_app;
 use axia_app_calendar as calendar_app;
 mod native_apps_host;
 mod app_control;
+mod clock_settings;
 mod window_memory;
 mod session_restore;
 mod desktop_session;

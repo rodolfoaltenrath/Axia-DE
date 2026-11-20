@@ -109,7 +109,13 @@ pub fn duration(ms: i64, cents: bool, decimal: &str) -> String {
         base
     }
 }
+/// Native sessions borrow their authoritative preferences and persist edits directly.
+pub trait Preferences {
+    fn read(&self, visit: &mut dyn FnMut(&Value));
+    fn write(&self, config: &Value);
+}
 pub struct Engine {
+    preferences: Option<std::rc::Rc<dyn Preferences>>,
     revision: u64,
     pub config: Value,
     observed: Value,
@@ -121,6 +127,7 @@ pub struct Engine {
 impl Default for Engine {
     fn default() -> Self {
         Self {
+            preferences: None,
             revision: 0,
             config: json!({}),
             observed: Value::Null,
@@ -136,6 +143,22 @@ impl Engine {
         self.revision = self.revision.checked_add(1).expect("clock revision exhausted");
     }
     pub fn sync(&mut self, config: &Value) {
+        if let Some(preferences) = self.preferences.clone() {
+            preferences.read(&mut |value| {
+                if value.is_object() && value != &self.config {
+                    self.changed();
+                    self.config = value.clone();
+                }
+            });
+        } else {
+            self.sync_value(config);
+        }
+    }
+    pub fn bind_preferences(&mut self, preferences: std::rc::Rc<dyn Preferences>) {
+        self.preferences = Some(preferences);
+        self.sync(&Value::Null);
+    }
+    fn sync_value(&mut self, config: &Value) {
         if config.is_object() && config != &self.observed {
             if config != &self.config { self.changed(); }
             self.config = config.clone();
@@ -153,8 +176,11 @@ impl Engine {
         self.save();
     }
     fn save(&mut self) {
-        self.effects
-            .push(json!({"kind":"settings","patch":{"clock":self.config}}));
+        if let Some(preferences) = &self.preferences {
+            preferences.write(&self.config);
+        } else {
+            self.effects.push(json!({"kind":"settings","patch":{"clock":self.config}}));
+        }
     }
     fn check(&mut self, now: i64) {
         let mut changed = false;
@@ -265,6 +291,7 @@ pub fn subscribe() -> axia_state::Subscription { CHANGES.with(|s|s.subscribe()) 
 pub fn with<T>(f: impl FnOnce(&mut Engine) -> T) -> T {
     let (result,changed)=SESSION.with(|s| {
         let mut engine=s.borrow_mut();let before=(engine.revision,engine.effects.len());
+        if engine.preferences.is_some() { engine.sync(&Value::Null); }
         let result=f(&mut engine);
         (result,before!=(engine.revision,engine.effects.len()))
     });

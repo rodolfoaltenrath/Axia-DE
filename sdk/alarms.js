@@ -27,8 +27,9 @@ function publish(store, value) {
   if (JSON.stringify(store.get()) !== JSON.stringify(value)) store.set(() => value);
 }
 export function clockRequest(cmd, extra = {}) {
-  const input = { now: Date.now(), config: conf(), ...extra };
-  const reply = appHost ? lord.clock.request({ cmd, ...input })
+  const input = { now: Date.now(), ...extra };
+  if (!appHost) delete input.config;
+  const reply = appHost ? lord.clock.request({ cmd, config: conf(), ...input })
     : nativeAppRequest(lord.nativeApps, { cmd: 'clockCommand', action: cmd, ...input,
       ...locale.get(), notificationPolicy: clockNotificationPolicy() });
   return applyClockReply(reply);
@@ -59,7 +60,7 @@ export function ClockSession() {
 }
 export const nextFire = (alarm, now = Date.now()) => clockRequest('nextFire', { alarm, now })?.value ?? null;
 export const clockAlarms = {
-  list: () => conf().alarms || [],
+  list: () => (appHost ? conf() : clockRequest('snapshot')?.config)?.alarms || [],
   add: alarm => clockRequest('alarmAdd', { alarm })?.value,
   update: (id, patch) => clockRequest('alarmUpdate', { id, patch }),
   remove: id => clockRequest('alarmRemove', { id }), nextFire,
@@ -167,12 +168,14 @@ function ClockStatus(props) {
 export function startAlarms() {
   if (started) return;
   started = true;
-  let last = JSON.stringify(conf());
-  settings.subscribe(() => {
-    const current = JSON.stringify(conf());
-    if (current !== last) { last = current; clockRequest('sync', { config: conf() }); }
-  });
+  if (appHost) {
+    let last = JSON.stringify(conf());
+    settings.subscribe(() => {
+      const current = JSON.stringify(conf());
+      if (current !== last) { last = current; clockRequest('sync'); }
+    });
+  }
   registerStatusItem('clock', ClockStatus, 10);
-  clockRequest('sync', { config: conf() });
+  clockRequest('sync');
 }
 export { dismissNotification };

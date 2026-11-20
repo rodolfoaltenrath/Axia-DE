@@ -107,6 +107,12 @@ agenda o próximo vencimento no host. A sessão não arma o timeout JS de
 `alarms.js` para esse trabalho. O engine e os vencimentos sobrevivem à
 remontagem das views.
 
+O engine usa o leitor de configurações do perfil privado. Alarmes e cidades
+são gravados diretamente no proprietário Rust, sem efeitos `settings` pelo JS.
+Uma assinatura nativa acorda o agendador quando a configuração muda; comandos
+da sessão não transportam `config`, e a lista pública de alarmes consulta o engine.
+O host isolado conserva o contrato anterior. Validação e limites em `STATE-RUST.md`.
+
 O item da barra monta `shell:clock-status`: texto, visibilidade e aba de destino
 são calculados no Rust, com símbolos vetoriais para evitar dependência de glifos
 emoji. A contagem tem atualização nativa apenas enquanto o timer executa; o

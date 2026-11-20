@@ -42,6 +42,7 @@ impl Scheduler {
                 .clock_reply(reply, &self.locale, wall, now);
         }
         self.changes.take();
+        crate::clock_settings::take();
         self.until = reply["wait"]
             .as_u64()
             .map(|ms| now + Duration::from_millis(ms));
@@ -66,7 +67,7 @@ impl Scheduler {
 }
 impl NativeApp for Scheduler {
     fn invalidated(&self) -> bool {
-        self.changes.pending()
+        self.changes.pending() || crate::clock_settings::pending()
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.until.map(|until| {

@@ -617,7 +617,7 @@ mesclagem ao Rust antes de aplicar o patch, preservando as alterações recebida
 A entrada pública `lord.perms.set` para notificações delega ao mesmo Rust por
 `axia_notification_permission_set`, incluindo os pedidos do painel Configurações.
 As demais permissões conservam sua implementação anterior. O host `.lpk`
-mantém o contrato do SDK. Avisos de revisão, persistência de settings, catálogo
+mantém o contrato do SDK. Avisos de revisão, consultas/edições legadas de settings, catálogo
 e demais consumidores JS continuam pendentes da migração completa.
 
 Testes unitários verificam validação, falha sem revogação, transição para `ask`
@@ -625,6 +625,37 @@ e cancelamento do toque. A integração usa os armazenamentos reais, impede
 chamadas aos setters JS pelo SDK e exige revisões corretas, ausência de revisão
 extra para mudanças de som e preservação de alterações feitas por assinantes.
 Logs e capturas desta etapa: `build/validation/native-notification-permission-write/`.
+
+## Configuração do relógio por perfil
+
+`clock_settings.rs` vincula o engine ao leitor de configurações do perfil
+privado. `axia-clock::Preferences` permite leitura emprestada e gravação direta;
+o core mantém o contrato anterior quando não há provedor nativo, como no host
+isolado. Na sessão, comandos ignoram configurações JS antigas, e alarmes/cidades
+são gravados no proprietário Rust, preservando os demais campos do perfil.
+Os efeitos de gravação `settings` não atravessam o SDK nesse caminho. O setter
+nativo atualiza somente o campo `clock`, sem construir um snapshot completo das
+preferências para descarte; alterações sem efeito não rearmam a gravação.
+
+Cada acesso ao engine sincroniza a configuração atual antes de usar seus dados.
+A assinatura nativa também invalida o observador de agendamento quando as
+preferências mudam, mesmo sem comandos ou atualização do espelho JS. Assim, um
+alarme criado diretamente no proprietário recebe seu prazo. Remover a configuração
+restitui o objeto vazio. Reverter uma edição para um valor anterior também vale:
+a comparação é com a configuração atual do engine, sem aguardar confirmação JS.
+
+`startAlarms` não assina nem serializa configurações na sessão; pedidos
+`clockCommand` não transportam `config`. A lista pública de alarmes consulta o
+engine atual. O observador `shell:settings` continua publicando revisões para
+consumidores legados. Idioma/região, fatos gerais da janela do app e os espelhos
+de timer/cronômetro continuam pendentes da migração completa.
+
+`native_clock_runtime` muda alarmes diretamente no Rust com o espelho JS antigo,
+exige atualização do indicador e da lista pública, altera cidades sem regravação
+JS e verifica preservação de campos e ausência de `config`/efeitos de gravação
+na ponte. Testes Rust do core e da ligação ao perfil cobrem persistência, reversão,
+limpeza da configuração e silêncio em leituras repetidas. Evidências locais em
+`build/validation/native-clock-settings/`.
 
 ## Templates e ações de alarmes no proprietário Rust
 
