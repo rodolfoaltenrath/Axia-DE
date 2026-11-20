@@ -4,7 +4,7 @@ import { createElement as h, useEffect, useState } from 'react';
 import { View, Text } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
-import { t, formatTime, locale } from './i18n.js';
+import { t, formatTime } from './i18n.js';
 import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive, ringingNotifications } from './notify.js';
 import { sound } from './sound.js';
 import { registerStatusItem } from './statusitems.js';
@@ -31,8 +31,7 @@ export function clockRequest(cmd, extra = {}) {
   const input = { now: Date.now(), ...extra };
   if (!appHost) delete input.config;
   const reply = appHost ? lord.clock.request({ cmd, config: conf(), ...input })
-    : nativeAppRequest(syncNativeCatalog(), { cmd: 'clockCommand', action: cmd, ...input,
-      ...locale.get() });
+    : nativeAppRequest(syncNativeCatalog(), { cmd: 'clockCommand', action: cmd, ...input });
   return applyClockReply(reply);
 }
 function applyClockReply(reply) {

@@ -328,8 +328,9 @@ still imports that catalog and supplies compatibility updates. The isolated `.lp
 host keeps its local policy implementation.
 Native delivery also resolves app captions/icons and formats timestamps from the
 profile's language, region and 12/24-hour preference. The SDK sends no computed
-caption, timestamp, minute or time label; locale context/revision remains a
-transitional fallback until the locale service migrates.
+caption, timestamp, minute, time label or locale context. A native profile source
+selects the initial locale and tracks catalog revisions. The SDK's public locale
+store, interface setup, translation and formatting remain pending migration.
 This applies to every `notify()`:
 
 Notification permission writes from the SDK and `lord.perms.set` share the

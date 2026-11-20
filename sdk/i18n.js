@@ -235,6 +235,7 @@ export const setLanguage = (lang) => settings.set({ language: lang });
 
 // After installing or editing a language pack.
 export function reloadCatalogs() {
+  if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) lord.locale.reload();
   cache.clear();
   metas.clear();
   locale.set((l) => ({ ...l, revision: (l.revision || 0) + 1 }));

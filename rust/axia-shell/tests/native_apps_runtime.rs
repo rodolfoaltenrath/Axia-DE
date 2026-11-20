@@ -419,6 +419,7 @@ import { configureWindows, windows, wm, registerBuiltinApp } from '@ROOT@/sdk/wi
 import { runningApps, forceQuit } from '@ROOT@/sdk/appcontrol.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { AppWindowContext } from '@ROOT@/sdk/components.jsx';
+settings.set({language:'en'});
 locale.set({...locale.get(),lang:'en'});
 const catalog=lord.nativeApps.request(JSON.stringify({cmd:'catalog'}));
 const compiled=catalog.map(m=>['photos','settings'].includes(m.id)?asyncNativeApp(m):nativeApp(m)), force=compiled.find(app=>app.id==='forcequit');

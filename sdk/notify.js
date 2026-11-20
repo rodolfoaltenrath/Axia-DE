@@ -18,7 +18,6 @@ import { getApp } from './windows.js';
 import { sound } from './sound.js';
 import { settings } from './settings.js';
 import { perms, permsRev } from './privacy.js';
-import { locale } from './i18n.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { notificationBridge } from './nativenotifications.js';
 import { settingsBridge } from './nativesettings.js';
@@ -137,7 +136,6 @@ export function notify({ app = '', title = '', body = '', actions = [], sound: w
   if (!appHost) {
     const selected = Array.isArray(actions) ? actions.slice(0, 3) : [];
     const reply = rawRequest('push', {
-      ...locale.get(),
       notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
         sound: !!withSound, ring: !!_ring, timeout,
         actions: selected.map(a => ({ id: a.id, label: a.label, primary: !!a.primary })) } });

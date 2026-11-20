@@ -76,7 +76,7 @@ lord.nativeViews.mount=(node,id,text,...sources)=>{
 };
 lord.nativeViews.facts=(handle,text)=>{if(handle===scheduler||handle===status)inspect(text);return send(handle,text);};
 locale.set({lang:'en',region:'',dir:'ltr'});
-settings.set({clock:{},notifications:{dnd:false,apps:{clock:{sound:false}}},mode:'@MODE@'});
+settings.set({language:'en',clock:{},notifications:{dnd:false,apps:{clock:{sound:false}}},mode:'@MODE@'});
 configureWindows({apps:[{id:'clock',name:'Clock',Component:()=>null}]});
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 function App(){const[rev,setRev]=useState(0);remount=()=>setRev(n=>n+1);return h(ThemeProvider,{tokens:theme},

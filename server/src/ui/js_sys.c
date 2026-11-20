@@ -690,6 +690,7 @@ static JSValue f_locale_set(JSContext *c, JSValueConst this_val, int argc, JSVal
     int ok = f && fwrite(buf, 1, n, f) == n;
     if (f) ok = fclose(f) == 0 && ok;
     if (ok) ok = rename(tmp, path) == 0;
+    if (ok) axia_locale_changed(home, 1);
     return JS_NewBool(c, ok);
 }
 
@@ -796,7 +797,7 @@ static JSValue f_locale_languages(JSContext *c, JSValueConst this_val, int argc,
 static JSValue f_locale_install(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val; (void)argc;
     const char *lang = JS_ToCString(c, argv[0]);
-    int ok = lang && valid_id_dot(lang) && JS_IsObject(argv[1]);
+    int ok = lang && valid_id_dot(lang) && JS_IsObject(argv[1]), wrote = 0;
     char dir[PATH_MAX + 128];
     if (ok) {
         char p[PATH_MAX + 64];
@@ -818,8 +819,9 @@ static JSValue f_locale_install(JSContext *c, JSValueConst this_val, int argc, J
                 char path[PATH_MAX * 2];
                 snprintf(path, sizeof path, "%s/%s.json", dir, ns);
                 FILE *f = fopen(path, "w");
+                if (f) wrote = 1; /* opening can truncate even when the write fails */
                 if (!f || fwrite(txt, 1, len, f) != len) ok = 0;
-                if (f) fclose(f);
+                if (f && fclose(f) != 0) ok = 0;
             } else ok = 0;
             if (txt) JS_FreeCString(c, txt);
             if (ns) JS_FreeCString(c, ns);
@@ -828,7 +830,14 @@ static JSValue f_locale_install(JSContext *c, JSValueConst this_val, int argc, J
         js_free(c, props);
     }
     if (lang) JS_FreeCString(c, lang);
+    if (wrote) axia_locale_changed(home, 0);
     return JS_NewBool(c, ok);
+}
+
+static JSValue f_locale_reload(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)c; (void)self; (void)argc; (void)argv;
+    axia_locale_changed(home, 0);
+    return JS_UNDEFINED;
 }
 
 /* ---- lord.keyboard: layouts (libxkbcommon, Rust keyboard) ---- */
@@ -1504,6 +1513,7 @@ static const JSCFunctionListEntry admin_funcs[] = {
     JS_CFUNC_DEF("request", 2, f_admin_request),
 };
 static const JSCFunctionListEntry locale_funcs[] = {
+    JS_CFUNC_DEF("reload", 0, f_locale_reload),
     JS_CFUNC_DEF("get", 0, f_locale_get),
     JS_CFUNC_DEF("set", 1, f_locale_set),
     JS_CFUNC_DEF("available", 0, f_locale_available),

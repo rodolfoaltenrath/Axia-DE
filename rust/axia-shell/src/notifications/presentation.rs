@@ -25,6 +25,19 @@ impl Presentation {
             self.i18n = I18n::new(&roots.0, roots.1.as_deref());
             self.roots = Some(roots);
         }
+        if let Some((home, saved)) = settings {
+            let locale = crate::locale::reader(home, &self.roots.as_ref().unwrap().0);
+            let locale = locale.read();
+            let revision = Value::from(locale.revision);
+            if self.revision != revision {
+                self.i18n.invalidate();
+                self.revision = revision;
+            }
+            self.i18n.lang = locale.lang.clone();
+            self.region = locale.region.clone();
+            self.hours = saved["clock"]["hour24"].as_str().unwrap_or("auto").into();
+            return;
+        }
         if let Some(revision) = input
             .get("localeRevision")
             .or_else(|| input.get("revision"))
@@ -34,23 +47,13 @@ impl Presentation {
                 self.revision = revision.clone();
             }
         }
-        let saved = settings.map(|(_, value)| value);
-        let lang = saved
-            .and_then(|s| s["language"].as_str())
-            .filter(|s| !s.is_empty())
-            .or_else(|| input["lang"].as_str());
-        if let Some(lang) = lang {
+        if let Some(lang) = input["lang"].as_str() {
             self.i18n.lang = lang.into();
         }
-        if let Some(region) = saved
-            .and_then(|s| s["region"].as_str())
-            .or_else(|| input["region"].as_str())
-        {
+        if let Some(region) = input["region"].as_str() {
             self.region = region.into();
         }
-        if let Some(saved) = saved {
-            self.hours = saved["clock"]["hour24"].as_str().unwrap_or("auto").into();
-        } else if config.is_object() {
+        if config.is_object() {
             self.hours = config["hour24"].as_str().unwrap_or("auto").into();
         }
     }

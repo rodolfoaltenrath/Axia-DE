@@ -593,10 +593,10 @@ sessão principal. Catálogo é lido por empréstimo, sem copiar a lista.
 
 Entrega e histórico usam o relógio civil nativo, inclusive para a agenda DND;
 expiração permanece monotônica. A formatação respeita idioma, região e preferência
-de 12/24 horas do perfil Rust, mesmo com espelho JS antigo. O contexto de idioma
-e revisão de catálogos ainda vem do adaptador como fallback/invalidação; a migração
-completa de i18n continua pendente. Uma entrega interna sem revisão não apaga a
-revisão já observada. Catálogos privados e fallback inglês permanecem disponíveis.
+de 12/24 horas do perfil Rust, mesmo com espelho JS antigo. Idioma/região e revisão
+de catálogos dos serviços vêm de `locale.rs`, sem contexto enviado pelo SDK.
+O store público, tradução/formatação e configuração da interface pelo SDK
+continuam pendentes. Catálogos privados e fallback inglês permanecem disponíveis.
 
 O SDK da sessão não calcula nome/horário nem transporta timestamp/minuto na
 entrega. O host LPK mantém seu contrato local. Testes Rust verificam dados
@@ -604,6 +604,38 @@ forjados ignorados, tradução/fallback, ícone de app conhecido e horário nati
 `notifications_runtime` exige apresentação portuguesa e relógio de 24 horas com
 contexto JS inglês antigo, além da ausência desses fatos nos pedidos SDK.
 Capturas/logs em `build/validation/notification-presentation/`.
+
+## Fonte nativa de idioma e região dos serviços
+
+`locale.rs` mantém um proprietário observável por perfil e raiz de assets.
+Preferência salva prevalece; a seleção automática usa `LANG` de
+`~/.config/locale.conf`, depois `/etc/locale.conf` sobre `/etc/default/locale`.
+Valores têm a validação do formato do host, leitura limitada a 8 KiB e idioma
+derivado sem executar comandos. Um catálogo `shell` válido habilita a escolha
+automática; ausência/invalidez usa inglês. Região vem do perfil.
+
+A leitura nativa sincroniza a revisão das preferências antes de emprestar o
+estado. Alterações irrelevantes e leituras repetidas não invalidam esse estado.
+Gravação bem-sucedida de locale.conf recalcula a escolha automática; instalação
+de arquivos de idioma e `lord.locale.reload()` invalidam os catálogos por revisão,
+inclusive quando uma instalação altera arquivos antes de falhar parcialmente.
+Não há timer nem dependência de `lord.locale.get` pelo caminho dos serviços.
+
+Notificações e entrega de alarmes usam essa fonte. Pedidos do SDK não carregam
+lang/region/revision/localeRevision. `reloadCatalogs` mantém a invalidação dos
+consumidores JS e avisa a fonte nativa. O store público do SDK ainda não é um
+espelho dessa fonte; integração ao observador do root, aplicação de idioma/direção
+na interface, tradução, formatos e demais consumidores continuam pendentes.
+
+Os testes Rust cobrem precedência/validação, limite, preferência salva,
+invalidações silenciosas, seleção automática, metadados privados e recarga.
+A integração instala pacote e altera locale.conf no perfil isolado enquanto
+`lord.locale.get` JS lança erro, exigindo atualização dos banners sem contexto
+de locale nos pedidos. Evidências em `build/validation/native-locale-source/`.
+
+Também foi retirado o acesso direto a `lord.settings.save` da troca de tema:
+ela usa `saveSettingsNow`, assim como o restante da sessão principal. O caminho
+de arquivo JS permanece no host LPK.
 
 ## Consulta nativa de permissões e firewall
 

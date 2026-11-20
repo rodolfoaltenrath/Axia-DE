@@ -3,7 +3,7 @@ export { LPK_API_VERSION } from '../runtime/lpk-api.js';
 export { standaloneDesktop } from './platform.js';
 import { createElement, cloneElement, Fragment } from 'react';
 import { render, onScreenChange } from '@lordos/runtime';
-import { settings } from './settings.js';
+import { settings, saveSettingsNow } from './settings.js';
 import { createStore, useStore } from './store.js';
 import { locale, tOptional } from './i18n.js';
 
@@ -179,7 +179,7 @@ export const themes = {
     } catch (e) { reopen = []; }
     markThemeSwitch();
     settings.set({ theme: id, themeReopen: reopen.length ? reopen : null, themeDesktops: desktopsForThemeSwitch() });
-    lord.settings.save(JSON.stringify(settings.get(), null, 2));
+    saveSettingsNow();
     return lord.themes.use(id);
   },
 };

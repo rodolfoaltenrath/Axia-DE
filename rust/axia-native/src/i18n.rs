@@ -63,6 +63,10 @@ impl I18n {
         }
         self.cache.get(&key).and_then(Option::as_ref)
     }
+    /// Whether a valid namespace is available through the user's roots or assets.
+    pub fn has_catalog(&mut self, lang: &str, namespace: &str) -> bool {
+        self.catalog(lang, namespace).is_some()
+    }
     /// Raw localized service data, using the same roots and cache as captions.
     pub fn entry(&mut self, lang: &str, namespace: &str, key: &str) -> Option<Value> {
         self.catalog(lang, namespace)?.get(key).cloned()
