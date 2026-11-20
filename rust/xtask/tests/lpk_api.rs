@@ -4,6 +4,50 @@ use std::{path::Path, process::Command};
 
 #[test]
 #[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
+fn isolated_locale_keeps_local_overrides_text_application_and_reload() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap();
+    let fixture = r#"
+import path from 'node:path';import {build} from 'esbuild';
+const root=process.argv[1];let privileged=0,language='',rtl=false;
+function store(value){const listeners=new Set();return{get:()=>value,set:change=>{value=typeof change==='function'?change(value):{...value,...change};for(const listener of listeners)listener();},subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};}
+const deny=()=>{privileged++;throw Error('isolated locale reached native session');};
+globalThis.__localeProbe={settings:store({language:'en',region:''}),localeBridge:{},nativeLocale:deny};
+globalThis.lord={text:{setLanguage:value=>{language=value;},setDirection:value=>{rtl=value;}},locale:{
+ languages:()=>['en','ar'].map(id=>({id,meta:JSON.stringify({direction:id==='ar'?'rtl':'ltr'})})),
+ catalog:(lang,ns)=>JSON.stringify(ns==='format'?{hour12:false,regions:{en_US:{hour12:true}},am:'AM',pm:'PM'}:{}),
+ state:deny,reload:deny}};
+const result=await build({entryPoints:[path.join(root,'sdk/i18n.js')],bundle:true,write:false,format:'esm',define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-locale',setup(build){
+ build.onResolve({filter:/\.js$/},args=>{const name=path.basename(args.path);if(name==='settings.js'||name==='nativelocale.js')return{path:name,namespace:'probe'};});
+ build.onLoad({filter:/.*/,namespace:'probe'},args=>({contents:(args.path==='settings.js'?['settings']:['localeBridge','nativeLocale']).map(name=>`export const ${name}=globalThis.__localeProbe.${name};`).join('\n')}));
+ }}]});
+const sdk=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+sdk.locale.set({lang:'ar'});const override=sdk.locale.get().lang==='ar'&&sdk.direction()==='rtl'&&rtl&&language==='ar';
+__localeProbe.settings.set({language:'en',region:'en_US'});const saved=sdk.locale.get().lang==='en'&&sdk.locale.get().region==='en_US'&&!rtl&&language==='en';
+const formatted=sdk.formatTime(new Date(2026,0,1,13,7))==='1:07 PM';sdk.reloadCatalogs();
+console.log(JSON.stringify({override,saved,formatted,reloaded:sdk.locale.get().revision===1,privileged}));
+"#;
+    let output = Command::new("node")
+        .current_dir(repo)
+        .args(["--input-type=module", "-e", fixture, repo.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    for flag in ["override", "saved", "formatted", "reloaded"] {
+        assert_eq!(report[flag], true, "{report}");
+    }
+    assert_eq!(report["privileged"], 0, "{report}");
+}
+
+#[test]
+#[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
 fn clock_ringing_stops_when_delivery_is_suppressed_or_the_banner_leaves() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()

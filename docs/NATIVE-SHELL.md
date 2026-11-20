@@ -133,7 +133,13 @@ Rust. Timestamp e minuto de entrega vêm do relógio nativo; nome e horário
 calculados pelo JS não entram no pedido. Idioma/região/12–24 h salvos no perfil
 têm prioridade. A fonte nativa `locale.rs` seleciona o idioma inicial e controla
 recargas de catálogos; notificações/alarmes não recebem contexto de locale pelo
-SDK. O store público de i18n e sua ligação à interface ainda precisam migrar.
+SDK. O store público de i18n espelha essa fonte por revisão, pelo observador
+`shell:settings`; idioma e direção são aplicados diretamente pela ABI C no
+contexto ativo. Leitores de outros perfis não alteram a interface. Updaters
+consultam o estado nativo e respostas antigas são descartadas. Tradução e
+formatação do SDK ainda precisam migrar. `native_locale_runtime` cobre quatro
+variantes de tema/tamanho, com setters JS de texto bloqueados; o CI GPU=1
+publica `axia-native-locale`. Evidências em `build/validation/native-locale-session/`.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

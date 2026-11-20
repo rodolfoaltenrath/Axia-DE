@@ -664,6 +664,21 @@ static JSValue f_locale_get(JSContext *c, JSValueConst this_val, int argc, JSVal
     return o;
 }
 
+static JSValue f_locale_state(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (argc < 1) return JS_NULL;
+    JSValue encoded = JS_JSONStringify(c, argv[0], JS_UNDEFINED, JS_UNDEFINED);
+    if (JS_IsException(encoded)) return encoded;
+    const char *input = JS_ToCString(c, encoded);
+    char *reply = input ? axia_locale_request(home, input) : NULL;
+    if (input) JS_FreeCString(c, input);
+    JS_FreeValue(c, encoded);
+    if (!reply) return JS_NULL;
+    JSValue value = JS_ParseJSON(c, reply, strlen(reply), "<locale>");
+    free(reply);
+    return value;
+}
+
 /* lord.locale.set({ LANG, LC_TIME, … }) writes ~/.config/locale.conf and applies it to the
  * processes launched from now on (Terminal shells, and apps in the future). */
 static JSValue f_locale_set(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -1036,6 +1051,14 @@ static JSValue f_text_set_direction(JSContext *c, JSValueConst this_val, int arg
     int rtl = JS_ToBool(c, argv[0]);
     if (ui.rtl != rtl) { ui.rtl = (uint8_t)rtl; ui.dirty = 1; }
     return JS_UNDEFINED;
+}
+
+void axia_locale_apply(const char *lang, int rtl) {
+    int ok = lang && strlen(lang) < 16;
+    for (const char *p = lang; ok && *p; p++)
+        ok = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '-' || *p == '_';
+    if (ok && strcmp(text_language(), lang)) { text_set_language(lang); ui.dirty = 1; }
+    if (ui.rtl != !!rtl) { ui.rtl = (uint8_t)!!rtl; ui.dirty = 1; }
 }
 
 /* 'rtl' if the first strong character is right-to-left, otherwise 'ltr'. */
@@ -1513,6 +1536,7 @@ static const JSCFunctionListEntry admin_funcs[] = {
     JS_CFUNC_DEF("request", 2, f_admin_request),
 };
 static const JSCFunctionListEntry locale_funcs[] = {
+    JS_CFUNC_DEF("state", 1, f_locale_state),
     JS_CFUNC_DEF("reload", 0, f_locale_reload),
     JS_CFUNC_DEF("get", 0, f_locale_get),
     JS_CFUNC_DEF("set", 1, f_locale_set),

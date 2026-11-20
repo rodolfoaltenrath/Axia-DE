@@ -17,6 +17,8 @@
 // and data (each language's format.json).
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
+import { localeBridge, nativeLocale } from './nativelocale.js';
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 
 export const FALLBACK = 'en';
 
@@ -94,7 +96,27 @@ function initial() {
   return FALLBACK;
 }
 
-export const locale = createStore({ lang: initial(), region: settings.get().region || '' });
+const initialLocale = appHost ? null : nativeLocale({ cmd: 'initialize' });
+const localeMirror = createStore(appHost ? { lang: initial(), region: settings.get().region || '' } : initialLocale.state);
+let localeRevision = initialLocale?.revision ?? 0;
+let nativeDirection = initialLocale?.direction || 'ltr';
+function adoptLocale(reply) {
+  if (!reply || reply.revision <= localeRevision) return;
+  if (reply.state.revision !== localeMirror.get()?.revision) { cache.clear(); metas.clear(); }
+  localeRevision = reply.revision;
+  nativeDirection = reply.direction;
+  localeMirror.set(() => reply.state);
+}
+export const locale = appHost ? localeMirror : {
+  get: localeMirror.get, subscribe: localeMirror.subscribe,
+  set(change) {
+    const reply = typeof change === 'function'
+      ? nativeLocale({ cmd: 'replace', value: change(nativeLocale({ cmd: 'snapshot' }).state) })
+      : nativeLocale({ cmd: 'patch', value: change });
+    adoptLocale(reply);
+  },
+};
+localeBridge.perform = effect => { if (effect.kind === 'localeState') adoptLocale(effect.reply); };
 
 // The server picks the CJK font according to the language (the same ideograph is drawn differently in
 // Chinese, Japanese and Korean) and, if the language is right-to-left (meta.json "direction": "rtl"),
@@ -105,18 +127,20 @@ function applyNative(l) {
     lord.text.setDirection(dirOf(l) === 'rtl');
   } catch (e) { /* server without lord.text */ }
 }
-applyNative(locale.get());
-locale.subscribe(() => applyNative(locale.get()));
+if (appHost) {
+  applyNative(locale.get());
+  locale.subscribe(() => applyNative(locale.get()));
+}
 
 // Direction of the interface ('rtl' in Arabic, Hebrew, Persian…) and of a standalone text (that of its
 // first strong character: an Arabic file name inside an English interface).
 // An isolated app (runtime/app-host.js) also gets the direction from axia-server with the language
 // (`dir`), so it mirrors like the desktop even if it cannot read that language's meta.json.
 function dirOf(l) { return l.dir === 'rtl' || l.dir === 'ltr' ? l.dir : meta(l.lang).direction === 'rtl' ? 'rtl' : 'ltr'; }
-export const direction = () => dirOf(locale.get());
+export const direction = () => appHost ? dirOf(locale.get()) : nativeDirection;
 export const textDirection = (s) => { try { return lord.text.direction(String(s ?? '')); } catch (e) { return 'ltr'; } };
 
-settings.subscribe(() => {
+if (appHost) settings.subscribe(() => {
   const s = settings.get();
   const cur = locale.get();
   if ((s.language && s.language !== cur.lang) || (s.region || '') !== cur.region)
@@ -235,8 +259,8 @@ export const setLanguage = (lang) => settings.set({ language: lang });
 
 // After installing or editing a language pack.
 export function reloadCatalogs() {
-  if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) lord.locale.reload();
   cache.clear();
   metas.clear();
-  locale.set((l) => ({ ...l, revision: (l.revision || 0) + 1 }));
+  if (appHost) locale.set((l) => ({ ...l, revision: (l.revision || 0) + 1 }));
+  else adoptLocale(nativeLocale({ cmd: 'reload' }));
 }

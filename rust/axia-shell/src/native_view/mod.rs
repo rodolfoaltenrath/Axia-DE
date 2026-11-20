@@ -399,6 +399,7 @@ pub unsafe extern "C" fn axia_view_key(key: *const c_char, chr: *const c_char, f
 #[no_mangle]
 pub extern "C" fn axia_view_tick(now: f64) {
     crate::settings::tick();
+    crate::locale::tick();
     for handle in handles() {
         with_host(handle, |h| h.tick(now));
     }
@@ -406,6 +407,7 @@ pub extern "C" fn axia_view_tick(now: f64) {
 /// Milliseconds until a view or resident settings need a tick, or -1.
 #[no_mangle]
 pub extern "C" fn axia_view_timeout(now: f64) -> f64 {
+    if crate::locale::pending() {return 0.;}
     let preferences = crate::settings::timeout().unwrap_or(-1.);
     let views = with(|r| {
         r.hosts

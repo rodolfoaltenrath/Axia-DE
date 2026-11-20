@@ -275,7 +275,7 @@ pub unsafe extern "C" fn axia_settings_request(
     home: *const c_char,
     input: *const c_char,
 ) -> *mut c_char {
-    let reply = if home.is_null() || input.is_null() {
+    let mut reply = if home.is_null() || input.is_null() {
         json!({"error":"settings.invalidRequest"})
     } else {
         let input = CStr::from_ptr(input).to_bytes();
@@ -287,6 +287,13 @@ pub unsafe extern "C" fn axia_settings_request(
             _ => json!({"error":"settings.invalidRequest"}),
         }
     };
+    if reply.get("state").is_some() && !home.is_null() {
+        if let Ok(home) = CStr::from_ptr(home).to_str() {
+            if let Some(locale) = crate::locale::snapshot_if_active(home,&crate::native_view::resource_roots().0) {
+                reply["localeState"] = locale;
+            }
+        }
+    }
     CString::new(reply.to_string()).map_or(std::ptr::null_mut(), CString::into_raw)
 }
 #[no_mangle]

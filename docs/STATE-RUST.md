@@ -66,8 +66,8 @@ explícito pode tentar novamente. Salvar não altera a revisão das preferência
 A API de arquivo legada continua disponível; uma gravação bem-sucedida de objeto
 válido atualiza o proprietário e cancela sua gravação pendente. O gravador C
 compartilhado não chama de volta ao modelo durante um save nativo.
-Idioma/região, bootstrap de outros serviços e demais consumidores de fatos de
-preferências continuam pendentes.
+Idioma/região também têm proprietário nativo, descrito abaixo. Bootstrap de
+outros serviços e demais consumidores de fatos de preferências continuam pendentes.
 
 `native_settings_runtime` exige quatro cenários claro/escuro e 640/1000 px:
 observador sem preferências nos fatos, espelho parado, updater com dados nativos,
@@ -595,7 +595,7 @@ Entrega e histórico usam o relógio civil nativo, inclusive para a agenda DND;
 expiração permanece monotônica. A formatação respeita idioma, região e preferência
 de 12/24 horas do perfil Rust, mesmo com espelho JS antigo. Idioma/região e revisão
 de catálogos dos serviços vêm de `locale.rs`, sem contexto enviado pelo SDK.
-O store público, tradução/formatação e configuração da interface pelo SDK
+O store público é um espelho do mesmo proprietário; tradução/formatação do SDK
 continuam pendentes. Catálogos privados e fallback inglês permanecem disponíveis.
 
 O SDK da sessão não calcula nome/horário nem transporta timestamp/minuto na
@@ -623,9 +623,8 @@ Não há timer nem dependência de `lord.locale.get` pelo caminho dos serviços.
 
 Notificações e entrega de alarmes usam essa fonte. Pedidos do SDK não carregam
 lang/region/revision/localeRevision. `reloadCatalogs` mantém a invalidação dos
-consumidores JS e avisa a fonte nativa. O store público do SDK ainda não é um
-espelho dessa fonte; integração ao observador do root, aplicação de idioma/direção
-na interface, tradução, formatos e demais consumidores continuam pendentes.
+consumidores JS e avisa a fonte nativa. O store público do SDK espelha essa fonte
+por revisão. Tradução, formatos e demais consumidores continuam pendentes.
 
 Os testes Rust cobrem precedência/validação, limite, preferência salva,
 invalidações silenciosas, seleção automática, metadados privados e recarga.
@@ -636,6 +635,36 @@ de locale nos pedidos. Evidências em `build/validation/native-locale-source/`.
 Também foi retirado o acesso direto a `lord.settings.save` da troca de tema:
 ela usa `saveSettingsNow`, assim como o restante da sessão principal. O caminho
 de arquivo JS permanece no host LPK.
+
+### Locale público e aplicação na interface
+
+Na sessão principal, `locale.get/subscribe` leem o espelho e `locale.set` envia
+patches ao proprietário Rust. Updaters consultam primeiro o estado nativo atual;
+respostas antigas não sobrescrevem revisões novas. A revisão do proprietário é
+independente da revisão dos catálogos, que invalida os caches JS de tradução.
+Overrides temporários, inclusive direção explícita e campos extras, ficam no
+modelo nativo. A direção calculada vem dos metadados sem acrescentar `dir` ao
+objeto público quando não foi fornecido. Revisões recebidas não são aceitas como
+revisões do proprietário.
+
+O comando de inicialização ativa apenas um contexto de interface e aplica idioma
+da fonte e direção diretamente pela ABI C. Leitores de outros perfis não alteram
+o estado global de texto. O loop sincroniza revisões de preferências sem polling;
+o observador não visual `shell:settings` transmite também `localeState`, sem fatos
+de locale vindos do SDK. Respostas síncronas de settings incluem o locale atual,
+preservando a atualização imediata dos consumidores existentes. Remontar o
+observador mantém overrides; reinicializar o contexto os descarta.
+
+`native_locale_runtime` cobre claro/escuro em 640/1000 px: espelho parado,
+updater sobre estado atual, respostas antigas, direção por metadados e explícita,
+remontagem, pacote instalado e recarga de catálogos. Bloqueia `locale.get` legado
+e os setters JS de idioma/direção. O host LPK conserva seu store local, coberto
+por contrato Rust separado. Passaram 610 testes unitários da shell, sete contratos
+LPK, 24 cenários gráficos de locale/configurações/notificações/relógio/Forçar
+encerramento/menu, encerramento instalado, smoke e apps compilados em GPU=1.
+Compositor e bundles recompilados; captura inspecionada. Evidências locais em
+`build/validation/native-locale-session/`; CI GPU=1 exige o teste e publica
+`axia-native-locale`. Medições físicas continuam reservadas ao final do roadmap.
 
 ## Consulta nativa de permissões e firewall
 

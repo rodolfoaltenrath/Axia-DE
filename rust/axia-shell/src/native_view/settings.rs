@@ -8,6 +8,9 @@ pub struct Observer {
     reader: Reader<Value>,
     changes: Subscription,
     sent: Option<u64>,
+    locale: Reader<crate::locale::State>,
+    locale_changes: Subscription,
+    locale_sent: Option<u64>,
 }
 impl Observer {
     pub fn new(home: &str) -> Self {
@@ -17,17 +20,22 @@ impl Observer {
             s.reader()
         });
         let changes = reader.subscribe();
+        let locale = crate::locale::reader(&home, &super::resource_roots().0);
+        let locale_changes = locale.subscribe();
         Self {
             home,
             reader,
             changes,
             sent: None,
+            locale,
+            locale_changes,
+            locale_sent: None,
         }
     }
 }
 impl NativeApp for Observer {
     fn invalidated(&self) -> bool {
-        self.changes.pending()
+        self.changes.pending() || self.locale_changes.pending()
     }
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] != "sync" {
@@ -35,13 +43,21 @@ impl NativeApp for Observer {
         }
         self.changes.take();
         let revision = self.reader.revision();
-        let effects = if self.sent == Some(revision) {
-            json!([])
-        } else {
+        self.locale_changes.take();
+        let mut effects = Vec::new();
+        if self.sent != Some(revision) {
             self.sent = Some(revision);
             let reply = crate::settings::with(&self.home, |s| s.snapshot());
-            json!([{"kind":"settingsState","reply":reply}])
-        };
+            effects.push(json!({"kind":"settingsState","reply":reply}));
+        }
+        if self.locale_sent != Some(self.locale.revision()) {
+            self.locale_sent = Some(self.locale.revision());
+            if let Some(reply) =
+                crate::locale::snapshot_if_active(&self.home, &super::resource_roots().0)
+            {
+                effects.push(json!({"kind":"localeState","reply":reply}));
+            }
+        }
         json!({"tree":{"kind":"view","style":{"pointerEvents":"none"}},"effects":effects})
     }
 }

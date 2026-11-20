@@ -2,6 +2,7 @@
 import { createStore, useStore } from './store.js';
 import defaults from './settings-defaults.json';
 import { settingsBridge } from './nativesettings.js';
+import { localeBridge } from './nativelocale.js';
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 function nativeSettings(input) {
   const reply = lord.settings.state(input);
@@ -66,9 +67,12 @@ function reuse(previous, next) {
   return same ? previous : next;
 }
 function adopt(reply) {
-  if (!reply || reply.revision <= nativeRevision) return;
-  nativeRevision = reply.revision;
-  mirror.set(() => reuse(mirror.get(), reply.state));
+  if (!reply) return;
+  if (reply.revision > nativeRevision) {
+    nativeRevision = reply.revision;
+    mirror.set(() => reuse(mirror.get(), reply.state));
+  }
+  if (reply.localeState) localeBridge.perform?.({ kind: 'localeState', reply: reply.localeState });
 }
 export const settings = appHost ? mirror : {
   get: mirror.get, subscribe: mirror.subscribe,

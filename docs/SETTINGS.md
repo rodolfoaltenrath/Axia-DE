@@ -330,7 +330,15 @@ Native delivery also resolves app captions/icons and formats timestamps from the
 profile's language, region and 12/24-hour preference. The SDK sends no computed
 caption, timestamp, minute, time label or locale context. A native profile source
 selects the initial locale and tracks catalog revisions. The SDK's public locale
-store, interface setup, translation and formatting remain pending migration.
+store mirrors that owner by revision through `shell:settings`. Functional updates
+read current native state, stale replies are discarded, and synchronous settings
+replies carry the current locale. Temporary language/region/direction overrides
+belong to Rust. The active interface applies language and direction directly
+through the C ABI; inactive profile readers cannot change global text state.
+The isolated `.lpk` host retains its local store. SDK translation and formatting
+remain pending migration. `native_locale_runtime` covers four theme/size cases
+with legacy locale reads and JS text setters disabled; CI GPU=1 publishes
+`axia-native-locale`. Local evidence: `build/validation/native-locale-session/`.
 This applies to every `notify()`:
 
 Notification permission writes from the SDK and `lord.perms.set` share the

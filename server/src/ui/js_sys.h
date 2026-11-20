@@ -11,6 +11,8 @@ char *axia_settings_read(const char *base, size_t *len);
 int axia_settings_write(const char *base, const char *text, size_t len, int durable);
 void axia_settings_written(const char *base, const char *text, size_t len);
 void axia_locale_changed(const char *home, int configuration);
+char *axia_locale_request(const char *home, const char *input);
+void axia_locale_apply(const char *lang, int rtl);
 /* Process of an isolated app: only lord.text and lord.image (drawing and text direction). */
 void js_sys_register_app(JSContext *c, JSValue lord);
 void js_sys_set_greeter(int on);             /* login screen theme: lord.greeter */
