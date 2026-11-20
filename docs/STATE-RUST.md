@@ -494,8 +494,10 @@ por app/legenda e conta os demais; dispensá-lo revela o anterior. A view
 revalida a ação contra IDs e índices atuais; um clique antigo não aciona uma
 notificação removida ou reutilizada. Fechamento precede o callback da ação.
 
-`sdk/notify.js` fornece metadados e preferências brutas; executa patches e
-callbacks genéricos. O Rust consulta permissões e firewall diretamente nos
+`sdk/notify.js` fornece metadados e executa callbacks genéricos. Entrega,
+agrupamento e toque leem as preferências do proprietário Rust do perfil;
+o registro de apps vistos também é atualizado nesse proprietário. O Rust
+consulta permissões e firewall diretamente nos
 armazenamentos do host. Os stores públicos recebem
 snapshots por revisão para compatibilidade, sem alimentar a view nativa.
 O adaptador descarta snapshots com revisão anterior ou igual à já aplicada;
@@ -503,8 +505,8 @@ efeitos atrasados da view não podem ressuscitar itens removidos por um comando.
 Referências de callbacks são limitadas aos banners/histórico mantidos, com
 liberação após drenar efeitos. Geometria do mount segue tema, área útil,
 direção e posicionamento. O host LPK mantém seu serviço local sem acessar o
-controlador privilegiado. Configurações, permissões e os
-consumidores dos stores continuam como pendências da migração completa.
+controlador privilegiado. Consultas/edições de preferências pelos controles
+legados, metadados e consumidores dos stores continuam pendentes.
 
 ### Repetição do toque de alarmes
 
@@ -513,7 +515,7 @@ recebe um prazo monotônico de 60 segundos e um próximo pulso a cada 2,5 segund
 Não Perturbe, estilo sem banner, recusa, silêncio e firewall impedem o início;
 mudanças de preferências cancelam o toque ativo. A agenda DND é reavaliada com
 a hora local nos pulsos, inclusive quando cruza meia-noite. O adaptador publica
-as preferências brutas e a identidade do app; o Rust consulta a permissão atual
+a identidade do app; o Rust lê as preferências do perfil e consulta a permissão atual
 e resolve os padrões e opções efetivas. O native view não recebe lista ou política.
 
 O prazo pertence à notificação no contexto. Remontar a view preserva a cadência;
@@ -551,14 +553,27 @@ pré-calculados, e o relógio não recebe opções efetivas produzidas pelo JS.
 `setAppNotifyPrefs` pede ao proprietário a alteração mesclada e a gravação
 nativa da permissão, quando aplicável. Consultas e cálculo de patches são
 puros: não expiram banners, não drenam efeitos nem invalidam leitores.
-A persistência das configurações e metadados de catálogo
-e o snapshot de configurações ainda passam pelo adaptador; a migração completa
-de `settings.js` permanece pendente. O host `.lpk` conserva as funções locais.
+As consultas e edições feitas pelos controles legados ainda transportam
+preferências pelo adaptador; entrega e toque não dependem desses snapshots.
+Persistência já pertence ao modelo Rust de configurações. Metadados de catálogo
+e consumidores dos snapshots continuam pendentes. O host `.lpk` conserva as funções locais.
 
 `notifications_runtime` modifica os padrões JS durante uma consulta para provar
-que a sessão usa o Rust, verifica a edição sem perder opções e exige transporte
-de preferências brutas. O contrato isolado mantém a compatibilidade legada.
+que a sessão usa o Rust e verifica a edição sem perder opções. A entrega não
+transporta preferências e o mount não recebe agrupamento. O teste muda o
+agrupamento e DND diretamente no proprietário, mantendo o espelho JS antigo,
+e exige que os banners e a política respondam ao estado nativo. O contrato
+isolado mantém a compatibilidade legada.
 Logs e capturas desta etapa: `build/validation/native-notification-preferences/`.
+
+O serviço recebe um leitor do perfil privado ao vincular o controlador ou a view
+ao contexto. A assinatura solicita sincronização sem polling; revisões de outros
+campos não invalidam a apresentação. Reutilizar o vínculo numa remontagem mantém
+o serviço. Cancelamento por mudança de preferências ocorre no próximo tick nativo,
+sem assinatura de settings ou pedido `ringPolicy` pelo JS. Atualizações de `seen`
+publicam somente um snapshot de compatibilidade por revisão; não devolvem um patch
+para ser regravado pelo SDK. Evidências dessa ligação direta em
+`build/validation/native-notification-settings/`.
 
 ## Consulta nativa de permissões e firewall
 

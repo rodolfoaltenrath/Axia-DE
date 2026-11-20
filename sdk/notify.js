@@ -21,6 +21,7 @@ import { perms, permsRev } from './privacy.js';
 import { appName, formatTime } from './i18n.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { notificationBridge } from './nativenotifications.js';
+import { settingsBridge } from './nativesettings.js';
 
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 
@@ -59,7 +60,8 @@ function perform(effect) {
         else if (!active.has(id)) callback.onClose = null;
       }
     });
-  } else if (effect.kind === 'settings') settings.set(effect.patch);
+  } else if (effect.kind === 'settingsState') settingsBridge.perform?.(effect);
+  else if (effect.kind === 'settings') settings.set(effect.patch);
   else if (effect.kind === 'notificationPermissionChanged') permsRev.set(v => v + 1);
   else if (effect.kind === 'notificationClose') {
     const callback = callbacks.get(effect.id), close = callback?.onClose;
@@ -137,15 +139,15 @@ function fwNotifyBlocked(app) {
     return !!lord.fw.blocks(a && (a.package || a.isolated) ? `lpk:${app}` : 'lordos', 'no-notifications');
   } catch (e) { return false; }
 }
-// Transitional permission/settings adapter for native Clock delivery.
-export const clockNotificationPolicy = () => ({ prefs: settings.get().notifications, source: notificationSource('clock') });
+// Catalog identity remains transitional; preferences are read by the native service.
+export const clockNotificationPolicy = () => ({ source: notificationSource('clock') });
 
 export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null, _ring = false } = {}) {
   app = String(app);
   if (!appHost) {
     const at = new Date(), registered = getApp(app);
     const selected = Array.isArray(actions) ? actions.slice(0, 3) : [];
-    const reply = rawRequest('push', { prefs: settings.get().notifications, source: notificationSource(app),
+    const reply = rawRequest('push', { source: notificationSource(app),
       wallMs: at.getTime(), minute: at.getHours() * 60 + at.getMinutes(),
       notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
         sound: !!withSound, ring: !!_ring, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),
@@ -199,18 +201,6 @@ export function runAction(n, a) {
   }
   dismissNotification(n.id, a.id || 'action');
   try { a.run?.(); } catch (e) { console.error('notify:', e); }
-}
-
-if (!appHost) {
-  let previous = settings.get().notifications;
-  settings.subscribe(() => {
-    const current = settings.get().notifications;
-    if (current === previous) return;
-    if (typeof lord === 'undefined' || typeof lord.greeter !== 'undefined' || typeof lord.appId === 'string'
-      || typeof lord.nativeApps?.request !== 'function') return;
-    previous = current;
-    command('ringPolicy', clockNotificationPolicy());
-  });
 }
 
 // Grouping by app (Settings → Notifications): the newest banner of each app, with "+N".

@@ -43,6 +43,7 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "noAccessFacts",
                 "nativeWrite",
                 "revisionOrder",
+                "residentPreferences",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
             }
@@ -93,9 +94,9 @@ let bannerHandle=0,bound=false,noPayload=true,toggle;
 let noSoundEffects=true,rawPolicy=true,noAccessFacts=true;
 const perform=notificationBridge.perform,request=lord.nativeApps.request;
 notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
-lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'){noAccessFacts&&=!('permission'in input)&&!('blocked'in input);if(input.action==='push')rawPolicy&&=!('appPrefs'in input);}if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'){noAccessFacts&&=!('permission'in input)&&!('blocked'in input);if(input.action==='push')rawPolicy&&=!('appPrefs'in input)&&!('prefs'in input);}if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy)&&!('prefs'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
-function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}));}
+function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}))&&!('ungrouped'in(value.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(handle,text)=>{if(handle===bannerHandle)inspect(text);return facts(handle,text);};
 lord.nativeViews.unmount=handle=>{if(handle===bannerHandle)bannerHandle=0;return unmount(handle);};
@@ -120,6 +121,19 @@ async function run(){
  settings.set({notifications:original});
  push('Grouped','Grouped old');push('Grouped','Grouped latest');
  await until(()=>find('Grouped latest'));const grouped=!!find('Grouped · +1')&&!find('Grouped old');
+ const nativePrefs=()=>lord.settings.state({cmd:'snapshot'}).state.notifications;
+ lord.settings.state({cmd:'patch',patch:{notifications:{...nativePrefs(),grouping:'off'}}});
+ const staleGrouping=settings.get().notifications.grouping==='app';
+ const ungroupedNative=await until(()=>find('Grouped old')&&!find('Grouped · +1'));
+ lord.settings.state({cmd:'patch',patch:{notifications:{...nativePrefs(),grouping:'app'}}});
+ const regroupedNative=await until(()=>find('Grouped · +1')&&!find('Grouped old'));
+ lord.settings.state({cmd:'patch',patch:{notifications:{...nativePrefs(),dnd:true}}});
+ const staleDnd=settings.get().notifications.dnd===false;
+ const hidden=request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'push',prefs:{dnd:false},notice:{title:'Resident DND'},wallMs:Date.now(),minute:0}));
+ const residentState=request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'snapshot'})).result;
+ const nativeHidden=hidden.result>0&&!residentState.shown.some(n=>n.title==='Resident DND')&&residentState.history.some(n=>n.title==='Resident DND');
+ lord.settings.state({cmd:'patch',patch:{notifications:{...nativePrefs(),dnd:false}}});
+ const residentPreferences=staleGrouping&&ungroupedNative&&regroupedNative&&staleDnd&&nativeHidden;
  push('Actions','Action primary',{actions:[{id:'first',label:'First',run:()=>ran.push('first')},{id:'second',label:'Second',run:()=>ran.push('second')}]});
  await until(()=>find('Second'));press(find('Second'));await until(()=>!find('Action primary'));
  push('Body','Body action',{actions:[{id:'first',label:'Default action',run:()=>ran.push('body')}]});
@@ -136,7 +150,7 @@ async function run(){
  await until(()=>find('Timed banner'));await sleep(1700);
  const timerGone=notifications.get().length===0&&!find('Timed banner');
  // Discard the compatibility snapshot: the native surface must still see the new notice.
- const direct=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',prefs:{},
+ const direct=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',
    wallMs:Date.now(),minute:0,notice:{title:'Direct native',label:'Direct',displayLabel:'Direct',sticky:true,sound:false}}));
  const nativeDirect=await until(()=>find('Direct native'));
  const mirrorStale=!notifications.get().some(n=>n.title==='Direct native');
@@ -164,7 +178,7 @@ async function run(){
    const linux=notify({app:'linux:probe',title:'Linux namespace',sound:false,sticky:true});dismissNotification(linux);
    lord.fw.setRestricted('lordos',[]);
    configureWindows({apps:[...probeApps,{id:'clock',name:'Clock',package:true,Component:()=>null}]});
-   const live=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',source:{package:true},prefs:{},wallMs:Date.now(),minute:0,
+   const live=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',source:{package:true},wallMs:Date.now(),minute:0,
      notice:{app:'clock',title:'Live permission',ring:true,sticky:true,sound:true}}));
    for(const effect of live.effects||[])notificationBridge.perform(effect);
    const started=ringing.get().includes(live.result);
@@ -210,7 +224,7 @@ async function run(){
    const evicted=ringing.get().length===0&&jsSounds===0;
    fire();const restarted=ringing.get().length===1&&jsSounds===0;
    settings.set(s=>({...s,notifications:{...s.notifications,apps:{clock:{sound:false}}}}));
-   const mutedWhileRinging=ringing.get().length===0&&jsSounds===0;
+   const mutedWhileRinging=await until(()=>ringing.get().length===0)&&jsSounds===0;
    ringGuard=quietDnd&&quietMuted&&armed&&evicted&&restarted&&mutedWhileRinging;
    for(const n of notifications.get())dismissNotification(n.id);
    ordinary=notify({title:'Native audio',sound:true,sticky:true});dismissNotification(ordinary);
@@ -220,7 +234,7 @@ async function run(){
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

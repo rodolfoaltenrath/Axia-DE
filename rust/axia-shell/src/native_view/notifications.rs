@@ -89,7 +89,7 @@ impl Banners {
 }
 impl super::NativeApp for Banners {
     fn invalidated(&self) -> bool {
-        self.changes.pending()
+        self.changes.pending() || self.service.borrow().settings_pending()
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.service.borrow().wait_ms(Instant::now())
@@ -101,7 +101,6 @@ impl super::NativeApp for Banners {
         match input["cmd"].as_str() {
             Some("sync") => {
                 let mut service = self.service.borrow_mut();
-                service.configure(input["args"]["ungrouped"] == true);
                 service.expire(Instant::now());
                 let effects = service.effects();
                 drop(service);

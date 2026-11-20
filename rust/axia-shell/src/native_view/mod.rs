@@ -215,6 +215,11 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     owner: Option<crate::winmodel::Session>) -> u32 {
     let windows=owner.as_ref().map(crate::winmodel::Session::reader);
     let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
+    if matches!(id, "shell:notifications" | "shell:clock") {
+        if let Some(session) = &owner {
+            session.notification_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
+        }
+    }
     let app = if id == "shell:titlebar" {
         windows.clone().map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
     } else if id == "forcequit" {

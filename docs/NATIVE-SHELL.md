@@ -113,9 +113,12 @@ emoji. A contagem tem atualização nativa apenas enquanto o timer executa; o
 estado não entra nos fatos JS. Templates e ações Parar/Adiar/Repetir também
 pertencem ao serviço Rust, inclusive no histórico. Repetir usa a duração do
 engine atual; a entrega consulta a regra atual do firewall por API nativa.
-Padrões e opções de notificações por app são resolvidos no Rust. O adaptador
-transporta preferências brutas e identidade de catálogo, persiste alterações e
-mantém snapshots de compatibilidade.
+Padrões e opções de notificações por app são resolvidos no Rust. Entrega,
+agrupamento e toque consultam o leitor nativo do perfil, sem preferências nos
+pedidos de entrega nem agrupamento nos fatos da view. O serviço atualiza o registro
+de apps vistos no proprietário de configurações. Consultas e edições dos controles
+legados ainda usam o adaptador, assim como identidade de catálogo e snapshots
+de compatibilidade.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

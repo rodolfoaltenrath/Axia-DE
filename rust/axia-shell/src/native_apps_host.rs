@@ -72,6 +72,8 @@ pub unsafe extern "C" fn axia_native_app_new_windows(
         return std::ptr::null_mut();
     }
     crate::native_view::install_services();
+    let (_, home) = crate::native_view::resource_roots();
+    (*windows).notification_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
     Box::into_raw(Box::new(NativeApp::Control(crate::app_control::Controller::new((*windows).clone()))))
 }
 #[no_mangle]

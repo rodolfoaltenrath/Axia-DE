@@ -1,11 +1,14 @@
 //! Context-owned notification delivery, history, grouping and monotonic expiry.
-use axia_state::{Reader, Store};
+use axia_state::{Reader, Store, Subscription};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 mod access;
 mod clock_delivery;
 mod preferences;
 mod sound;
+#[cfg(test)]
+#[path = "notifications/settings_tests.rs"]
+mod settings_tests;
 
 const MAX_SHOWN: usize = 4;
 const HISTORY: usize = 50;
@@ -79,6 +82,7 @@ pub struct Service {
     clock_delivery: clock_delivery::Delivery,
     clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
     sounds: Vec<(u64, bool)>,
+    settings: Option<(String, Reader<Value>, Subscription)>,
 }
 
 // Wall time is used for user schedules/history; elapsed banner time is monotonic.
@@ -98,8 +102,33 @@ pub fn dnd(prefs: &Value, wall_ms: f64, minute: f64) -> bool {
 }
 
 impl Service {
+    pub(crate) fn bind_settings(&mut self, home: &str) {
+        let home = crate::settings::profile(home);
+        if self.settings.as_ref().is_some_and(|(current, _, _)| current == &home) {
+            return;
+        }
+        let reader = crate::settings::with(&home, |s| s.reader());
+        let changes = reader.subscribe();
+        self.ring_prefs = preferences::normalize(&reader.read()["notifications"]);
+        self.settings = Some((home, reader, changes));
+        self.configure(self.ring_prefs["grouping"] == "off");
+    }
+    pub(crate) fn settings_pending(&self) -> bool {
+        self.settings.as_ref().is_some_and(|(_, _, changes)| changes.pending())
+    }
+    fn sync_preferences(&mut self) {
+        if let Some((_, reader, changes)) = &self.settings {
+            if changes.take().is_none() {
+                return;
+            }
+            self.ring_prefs = preferences::normalize(&reader.read()["notifications"]);
+            self.configure(self.ring_prefs["grouping"] == "off");
+        }
+    }
     fn policy(&mut self, input: &Value) {
-        self.ring_prefs = preferences::normalize(&input["prefs"]);
+        if self.settings.is_none() {
+            self.ring_prefs = preferences::normalize(&input["prefs"]);
+        }
         self.clock_source = access::Source::from(&input["source"]);
     }
     pub fn reader(&self) -> Reader<State> {
@@ -126,6 +155,7 @@ impl Service {
         });
     }
     pub fn expire(&mut self, now: Instant) {
+        self.sync_preferences();
         let wall = axia_clock::now();
         let local = axia_clock::local(wall);
         self.expire_at(now, wall as f64, (local.tm_hour * 60 + local.tm_min) as f64);
@@ -259,7 +289,11 @@ impl Service {
             )),
             Some("push") => {
                 let n = &input["notice"];
-                let prefs = &preferences::normalize(&input["prefs"]);
+                let prefs = &if self.settings.is_some() {
+                    self.ring_prefs.clone()
+                } else {
+                    preferences::normalize(&input["prefs"])
+                };
                 let app = n["app"].as_str().unwrap_or("");
                 let source = access::Source::from(&input["source"]);
                 let ap = &preferences::app(prefs, app, &access::permission(app, &source));
@@ -273,8 +307,13 @@ impl Service {
                         patch = json!({});
                     }
                     patch["seen"] = json!(seen);
-                    self.effects
-                        .push(json!({"kind":"settings","patch":{"notifications":patch}}));
+                    if let Some((home, _, _)) = &self.settings {
+                        let reply = crate::settings::with(home, |s| s.command(
+                            &json!({"cmd":"patch","patch":{"notifications":patch}})));
+                        self.effects.push(json!({"kind":"settingsState","reply":reply}));
+                    } else {
+                        self.effects.push(json!({"kind":"settings","patch":{"notifications":patch}}));
+                    }
                 }
                 if ap["allow"] == false || access::blocked(app, &source) {
                     json!(0)

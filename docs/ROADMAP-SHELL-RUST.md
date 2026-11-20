@@ -364,14 +364,18 @@ views nativas lerem direto, sem JSON.
       prazos de notificações pertencem ao contexto Rust. A view monta os
       banners diretamente desse proprietário, sem árvore/lista JS e sem
       timer JS. Ações revalidam IDs e índices antes dos callbacks; o host
-      LPK preserva o comportamento local. Transporte/persistência de preferências,
-      callbacks e stores de compatibilidade ainda usam o adaptador.
+      LPK preserva o comportamento local. Entrega, agrupamento e toque agora
+      leem o proprietário de configurações do perfil, com assinatura nativa;
+      o registro de apps vistos também é escrito diretamente nesse proprietário.
+      Consultas/edições dos controles legados, metadados, callbacks e stores
+      de compatibilidade ainda usam o adaptador.
       O relógio agora publica invalidações Rust. Um observador no root agenda
       a próxima ocorrência e entrega os efeitos sem setTimeout JS na sessão;
       o indicador da barra consulta o engine diretamente e atualiza a contagem
       no host, sem store/fatos de relógio ou intervalo JS de apresentação.
       Consultas não invalidam consumidores; remontagens preservam o engine.
-      Preferências, callbacks genéricos e efeitos finais continuam pendentes.
+      Configuração do engine do relógio, callbacks genéricos e demais efeitos
+      continuam pendentes.
       Correção pontual: toque repetido só é armado para banner entregue e
       audível, e é cancelado na retirada, silêncio, recusa ou no prazo de
       um minuto. Após a confirmação de que o Actions foi corrigido e a meta
@@ -383,14 +387,14 @@ views nativas lerem direto, sem JSON.
       inclusive no histórico. Repetir consulta a duração atual do engine;
       entrega e pulsos verificam o firewall nativo atual. Catálogos do usuário,
       fallback e revisão de idioma preservados. Callbacks genéricos,
-      preferências e espelhos continuam no adaptador. O serviço Rust agora
+      consultas/edições legadas de preferências e espelhos continuam no adaptador. O serviço Rust agora
       também executa o som diretamente no cliente de áudio nativo: fila tipada,
       validação na drenagem e descarte de tentativas sem conexão, sem efeito
       de som ou chamada de reprodução JS na sessão. Saída física no encerramento.
       Padrões, opções por app, precedência da permissão de pacotes e mesclagem
       de alterações de notificações agora são resolvidos no Rust; entrega e
-      relógio recebem preferências brutas. APIs de consulta não invalidam o
-      modelo nem drenam efeitos. Transporte/persistência de configurações,
+      toque leem as configurações atuais do perfil. APIs de consulta não invalidam o
+      modelo nem drenam efeitos. Consultas/edições legadas de configurações,
       metadados e espelhos continuam pendentes. A leitura
       de permissões e firewall agora consulta os armazenamentos nativos na
       entrega e nos pulsos, sem fatos calculados pelo JS. Escopos de apps e
@@ -587,3 +591,4 @@ mostraram.
 | 2026-11-20 | Fase 2: gravação nativa das permissões de notificações | Commit desta linha | SDK e entrada pública usada por Configurações compartilham escrita Rust, com validador de ID existente, perm_set protegido e aviso ao broker somente após sucesso ao negar/retornar a ask. API do SDK não chama setters JS; aviso de revisão mantém os controles legados atualizados. Mesclagem considera alterações de assinantes durante a atualização de permissão. Passaram 590 testes unitários, seis contratos LPK, oito cenários gráficos e encerramento instalado por timeout/SIGTERM em GPU=1. Integração verifica armazenamento real, revisões, setters JS bloqueados e ID inválido recusado. Evidências em build/validation/native-notification-permission-write. Configurações, catálogo, avisos/espelhos de compatibilidade e callbacks genéricos ainda pendentes; medições físicas no encerramento. |
 | 2026-11-20 | Fase 2: proprietário observável das configurações por perfil | Commit desta linha | Padrões compartilhados por JSON de dados, schemas 1–3 e mutações no Rust; leitor nativo e observador sem polling no root. SDK é espelho por revisão, preserva referências inalteradas, descarta snapshots antigos e usa o proprietário atual em updaters/gravação. Inicialização única mantém dados pendentes; confirmações antigas não limpam alterações novas. Corrigida a identidade de campos na API pública de migração, exigida por Arquivos. Passaram 595 testes unitários, seis contratos LPK, vinte cenários gráficos de configurações/Arquivos/notificações/relógio, encerramento instalado e integração dos apps compilados. CI GPU=1 exige native_settings_runtime e publica captura; evidências em build/validation/native-settings. Gravação de 300 ms, persistência/serialização de arquivo, idioma/região e demais consumidores de preferências ainda pendentes; medições físicas no encerramento. |
 | 2026-11-20 | Fase 2: carregamento e persistência das configurações no Rust | Commit desta linha | Bootstrap lê o perfil privado; modelo controla prazo monotônico de 300 ms, serialização e confirmação, com primitivas C existentes de limite/rename/fsync. Loop atende a gravação mesmo sem views; falhas conservam dados sem repetição por quadro. API legada sincroniza o proprietário após sucesso. Passaram 599 testes unitários, seis contratos LPK, vinte cenários gráficos de configurações/Arquivos/notificações/relógio, encerramento instalado por timeout/SIGTERM e integração dos apps compilados em GPU=1. Teste bloqueia I/O JS desde os imports, exige ausência de timers JS de gravação e salva antes da primeira view; captura inspecionada. Evidências em build/validation/native-settings-io. Idioma/região e consumidores de preferências continuam pendentes; medições físicas no encerramento. |
+| 2026-11-20 | Fase 2: notificações leem as configurações nativas do perfil | Commit desta linha | Controlador e views vinculam leitor/assinatura ao proprietário privado; entrega, agrupamento e toque ignoram preferências antigas do transporte. Removidos agrupamento nos fatos, preferências nos pedidos de entrega e assinatura JS de política do toque. Registro de apps vistos é escrito no modelo Rust e publica snapshot por revisão. Passaram 601 testes unitários, dois testes focados após revisão, seis contratos LPK, doze cenários gráficos de notificações/relógio/configurações, encerramento instalado por timeout/SIGTERM, smoke agregado e integração dos apps compilados em GPU=1. Integração altera agrupamento/DND diretamente no Rust com espelho JS antigo; captura inspecionada. Evidências em build/validation/native-notification-settings. Consultas/edições legadas, configuração do engine do relógio, catálogo, callbacks genéricos e espelhos ainda pendentes; medições físicas no encerramento. |
