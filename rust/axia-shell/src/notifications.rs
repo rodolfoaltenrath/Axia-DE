@@ -102,6 +102,13 @@ pub fn dnd(prefs: &Value, wall_ms: f64, minute: f64) -> bool {
 }
 
 impl Service {
+    fn with_preferences<T>(&self, fallback: &Value, read: impl FnOnce(&Value) -> T) -> T {
+        if let Some((_, reader, _)) = &self.settings {
+            read(&reader.read()["notifications"])
+        } else {
+            read(fallback)
+        }
+    }
     pub(crate) fn bind_settings(&mut self, home: &str) {
         let home = crate::settings::profile(home);
         if self.settings.as_ref().is_some_and(|(current, _, _)| current == &home) {
@@ -249,28 +256,40 @@ impl Service {
     pub fn command(&mut self, input: &Value, now: Instant) -> Value {
         match input["action"].as_str() {
             Some("preferences") => {
-                return json!({"result":preferences::normalize(&input["prefs"]),"effects":[]})
+                return json!({"result":self.with_preferences(&input["prefs"],preferences::normalize),"effects":[]})
             }
             Some("appPreferences") => {
                 let app = input["app"].as_str().unwrap_or("");
-                return json!({"result":preferences::app(&input["prefs"],app,&access::permission(app,&access::Source::from(&input["source"]))),"effects":[]});
+                let result = self.with_preferences(&input["prefs"], |prefs| preferences::app(prefs,app,&access::permission(app,&access::Source::from(&input["source"]))));
+                return json!({"result":result,"effects":[]});
             }
-            Some("preferencesPatch") => {
-                return json!({"result":preferences::patch(&input["prefs"],input["app"].as_str().unwrap_or(""),&input["patch"]),"effects":[]})
+            Some("policy") => {
+                let result = self.with_preferences(&input["prefs"], |prefs| dnd(prefs,
+                    input["wallMs"].as_f64().unwrap_or(0.),input["minute"].as_f64().unwrap_or(0.)));
+                return json!({"result":result,"effects":[]});
             }
             Some("setAppPreferences") => {
                 let app = input["app"].as_str().unwrap_or("");
                 let source = access::Source::from(&input["source"]);
-                let result = preferences::patch(&input["prefs"], app, &input["patch"]);
+                let result = self.with_preferences(&input["prefs"], |prefs| preferences::patch(prefs, app, &input["patch"]));
+                let permission = access::update(app, &source, &input["patch"]);
+                let state = self.settings.as_ref().and_then(|(home, _, _)| {
+                    crate::settings::with(home, |s| s.set("notifications", &result).then(|| s.snapshot()))
+                });
                 let mut effects = Vec::new();
-                if let Some(saved) = access::update(app, &source, &input["patch"]) {
+                if state.is_some() || permission.is_some() {
                     self.expire(now);
                     effects = self.effects();
+                }
+                if let Some(reply) = state {
+                    effects.push(json!({"kind":"settingsState","reply":reply}));
+                }
+                if let Some(saved) = permission {
                     effects.push(
                         json!({"kind":"notificationPermissionChanged","app":app,"saved":saved}),
                     );
                 }
-                return json!({"result":result,"effects":effects});
+                return json!({"result":if self.settings.is_some() {Value::Null} else {result},"effects":effects});
             }
             _ => {}
         }
@@ -282,11 +301,6 @@ impl Service {
         self.expire(now);
         let result = match input["action"].as_str() {
             Some("ringPolicy") => Value::Null,
-            Some("policy") => json!(dnd(
-                &input["prefs"],
-                input["wallMs"].as_f64().unwrap_or(0.),
-                input["minute"].as_f64().unwrap_or(0.)
-            )),
             Some("push") => {
                 let n = &input["notice"];
                 let prefs = &if self.settings.is_some() {

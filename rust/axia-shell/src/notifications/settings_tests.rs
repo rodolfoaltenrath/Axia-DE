@@ -1,6 +1,65 @@
 use super::*;
 
 #[test]
+fn native_preference_queries_and_edits_use_the_owner_without_draining_on_reads() {
+    let path = std::env::temp_dir().join(format!("axia-notification-edit-{}", std::process::id()));
+    std::fs::create_dir_all(&path).unwrap();
+    let home = crate::settings::profile(path.to_str().unwrap());
+    let settings = crate::settings::with(&home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("notifications", &json!({"dnd":true,"extra":7,"apps":{"clock":{"sound":false,"custom":3},"notes":{"lock":false}}}));
+        s.reader()
+    });
+    let now = Instant::now();
+    let mut service = Service::default();
+    service.bind_settings(&home);
+    service.effects.push(json!({"kind":"pending"}));
+    let state = service.reader();
+    let changes = state.subscribe();
+    for input in [
+        json!({"action":"preferences","prefs":{"extra":0}}),
+        json!({"action":"appPreferences","app":"clock","prefs":{"apps":{"clock":{"sound":true}}}}),
+        json!({"action":"policy","prefs":{"dnd":false},"wallMs":0,"minute":0}),
+    ] {
+        let reply = service.command(&input, now + Duration::from_secs(60));
+        match input["action"].as_str().unwrap() {
+            "preferences" => assert_eq!(reply["result"]["extra"], 7),
+            "appPreferences" => assert_eq!(reply["result"]["sound"], false),
+            _ => assert_eq!(reply["result"], true),
+        }
+        assert_eq!(reply["effects"], json!([]));
+    }
+    assert!(!changes.pending());
+    assert_eq!(service.effects.len(), 1);
+    let reply = service.command(
+        &json!({"action":"setAppPreferences","app":"clock","patch":{"style":"alert"},"prefs":{}}),
+        now,
+    );
+    assert_eq!(settings.read()["notifications"]["extra"], 7);
+    assert_eq!(
+        settings.read()["notifications"]["apps"]["clock"],
+        json!({"custom":3,"sound":false,"style":"alert"})
+    );
+    assert_eq!(
+        settings.read()["notifications"]["apps"]["notes"],
+        json!({"lock":false})
+    );
+    assert!(reply["effects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["kind"] == "settingsState"));
+    let settings_changes = settings.subscribe();
+    let no_op = service.command(
+        &json!({"action":"setAppPreferences","app":"clock","patch":{"style":"alert"}}),
+        now,
+    );
+    assert_eq!(no_op["effects"], json!([]));
+    assert!(!settings_changes.pending());
+    std::fs::remove_dir(&path).unwrap();
+}
+
+#[test]
 fn resident_preferences_override_stale_transport_and_invalidate_grouping_and_ringing() {
     let path =
         std::env::temp_dir().join(format!("axia-notification-settings-{}", std::process::id()));

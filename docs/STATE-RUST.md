@@ -505,8 +505,8 @@ efeitos atrasados da view não podem ressuscitar itens removidos por um comando.
 Referências de callbacks são limitadas aos banners/histórico mantidos, com
 liberação após drenar efeitos. Geometria do mount segue tema, área útil,
 direção e posicionamento. O host LPK mantém seu serviço local sem acessar o
-controlador privilegiado. Consultas/edições de preferências pelos controles
-legados, metadados e consumidores dos stores continuam pendentes.
+controlador privilegiado. Metadados, controles legados e consumidores dos
+stores continuam pendentes; as APIs de preferências já usam o perfil nativo.
 
 ### Repetição do toque de alarmes
 
@@ -553,8 +553,12 @@ pré-calculados, e o relógio não recebe opções efetivas produzidas pelo JS.
 `setAppNotifyPrefs` pede ao proprietário a alteração mesclada e a gravação
 nativa da permissão, quando aplicável. Consultas e cálculo de patches são
 puros: não expiram banners, não drenam efeitos nem invalidam leitores.
-As consultas e edições feitas pelos controles legados ainda transportam
-preferências pelo adaptador; entrega e toque não dependem desses snapshots.
+As consultas `notifyPrefs`, `appNotifyPrefs` e `dndActive` da sessão leem o
+proprietário atual e não transportam preferências JS. `setAppNotifyPrefs`
+também mescla e grava nesse proprietário, antes de publicar avisos aos controles.
+O SDK recebe snapshots de compatibilidade por revisão e não reaplica o patch
+nem refaz sua mesclagem. Snapshots opcionais das APIs continuam locais ao host
+isolado; na sessão, a fonte autoritativa é sempre o perfil nativo.
 Persistência já pertence ao modelo Rust de configurações. Metadados de catálogo
 e consumidores dos snapshots continuam pendentes. O host `.lpk` conserva as funções locais.
 
@@ -562,7 +566,9 @@ e consumidores dos snapshots continuam pendentes. O host `.lpk` conserva as fun�
 que a sessão usa o Rust e verifica a edição sem perder opções. A entrega não
 transporta preferências e o mount não recebe agrupamento. O teste muda o
 agrupamento e DND diretamente no proprietário, mantendo o espelho JS antigo,
-e exige que os banners e a política respondam ao estado nativo. O contrato
+e exige que os banners, consultas e política respondam ao estado nativo. A edição
+preserva campos que só existem no proprietário, e todo pedido de notificações
+do SDK deve omitir `prefs`. O contrato
 isolado mantém a compatibilidade legada.
 Logs e capturas desta etapa: `build/validation/native-notification-preferences/`.
 
@@ -573,7 +579,8 @@ o serviço. Cancelamento por mudança de preferências ocorre no próximo tick n
 sem assinatura de settings ou pedido `ringPolicy` pelo JS. Atualizações de `seen`
 publicam somente um snapshot de compatibilidade por revisão; não devolvem um patch
 para ser regravado pelo SDK. Evidências dessa ligação direta em
-`build/validation/native-notification-settings/`.
+`build/validation/native-notification-settings/`. A migração das consultas e
+edições está em `build/validation/native-notification-edit/`.
 
 ## Consulta nativa de permissões e firewall
 
@@ -611,13 +618,14 @@ chegam à gravação. Outros campos e apps internos não alteram permissões.
 Uma recusa cancela o toque ativo e publica um aviso de revisão para o espelho
 de privacidade. O SDK executa somente essa atualização de compatibilidade;
 não chama `perms.set`/`lord.perms.set` para essa API da sessão. Assinantes do
-aviso podem alterar configurações: nesse caso, o adaptador pede uma nova
-mesclagem ao Rust antes de aplicar o patch, preservando as alterações recebidas.
+aviso podem alterar configurações: a edição já está confirmada no proprietário
+e seu snapshot é publicado antes do aviso. Alterações desses assinantes criam
+uma revisão posterior e não são sobrescritas por uma reaplicação do patch.
 
 A entrada pública `lord.perms.set` para notificações delega ao mesmo Rust por
 `axia_notification_permission_set`, incluindo os pedidos do painel Configurações.
 As demais permissões conservam sua implementação anterior. O host `.lpk`
-mantém o contrato do SDK. Avisos de revisão, consultas/edições legadas de settings, catálogo
+mantém o contrato do SDK. Avisos de revisão, catálogo
 e demais consumidores JS continuam pendentes da migração completa.
 
 Testes unitários verificam validação, falha sem revogação, transição para `ask`

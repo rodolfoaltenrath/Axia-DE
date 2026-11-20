@@ -75,7 +75,7 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { NotificationBanner } from '@ROOT@/sdk/nativebanner.js';
-import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement, NOTIFY_DEFAULTS, notifyPrefs, appNotifyPrefs, setAppNotifyPrefs } from '@ROOT@/sdk/notify.js';
+import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement, NOTIFY_DEFAULTS, notifyPrefs, appNotifyPrefs, setAppNotifyPrefs, dndActive } from '@ROOT@/sdk/notify.js';
 import { clockRequest, ringing } from '@ROOT@/sdk/alarms.js';
 import { sound } from '@ROOT@/sdk/sound.js';
 import { perms, permsRev } from '@ROOT@/sdk/privacy.js';
@@ -94,7 +94,7 @@ let bannerHandle=0,bound=false,noPayload=true,toggle;
 let noSoundEffects=true,rawPolicy=true,noAccessFacts=true;
 const perform=notificationBridge.perform,request=lord.nativeApps.request;
 notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
-lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'){noAccessFacts&&=!('permission'in input)&&!('blocked'in input);if(input.action==='push')rawPolicy&&=!('appPrefs'in input)&&!('prefs'in input);}if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy)&&!('prefs'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'){rawPolicy&&=!('prefs'in input)&&input.action!=='preferencesPatch';noAccessFacts&&=!('permission'in input)&&!('blocked'in input);if(input.action==='push')rawPolicy&&=!('appPrefs'in input)&&!('prefs'in input);}if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy)&&!('prefs'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
 function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}))&&!('ungrouped'in(value.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
@@ -110,7 +110,10 @@ function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvide
 render(h(App));
 async function run(){
  const grouping=NOTIFY_DEFAULTS.grouping;NOTIFY_DEFAULTS.grouping='off';
- const defaults=notifyPrefs({}),options=appNotifyPrefs('clock',{notifications:{apps:{clock:{sound:false}}}});
+ const defaults=notifyPrefs();
+ const initialPrefs=settings.get().notifications;
+ setAppNotifyPrefs('clock',{sound:false});const options=appNotifyPrefs('clock');
+ settings.set({notifications:initialPrefs});
  NOTIFY_DEFAULTS.grouping=grouping;
  const original=settings.get().notifications;
  settings.set({notifications:{...original,extra:'keep',apps:{notes:{lock:false},clock:{sound:false,custom:3}}}});
@@ -129,11 +132,18 @@ async function run(){
  const regroupedNative=await until(()=>find('Grouped · +1')&&!find('Grouped old'));
  lord.settings.state({cmd:'patch',patch:{notifications:{...nativePrefs(),dnd:true}}});
  const staleDnd=settings.get().notifications.dnd===false;
+ const nativeQueries=dndActive()&&notifyPrefs().dnd===true;
  const hidden=request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'push',prefs:{dnd:false},notice:{title:'Resident DND'},wallMs:Date.now(),minute:0}));
  const residentState=request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'snapshot'})).result;
  const nativeHidden=hidden.result>0&&!residentState.shown.some(n=>n.title==='Resident DND')&&residentState.history.some(n=>n.title==='Resident DND');
  lord.settings.state({cmd:'patch',patch:{notifications:{...nativePrefs(),dnd:false}}});
- const residentPreferences=staleGrouping&&ungroupedNative&&regroupedNative&&staleDnd&&nativeHidden;
+ const beforeNativeEdit=nativePrefs();
+ lord.settings.state({cmd:'patch',patch:{notifications:{...beforeNativeEdit,nativeOnly:'keep',apps:{clock:{custom:7,sound:false}}}}});
+ setAppNotifyPrefs('clock',{style:'alert'});
+ const committed=nativePrefs();
+ const nativeEdit=committed.nativeOnly==='keep'&&committed.apps.clock.custom===7&&committed.apps.clock.sound===false&&committed.apps.clock.style==='alert'&&!appNotifyPrefs('clock').sound;
+ lord.settings.state({cmd:'patch',patch:{notifications:beforeNativeEdit}});
+ const residentPreferences=staleGrouping&&ungroupedNative&&regroupedNative&&staleDnd&&nativeHidden&&nativeQueries&&nativeEdit;
  push('Actions','Action primary',{actions:[{id:'first',label:'First',run:()=>ran.push('first')},{id:'second',label:'Second',run:()=>ran.push('second')}]});
  await until(()=>find('Second'));press(find('Second'));await until(()=>!find('Action primary'));
  push('Body','Body action',{actions:[{id:'first',label:'Default action',run:()=>ran.push('body')}]});

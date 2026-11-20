@@ -84,27 +84,23 @@ function command(action, extra = {}) { return applyReply(rawRequest(action, extr
 // (org.freedesktop.Notifications, server/src/hw/notifyd.c). For .lpk packages "allow" is the
 // sandbox's "notifications" permission (the same switch as in Privacy & Security).
 export const NOTIFY_DEFAULTS = { dnd: false, schedule: { on: false, from: 22 * 60, to: 7 * 60 }, grouping: 'app', apps: {}, seen: [] };
-export const notifyPrefs = (s = settings.get()) => appHost
-  ? ({ ...NOTIFY_DEFAULTS, ...(s.notifications || {}) })
-  : command('preferences', { prefs: s.notifications });
+export const notifyPrefs = (s) => appHost
+  ? ({ ...NOTIFY_DEFAULTS, ...((s || settings.get()).notifications || {}) })
+  : command('preferences');
 const isPackage = (app) => { try { return !!getApp(app)?.package; } catch (e) { return false; } };
 function notificationSource(app) {
   try { const a = getApp(app); return { package: !!a?.package, isolated: !!a?.isolated }; }
   catch (e) { return {}; }
 }
-export function appNotifyPrefs(app, s = settings.get()) {
-  if (!appHost) return command('appPreferences', { prefs: s.notifications, app, source: notificationSource(app) });
+export function appNotifyPrefs(app, s) {
+  if (!appHost) return command('appPreferences', { app, source: notificationSource(app) });
   const p = { allow: true, style: 'banner', sound: true, lock: true, ...(notifyPrefs(s).apps[app] || {}) };
   if (isPackage(app)) p.allow = perms.get(app, 'notifications') !== 'deny';
   return p;
 }
 export function setAppNotifyPrefs(app, patch) {
   if (!appHost) {
-    const base = settings.get().notifications;
-    const merged = command('setAppPreferences', { prefs: base, app, patch, source: notificationSource(app) });
-    // Permission listeners can update settings before this preference patch is applied.
-    settings.set(s => ({ ...s, notifications: s.notifications === base ? merged
-      : command('preferencesPatch', { prefs: s.notifications, app, patch }) }));
+    command('setAppPreferences', { app, patch, source: notificationSource(app) });
     return;
   }
   if (isPackage(app) && 'allow' in patch) perms.set(app, 'notifications', patch.allow ? 'allow' : 'deny');
@@ -113,8 +109,8 @@ export function setAppNotifyPrefs(app, patch) {
     return { ...s, notifications: { ...p, apps: { ...p.apps, [app]: { ...(p.apps[app] || {}), ...patch } } } };
   });
 }
-export function dndActive(now = new Date(), s = settings.get()) {
-  if (!appHost) return command('policy', { prefs: s.notifications, wallMs: now.getTime(), minute: now.getHours() * 60 + now.getMinutes() });
+export function dndActive(now = new Date(), s) {
+  if (!appHost) return command('policy', { wallMs: now.getTime(), minute: now.getHours() * 60 + now.getMinutes() });
   const p = notifyPrefs(s);
   if (p.dnd === true || (typeof p.dnd === 'number' && now.getTime() < p.dnd)) return true;
   if (!p.schedule?.on) return false;

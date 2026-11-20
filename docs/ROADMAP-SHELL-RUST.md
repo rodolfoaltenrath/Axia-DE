@@ -367,8 +367,10 @@ views nativas lerem direto, sem JSON.
       LPK preserva o comportamento local. Entrega, agrupamento e toque agora
       leem o proprietário de configurações do perfil, com assinatura nativa;
       o registro de apps vistos também é escrito diretamente nesse proprietário.
-      Consultas/edições dos controles legados, metadados, callbacks e stores
-      de compatibilidade ainda usam o adaptador.
+      Consultas/edições do SDK também usam o proprietário atual, sem preferências
+      nos pedidos e sem reaplicar patches em JS; a gravação precede os avisos
+      dos controles legados. Metadados, callbacks e stores de compatibilidade
+      ainda usam o adaptador.
       O relógio agora publica invalidações Rust. Um observador no root agenda
       a próxima ocorrência e entrega os efeitos sem setTimeout JS na sessão;
       o indicador da barra consulta o engine diretamente e atualiza a contagem
@@ -391,15 +393,15 @@ views nativas lerem direto, sem JSON.
       inclusive no histórico. Repetir consulta a duração atual do engine;
       entrega e pulsos verificam o firewall nativo atual. Catálogos do usuário,
       fallback e revisão de idioma preservados. Callbacks genéricos,
-      consultas/edições legadas de preferências e espelhos continuam no adaptador. O serviço Rust agora
+      avisos de compatibilidade e espelhos continuam no adaptador. O serviço Rust agora
       também executa o som diretamente no cliente de áudio nativo: fila tipada,
       validação na drenagem e descarte de tentativas sem conexão, sem efeito
       de som ou chamada de reprodução JS na sessão. Saída física no encerramento.
       Padrões, opções por app, precedência da permissão de pacotes e mesclagem
       de alterações de notificações agora são resolvidos no Rust; entrega e
       toque leem as configurações atuais do perfil. APIs de consulta não invalidam o
-      modelo nem drenam efeitos. Consultas/edições legadas de configurações,
-      metadados e espelhos continuam pendentes. A leitura
+      modelo nem drenam efeitos. Controles, metadados e consumidores dos espelhos
+      continuam pendentes. A leitura
       de permissões e firewall agora consulta os armazenamentos nativos na
       entrega e nos pulsos, sem fatos calculados pelo JS. Escopos de apps e
       exceções preservados; revogação sem alterar settings cancela o toque.
@@ -597,3 +599,4 @@ mostraram.
 | 2026-11-20 | Fase 2: carregamento e persistência das configurações no Rust | Commit desta linha | Bootstrap lê o perfil privado; modelo controla prazo monotônico de 300 ms, serialização e confirmação, com primitivas C existentes de limite/rename/fsync. Loop atende a gravação mesmo sem views; falhas conservam dados sem repetição por quadro. API legada sincroniza o proprietário após sucesso. Passaram 599 testes unitários, seis contratos LPK, vinte cenários gráficos de configurações/Arquivos/notificações/relógio, encerramento instalado por timeout/SIGTERM e integração dos apps compilados em GPU=1. Teste bloqueia I/O JS desde os imports, exige ausência de timers JS de gravação e salva antes da primeira view; captura inspecionada. Evidências em build/validation/native-settings-io. Idioma/região e consumidores de preferências continuam pendentes; medições físicas no encerramento. |
 | 2026-11-20 | Fase 2: notificações leem as configurações nativas do perfil | Commit desta linha | Controlador e views vinculam leitor/assinatura ao proprietário privado; entrega, agrupamento e toque ignoram preferências antigas do transporte. Removidos agrupamento nos fatos, preferências nos pedidos de entrega e assinatura JS de política do toque. Registro de apps vistos é escrito no modelo Rust e publica snapshot por revisão. Passaram 601 testes unitários, dois testes focados após revisão, seis contratos LPK, doze cenários gráficos de notificações/relógio/configurações, encerramento instalado por timeout/SIGTERM, smoke agregado e integração dos apps compilados em GPU=1. Integração altera agrupamento/DND diretamente no Rust com espelho JS antigo; captura inspecionada. Evidências em build/validation/native-notification-settings. Consultas/edições legadas, configuração do engine do relógio, catálogo, callbacks genéricos e espelhos ainda pendentes; medições físicas no encerramento. |
 | 2026-11-20 | Fase 2: configuração do relógio vinculada ao perfil Rust | Commit desta linha | Engine lê preferências por empréstimo e grava alarmes/cidades diretamente no proprietário, com setter de campo sem snapshot completo para descarte. Pedidos SDK não transportam config; startAlarms não assina/serializa settings na sessão e a lista pública consulta o engine. Assinatura nativa atualiza o agendamento mesmo com espelho JS antigo; reversão para valor anterior e remoção da configuração preservadas. Passaram 602 testes da shell, nove do core, cinco do app, seis contratos LPK, doze cenários gráficos de relógio/notificações/configurações, encerramento instalado por timeout/SIGTERM, smoke agregado e integração dos apps compilados em GPU=1. Captura inspecionada; evidências em build/validation/native-clock-settings. Idioma/região, fatos gerais da janela, consultas/edições legadas de notificações, catálogo, callbacks e consumidores dos espelhos continuam pendentes; medições físicas no encerramento. |
+| 2026-11-20 | Fase 2: consultas e edições de notificações no proprietário Rust | Commit desta linha | notifyPrefs/appNotifyPrefs/dndActive leem o perfil atual por empréstimo; pedidos SDK não transportam prefs. setAppNotifyPrefs mescla/grava antes dos avisos de compatibilidade, sem setter/rebase JS; removida a operação privada preferencesPatch. Consultas não expiram banners nem drenam efeitos, e edições sem efeito não regravam o perfil. Snapshot opcional continua local ao host LPK. Passaram 603 testes unitários da shell, seis contratos LPK, doze cenários gráficos de notificações/relógio/configurações, encerramento instalado por timeout/SIGTERM, smoke agregado e integração dos apps compilados em GPU=1. Integração verifica consultas com espelho antigo, edição preservando campos exclusivos do Rust, ausência de prefs e alterações feitas por assinantes de permissões. Captura inspecionada; evidências em build/validation/native-notification-edit. Catálogo, controles/avisos de compatibilidade, callbacks genéricos e consumidores dos espelhos continuam pendentes; medições físicas no encerramento. |

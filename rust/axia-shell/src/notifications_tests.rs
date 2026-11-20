@@ -385,7 +385,7 @@ fn preference_queries_do_not_expire_banners_drain_effects_or_invalidate_readers(
     let reader = service.reader();
     let changes = reader.subscribe();
     let revision = reader.revision();
-    for action in ["preferences", "appPreferences", "preferencesPatch"] {
+    for action in ["preferences", "appPreferences", "policy"] {
         let reply = service.command(
             &json!({"action":action,"prefs":{},"app":"clock","patch":{"sound":false}}),
             now + Duration::from_secs(30),
