@@ -679,7 +679,8 @@ the `Date` of the whole theme (the bar, the other apps). Instead:
 ### Alarms with the app closed (`rust/axia-clock/src/`)
 
 Alarms, the timer and the stopwatch live in Rust session state, independently of the window.
-The SDK bridge presents notifications and sounds; `startShell` calls
+The native notification service builds alarm/timer notices and owns their actions;
+the SDK bridge executes sound and preference effects. `startShell` calls
 `startAlarms()` once per session. So they ring with Clock closed and also with the session in the
 background (fast user switching, or viewed only from the browser): the `axia-server` session keeps
 running, and so does its JS.
@@ -693,6 +694,11 @@ running, and so does its JS.
   JS scheduling timeout in this path; the isolated compatibility adapter keeps
   its existing timeout. Commands from native Clock windows invalidate the same
   source, including when they bypass the SDK mirror. Remounting preserves the engine.
+- **Templates and actions:** the native service translates notice text and time
+  using the current locale and user catalogs. Stop, Snooze and Repeat stay native
+  even when invoked from history; Repeat reads the engine's current duration.
+  SDK clock commands use the same context-bound delivery path as the scheduler.
+  Delivery checks the live firewall rule, including changes made while waiting.
 - **Clock changes and suspend:** `axia-server` timers use `CLOCK_MONOTONIC`, which does not advance
   while suspended. So the wait is cut into slices —1 minute if something is due within the hour,
   10 minutes otherwise— and each wake-up recomputes with the real time. Anything that should have

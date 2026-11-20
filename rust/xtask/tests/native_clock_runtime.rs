@@ -32,6 +32,9 @@ fn clock_deadlines_and_status_read_the_resident_engine() {
                 "hidden",
                 "alarm",
                 "noJsTimers",
+                "nativeActions",
+                "nativeTemplates",
+                "liveFirewall",
                 "saved",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -58,6 +61,7 @@ const timeout=globalThis.setTimeout,interval=globalThis.setInterval;
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<200&&!fn();i++)await sleep(20);return!!fn();}
 let scheduler=0,status=0,bound=true,noPayload=true,remount,noJsTimers=true,completions=0;
+const completionIds=new Set();
 const mount=lord.nativeViews.mount,send=lord.nativeViews.facts;
 function inspect(text){const facts=JSON.parse(text);for(const key of ['clock','timer','stopwatch','nextAlarm','config'])noPayload&&=!(key in facts)&&!(key in(facts.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{
@@ -86,18 +90,32 @@ async function run(){
   const nativeStatus=await until(()=>text().includes('0:03'));
   const mirrorStale=clockTimer.get().state==='idle';
   const countedDown=await until(()=>text().includes('0:02'));
-  clockBridge.perform=effect=>{for(const e of effect.reply?.effects||[])if(e.kind==='timer')completions++;perform(effect);};
+  clockBridge.perform=effect=>{for(const e of effect.reply?.notificationEffects||[])if(e.kind==='notificationState')for(const n of e.state.history)if(n.app==='clock'&&!completionIds.has(n.id)){completionIds.add(n.id);completions++;}perform(effect);};
   const previous=scheduler;remount();const remounted=await until(()=>scheduler!==previous&&text().includes(':'));
   const completed=await until(()=>notifyHistory.get().some(n=>n.app==='clock'))&&clockTimer.get().state==='idle';
+  const notice=notifyHistory.get().find(n=>n.app==='clock');
+  const nativeTemplates=notice?.title==='Timer done'&&notice.body==='Time is up.'&&notice.actions[1].id==='again'&&typeof notice.actions[1].run!=='function';
+  direct('timerStart',{seconds:9});direct('timerPause');
+  clockTimer.set({state:'idle',duration:1000,endsAt:0,left:0});
+  const acted=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'act',id:notice?.id,index:1}));
+  const snapshot=direct('snapshot');
+  const nativeActions=snapshot.timer.state==='running'&&snapshot.timer.duration===9000&&!acted.effects.some(e=>e.kind==='notificationAction');
+  direct('timerReset');
   for(const n of notifications.get())dismissNotification(n.id);
   direct('timerStart',{seconds:60});direct('timerPause');await until(()=>text().includes('1:00'));
   click(lord.nativeViews.findText(status,'1:00'));
   const opened=await until(()=>wm.get('clock')?.args?.tab==='timer');
   wm.close('clock');direct('timerReset');const hidden=await until(()=>text().trim()==='');
+  const before=notifyHistory.get().length;
+  direct('timerStart',{seconds:1});
+  lord.fw.setRestricted('lordos',['no-notifications']);
+  const expired=await until(()=>direct('snapshot').timer.state==='idle');
+  const liveFirewall=expired&&notifyHistory.get().length===before;
+  lord.fw.setRestricted('lordos',[]);
   settings.set({clock:{alarms:[{id:'probe',on:true,snooze:Date.now()+600000}],hour24:'24'}});
   const alarm=await until(()=>text().includes(':'));
   const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
-  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,opened,hidden,alarm,noJsTimers,completions,saved:!!saved?.ok}));
+  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,completions,saved:!!saved?.ok}));
  }finally{globalThis.setTimeout=timeout;globalThis.setInterval=interval;}
 }
 timeout(()=>run().catch(error=>console.error('native_clock driver: '+(error.stack||error))),150);

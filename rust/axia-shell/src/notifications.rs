@@ -2,6 +2,7 @@
 use axia_state::{Reader, Store};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
+mod clock_delivery;
 
 const MAX_SHOWN: usize = 4;
 const HISTORY: usize = 50;
@@ -73,6 +74,8 @@ pub struct Service {
     ring_prefs: Value,
     clock_prefs: Value,
     ring_blocked: bool,
+    clock_delivery: clock_delivery::Delivery,
+    clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
 }
 
 // Wall time is used for user schedules/history; elapsed banner time is monotonic.
@@ -122,6 +125,7 @@ impl Service {
     }
     fn audible_policy(&self, wall: f64, minute: f64) -> bool {
         !self.ring_blocked
+            && !clock_delivery::blocked()
             && self.clock_prefs["allow"] != false
             && self.clock_prefs["sound"] != false
             && self.clock_prefs["style"] != "none"
@@ -177,6 +181,10 @@ impl Service {
         }
     }
     pub fn effects(&mut self) -> Vec<Value> {
+        let state = self.state.read();
+        self.clock_actions.retain(|id, _| state.shown.iter().any(|n| n.id() == *id)
+            || state.history.iter().any(|n| n["id"] == *id));
+        drop(state);
         let mut effects = Vec::new();
         if self.sent != Some(self.state.revision()) {
             self.sent = Some(self.state.revision());
@@ -331,8 +339,11 @@ impl Service {
                             .filter(|s| !s.is_empty())
                             .unwrap_or("action"),
                     );
-                    self.effects
-                        .push(json!({"kind":"notificationAction","id":id,"index":index}));
+                    if let Some(native) = self.clock_actions.get(&id).and_then(|a| a.get(index as usize)).cloned() {
+                        native.run(axia_clock::now());
+                    } else {
+                        self.effects.push(json!({"kind":"notificationAction","id":id,"index":index}));
+                    }
                 }
                 Value::Null
             }

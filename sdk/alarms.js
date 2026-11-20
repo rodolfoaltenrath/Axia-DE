@@ -1,16 +1,18 @@
 // Session clock bridge. Rust owns recurrence, scheduling, alarms, timer and stopwatch.
-// The shell publishes snapshots and presents notifications, sounds and the status item.
+// The shell adapter publishes compatibility snapshots and executes settings/sound effects.
 import { createElement as h, useEffect, useState } from 'react';
 import { View, Text } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
-import { t, formatTime } from './i18n.js';
-import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive, notifyRinging, ringingNotifications } from './notify.js';
+import { t, formatTime, locale } from './i18n.js';
+import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive, ringingNotifications, clockNotificationPolicy } from './notify.js';
 import { sound } from './sound.js';
 import { registerStatusItem } from './statusitems.js';
 import { wm } from './windows.js';
 import { NativeView } from './nativeview.js';
 import { clockBridge } from './nativeclock.js';
+import { notificationBridge } from './nativenotifications.js';
+import { nativeAppRequest } from './nativeappmodel.js';
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 const NATIVE_CLOCK = { id: 'shell:clock', shell: true };
 const NATIVE_CLOCK_STATUS = { id: 'shell:clock-status', shell: true };
@@ -25,7 +27,10 @@ function publish(store, value) {
   if (JSON.stringify(store.get()) !== JSON.stringify(value)) store.set(() => value);
 }
 export function clockRequest(cmd, extra = {}) {
-  const reply = lord.clock.request({ cmd, now: Date.now(), config: conf(), ...extra });
+  const input = { now: Date.now(), config: conf(), ...extra };
+  const reply = appHost ? lord.clock.request({ cmd, ...input })
+    : nativeAppRequest(lord.nativeApps, { cmd: 'clockCommand', action: cmd, ...input,
+      ...locale.get(), notificationPolicy: clockNotificationPolicy() });
   return applyClockReply(reply);
 }
 function applyClockReply(reply) {
@@ -35,9 +40,10 @@ function applyClockReply(reply) {
     publish(clockState, { timer: reply.timer, stopwatch: reply.stopwatch });
     for (const effect of reply.effects || []) {
       if (effect.kind === 'settings') settings.set(effect.patch);
-      else if (effect.kind === 'alarm') fireAlarm(effect.alarm, effect.due);
-      else if (effect.kind === 'timer') fireTimer();
+      else if (appHost && effect.kind === 'alarm') fireAlarm(effect.alarm, effect.due);
+      else if (appHost && effect.kind === 'timer') fireTimer();
     }
+    for (const effect of reply.notificationEffects || []) notificationBridge.perform(effect);
     if (appHost) {
       clearTimeout(handle);
       if (started && reply.wait != null) handle = setTimeout(arm, reply.wait);
@@ -74,7 +80,6 @@ export const arm = () => clockRequest('arm');
 
 export const ringing = appHost ? createStore([]) : ringingNotifications;
 function ring(notifyOpts) {
-  if (!appHost) return notifyRinging(notifyOpts);
   let iv = null, stopped = false, offNotices = () => {}, offPrefs = () => {};
   const stopAt = Date.now() + RING_MS;
   const stop = () => {

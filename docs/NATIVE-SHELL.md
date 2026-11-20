@@ -103,14 +103,18 @@ remontagem das views.
 O item da barra monta `shell:clock-status`: texto, visibilidade e aba de destino
 são calculados no Rust, com símbolos vetoriais para evitar dependência de glifos
 emoji. A contagem tem atualização nativa apenas enquanto o timer executa; o
-estado não entra nos fatos JS. Preferências, snapshots de compatibilidade e
-efeitos de alarmes ainda usam o adaptador. A repetição do toque já pertence ao
+estado não entra nos fatos JS. Templates e ações Parar/Adiar/Repetir também
+pertencem ao serviço Rust, inclusive no histórico. Repetir usa a duração do
+engine atual; a entrega consulta a regra atual do firewall por API nativa.
+Preferências, snapshots de compatibilidade e execução final de som ainda usam
+o adaptador. A repetição do toque já pertence ao
 serviço nativo de notificações: cadência e prazo monotônicos, cancelamento por
 política/retirada e validação de pulsos enfileirados antes do som.
 
 `native_clock_runtime` verifica os quatro cenários claro/escuro e 640/1000 px:
 fonte opaca, ausência de estado nos fatos, espelho JS parado, contagem,
-remontagem, vencimento único, clique na aba correta e indicador de alarme.
+remontagem, vencimento único, clique na aba correta, indicador de alarme,
+templates, Repetir com espelho incorreto e firewall alterado durante a espera.
 O teste recusa o timeout de agendamento e intervalos JS durante a observação;
 timers independentes de persistência de preferências continuam permitidos.
 

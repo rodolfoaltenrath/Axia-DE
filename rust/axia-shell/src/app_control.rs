@@ -26,6 +26,11 @@ impl Controller {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "clockCommand" {
+            let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };
+            let wall = input["now"].as_i64().unwrap_or_else(axia_clock::now);
+            return windows.notification_service().borrow_mut().clock_command(input, wall, std::time::Instant::now());
+        }
         if input["cmd"] == "notifications" {
             let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };
             return windows.notification_service().borrow_mut().command(input, std::time::Instant::now());

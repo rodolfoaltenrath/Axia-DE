@@ -362,7 +362,7 @@ views nativas lerem direto, sem JSON.
       o indicador da barra consulta o engine diretamente e atualiza a contagem
       no host, sem store/fatos de relógio ou intervalo JS de apresentação.
       Consultas não invalidam consumidores; remontagens preservam o engine.
-      Templates de alarmes, preferências, callbacks e efeitos continuam pendentes.
+      Preferências, callbacks genéricos e efeitos finais continuam pendentes.
       Correção pontual: toque repetido só é armado para banner entregue e
       audível, e é cancelado na retirada, silêncio, recusa ou no prazo de
       um minuto. Após a confirmação de que o Actions foi corrigido e a meta
@@ -370,7 +370,11 @@ views nativas lerem direto, sem JSON.
       também pertence ao serviço Rust de notificações: prazo monotônico de
       60 segundos, cadência de 2,5 segundos, cancelamento e revalidação de
       pulsos antes do som, sem intervalo ou seleção de banners JS na sessão.
-      Templates, callbacks e execução final do som continuam no adaptador.
+      Templates e ações Parar/Adiar/Repetir agora pertencem ao serviço Rust,
+      inclusive no histórico. Repetir consulta a duração atual do engine;
+      entrega e pulsos verificam o firewall nativo atual. Catálogos do usuário,
+      fallback e revisão de idioma preservados. Callbacks genéricos,
+      preferências e execução final do som continuam no adaptador.
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
       e substituir ícones descritos por funções JS por recursos serializáveis;
       o host nativo ainda usa placeholder para esses ícones personalizados.
@@ -552,3 +556,4 @@ mostraram.
 | 2026-11-19 | Correção pontual do toque de alarmes, sem migrar o relógio | Commit desta linha | Reproduzidos som repetido para entrega recusada/DND/silenciosa, retirada do banner e estado preso no prazo final. Guardas e cancelamento do intervalo existente corrigidos, com liberação das assinaturas. Seis testes Rust/Node do contrato, quatro cenários gráficos reais, encerramento instalado e smoke agregado aprovados em GPU=1. Migração do relógio adiada a pedido; push permanece com o usuário. |
 | 2026-11-20 | Fase 2: agendamento e indicador do relógio no host Rust | Commit desta linha | Invalidações nativas do engine, prazo único no observador independente do tema e indicador que lê timer/alarmes por empréstimo, sem estado nos fatos nem timer JS de agendamento/apresentação. Engine preservado na remontagem; símbolos vetoriais. Passaram oito testes do core, 566 da shell, seis contratos LPK, quatro cenários novos com espelho parado, quatro de notificações, encerramento instalado, smoke agregado e integração dos apps compilados. Captura inspecionada; CI GPU=1 exige native_clock_runtime e publica evidências. Toque repetido, preferências, callbacks/templates e efeitos continuam pendentes. Alterações da Dock de 54d0e9ed preservadas. |
 | 2026-11-20 | Fase 2: repetição do toque no serviço Rust de notificações | Commit desta linha | Cadência de 2,5 s e prazo monotônico de 60 s vinculados ao banner; sem intervalo JS na sessão. Política, dispensa, ação e retirada cancelam o toque; pulsos atrasados são revalidados e não formam rajadas. Reproduzido e corrigido snapshot antigo que ressuscitava itens do espelho, agora protegido por revisão numérica. Passaram 571 testes unitários, seis contratos de compatibilidade, oito cenários gráficos de relógio/notificações, encerramento instalado, smoke agregado e integração dos apps compilados. Captura inspecionada. Templates, callbacks, preferências e execução final do som permanecem pendentes. |
+| 2026-11-20 | Fase 2: templates e ações de alarmes no serviço Rust | Commit desta linha | Conclusões do observador e comandos do SDK criam notificações diretamente no proprietário nativo. Textos, hora, catálogos do usuário e revisões de idioma no Rust; Parar/Adiar/Repetir são ações privadas, inclusive no histórico. Repetir usa a duração atual do engine. Reproduzida entrega após bloqueio tardio de firewall; corrigida com consulta ao armazenamento nativo na entrega e nos pulsos. Passaram 578 testes unitários, seis contratos LPK, oito cenários gráficos de relógio/notificações, encerramento instalado por timeout/SIGTERM e integração dos apps compilados. Evidências em build/validation/clock-delivery; captura inspecionada. Preferências, callbacks genéricos, espelhos e execução final do som continuam pendentes; medições físicas no encerramento. |

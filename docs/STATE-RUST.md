@@ -403,8 +403,9 @@ nativo de um segundo apenas enquanto executa; pausada, não pede atualizações.
 O limiar de 24 horas do próximo alarme também é nativo. A formatação regional
 reutiliza `axia-native::date_format`. Um clique revalida a aba pelo estado atual.
 
-`sdk/alarms.js` ainda sincroniza preferências, publica snapshots para APIs
-legadas e executa templates, sons e callbacks dos alarmes. A repetição do toque
+`sdk/alarms.js` ainda sincroniza preferências e publica snapshots para APIs
+legadas. Os templates e as ações dos alarmes agora pertencem ao serviço Rust,
+como descrito abaixo. A repetição do toque
 agora usa o serviço nativo de notificações descrito abaixo, mantendo a correção
 de permissões/silêncio/retirada sem intervalo JS na sessão.
 O adaptador isolado preserva o caminho legado de agendamento e apresentação.
@@ -465,8 +466,36 @@ ou snapshot JS a cada som. O efeito identifica a notificação, e `ringAudible`
 revalida no Rust um pulso já enfileirado antes de `sound.play`; um banner
 dispensado ou silenciado não continua tocando por efeitos antigos. `ringing`
 agora é apenas um espelho de compatibilidade. O host isolado mantém o caminho
-local corrigido anteriormente. Templates, callbacks, configurações e execução
+local corrigido anteriormente. Callbacks genéricos, configurações e execução
 final do som permanecem pendentes.
+
+## Templates e ações de alarmes no proprietário Rust
+
+`notifications/clock_delivery.rs` transforma os efeitos do engine diretamente
+em notificações do contexto. Textos, nome do app, hora e botões usam os catálogos
+nativos, incluindo pacotes do usuário, fallback inglês e invalidação por revisão
+de idioma. O observador `shell:clock` entrega vencimentos sem passar por
+`fireAlarm`/`fireTimer` no JS. Pedidos do SDK usam `clockCommand` no controlador
+vinculado ao contexto; ambos os caminhos entregam cada conclusão uma única vez.
+
+Parar, Adiar e Repetir são ações tipadas privadas, associadas ao ID da
+notificação. A view e o histórico apenas enviam ID/índice; não há closure JS
+para essas ações. Adiar usa a identidade do alarme e preserva patches pendentes
+para o observador. Repetir consulta a duração atual no engine, mesmo com o
+espelho JS desatualizado. O serviço conserva ações apenas enquanto a notificação
+pertence aos banners ou ao histórico limitado. Callbacks de outros apps continuam
+no adaptador de compatibilidade.
+
+A entrega e os pulsos consultam a restrição atual de notificações do firewall
+pela API nativa `restrict_blocks`, sobre o mesmo armazenamento usado pelo SDK.
+Uma alteração entre o início e o vencimento do timer não depende de um novo
+snapshot JS. Preferências, persistência e execução final do som continuam
+transitórias. O host `.lpk` mantém seus templates e callbacks locais.
+
+`native_clock_runtime` também exige textos nativos, ação Repetir com duração
+JS incorreta e bloqueio de firewall alterado durante a espera. O teste do
+firewall reproduziu falha antes da consulta nativa. Testes unitários cobrem
+ações pelo histórico, Adiar, Parar, limites, idioma e cancelamento do toque.
 
 ## Gestos horizontais de desktop
 

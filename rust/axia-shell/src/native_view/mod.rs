@@ -154,6 +154,9 @@ pub(crate) fn modifiers() -> i32 {
 fn with<T>(f: impl FnOnce(&mut Registry) -> T) -> T {
     VIEWS.with(|r| f(&mut r.borrow_mut()))
 }
+pub(crate) fn resource_roots() -> (String, Option<String>) {
+    with(|r| (r.assets.clone(), r.home.clone()))
+}
 fn with_host<T>(handle: u32, f: impl FnOnce(&mut Host) -> T) -> Option<T> {
     // A host is taken out while it runs: an app request cannot reach the registry.
     let mut host = with(|r| r.hosts.remove(&handle))?;
@@ -227,7 +230,7 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     } else if id == "shell:notifications" {
         owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:clock" {
-        owner.as_ref().map(|_| Box::new(clock::Scheduler::default()) as Box<dyn NativeApp>)
+        owner.as_ref().map(|session| Box::new(clock::Scheduler::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:clock-status" {
         owner.as_ref().map(|_| Box::new(clock::Status::default()) as Box<dyn NativeApp>)
     } else if id == "shell:window-memory" {

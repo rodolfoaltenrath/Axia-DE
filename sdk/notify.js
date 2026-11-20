@@ -125,6 +125,8 @@ function fwNotifyBlocked(app) {
     return !!lord.fw.blocks(a && (a.package || a.isolated) ? `lpk:${app}` : 'lordos', 'no-notifications');
   } catch (e) { return false; }
 }
+// Transitional permission/settings adapter for native Clock delivery.
+export const clockNotificationPolicy = () => ({ prefs: notifyPrefs(), clock: appNotifyPrefs('clock'), blocked: fwNotifyBlocked('clock') });
 
 export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null, _ring = false } = {}) {
   app = String(app);
@@ -187,8 +189,6 @@ export function runAction(n, a) {
   try { a.run?.(); } catch (e) { console.error('notify:', e); }
 }
 
-// Internal Clock bridge. The main session owns repeat cadence and cancellation in Rust.
-export const notifyRinging = options => notify({ ...options, sticky: true, sound: true, _ring: true });
 if (!appHost) {
   let previous = settings.get().notifications;
   settings.subscribe(() => {

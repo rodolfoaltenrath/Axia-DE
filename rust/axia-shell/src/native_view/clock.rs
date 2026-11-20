@@ -10,6 +10,8 @@ pub struct Scheduler {
     until: Option<Instant>,
     last: Value,
     mounted: bool,
+    notifications: Option<std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>>,
+    locale: Value,
 }
 impl Default for Scheduler {
     fn default() -> Self {
@@ -18,24 +20,43 @@ impl Default for Scheduler {
             until: None,
             last: Value::Null,
             mounted: false,
+            notifications: None,
+            locale: Value::Null,
         }
     }
 }
 impl Scheduler {
+    pub fn new(
+        notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
+    ) -> Self {
+        Self {
+            notifications: Some(notifications),
+            ..Default::default()
+        }
+    }
     fn sync_at(&mut self, wall: i64, now: Instant) -> Value {
-        let reply = clock::with(|s| s.command(&json!({"cmd":"arm"}), wall));
+        let mut reply = clock::with(|s| s.command(&json!({"cmd":"arm"}), wall));
+        if let Some(service) = &self.notifications {
+            reply = service
+                .borrow_mut()
+                .clock_reply(reply, &self.locale, wall, now);
+        }
         self.changes.take();
         self.until = reply["wait"]
             .as_u64()
             .map(|ms| now + Duration::from_millis(ms));
         let state = json!({"timer":reply["timer"],"stopwatch":reply["stopwatch"],"nextAlarm":reply["nextAlarm"],"config":reply["config"]});
-        let effects =
-            if self.last != state || reply["effects"].as_array().is_some_and(|e| !e.is_empty()) {
-                self.last = state;
-                json!([{"kind":"clockReply","reply":reply}])
-            } else {
-                json!([])
-            };
+        let effects = if self.last != state
+            || reply["effects"].as_array().is_some_and(|e| !e.is_empty())
+            || reply["notificationEffects"]
+                .as_array()
+                .is_some_and(|e| !e.is_empty())
+        {
+            self.last = state;
+            json!([{"kind":"clockReply","reply":reply}])
+        } else {
+            json!([])
+        };
         if std::mem::replace(&mut self.mounted, true) {
             json!({"same":true,"effects":effects})
         } else {
@@ -61,6 +82,8 @@ impl NativeApp for Scheduler {
     }
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "sync" {
+            self.locale = json!({"lang":input["lang"],"region":input["context"]["region"],
+                "localeRevision":input["context"]["localeRevision"]});
             self.sync_at(clock::now(), Instant::now())
         } else {
             json!({})
@@ -144,7 +167,10 @@ impl Status {
                 } else {
                     date_format::time(
                         &mut self.i18n,
-                        input["region"].as_str().unwrap_or(""),
+                        input["context"]["region"]
+                            .as_str()
+                            .or_else(|| input["region"].as_str())
+                            .unwrap_or(""),
                         s.config["hour24"].as_str().unwrap_or(""),
                         &clock::local(next.unwrap_or(now)),
                         false,
