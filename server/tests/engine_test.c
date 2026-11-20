@@ -1585,7 +1585,7 @@ static void test_dock_preview_capture(void) {
     layout_root(root,400,300);
     uint64_t sig=paint_preview_signature(source);
     PaintView keep=paint_view;
-    uint32_t px[100*50];Canvas small;canvas_init(&small,px,100,50,100);
+    uint32_t px[100*100];Canvas small;canvas_init(&small,px,100,50,100);
     nwdraw=0;test_gpu=1;
     CHECK(paint_preview(&small,source),"preview captures a native subtree");
     CHECK(px[10*100+10]==0xff406083u,"Wayland content is visible in preview");
@@ -1594,6 +1594,9 @@ static void test_dock_preview_capture(void) {
     CHECK(source->ax==40 && source->ay==30 && source->w==200 && source->h==100,"preview keeps source geometry");
     CHECK(!paint_preview_mode && !paint_capture_mode && !memcmp(&keep,&paint_view,sizeof keep),"preview restores paint state");
     CHECK(sig==paint_preview_signature(source),"capture itself does not invalidate source signature");
+    Canvas square;canvas_init(&square,px,100,100,100);
+    CHECK(paint_preview(&square,source),"preview can fit a different target ratio");
+    CHECK(px[0]==0 && px[99*100+99]==0,"unused preview pixels are transparent rather than black bands");
     node_invalidate(surf);CHECK(sig!=paint_preview_signature(source),"child changes invalidate thumbnail");
     source->protect=1;paint_preview(&small,source);
     CHECK(px[10*100+10]==0xff000000u,"protected window is black in previews");

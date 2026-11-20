@@ -577,6 +577,7 @@ ocorrências por arquivo, sem repetir cada chamada do mesmo símbolo.
 | `lord.wm.pointer` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/windows.js](../sdk/windows.js); literal |
 | `lord.wm.policy` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/windows.js](../sdk/windows.js); literal |
 | `lord.wm.preview` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/dockpreviews.jsx](../sdk/dockpreviews.jsx); literal |
+| `lord.wm.previewSize` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/dockpreviews.jsx](../sdk/dockpreviews.jsx); dimensões retidas, sem captura |
 | `lord.wm.script` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/windows.js](../sdk/windows.js); literal |
 | `lord.wm.thumbnail` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/dockpreviews.jsx](../sdk/dockpreviews.jsx); literal |
 | `lord.wm.thumbnailSurface` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/dockpreviews.jsx](../sdk/dockpreviews.jsx); literal |

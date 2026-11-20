@@ -315,7 +315,7 @@ export function Dock({ t, items: list, running, onOpen, onContext, onTrash, onTr
             <BarTrash size={sizes[i]} full={trashFull} dark={t.mode === 'dark'} />
           </View>
         ) : (
-          <View key={app.id} onClick={() => { if (!dockDragJustEnded()) onOpen(app.id); }} onContextMenu={() => onContext?.(app.id, anchor(i))}
+          <View key={app.id} onClick={() => { if (!dockDragJustEnded()) { preview.activate(app.id); onOpen(app.id); } }} onContextMenu={() => onContext?.(app.id, anchor(i))}
             onMouseDown={(e) => { if (!e.button) { setPressed(app.id); beginDockDrag({ id: app.id, Icon: app.Icon, x: e.x, y: e.y, source: 'dock' }); } }}
             style={{ position: 'absolute', ...place(i), width: sizes[i], height: sizes[i], opacity: isPressed(i) ? feedback.pressed.opacity : 1 }}>
             {hoverPlate(i)}

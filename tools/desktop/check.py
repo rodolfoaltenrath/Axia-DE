@@ -226,11 +226,13 @@ def main():
                     entry['size'] = len(fixture)
                     entry['sha256'] = hashlib.sha256(fixture).hexdigest()
             (staged / 'code-manifest.json').write_text(json.dumps(staged_manifest))
-            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '14',
+            run_viewed([str(staged / 'bin/axia-server'), '--headless', '1000x700', '--timeout', '18',
                         '--theme', '../themes/default/theme.bundle.js'], home / 'runtime',
                        cwd=staged / 'bin', env=env, **opts)
             log = (home / '.cache/axia/session.log').read_text()
             assert 'dock preview integration: passed' in log, log
+            assert 'dock preview sizing and close integration: passed' in log, log
+            assert 'dock disabled hover integration: passed' in log, log
             assert 'dock feedback integration: passed' in log, log
             assert 'dock native animation integration: passed' in log, log
             assert 'scheduler compositor integration: passed' in log, log

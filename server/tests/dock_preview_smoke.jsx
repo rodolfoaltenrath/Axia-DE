@@ -18,16 +18,19 @@ async function until(ok, ms = 2000) {
   return ok();
 }
 const theme = { ...DEFAULT_TOKENS, dockBg: 'rgba(32,34,48,0.55)', dockBorder: 'rgba(255,255,255,0.2)', blur: 24 };
-let captures = 0, calls = 0, lastSource = 0, switchHover, latest, source;
+let captures = 0, calls = 0, lastSource = 0, switchHover, latest, source, resizeSource, showSecond, blockPreview;
+let activatedPreview = 0, focusCalls = 0;
+const previewStates = new Map(), capturedSizes = new Map();
 let hoverStarted = 0, firstImageMs = null, pendingRequests = 0;
 const nodes = new Map();
-for (const method of ['createNode', 'appendChild', 'insertBefore', 'setStyle', 'destroy']) {
+for (const method of ['createNode', 'appendChild', 'insertBefore', 'setStyle', 'setText', 'destroy']) {
   const original = lord[method];
   lord[method] = (...args) => {
     const result = original(...args);
     if (method === 'createNode') nodes.set(result, { id: result, style: {} });
     if (method === 'appendChild' || method === 'insertBefore') nodes.get(args[1]).parent = args[0];
     if (method === 'setStyle') nodes.get(args[0]).style[args[1]] = args[2];
+    if (method === 'setText') nodes.get(args[0]).text = args[1];
     if (method === 'destroy') nodes.delete(args[0]);
     return result;
   };
@@ -38,9 +41,11 @@ const originalVisibility = lord.anim.dockVisibility;
 lord.anim.dockVisibility = (...args) => { visibility.push(args); return originalVisibility(...args); };
 const DockIcon = ({ size }) => { iconRenders++; return h(View, { style: { width: size, height: size, backgroundColor: '#5c946e' } }); };
 const originalPreview = lord.wm.preview;
-lord.wm.preview = (...args) => { const out = originalPreview(...args); if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++; return out; };
+lord.wm.preview = (...args) => { const input = JSON.parse(args[0]), out = originalPreview(...args); if (input.op === 'activate') activatedPreview = input.id; if (input.id) previewStates.set(input.id, out); if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++; return out; };
 const original = lord.wm.thumbnail;
-lord.wm.thumbnail = (...args) => { calls++; const ok = original(...args); if (ok) { captures++; lastSource = args[1]; if (firstImageMs == null) firstImageMs = lord.now() - hoverStarted; } return ok; };
+lord.wm.thumbnail = (...args) => { calls++; const ok = original(...args); if (ok) { captures++; lastSource = args[1]; capturedSizes.set(args[1], args.slice(3)); if (firstImageMs == null) firstImageMs = lord.now() - hoverStarted; } return ok; };
+const originalFocus = wm.focus;
+wm.focus = (...args) => { focusCalls++; return originalFocus(...args); };
 configureWindows({ apps: [{ id: 'preview-test', name: 'Live preview', size: [600, 300] }], workArea: { x: 0, y: 0, w: 1000, h: 700 } });
 const previewId = wm.open('preview-test', { frame: { x: 50, y: 40, w: 600, h: 300 } });
 wm.setTitle(previewId, 'Live preview');
@@ -48,16 +53,20 @@ check(previewId === 'preview-test' && wm.get(previewId)?.app === 'preview-test',
 function Harness() {
   const [hover, setHover] = useState(false), [frame, setFrame] = useState(0);
   const [dock, setDock] = useState({ position: 'bottom', mode: 'dark' });
+  const [dimensions, setDimensions] = useState([600, 300]), [second, setSecond] = useState(null);
+  const [previewBlocked, setPreviewBlocked] = useState(false); blockPreview = setPreviewBlocked;
+  resizeSource = setDimensions; showSecond = setSecond;
   changeDock = setDock;
   const root = useRef(null); switchHover = setHover;
   const p = useDockPreviews({ hit: hover ? { id: 'app:preview-test' } : null, anchor: { x: 500, y: 580 },
-    area: { x: 0, y: 0, w: 1000, h: 700 }, position: 'bottom', disabled: false, theme });
+    area: { x: 0, y: 0, w: 1000, h: 700 }, position: 'bottom', disabled: previewBlocked, theme });
   latest = p;
   useEffect(() => { const timer = setInterval(() => { if (!pauseSource) setFrame((n) => n + 1); }, 170); return () => clearInterval(timer); }, []);
   useEffect(() => { source = root.current; setTimeout(() => run().catch((e) => console.error(e)), 120); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
-    h(View, { ref: (inst) => { root.current = inst; wm.frameRef('preview-test')(inst); }, style: { position: 'absolute', left: 50, top: 40, width: 600, height: 300, backgroundColor: frame % 2 ? '#bc4535' : '#255bad' } },
+    h(View, { ref: (inst) => { root.current = inst; wm.frameRef('preview-test')(inst); }, style: { position: 'absolute', left: 50, top: 40, width: dimensions[0], height: dimensions[1], backgroundColor: frame % 2 ? '#bc4535' : '#255bad' } },
       h(Text, { style: { color: '#ffffff', fontSize: 26, padding: 30 } }, `Live content ${frame}`)), p.panel,
+    second ? h(View, { ref: wm.frameRef(second), style: { position: 'absolute', left: 680, top: 40, width: 300, height: 300, backgroundColor: '#438b64' } }) : null,
     h(Dock, { t: { ...theme, mode: dock.mode, effects: dock.position !== 'left' }, items: [{ id: 'app:preview-test', name: 'Test', Icon: DockIcon }],
       running: [], onOpen: () => { opens++; }, position: dock.position, size: 54, autohide: !!dock.autohide,
       area: { x: 0, y: 0, w: 1000, h: 700 } }));
@@ -82,6 +91,14 @@ async function checkFeedback() {
     check(plate()?.style.backgroundColor === color(style.pressed.backgroundColor), 'press differs from hover');
     event('up'); await sleep(40);
     check(icon.style.opacity === 1 && opens === 1, 'release restores the icon and activates once');
+    const captureCount = calls;
+    await sleep(240);
+    check(activatedPreview && !previewStates.get(activatedPreview)?.open, 'activation keeps preview closed while pointer stays on icon');
+    check(calls === captureCount, 'activation suppression performs no captures');
+    event('move', 0); await sleep(40); event('move');
+    check(await until(() => previewStates.get(activatedPreview)?.open), 'leaving and re-entering restores the normal hover delay');
+    event('move', 0); await sleep(350);
+    event('move');
     event('down'); await sleep(30); event('up', 0); await sleep(30);
     check(icon.style.opacity === 1 && opens === 1, 'release outside clears press without activating');
     event('down', icon.id, 2); await sleep(30);
@@ -93,6 +110,70 @@ async function checkFeedback() {
     opens = 0;
   }
   console.log('dock feedback integration: passed');
+}
+function clickText(label, header = 0) {
+  const beneath = (node, ancestor) => { for (let n = nodes.get(node); n; n = nodes.get(n.parent)) if (n.id === ancestor) return true; return false; };
+  const text = [...nodes.values()].find(n => n.text === label && (!header || beneath(n.id, header)));
+  check(!!text, 'control exists: ' + label);
+  const target = text.parent, box = lord.getLayout(target);
+  __lordEvent('move', target, box[0] + box[2] / 2, box[1] + box[3] / 2, 0);
+  for (const type of ['down', 'up']) __lordEvent(type, target, box[0] + box[2] / 2, box[1] + box[3] / 2, 0);
+}
+async function checkDisabledHover() {
+  latest.activate('app:preview-test');
+  blockPreview(true); await sleep(40);
+  blockPreview(false); await sleep(200);
+  check(!latest.open, 'disabling preview does not rearm a stationary pointer');
+  blockPreview(true); switchHover(false); await sleep(40);
+  switchHover(true); await sleep(40);
+  const stopped = calls; await sleep(180);
+  check(!latest.open && calls === stopped, 'disabled preview never captures after pointer re-entry');
+  blockPreview(false);
+  check(await until(() => latest.open), 'leaving and returning while disabled rearms preview when enabled');
+  switchHover(false); await sleep(350);
+  console.log('dock disabled hover integration: passed');
+}
+async function checkPreviewSizingAndClose() {
+  switchHover(false); await sleep(40);
+  switchHover(true); check(await until(() => latest.open), 'preview opens for sizing checks');
+  for (const [width, height] of [[600, 300], [300, 300], [300, 600]]) {
+    capturedSizes.delete(source.id); resizeSource([width, height]);
+    check(await until(() => {
+      const size = capturedSizes.get(source.id);
+      return size && Math.abs(size[0] / size[1] - width / height) < 0.02;
+    }), 'capture follows source aspect ratio without letterbox: ' + width + 'x' + height);
+  }
+  const second = wm.open('preview-test', { new: true, frame: { x: 680, y: 40, w: 300, h: 300 } });
+  wm.setTitle(second, 'Second preview'); showSecond(second);
+  // The Wayland bridge always returns false until the client unmaps, even
+  // when it accepts the request. Reproduce that contract without forcing close.
+  wm.setArgs(second, { surface: 999999 });
+  let requestedClose = 0;
+  const releaseSecond = wm.setCloseGuard(second, () => { requestedClose++; return false; });
+  check(await until(() => [...nodes.values()].some(n => n.text === 'Second preview')), 'second window has its own card');
+  await sleep(40); // The rendered caption must reach native layout before pointer input.
+  const title = [...nodes.values()].find(n => n.text === 'Second preview');
+  const header = nodes.get(title.parent).parent;
+  const focused = focusCalls;
+  clickText('×', header);
+  await sleep(40);
+  check(requestedClose === 1 && !!wm.get(second) && latest.open, 'async close keeps remaining previews visible while awaiting the client');
+  wm.close(second, true); releaseSecond(); // The client's eventual unmap event.
+  check(await until(() => !wm.get(second)), 'close button closes only its target window');
+  check(await until(() => !!wm.get(previewId) && latest.open), 'other window stays open with its preview');
+  check(focusCalls === focused, 'close never bubbles into card activation');
+  const release = wm.setCloseGuard(previewId, () => false);
+  clickText('×');
+  check(await until(() => !latest.open), 'guarded close dismisses preview so the app can ask about unsaved changes');
+  check(!!wm.get(previewId), 'close respects the app guard'); release();
+  switchHover(false); await sleep(40); switchHover(true);
+  check(await until(() => latest.open), 'guarded window can be previewed again');
+  clickText('×');
+  check(await until(() => !wm.get(previewId) && !latest.open), 'closing the last window removes the preview');
+  const stopped = calls; await sleep(240);
+  check(calls === stopped, 'last-window close stops capture polling');
+  switchHover(false);
+  console.log('dock preview sizing and close integration: passed');
 }
 async function checkNativeDockAnimations() {
   pauseSource = true;
@@ -179,6 +260,8 @@ async function run() {
   globalThis.__lordEvent('down', 0, 4, 4, 0); await sleep(120); check(!latest.open, 'outside press dismisses');
   console.log('dock preview integration: passed');
   await checkFeedback();
+  await checkDisabledHover();
+  await checkPreviewSizingAndClose();
   await checkNativeDockAnimations();
   await checkScheduler();
 }

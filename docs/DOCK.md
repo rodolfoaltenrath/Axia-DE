@@ -27,6 +27,29 @@ Everything is applied live, without restarting, and is saved in
 | ![menu](dock-right-menu.png) | ![revealed](dock-hidden-revealed.png) |
 | Right click with the Dock on the right: the menu opens inward | Auto-hide: it appears when the pointer reaches the edge (without the Dock: [`dock-hidden.png`](dock-hidden.png)) |
 
+## Window previews
+
+Hovering a running app opens its previews after 140 ms. Clicking an app's Dock
+icon dismisses its preview and waits for the pointer to leave that icon before
+starting another hover delay. Opening the app, receiving its first window or
+moving within the icon does not reopen the preview.
+Pointer departures are tracked even while previews are disabled or an app is
+fullscreen, so a fresh hover works as soon as previews become available again.
+
+Each card has a close button beside its title. It requests the window's normal
+close operation, including the app's unsaved-change confirmation, and does not
+activate the card. Closing one window keeps the remaining cards available;
+closing the last one stops preview captures.
+For Linux windows, the panel waits for the client's asynchronous close response
+and keeps the other previews available.
+
+Thumbnail dimensions follow the retained window or Wayland surface's aspect
+ratio, including after a resize. Square and portrait windows use narrower cards,
+and wide windows use shorter images, without stretching, cropping or fixed black
+bands. Reading those dimensions does not capture pixels or configure the client.
+Rust retains the existing hover deadline, 300 ms leave grace, aggregate capture
+budget, unchanged-content deduplication and slow-readback backoff.
+
 ## Settings (`sdk/dock.js`: `DOCK_DEFAULTS`, `dockPrefs(settings)`)
 
 | Key | Values | Default |

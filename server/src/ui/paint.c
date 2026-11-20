@@ -2261,7 +2261,7 @@ int paint_preview(Canvas *c, Node *root) {
     paint_view.dy=(c->h-root->h*paint_view.k)*0.5f;
     skip_until=skip_reached=0;paint_cull=0;tf_self=tf_unit=root->id;
     paint_capture_mode=paint_preview_mode=1;
-    canvas_clear(c,0xff17171cu);
+    canvas_clear(c,0);
     paint_node(c,root,1);
     paint_preview_mode=0;paint_capture_mode=km;
     skip_until=ks;skip_reached=kr;paint_cull=kc;tf_self=kt;tf_unit=ku;paint_view=keep;

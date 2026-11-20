@@ -268,6 +268,23 @@ static JSValue f_preview(JSContext *c,JSValueConst self,int argc,JSValueConst *a
     if (!result) return JS_ThrowOutOfMemory(c);
     JSValue out=JS_ParseJSON(c,result,strlen(result),"<dock-preview>");axia_dock_preview_free(result);return out;
 }
+/* Retained dimensions only: no painting, readback or client configure. */
+static JSValue f_preview_size(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)self;int32_t source=0,surface=0;int sw=0,sh=0;double w=0,h=0;
+    if (argc<2 || JS_ToInt32(c,&source,argv[0]) || JS_ToInt32(c,&surface,argv[1])) return JS_NULL;
+    if (surface>0) {
+        if (!wl_preview_size(surface,&sw,&sh)) return JS_NULL;
+        w=sw;h=sh;
+    } else {
+        Node *n=node_get(source);
+        if (!n || n->w<=0 || n->h<=0) return JS_NULL;
+        w=n->w;h=n->h;
+    }
+    JSValue out=JS_NewArray(c);
+    JS_SetPropertyUint32(c,out,0,JS_NewFloat64(c,w));
+    JS_SetPropertyUint32(c,out,1,JS_NewFloat64(c,h));
+    return out;
+}
 static JSValue f_thumbnail(JSContext *c,JSValueConst self,int argc,JSValueConst *argv) {
     (void)self;uint32_t handle=0;int32_t source=0,target=0,w=0,h=0;
     if (argc<5 || JS_ToUint32(c,&handle,argv[0]) || JS_ToInt32(c,&source,argv[1]) ||
@@ -312,7 +329,7 @@ static JSValue f_thumbnail_surface(JSContext *c,JSValueConst self,int argc,JSVal
     if (!axia_dock_preview_due(handle,sid|0x40000000,sig,now,!dst->img)) return JS_FALSE;
     uint32_t *px=calloc((size_t)w*h,sizeof *px); int ok=0;
     if (px) {
-        Canvas canvas;canvas_init(&canvas,px,w,h,w);canvas_clear(&canvas,0xff17171cu);
+        Canvas canvas;canvas_init(&canvas,px,w,h,w);canvas_clear(&canvas,0);
         PaintView keep=paint_view;
         float k=fminf((float)w/sw,(float)h/sh);
         paint_view=(PaintView){0,0,k,(w-sw*k)*0.5f,(h-sh*k)*0.5f,keep.index};
@@ -347,6 +364,7 @@ static JSValue f_policy(JSContext *c, JSValueConst t, int argc, JSValueConst *ar
 static const JSCFunctionListEntry wm_funcs[] = {
     JS_CFUNC_DEF("preview", 1, f_preview),
     JS_CFUNC_DEF("thumbnail", 5, f_thumbnail),
+    JS_CFUNC_DEF("previewSize", 2, f_preview_size),
     JS_CFUNC_DEF("thumbnailSurface", 5, f_thumbnail_surface),
     JS_CFUNC_DEF("grab", 3, f_grab),
     JS_CFUNC_DEF("cancel", 0, f_cancel),

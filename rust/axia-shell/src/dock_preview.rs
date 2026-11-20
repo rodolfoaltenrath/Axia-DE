@@ -10,6 +10,7 @@ const LEAVE_MS: f64 = 300.;
 #[derive(Default)]
 struct Preview {
     key: String,
+    activated: String,
     since: f64,
     left: Option<f64>,
     open: bool,
@@ -24,6 +25,7 @@ impl Preview {
     fn clear_interaction(&mut self) {
         // Opening another app must not bypass a slow GPU's aggregate cooldown.
         *self = Self {
+            activated: std::mem::take(&mut self.activated),
             next_capture: self.next_capture,
             interval: self.interval,
             cost: self.cost,
@@ -31,11 +33,29 @@ impl Preview {
         };
     }
     fn update(&mut self, v: &Value, now: f64) -> Value {
+        let key = v["key"].as_str().unwrap_or("");
+        // A disabled preview still observes real pointer departures. Its empty
+        // effective key alone cannot distinguish a departure from fullscreen.
+        if let Some(hover) = v["hoverKey"].as_str() {
+            if self.activated != hover {
+                self.activated.clear();
+            }
+        }
+        if v["op"] == "activate" {
+            self.clear_interaction();
+            self.activated = key.chars().take(1024).collect();
+            return json!({"open":false,"pending":false});
+        }
         if v["op"] == "dismiss" {
             self.clear_interaction();
             return json!({"open":false,"pending":false});
         }
-        let key = v["key"].as_str().unwrap_or("");
+        if !self.activated.is_empty() {
+            if self.activated == key {
+                return json!({"open":false,"pending":false});
+            }
+            self.activated.clear();
+        }
         let inside = v["inside"].as_bool().unwrap_or(false);
         if !key.is_empty() {
             if self.key != key {
@@ -109,10 +129,22 @@ impl Preview {
             .iter()
             .skip(self.page * capacity)
             .take(capacity)
-            .cloned()
+            .map(|window| {
+                let mut card = window.clone();
+                let dimension = |key: &str, fallback: f64| window[key].as_f64()
+                    .filter(|n| n.is_finite() && *n > 0.).unwrap_or(fallback);
+                let w = dimension("width", card_w);
+                let h = dimension("height", image_h);
+                let scale = (card_w / w).min(image_h / h);
+                card["imageWidth"] = json!((w * scale).max(1.));
+                card["imageHeight"] = json!((h * scale).max(1.));
+                card["width"] = json!((w * scale).clamp(72., card_w));
+                card
+            })
             .collect();
-        let width = 16. + cards.len() as f64 * (card_w + 8.) - 8.;
-        let height = 16. + image_h + 30. + if pages > 1 { 28. } else { 0. };
+        let width = 16. + cards.iter().map(|c| c["width"].as_f64().unwrap() + 8.).sum::<f64>() - 8.;
+        let tallest = cards.iter().map(|c| c["imageHeight"].as_f64().unwrap()).fold(0., f64::max);
+        let height = 16. + tallest + 30. + if pages > 1 { 28. } else { 0. };
         let left = if side == "left" {
             x
         } else if side == "right" {
@@ -295,6 +327,58 @@ mod tests {
         assert_eq!(s.update(&input("", false), 1340.)["open"], false);
     }
     #[test]
+    fn activation_waits_for_a_fresh_hover_even_when_the_window_arrives_later() {
+        let mut s = Preview::default();
+        let mut click = input("a", false);
+        click["op"] = json!("activate");
+        click["windows"] = json!([]);
+        assert_eq!(s.update(&click, 0.)["pending"], false);
+        for now in [1., 140., 500., 5000.] {
+            let out = s.update(&input("a", false), now);
+            assert_eq!(out["open"], false);
+            assert_eq!(out["pending"], false);
+            assert!(!s.due(5, 1, now, true));
+        }
+        s.update(&input("", false), 5010.);
+        assert_eq!(s.update(&input("a", false), 5020.)["waitMs"], 140.);
+        assert_eq!(s.update(&input("a", false), 5159.)["open"], false);
+        assert_eq!(s.update(&input("a", false), 5160.)["open"], true);
+    }
+    #[test]
+    fn activation_closes_an_open_preview_and_survives_dismissal() {
+        let mut s = Preview::default();
+        s.update(&input("a", false), 0.);
+        s.update(&input("a", false), 140.);
+        assert!(s.due(5, 1, 140., true));
+        s.done(20., 160.);
+        let mut click = input("a", false);
+        click["op"] = json!("activate");
+        assert_eq!(s.update(&click, 170.)["open"], false);
+        s.update(&json!({"op":"dismiss"}), 180.);
+        assert_eq!(s.update(&input("a", false), 1000.)["pending"], false);
+        assert_eq!(s.update(&input("b", false), 1010.)["waitMs"], 140.);
+        assert_eq!(s.update(&input("b", false), 1150.)["open"], true);
+    }
+    #[test]
+    fn disabled_preview_tracks_departures_without_rearming_a_stationary_pointer() {
+        let mut s = Preview::default();
+        let mut click = input("a", false);
+        click["op"] = json!("activate");
+        s.update(&click, 0.);
+        let mut blocked = input("", false);
+        blocked["op"] = json!("dismiss");
+        blocked["hoverKey"] = json!("a");
+        s.update(&blocked, 100.);
+        assert_eq!(s.update(&input("a", false), 500.)["pending"], false);
+        blocked["hoverKey"] = json!("");
+        s.update(&blocked, 600.);
+        blocked["hoverKey"] = json!("a");
+        s.update(&blocked, 700.);
+        assert_eq!(s.update(&input("a", false), 800.)["waitMs"], 140.);
+        assert_eq!(s.update(&input("a", false), 939.)["open"], false);
+        assert_eq!(s.update(&input("a", false), 940.)["open"], true);
+    }
+    #[test]
     fn hover_deadline_reports_remaining_time_and_cancels_without_capture() {
         let mut s = Preview::default();
         assert_eq!(s.update(&input("a", false), 0.)["waitMs"], 140.);
@@ -353,6 +437,33 @@ mod tests {
         assert!(s.due(1, 11, 801., false));
         s.open = false;
         assert!(!s.due(1, 12, 2000., true));
+    }
+    #[test]
+    fn each_thumbnail_keeps_its_source_ratio_inside_the_existing_capture_budget() {
+        let mut s = Preview::default();
+        let mut v = input("a", false);
+        v["windows"] = json!([
+            {"id":"wide","node":1,"width":600.,"height":300.},
+            {"id":"square","node":2,"width":500.,"height":500.},
+            {"id":"portrait","node":3,"width":300.,"height":600.}
+        ]);
+        v["aw"] = json!(1400.);
+        s.update(&v, 0.);
+        let out = s.update(&v, 140.);
+        let cards = out["cards"].as_array().unwrap();
+        for (card, ratio) in cards.iter().zip([2., 1., 0.5]) {
+            let w = card["imageWidth"].as_f64().unwrap();
+            let h = card["imageHeight"].as_f64().unwrap();
+            assert!((w / h - ratio).abs() < 1e-6);
+            assert!(w <= 232. && h <= 232. * 0.61);
+            assert!(card["width"].as_f64().unwrap() >= w);
+        }
+        assert!(cards[0]["width"].as_f64().unwrap() > cards[1]["width"].as_f64().unwrap());
+        assert!(cards[1]["width"].as_f64().unwrap() > cards[2]["width"].as_f64().unwrap());
+        v["windows"][0]["width"] = json!(300.);
+        v["windows"][0]["height"] = json!(600.);
+        let resized = s.update(&v, 150.);
+        assert_eq!(resized["cards"][0]["imageWidth"], out["cards"][2]["imageWidth"]);
     }
     #[test]
     fn pagination_and_screen_edges_are_bounded() {
