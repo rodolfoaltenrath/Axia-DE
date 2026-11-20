@@ -302,6 +302,7 @@ name = "axia-clock"
 version = "0.1.0"
 dependencies = [
  "axia-native",
+ "axia-state",
  "libc",
  "serde_json",
 ]

@@ -357,11 +357,17 @@ views nativas lerem direto, sem JSON.
       timer JS. Ações revalidam IDs e índices antes dos callbacks; o host
       LPK preserva o comportamento local. Preferências, permissões/firewall,
       som, callbacks e stores de compatibilidade ainda usam o adaptador.
-      Relógio, apresentação de alarmes e seus efeitos continuam pendentes.
+      O relógio agora publica invalidações Rust. Um observador no root agenda
+      a próxima ocorrência e entrega os efeitos sem setTimeout JS na sessão;
+      o indicador da barra consulta o engine diretamente e atualiza a contagem
+      no host, sem store/fatos de relógio ou intervalo JS de apresentação.
+      Consultas não invalidam consumidores; remontagens preservam o engine.
+      Templates de alarmes, preferências, callbacks e efeitos continuam pendentes.
       Correção pontual: toque repetido só é armado para banner entregue e
       audível, e é cancelado na retirada, silêncio, recusa ou no prazo de
-      um minuto. A migração do relógio e dos prazos de toque permanece adiada
-      por solicitação do usuário; o intervalo JS existente foi preservado.
+      um minuto. Após a confirmação de que o Actions foi corrigido e a meta
+      foi retomada, avançou o agendamento acima. Os prazos de repetição do toque
+      continuam no intervalo JS corrigido e ainda precisam migrar.
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
       e substituir ícones descritos por funções JS por recursos serializáveis;
       o host nativo ainda usa placeholder para esses ícones personalizados.
@@ -541,3 +547,4 @@ mostraram.
 | 2026-11-19 | Fase 2: decisão dos gestos horizontais no proprietário Rust | Commit desta linha | Troca de desktops ou ciclo de janelas escolhidos pelo estado atual, com RTL, limites e filtragem compartilhada com a API legada. 553 testes unitários, quatro contratos LPK, oito cenários gráficos de indicador/animação, encerramento instalado e smoke agregado passaram em GPU=1. Integração bloqueia leitura do espelho da lista; fixtures agora definem RTL explicitamente, sem depender de catálogo árabe ausente. Reconsultado Actions: última execução ainda é 44595705926, cuja fixture de título foi corrigida em 796b6a89; confirmação remota aguarda push. |
 | 2026-11-19 | Fase 2: serviço e banners de notificações no contexto Rust | Commit desta linha | Lista/histórico limitados, IDs, agrupamento, DND, política de entrega, ações e prazos monotônicos no proprietário nativo; a view não recebe árvore/lista JS. 558 testes unitários, cinco contratos LPK, quatro cenários gráficos com fonte opaca, espelho parado e remontagem, encerramento instalado e smoke agregado passaram em GPU=1. Captura inspecionada; callbacks e consumidores de compatibilidade, preferências, permissões/firewall, som e alarmes continuam pendentes. |
 | 2026-11-19 | Correção pontual do toque de alarmes, sem migrar o relógio | Commit desta linha | Reproduzidos som repetido para entrega recusada/DND/silenciosa, retirada do banner e estado preso no prazo final. Guardas e cancelamento do intervalo existente corrigidos, com liberação das assinaturas. Seis testes Rust/Node do contrato, quatro cenários gráficos reais, encerramento instalado e smoke agregado aprovados em GPU=1. Migração do relógio adiada a pedido; push permanece com o usuário. |
+| 2026-11-20 | Fase 2: agendamento e indicador do relógio no host Rust | Commit desta linha | Invalidações nativas do engine, prazo único no observador independente do tema e indicador que lê timer/alarmes por empréstimo, sem estado nos fatos nem timer JS de agendamento/apresentação. Engine preservado na remontagem; símbolos vetoriais. Passaram oito testes do core, 566 da shell, seis contratos LPK, quatro cenários novos com espelho parado, quatro de notificações, encerramento instalado, smoke agregado e integração dos apps compilados. Captura inspecionada; CI GPU=1 exige native_clock_runtime e publica evidências. Toque repetido, preferências, callbacks/templates e efeitos continuam pendentes. Alterações da Dock de 54d0e9ed preservadas. |

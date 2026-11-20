@@ -1,4 +1,20 @@
 use super::*;
+
+#[test]
+fn native_subscriptions_coalesce_writes_and_read_only_access_is_quiet() {
+    with(|s|*s=Default::default());
+    let changes=subscribe();
+    with(|s|{s.snapshot(1000);});assert!(!changes.pending());
+    with(|s|s.native(&json!({"cmd":"timerStart","seconds":10}),1000));
+    assert!(changes.pending());let first=changes.take().unwrap();
+    with(|s|s.command(&json!({"cmd":"timerLeft"}),1000));assert!(!changes.pending());
+    with(|s|s.native(&json!({"cmd":"timerPause"}),2000));
+    with(|s|s.native(&json!({"cmd":"timerResume"}),3000));
+    assert!(changes.take().unwrap()>first);assert!(!changes.pending());
+    with(|s|s.command(&json!({"cmd":"alarmAdd","alarm":{"h":9}}),1000));
+    changes.take();
+    with(|s|s.sync(&json!({"hour24":"24"})));assert!(changes.pending());
+}
 fn call(s: &mut Engine, cmd: &str, now: i64) -> Value {
     s.command(&json!({"cmd":cmd}), now)
 }

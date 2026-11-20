@@ -687,8 +687,12 @@ running, and so does its JS.
 - **Storage:** `settings.clock = { alarms: [{ id, h, m, days, label, on, snooze, fired }],
   cities: [...] }` in `~/.config/axia/settings.json`. `fired` is the instant it last rang, so it
   does not ring again when the session restarts.
-- **No polling:** a single `setTimeout` until the next thing due (alarm, snooze or end of the
-  timer). It is re-armed when the alarms change (settings subscription).
+- **Scheduling:** in the main shell, `shell:clock` observes native engine changes
+  and owns one native deadline until the next alarm, snooze or timer completion.
+  It is mounted independently of the theme's optional status item. There is no
+  JS scheduling timeout in this path; the isolated compatibility adapter keeps
+  its existing timeout. Commands from native Clock windows invalidate the same
+  source, including when they bypass the SDK mirror. Remounting preserves the engine.
 - **Clock changes and suspend:** `axia-server` timers use `CLOCK_MONOTONIC`, which does not advance
   while suspended. So the wait is cut into slices —1 minute if something is due within the hour,
   10 minutes otherwise— and each wake-up recomputes with the real time. Anything that should have
@@ -702,8 +706,11 @@ running, and so does its JS.
   muted and Do Not Disturb notifications do not arm it. Removing or evicting the
   banner, changing its permission/sound settings, or reaching the one-minute
   limit cancels the interval and releases its subscriptions and ringing entry.
-- **Menu bar:** `registerStatusItem('clock', …)` shows ⏱ with the time left on the timer (redrawn
-  every second only while it runs) or ⏰ with the time of the next alarm if it rings within 24 h.
+- **Menu bar:** `registerStatusItem('clock', …)` mounts `shell:clock-status`, which
+  reads the native engine and shows ⏱ with the time left on the timer (redrawn
+  natively every second only while running) or ⏰ with the next alarm within 24 h.
+  The paused timer has no refresh deadline. The 24-hour visibility threshold
+  also has a native deadline; no JS list, clock snapshot or interval drives the indicator.
   A click opens Clock on that tab.
 
 ### Menu bar status items (`sdk/statusitems.js`)

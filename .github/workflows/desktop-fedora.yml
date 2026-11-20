@@ -94,6 +94,11 @@ jobs:
         env:
           AXIA_NOTIFICATIONS_OUTPUT: ${{ runner.temp }}/axia-notifications
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test notifications_runtime -- --ignored --nocapture
+      - name: Rust native clock scheduling and status
+        if: matrix.gpu == 1
+        env:
+          AXIA_NATIVE_CLOCK_OUTPUT: ${{ runner.temp }}/axia-native-clock
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_clock_runtime -- --ignored --nocapture
       - name: Rust Dock integration and captures
         if: matrix.gpu == 1
         env:
@@ -267,6 +272,12 @@ jobs:
         with:
           name: axia-notifications
           path: ${{ runner.temp }}/axia-notifications
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-native-clock
+          path: ${{ runner.temp }}/axia-native-clock
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

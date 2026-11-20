@@ -110,6 +110,7 @@ pub fn duration(ms: i64, cents: bool, decimal: &str) -> String {
     }
 }
 pub struct Engine {
+    revision: u64,
     pub config: Value,
     observed: Value,
     pub timer: Value,
@@ -120,6 +121,7 @@ pub struct Engine {
 impl Default for Engine {
     fn default() -> Self {
         Self {
+            revision: 0,
             config: json!({}),
             observed: Value::Null,
             timer: json!({"state":"idle","duration":0,"endsAt":0,"left":0}),
@@ -130,8 +132,12 @@ impl Default for Engine {
     }
 }
 impl Engine {
+    fn changed(&mut self) {
+        self.revision = self.revision.checked_add(1).expect("clock revision exhausted");
+    }
     pub fn sync(&mut self, config: &Value) {
         if config.is_object() && config != &self.observed {
+            if config != &self.config { self.changed(); }
             self.config = config.clone();
             self.observed = config.clone();
         }
@@ -182,12 +188,12 @@ impl Engine {
             self.effects.push(json!({"kind":"timer"}));
         }
     }
+    pub fn next_alarm(&self, now: i64) -> Option<(i64, &Value)> {
+        self.config["alarms"].as_array().into_iter().flatten()
+            .filter_map(|a|next_fire(a,now).map(|at|(at,a))).min_by_key(|(at,_)|*at)
+    }
     pub fn snapshot(&self, now: i64) -> Value {
-        let next = self
-            .alarms()
-            .into_iter()
-            .filter_map(|a| next_fire(&a, now).map(|ms| (ms, a)))
-            .min_by_key(|(ms, _)| *ms);
+        let next = self.next_alarm(now);
         let mut due = next.as_ref().map(|(ms, _)| *ms);
         if self.timer["state"] == "running" {
             let end = num(&self.timer, "endsAt");
@@ -200,6 +206,15 @@ impl Engine {
         json!({"config":self.config,"timer":self.timer,"stopwatch":self.stopwatch,"nextAlarm":next.map(|(at,a)|json!({"at":at,"label":a["label"]})),"wait":wait})
     }
     pub fn command(&mut self, input: &Value, now: i64) -> Value {
+        if matches!(input["cmd"].as_str(),Some("nextFire"|"timerLeft"|"swElapsed"|"duration"|"snapshot")) {
+            return self.command_inner(input,now);
+        }
+        let before=(self.config.clone(),self.timer.clone(),self.stopwatch.clone());
+        let reply=self.command_inner(input,now);
+        if before.0!=self.config || before.1!=self.timer || before.2!=self.stopwatch { self.changed(); }
+        reply
+    }
+    fn command_inner(&mut self, input: &Value, now: i64) -> Value {
         self.sync(&input["config"]);
         let cmd = input["cmd"].as_str().unwrap_or("");
         let mut value = Value::Null;
@@ -241,9 +256,21 @@ impl Engine {
         }
     }
 }
-thread_local! {static SESSION:RefCell<Engine>=RefCell::new(Engine::default());}
+thread_local! {
+    static SESSION:RefCell<Engine>=RefCell::new(Engine::default());
+    static CHANGES:axia_state::Store<()>=axia_state::Store::default();
+}
+/// Native consumers borrow the engine through `with` after this signal changes.
+pub fn subscribe() -> axia_state::Subscription { CHANGES.with(|s|s.subscribe()) }
 pub fn with<T>(f: impl FnOnce(&mut Engine) -> T) -> T {
-    SESSION.with(|s| f(&mut s.borrow_mut()))
+    let (result,changed)=SESSION.with(|s| {
+        let mut engine=s.borrow_mut();let before=(engine.revision,engine.effects.len());
+        let result=f(&mut engine);
+        (result,before!=(engine.revision,engine.effects.len()))
+    });
+    // No consumer runs under an engine borrow; several commands coalesce.
+    if changed { CHANGES.with(|s|s.update(|_|((),true))); }
+    result
 }
 #[no_mangle]
 pub unsafe extern "C" fn axia_clock_request(input: *const c_char) -> *mut c_char {

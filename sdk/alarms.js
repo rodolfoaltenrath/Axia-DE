@@ -9,6 +9,11 @@ import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive }
 import { sound } from './sound.js';
 import { registerStatusItem } from './statusitems.js';
 import { wm } from './windows.js';
+import { NativeView } from './nativeview.js';
+import { clockBridge } from './nativeclock.js';
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
+const NATIVE_CLOCK = { id: 'shell:clock', shell: true };
+const NATIVE_CLOCK_STATUS = { id: 'shell:clock-status', shell: true };
 const MIN = 60000, SNOOZE = 9 * MIN, RING_MS = 60000;
 const conf = () => settings.get().clock || {};
 export const clockTimer = createStore({ state: 'idle', duration: 0, endsAt: 0, left: 0 });
@@ -21,6 +26,9 @@ function publish(store, value) {
 }
 export function clockRequest(cmd, extra = {}) {
   const reply = lord.clock.request({ cmd, now: Date.now(), config: conf(), ...extra });
+  return applyClockReply(reply);
+}
+function applyClockReply(reply) {
   if (!reply) return null;
   if ('timer' in reply) {
     publish(clockTimer, reply.timer); publish(stopwatch, reply.stopwatch); publish(nextAlarm, reply.nextAlarm);
@@ -30,10 +38,18 @@ export function clockRequest(cmd, extra = {}) {
       else if (effect.kind === 'alarm') fireAlarm(effect.alarm, effect.due);
       else if (effect.kind === 'timer') fireTimer();
     }
-    clearTimeout(handle);
-    if (started && reply.wait != null) handle = setTimeout(arm, reply.wait);
+    if (appHost) {
+      clearTimeout(handle);
+      if (started && reply.wait != null) handle = setTimeout(arm, reply.wait);
+    }
   }
   return reply;
+}
+clockBridge.perform = effect => { if (effect.kind === 'clockReply') applyClockReply(effect.reply); };
+export function ClockSession() {
+  if (appHost || typeof lord === 'undefined' || typeof lord.appId === 'string' || typeof lord.greeter !== 'undefined') return null;
+  return h(NativeView, { manifest: NATIVE_CLOCK, stateSource: lord.windowList,
+    style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, pointerEvents: 'none' } });
 }
 export const nextFire = (alarm, now = Date.now()) => clockRequest('nextFire', { alarm, now })?.value ?? null;
 export const clockAlarms = {
@@ -123,7 +139,7 @@ function useTick(on) {
   useEffect(() => { if (!on) return undefined; const id = setInterval(() => set((x) => x + 1), 1000); return () => clearInterval(id); }, [on]);
 }
 
-function ClockStatus({ color, height }) {
+function LegacyClockStatus({ color, height }) {
   const tm = useStore(clockTimer);
   const na = useStore(nextAlarm);
   const soon = na && na.at - Date.now() < 24 * 60 * MIN;
@@ -134,6 +150,10 @@ function ClockStatus({ color, height }) {
   },
   tm.state !== 'idle' ? h(TimerLeft, { color }) : null,
   soon && tm.state === 'idle' ? h(Text, { style: { fontSize: 12, color } }, `⏰ ${formatTime(new Date(na.at))}`) : null);
+}
+function ClockStatus(props) {
+  return appHost ? h(LegacyClockStatus, props)
+    : h(NativeView, { manifest: NATIVE_CLOCK_STATUS, stateSource: lord.windowList, args: props });
 }
 
 

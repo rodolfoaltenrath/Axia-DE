@@ -99,7 +99,7 @@ export { registerStatusItem, StatusItems, statusItems } from './statusitems.js';
 export { clockAlarms, clockTimer, timerStart, timerPause, timerResume, timerReset, timerLeft, stopwatch, swStart, swStop, swLap, swReset, swElapsed, nextAlarm, nextFire } from './alarms.js';
 export { help } from './help.js';
 import { NotificationBanner } from './nativebanner.js';
-import { startAlarms } from './alarms.js';
+import { startAlarms, ClockSession } from './alarms.js';
 import { startDiskWatch } from './diskwatch.js';
 import { maybeStartTour } from './help.js';
 import { getApp as getAppOf, isLiveSystem as isLiveSystemOf, wm as wmOf, windows as windowsStore } from './windows.js';
@@ -266,6 +266,7 @@ function LocaleRoot({ children }) {
     at('modal', PrintDialog),
     createElement(RestorePrompt, { key: 'restore' }),
     createElement(DesktopSession, { key: 'desktops' }),
+    createElement(ClockSession, { key: 'clock' }),
     at('notification', NotificationBanner, ClipboardToast, DisplayIdentify),
     at('system', PermissionPrompt, Powerbox, KeyringPrompt, BluetoothPrompt, DisplayConfirm),
     at('input', OskPanel, ImeOverlay));

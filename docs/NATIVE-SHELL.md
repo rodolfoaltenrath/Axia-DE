@@ -92,6 +92,34 @@ fatia. Passaram 47 testes leves, dois contratos Rust/Node e a integração real
 com quatro casos e capturas. Métricas físicas e avaliação final de desempenho ficam para o encerramento
 do roadmap, por decisão do usuário; o orçamento existente continua no CI.
 
+## Agendamento e indicador do relógio — 2026-11-20
+
+O root monta `shell:clock` independentemente da barra do tema. O engine Rust
+invalida seus assinantes após comandos e mudanças de efeitos; o observador
+agenda o próximo vencimento no host. A sessão não arma o timeout JS de
+`alarms.js` para esse trabalho. O engine e os vencimentos sobrevivem à
+remontagem das views.
+
+O item da barra monta `shell:clock-status`: texto, visibilidade e aba de destino
+são calculados no Rust, com símbolos vetoriais para evitar dependência de glifos
+emoji. A contagem tem atualização nativa apenas enquanto o timer executa; o
+estado não entra nos fatos JS. Preferências, snapshots de compatibilidade e
+efeitos de alarmes ainda usam o adaptador; a repetição do toque continua pendente.
+
+`native_clock_runtime` verifica os quatro cenários claro/escuro e 640/1000 px:
+fonte opaca, ausência de estado nos fatos, espelho JS parado, contagem,
+remontagem, vencimento único, clique na aba correta e indicador de alarme.
+O teste recusa o timeout de agendamento e intervalos JS durante a observação;
+timers independentes de persistência de preferências continuam permitidos.
+
+```text
+AXIA_NATIVE_CLOCK_OUTPUT=/var/tmp/axia-native-clock cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_clock_runtime -- --ignored --nocapture
+```
+
+O CI GPU=1 exige essa integração e publica `axia-native-clock`. Logs e capturas
+locais ficam em `build/validation/native-clock/`. Contratos e pendências em
+`STATE-RUST.md`.
+
 ## Notificações da sessão — 2026-11-19
 
 `NotificationBanner` usa sempre o host de views Rust na sessão. A preferência

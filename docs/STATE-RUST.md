@@ -381,6 +381,34 @@ aprovados. Capturas e logs em `build/validation/desktop-session/`; o CI já
 exige `desktop_hud_runtime` e publica `axia-desktop-hud`. Sem nova medição
 física ou RPM completo nesta entrega.
 
+## Agendamento e indicador do relógio
+
+O engine residente de `axia-clock` mantém timer, cronômetro e alarmes como antes,
+compartilhado pelas views nativas do processo da sessão. `subscribe()` agora
+oferece invalidações canceláveis por `axia-state`. Escritas e mudanças na fila
+de efeitos notificam depois de liberar o empréstimo; leituras e consultas sem
+mudança não invalidam. O sinal agrupa várias escritas antes da sincronização.
+
+O root monta `shell:clock` mesmo quando o tema não inclui StatusItems. Esse
+observador usa um único prazo nativo para processar ocorrências e entregar
+efeitos, preservando as fatias de um/dez minutos para mudanças do relógio e
+suspensão. Sem ocorrências pendentes, não há prazo. Remontagens não reinicializam
+o engine nem prorrogam o vencimento. Comandos nativos que alteram o engine
+invalidam o observador sem depender de atualizar o espelho JS primeiro.
+
+`shell:clock-status` calcula texto, visibilidade e aba de destino a partir do
+engine Rust. O mount fornece apenas cor/altura e uma fonte opaca validada; não
+fornece timer, cronômetro, próximo alarme ou config. A contagem usa um prazo
+nativo de um segundo apenas enquanto executa; pausada, não pede atualizações.
+O limiar de 24 horas do próximo alarme também é nativo. A formatação regional
+reutiliza `axia-native::date_format`. Um clique revalida a aba pelo estado atual.
+
+`sdk/alarms.js` ainda sincroniza preferências, publica snapshots para APIs
+legadas e executa templates, sons e callbacks dos alarmes. A repetição do toque
+mantém a correção de permissões/silêncio/retirada e ainda usa seu intervalo JS.
+O adaptador isolado preserva o caminho legado de agendamento e apresentação.
+Esses itens continuam pendentes para a sessão sem JS.
+
 ## Serviço e banners de notificações
 
 Cada `Session` possui um serviço `notifications` compartilhado apenas pelos
