@@ -2,21 +2,6 @@
 use super::*;
 use axia_native::{date_format, i18n::I18n};
 
-// The same live rule store used by lord.fw.blocks, independent of JS snapshots.
-#[cfg(not(test))]
-pub(super) fn blocked() -> bool {
-    extern "C" {
-        fn restrict_blocks(id: *const std::ffi::c_char, flag: u32) -> i32;
-    }
-    unsafe { restrict_blocks(c"lordos".as_ptr(), 1 << 10) != 0 }
-}
-#[cfg(test)]
-thread_local! { static BLOCKED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
-#[cfg(test)]
-pub(super) fn blocked() -> bool {
-    BLOCKED.with(std::cell::Cell::get)
-}
-
 #[derive(Clone)]
 pub(super) enum Action {
     Stop,
@@ -260,16 +245,16 @@ mod tests {
     fn live_firewall_rules_block_delivery_and_cancel_an_existing_ring() {
         let initial = sound::attempts();
         let (mut s, now, wall) = setup();
-        BLOCKED.with(|v| v.set(true));
+        access::host::set_blocked("lordos", true);
         complete(&mut s, now, wall, json!({"kind":"timer"}));
         assert!(s.reader().read().history.is_empty());
         assert!(s.clock_actions.is_empty());
         assert_eq!(sound::attempts(), initial);
-        BLOCKED.with(|v| v.set(false));
+        access::host::set_blocked("lordos", false);
         complete(&mut s, now, wall, json!({"kind":"timer"}));
         assert_eq!(s.reader().read().snapshot()["ringing"], json!([1]));
         s.expire(now + RING_STEP);
-        BLOCKED.with(|v| v.set(true));
+        access::host::set_blocked("lordos", true);
         s.effects();
         assert_eq!(sound::attempts(), initial + 1);
         s.expire(now + RING_STEP * 2);
@@ -279,7 +264,7 @@ mod tests {
             .is_empty());
         assert!(!s.effects().iter().any(|e| e["kind"] == "notificationSound"));
         assert_eq!(sound::attempts(), initial + 1);
-        BLOCKED.with(|v| v.set(false));
+        access::host::set_blocked("lordos", false);
     }
     #[test]
     fn user_catalogs_locale_revisions_and_default_alarm_labels_are_native() {
@@ -343,12 +328,11 @@ impl Service {
         let mut notifications = Vec::new();
         for effect in effects.as_array().into_iter().flatten() {
             if effect["kind"] == "alarm" || effect["kind"] == "timer" {
-                self.ring_blocked = blocked();
                 let (notice, actions) = self.clock_delivery.notice(effect, wall);
                 let local = axia_clock::local(wall);
                 let delivered = self.command(
                     &json!({"action":"push","notice":notice,"prefs":self.ring_prefs,
-                    "permission":self.clock_permission,"blocked":self.ring_blocked,"wallMs":wall,
+                    "source":self.clock_source.facts(),"wallMs":wall,
                     "minute":local.tm_hour*60+local.tm_min}),
                     now,
                 );

@@ -2,6 +2,7 @@
 use axia_state::{Reader, Store};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
+mod access;
 mod clock_delivery;
 mod preferences;
 mod sound;
@@ -74,9 +75,7 @@ pub struct Service {
     sent: Option<u64>,
     effects: Vec<Value>,
     ring_prefs: Value,
-    clock_prefs: Value,
-    clock_permission: Value,
-    ring_blocked: bool,
+    clock_source: access::Source,
     clock_delivery: clock_delivery::Delivery,
     clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
     sounds: Vec<(u64, bool)>,
@@ -101,9 +100,7 @@ pub fn dnd(prefs: &Value, wall_ms: f64, minute: f64) -> bool {
 impl Service {
     fn policy(&mut self, input: &Value) {
         self.ring_prefs = preferences::normalize(&input["prefs"]);
-        self.clock_permission = input["permission"].clone();
-        self.clock_prefs = preferences::app(&self.ring_prefs, "clock", &self.clock_permission);
-        self.ring_blocked = input["blocked"] == true;
+        self.clock_source = access::Source::from(&input["source"]);
     }
     pub fn reader(&self) -> Reader<State> {
         self.state.reader()
@@ -134,11 +131,15 @@ impl Service {
         self.expire_at(now, wall as f64, (local.tm_hour * 60 + local.tm_min) as f64);
     }
     fn audible_policy(&self, wall: f64, minute: f64) -> bool {
-        !self.ring_blocked
-            && !clock_delivery::blocked()
-            && self.clock_prefs["allow"] != false
-            && self.clock_prefs["sound"] != false
-            && self.clock_prefs["style"] != "none"
+        let prefs = preferences::app(
+            &self.ring_prefs,
+            "clock",
+            &access::permission("clock", &self.clock_source),
+        );
+        access::allowed("clock", &self.clock_source)
+            && prefs["allow"] != false
+            && prefs["sound"] != false
+            && prefs["style"] != "none"
             && !dnd(&self.ring_prefs, wall, minute)
     }
     fn expire_at(&mut self, now: Instant, wall: f64, minute: f64) {
@@ -201,8 +202,9 @@ impl Service {
         // Drain audio directly, after commands have dismissed/evicted any due banner.
         // No pending sound crosses the JS bridge or survives a disconnected audio server.
         let state = self.state.read();
+        let clock_allowed = access::allowed("clock", &self.clock_source);
         for (id, repeat) in self.sounds.drain(..) {
-            if (!repeat || !clock_delivery::blocked())
+            if (!repeat || clock_allowed)
                 && state
                     .shown
                     .iter()
@@ -220,7 +222,8 @@ impl Service {
                 return json!({"result":preferences::normalize(&input["prefs"]),"effects":[]})
             }
             Some("appPreferences") => {
-                return json!({"result":preferences::app(&input["prefs"],input["app"].as_str().unwrap_or(""),&input["permission"]),"effects":[]})
+                let app = input["app"].as_str().unwrap_or("");
+                return json!({"result":preferences::app(&input["prefs"],app,&access::permission(app,&access::Source::from(&input["source"]))),"effects":[]});
             }
             Some("preferencesPatch") => {
                 return json!({"result":preferences::patch(&input["prefs"],input["app"].as_str().unwrap_or(""),&input["patch"]),"effects":[]})
@@ -244,7 +247,8 @@ impl Service {
                 let n = &input["notice"];
                 let prefs = &preferences::normalize(&input["prefs"]);
                 let app = n["app"].as_str().unwrap_or("");
-                let ap = &preferences::app(prefs, app, &input["permission"]);
+                let source = access::Source::from(&input["source"]);
+                let ap = &preferences::app(prefs, app, &access::permission(app, &source));
                 // Remember attempted apps even when permission/firewall denies delivery.
                 let mut seen: Vec<Value> = prefs["seen"].as_array().cloned().unwrap_or_default();
                 if !app.is_empty() && !seen.iter().any(|id| id == app) {
@@ -258,7 +262,7 @@ impl Service {
                     self.effects
                         .push(json!({"kind":"settings","patch":{"notifications":patch}}));
                 }
-                if ap["allow"] == false || input["blocked"] == true {
+                if ap["allow"] == false || access::blocked(app, &source) {
                     json!(0)
                 } else {
                     self.next = self.next.checked_add(1).expect("notification ID exhausted");

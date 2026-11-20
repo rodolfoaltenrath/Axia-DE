@@ -435,8 +435,9 @@ por app/legenda e conta os demais; dispensá-lo revela o anterior. A view
 revalida a ação contra IDs e índices atuais; um clique antigo não aciona uma
 notificação removida ou reutilizada. Fechamento precede o callback da ação.
 
-`sdk/notify.js` fornece metadados, preferências brutas, estado da permissão e bloqueio
-de firewall; executa patches e callbacks genéricos. Os stores públicos recebem
+`sdk/notify.js` fornece metadados e preferências brutas; executa patches e
+callbacks genéricos. O Rust consulta permissões e firewall diretamente nos
+armazenamentos do host. Os stores públicos recebem
 snapshots por revisão para compatibilidade, sem alimentar a view nativa.
 O adaptador descarta snapshots com revisão anterior ou igual à já aplicada;
 efeitos atrasados da view não podem ressuscitar itens removidos por um comando.
@@ -453,8 +454,8 @@ recebe um prazo monotônico de 60 segundos e um próximo pulso a cada 2,5 segund
 Não Perturbe, estilo sem banner, recusa, silêncio e firewall impedem o início;
 mudanças de preferências cancelam o toque ativo. A agenda DND é reavaliada com
 a hora local nos pulsos, inclusive quando cruza meia-noite. O adaptador publica
-as preferências brutas e o estado da permissão; o Rust resolve os padrões e
-opções efetivas. O native view não recebe lista ou política.
+as preferências brutas e a identidade do app; o Rust consulta a permissão atual
+e resolve os padrões e opções efetivas. O native view não recebe lista ou política.
 
 O prazo pertence à notificação no contexto. Remontar a view preserva a cadência;
 um atraso produz no máximo um pulso, sem recuperar sons perdidos em rajada.
@@ -483,14 +484,14 @@ Logs e capturas desta etapa: `build/validation/native-notification-audio/`.
 da permissão de pacotes e a mesclagem de alterações. Campos desconhecidos,
 opções de outros apps e histórico de apps vistos são preservados. A mesclagem
 global continua rasa, conservando o formato já persistido pelo SDK. Pacotes usam
-o estado da permissão informado pelo host; apps internos usam o campo `allow`.
+o estado atual da permissão consultado pela API nativa; apps internos usam o campo `allow`.
 
 Entrega, toque de alarmes e as APIs `notifyPrefs`/`appNotifyPrefs` da sessão
 usam essas funções Rust. Pedidos de entrega não transportam `appPrefs`
 pré-calculados, e o relógio não recebe opções efetivas produzidas pelo JS.
 `setAppNotifyPrefs` pede ao proprietário a alteração mesclada. Consultas e
 mesclagem são puras: não expiram banners, não drenam efeitos nem invalidam
-leitores. A persistência, a leitura/escrita da permissão, metadados de catálogo
+leitores. A persistência, a escrita da permissão, metadados de catálogo
 e o snapshot de configurações ainda passam pelo adaptador; a migração completa
 de `settings.js` permanece pendente. O host `.lpk` conserva as funções locais.
 
@@ -498,6 +499,28 @@ de `settings.js` permanece pendente. O host `.lpk` conserva as funções locais.
 que a sessão usa o Rust, verifica a edição sem perder opções e exige transporte
 de preferências brutas. O contrato isolado mantém a compatibilidade legada.
 Logs e capturas desta etapa: `build/validation/native-notification-preferences/`.
+
+## Consulta nativa de permissões e firewall
+
+`notifications/access.rs` lê `perm_get` e `restrict_blocks` pela ABI do host,
+sobre os mesmos armazenamentos usados pelos controles de privacidade. A entrega
+e a consulta de opções não aceitam estado de permissão ou bloqueio calculado
+pelo JS. A identidade ainda chega do catálogo transitório: pacote, isolado ou
+app interno. O Rust deriva o escopo `lpk:<id>` ou `lordos` e preserva as exceções
+de avisos de Configurações, notificações sem app e do namespace Linux, cuja
+verificação ocorre na entrada D-Bus.
+
+O toque conserva essa identidade no proprietário do contexto e reconsulta a
+permissão/firewall nos pulsos e antes de reproduzir uma tentativa enfileirada.
+Revogar uma permissão sem alterar `settings` cancela o toque; reautorização não
+retoma um alarme já cancelado. A escrita de permissões, seus espelhos/avisos de
+revisão no SDK e a migração do catálogo continuam pendentes.
+
+A integração gráfica modifica os armazenamentos reais enquanto as consultas JS
+simulam liberação: exige recusa de pacote, isolamento dos escopos do firewall,
+exceções preservadas e cancelamento de um toque por revogação. Também exige
+ausência dos fatos `permission`/`blocked` nos pedidos da sessão.
+Logs e capturas desta etapa: `build/validation/native-notification-access/`.
 
 ## Templates e ações de alarmes no proprietário Rust
 

@@ -355,8 +355,8 @@ views nativas lerem direto, sem JSON.
       prazos de notificações pertencem ao contexto Rust. A view monta os
       banners diretamente desse proprietário, sem árvore/lista JS e sem
       timer JS. Ações revalidam IDs e índices antes dos callbacks; o host
-      LPK preserva o comportamento local. Preferências, permissões/firewall
-      genéricos, callbacks e stores de compatibilidade ainda usam o adaptador.
+      LPK preserva o comportamento local. Transporte/persistência de preferências,
+      escrita de permissões, callbacks e stores de compatibilidade ainda usam o adaptador.
       O relógio agora publica invalidações Rust. Um observador no root agenda
       a próxima ocorrência e entrega os efeitos sem setTimeout JS na sessão;
       o indicador da barra consulta o engine diretamente e atualiza a contagem
@@ -382,7 +382,10 @@ views nativas lerem direto, sem JSON.
       de alterações de notificações agora são resolvidos no Rust; entrega e
       relógio recebem preferências brutas. APIs de consulta não invalidam o
       modelo nem drenam efeitos. Transporte/persistência de configurações,
-      leitura/escrita de permissões, metadados e espelhos continuam pendentes.
+      escrita de permissões, metadados e espelhos continuam pendentes. A leitura
+      de permissões e firewall agora consulta os armazenamentos nativos na
+      entrega e nos pulsos, sem fatos calculados pelo JS. Escopos de apps e
+      exceções preservados; revogação sem alterar settings cancela o toque.
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
       e substituir ícones descritos por funções JS por recursos serializáveis;
       o host nativo ainda usa placeholder para esses ícones personalizados.
@@ -567,3 +570,4 @@ mostraram.
 | 2026-11-20 | Fase 2: templates e ações de alarmes no serviço Rust | Commit desta linha | Conclusões do observador e comandos do SDK criam notificações diretamente no proprietário nativo. Textos, hora, catálogos do usuário e revisões de idioma no Rust; Parar/Adiar/Repetir são ações privadas, inclusive no histórico. Repetir usa a duração atual do engine. Reproduzida entrega após bloqueio tardio de firewall; corrigida com consulta ao armazenamento nativo na entrega e nos pulsos. Passaram 578 testes unitários, seis contratos LPK, oito cenários gráficos de relógio/notificações, encerramento instalado por timeout/SIGTERM e integração dos apps compilados. Evidências em build/validation/clock-delivery; captura inspecionada. Preferências, callbacks genéricos, espelhos e execução final do som continuam pendentes; medições físicas no encerramento. |
 | 2026-11-20 | Fase 2: execução nativa do som de notificações | Commit desta linha | Serviço Rust guarda IDs/tipo dos pulsos em fila privada e chama snd_play diretamente, validando retirada e firewall antes da reprodução. Eliminados efeito de som e reconsulta ringAudible pelo JS da sessão; host LPK preservado. Falha de áudio descarta a tentativa sem adicionar timer de recuperação. Passaram 578 testes unitários, 17 testes focados após reforço da guarda, seis contratos LPK, oito cenários gráficos com ausência de efeitos/chamadas JS de som e encerramento instalado por timeout/SIGTERM. Captura inspecionada; evidências em build/validation/native-notification-audio. Preferências, callbacks genéricos e espelhos continuam pendentes; áudio físico no encerramento. |
 | 2026-11-20 | Fase 2: resolução nativa das preferências de notificações | Commit desta linha | Padrões globais e por app, precedência da permissão de pacotes e mesclagem das edições no Rust. SDK transporta preferências brutas e estado da permissão; entrega não aceita opções efetivas pré-calculadas. Consultas/mesclagem não expiram banners, drenam efeitos ou invalidam leitores. Passaram 583 testes unitários, seis contratos LPK, oito cenários gráficos e encerramento instalado por timeout/SIGTERM. Integração verifica padrões JS alterados sem influência no resultado nativo, edição sem perda de outras opções e ausência de appPrefs no transporte. Evidências em build/validation/native-notification-preferences. Persistência/transporte de configurações, acesso a permissões, metadados, callbacks genéricos e espelhos permanecem pendentes; medições físicas no encerramento. |
+| 2026-11-20 | Fase 2: consulta nativa das permissões e do firewall de notificações | Commit desta linha | Rust consulta perm_get e restrict_blocks nos armazenamentos reais, deriva escopos de apps internos/pacotes/isolados e preserva exceções de Configurações, app vazio e namespace Linux. Removidos fatos permission/blocked dos pedidos JS. Pulsos reconsultam a permissão atual e descartam tentativas enfileiradas após revogação, sem atualização de settings e sem retomar toque cancelado. Passaram 586 testes unitários, seis contratos LPK, oito cenários gráficos e encerramento instalado por timeout/SIGTERM. Integração usa permissões/firewall reais com consultas JS simulando liberação; catálogo do cenário mantém identidade coerente. Evidências em build/validation/native-notification-access. Escrita de permissões, catálogo, configurações, callbacks genéricos e espelhos ainda pendentes; medições físicas no encerramento. |

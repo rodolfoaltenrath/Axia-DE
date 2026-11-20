@@ -50,7 +50,6 @@ fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
     let now = Instant::now();
     for extra in [
         json!({"prefs":{"apps":{"clock":{"allow":false}}}}),
-        json!({"blocked":true}),
         json!({"prefs":{"dnd":true}}),
         json!({"prefs":{"apps":{"clock":{"sound":false}}}}),
         json!({"prefs":{"apps":{"clock":{"style":"none"}}}}),
@@ -75,14 +74,13 @@ fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
 }
 
 #[test]
-fn muting_dnd_denial_and_firewall_cancel_native_ringing_without_resuming_old_alarms() {
+fn muting_dnd_and_denial_cancel_native_ringing_without_resuming_old_alarms() {
     let now = Instant::now();
     for policy in [
         json!({"prefs":{"apps":{"clock":{"sound":false}}}}),
         json!({"prefs":{"apps":{"clock":{"allow":false}}}}),
         json!({"prefs":{"apps":{"clock":{"style":"none"}}}}),
         json!({"prefs":{"dnd":true}}),
-        json!({"blocked":true}),
     ] {
         let mut service = Service::default();
         ring(&mut service, now, json!({}));
@@ -182,16 +180,18 @@ fn permission_firewall_dnd_and_history_have_distinct_delivery_effects() {
     let initial = sound::attempts();
     let now = Instant::now();
     let mut service = Service::default();
-    for extra in [
-        json!({"prefs":{"apps":{"notes":{"allow":false}}}}),
-        json!({"blocked":true}),
+    for (extra, blocked) in [
+        (json!({"prefs":{"apps":{"notes":{"allow":false}}}}), false),
+        (json!({}), true),
     ] {
+        access::host::set_blocked("lordos", blocked);
         let reply = push(&mut service, now, "Denied", extra);
         assert_eq!(reply["result"], 0);
         assert!(kinds(&reply).contains(&"settings"));
         assert!(!kinds(&reply).contains(&"notificationSound"));
         assert!(service.reader().read().history.is_empty());
     }
+    access::host::set_blocked("lordos", false);
     for extra in [
         json!({"prefs":{"dnd":true}}),
         json!({"prefs":{"apps":{"notes":{"style":"none"}}}}),
@@ -405,24 +405,48 @@ fn delivery_resolves_raw_preferences_instead_of_trusting_precomputed_app_options
     let mut service = Service::default();
     let raw = json!({"prefs":{"apps":{"notes":{"allow":false}}},"appPrefs":{"allow":true}});
     assert_eq!(push(&mut service, now, "Denied", raw)["result"], 0);
+    access::host::set_permission("notes", 2);
     assert_eq!(
         push(
             &mut service,
             now,
             "Package denied",
-            json!({"permission":"deny"})
+            json!({"source":{"package":true},"permission":"allow","blocked":false})
         )["result"],
         0
     );
+    access::host::set_permission("notes", 1);
     let granted = push(
         &mut service,
         now,
         "Package allowed",
-        json!({"permission":"allow","prefs":{"apps":{"notes":{"allow":false,"sound":false}}}}),
+        json!({"source":{"package":true},"permission":"deny","prefs":{"apps":{"notes":{"allow":false,"sound":false}}}}),
     );
     assert!(granted["result"].as_u64().unwrap() > 0);
     assert_eq!(
         service.reader().read().shown[0].data["title"],
         "Package allowed"
     );
+}
+
+#[test]
+fn revoking_a_live_package_permission_cancels_queued_and_future_alarm_pulses() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    ring(&mut service, now, json!({"source":{"package":true}}));
+    let played = sound::attempts();
+    service.expire_at(now + RING_STEP, 0., 0.);
+    access::host::set_permission("clock", 2);
+    service.effects();
+    assert_eq!(sound::attempts(), played);
+    service.expire_at(now + RING_STEP * 2, 0., 0.);
+    assert!(service.reader().read().snapshot()["ringing"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    access::host::set_permission("clock", 1);
+    service.expire_at(now + Duration::from_secs(10), 0., 0.);
+    service.effects();
+    assert_eq!(sound::attempts(), played);
+    assert!(service.wait_ms(now).is_none());
 }

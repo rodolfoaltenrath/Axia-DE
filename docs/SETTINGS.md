@@ -311,8 +311,9 @@ it from LordOS would make dpkg ask about it on every package update (or drop the
 
 The main shell applies notification policy in the context-owned Rust service
 (`rust/axia-shell/src/notifications/`). Defaults, app overrides and preference
-patches are resolved natively from raw preferences and the host permission state.
-`sdk/notify.js` transports those inputs and persists patches; the isolated `.lpk`
+patches are resolved natively from raw preferences. Permission/firewall checks
+read the host stores directly, including changes while an alarm rings.
+`sdk/notify.js` transports preferences and app identity and persists patches; the isolated `.lpk`
 host keeps its local policy implementation. This applies to every `notify()`:
 
 - **Per app:** allow, style (none / banners / alerts: alerts stay until dismissed), sound, and

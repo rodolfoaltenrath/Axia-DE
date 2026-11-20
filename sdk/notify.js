@@ -85,9 +85,12 @@ export const notifyPrefs = (s = settings.get()) => appHost
   ? ({ ...NOTIFY_DEFAULTS, ...(s.notifications || {}) })
   : command('preferences', { prefs: s.notifications });
 const isPackage = (app) => { try { return !!getApp(app)?.package; } catch (e) { return false; } };
-const packagePermission = app => isPackage(app) ? perms.get(app, 'notifications') : null;
+function notificationSource(app) {
+  try { const a = getApp(app); return { package: !!a?.package, isolated: !!a?.isolated }; }
+  catch (e) { return {}; }
+}
 export function appNotifyPrefs(app, s = settings.get()) {
-  if (!appHost) return command('appPreferences', { prefs: s.notifications, app, permission: packagePermission(app) });
+  if (!appHost) return command('appPreferences', { prefs: s.notifications, app, source: notificationSource(app) });
   const p = { allow: true, style: 'banner', sound: true, lock: true, ...(notifyPrefs(s).apps[app] || {}) };
   if (isPackage(app)) p.allow = perms.get(app, 'notifications') !== 'deny';
   return p;
@@ -127,14 +130,14 @@ function fwNotifyBlocked(app) {
   } catch (e) { return false; }
 }
 // Transitional permission/settings adapter for native Clock delivery.
-export const clockNotificationPolicy = () => ({ prefs: settings.get().notifications, permission: packagePermission('clock'), blocked: fwNotifyBlocked('clock') });
+export const clockNotificationPolicy = () => ({ prefs: settings.get().notifications, source: notificationSource('clock') });
 
 export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null, _ring = false } = {}) {
   app = String(app);
   if (!appHost) {
     const at = new Date(), registered = getApp(app);
     const selected = Array.isArray(actions) ? actions.slice(0, 3) : [];
-    const reply = rawRequest('push', { prefs: settings.get().notifications, permission: packagePermission(app), blocked: fwNotifyBlocked(app),
+    const reply = rawRequest('push', { prefs: settings.get().notifications, source: notificationSource(app),
       wallMs: at.getTime(), minute: at.getHours() * 60 + at.getMinutes(),
       notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
         sound: !!withSound, ring: !!_ring, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),

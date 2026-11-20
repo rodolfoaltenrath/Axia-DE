@@ -107,8 +107,10 @@ estado não entra nos fatos JS. Templates e ações Parar/Adiar/Repetir também
 pertencem ao serviço Rust, inclusive no histórico. Repetir usa a duração do
 engine atual; a entrega consulta a regra atual do firewall por API nativa.
 Padrões e opções de notificações por app são resolvidos no Rust. O adaptador
-transporta preferências brutas e estado de permissão, persiste alterações e
+transporta preferências brutas e identidade de catálogo, persiste alterações e
 mantém snapshots de compatibilidade.
+O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
+e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 O serviço chama o cliente de áudio diretamente pela ABI nativa; não há efeito
 de som na ponte JS nem callback de reprodução para alarmes/notificações.
 A repetição do toque já pertence ao
