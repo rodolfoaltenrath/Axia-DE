@@ -6,6 +6,7 @@
 
 void js_sys_init(void);                         /* takes $HOME (already unprivileged) */
 void js_sys_register(JSContext *c, JSValue lord);
+char *axia_settings_request(const char *home, const char *input);
 /* Process of an isolated app: only lord.text and lord.image (drawing and text direction). */
 void js_sys_register_app(JSContext *c, JSValue lord);
 void js_sys_set_greeter(int on);             /* login screen theme: lord.greeter */

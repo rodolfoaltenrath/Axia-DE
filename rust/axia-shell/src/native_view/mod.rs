@@ -17,6 +17,7 @@ mod menubar;
 mod desktop_hud;
 mod notifications;
 mod clock;
+mod settings;
 mod window_menu;
 #[cfg(test)]
 mod window_menu_tests;
@@ -231,6 +232,8 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:clock" {
         owner.as_ref().map(|session| Box::new(clock::Scheduler::new(session.notification_service())) as Box<dyn NativeApp>)
+    } else if id == "shell:settings" {
+        owner.as_ref().map(|_| Box::new(settings::Observer::new(home.as_deref().unwrap_or(""))) as Box<dyn NativeApp>)
     } else if id == "shell:clock-status" {
         owner.as_ref().map(|_| Box::new(clock::Status::default()) as Box<dyn NativeApp>)
     } else if id == "shell:window-memory" {

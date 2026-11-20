@@ -27,6 +27,7 @@ RUST_INPUTS += $(wildcard ../rust/axia-shell/src/*.css ../assets/vscode/axia-win
 RUST_INPUTS += $(foreach crate,$(wildcard ../rust/axia-native ../rust/axia-state ../rust/axia-fs ../rust/axia-clock ../rust/axia-app-*),$(crate)/Cargo.toml $(call rust_sources,$(crate)/src))
 RUST_INPUTS += $(CODEC_INPUTS)
 RUST_INPUTS += ../assets/emoji.json
+RUST_INPUTS += ../sdk/settings-defaults.json
 RUST_INPUTS += ../assets/monitor/geoip-country.mmdb ../assets/monitor/land.bin
 # The desktop runs on a host distribution: devices come from libseat, and networking,
 # packages and login stay with the host.

@@ -25,6 +25,51 @@ e informar corretamente se ela mudou estado. A API usa `Rc`/`RefCell` e não
 aceita compartilhamento entre threads. Workers deverão entregar seus
 resultados à thread da interface.
 
+## Configurações residentes por perfil
+
+`rust/axia-shell/src/settings.rs` guarda o estado autoritativo de configurações
+em `axia-state`, na thread da interface e por perfil do processo. O caminho do
+perfil vem do adaptador C, não do pedido JSON. Padrões usam uma fonte de dados
+comum em `sdk/settings-defaults.json`, incluída no Rust e no SDK isolado; o
+Makefile acompanha esse arquivo como dependência do arquivo estático Rust.
+
+O bootstrap recebe o texto carregado pela API existente, aplica os mesmos
+schemas 1–3 e preserva campos desconhecidos e versões futuras. Migração pública
+continua pura. Arquivos ilegíveis recebem os padrões, com aviso; não são gravados
+durante a inicialização. O modelo inicializa uma vez por perfil e preserva
+alterações pendentes quando o espelho ou a view são recriados.
+
+Patches alteram apenas os campos enviados; substituições por função usam o
+snapshot atual do proprietário. Leituras e alterações sem efeito não invalidam
+consumidores. Leitores Rust acessam os valores por empréstimo. A API da sessão
+em `sdk/settings.js` é um espelho com revisões: descartam-se respostas atrasadas,
+e campos inalterados conservam suas referências para as assinaturas existentes.
+A mesma preservação de referências vale para `migrateSettings`.
+
+O root monta `shell:settings`, vinculado ao proprietário validado da sessão e
+independente do tema. Esse observador consome invalidações e publica snapshots
+somente quando a revisão muda, sem polling. Os demais apps ainda recebem
+preferências nos fatos JSON; a leitura direta nesses consumidores está pendente.
+O host `.lpk` preserva o store e as migrações locais.
+
+A gravação de 300 ms e a serialização para a API de arquivo ainda são feitas
+pelo adaptador JS. A gravação usa o snapshot nativo atual; confirmação de uma
+revisão antiga não limpa alterações posteriores. `saveSettingsNow(true)` mantém
+o caminho durável existente. Mudanças pendentes sobrevivem à recriação do
+adaptador, que rearma sua gravação. Transferir o prazo e a persistência para
+Rust, assim como idioma/região e demais consumidores, continua pendente.
+
+`native_settings_runtime` exige quatro cenários claro/escuro e 640/1000 px:
+observador sem preferências nos fatos, espelho parado, updater com dados nativos,
+descarte de respostas antigas, referências preservadas, nomes de propriedades
+próprios, alterações sem efeito, gravação durável e remontagem sem nova gravação.
+O CI GPU=1 exige essa integração e publica `axia-native-settings`.
+Evidências locais em `build/validation/native-settings/`. A regressão de Arquivos
+também exige que a migração pública preserve a referência do campo `files`,
+além dos valores migrados. Configurações, Arquivos, notificações e relógio
+foram verificados em vinte cenários gráficos, além dos apps compilados e do
+encerramento instalado. Não houve nova medição física.
+
 ## Primeiro modelo: janelas
 
 `axia_shell::winmodel::Session` guarda `WindowState` nesse store. `reader()`

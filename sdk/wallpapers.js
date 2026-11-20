@@ -5,9 +5,10 @@
 //   thumb     320×180 for grids (Settings, Control Center); never decode the full image for those
 //   variants  [{ w, h, src }] from small to large: wallpaperSrc() picks the one that fits a screen
 import index from '../assets/wallpapers/index.json';
+import settingsDefaults from './settings-defaults.json';
 
-// The desktop of a new user (sdk/settings.js DEFAULTS) and the fallback for an unknown id.
-export const DEFAULT_WALLPAPER = 'infinite-galaxy';
+// The shared preference default and the fallback for an unknown wallpaper id.
+export const DEFAULT_WALLPAPER = settingsDefaults.wallpaper;
 // The still background Settings offers for the login screen.
 export const GREETER_WALLPAPER = 'violet-horizon';
 

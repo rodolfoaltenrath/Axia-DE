@@ -28,6 +28,7 @@ mod session_restore;
 mod desktop_session;
 mod desktop_animation;
 mod notifications;
+mod settings;
 #[path = "../../../server/src/app/mod.rs"]
 mod isolated_app;
 use axia_app_notes as notes_app;

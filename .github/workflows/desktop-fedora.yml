@@ -104,6 +104,11 @@ jobs:
         env:
           AXIA_DOCK_OUTPUT: ${{ runner.temp }}/axia-dock
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test dock_runtime -- --ignored --nocapture
+      - name: Rust native settings ownership and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_NATIVE_SETTINGS_OUTPUT: ${{ runner.temp }}/axia-native-settings
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_settings_runtime -- --ignored --nocapture
       - name: Rust Spotlight integration and captures
         if: matrix.gpu == 1
         env:
@@ -278,6 +283,12 @@ jobs:
         with:
           name: axia-native-clock
           path: ${{ runner.temp }}/axia-native-clock
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-native-settings
+          path: ${{ runner.temp }}/axia-native-settings
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

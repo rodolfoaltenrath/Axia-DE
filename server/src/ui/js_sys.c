@@ -442,6 +442,20 @@ static JSValue f_settings_load(JSContext *c, JSValueConst this_val, int argc, JS
     free(txt);
     return s;
 }
+static JSValue f_settings_state(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)self;
+    if (argc < 1) return JS_NULL;
+    JSValue encoded = JS_JSONStringify(c, argv[0], JS_UNDEFINED, JS_UNDEFINED);
+    if (JS_IsException(encoded)) return encoded;
+    const char *input = JS_ToCString(c, encoded);
+    char *reply = input ? axia_settings_request(home, input) : NULL;
+    if (input) JS_FreeCString(c, input);
+    JS_FreeValue(c, encoded);
+    if (!reply) return JS_NULL;
+    JSValue value = JS_ParseJSON(c, reply, strlen(reply), "<settings>");
+    free(reply);
+    return value;
+}
 
 static JSValue f_settings_save(JSContext *c, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
@@ -1476,6 +1490,7 @@ static const JSCFunctionListEntry settings_funcs[] = {
     JS_CFUNC_DEF("importWallpaper", 1, f_wallpaper_import),
     JS_CFUNC_DEF("glassMaterial", 2, f_glass_material),
     JS_CFUNC_DEF("load", 0, f_settings_load),
+    JS_CFUNC_DEF("state", 1, f_settings_state),
     JS_CFUNC_DEF("save", 1, f_settings_save),
 };
 static const JSCFunctionListEntry admin_funcs[] = {

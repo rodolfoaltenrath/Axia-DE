@@ -4,6 +4,12 @@ Settings now uses the compiled Rust native view. Its manifest, all pages,
 controls and tests live in `apps/settings/*.rs`; see [RUST-SETTINGS.md](RUST-SETTINGS.md).
 The service architecture below describes the existing shared shell APIs.
 
+Preferences now have a resident Rust owner per profile (`axia-shell/src/settings.rs`).
+Defaults come from `sdk/settings-defaults.json`; schema migrations and mutations
+run natively. The SDK is a revisioned compatibility mirror, updated by the root's
+`shell:settings` observer without polling. Its 300 ms save deadline, file
+serialization and the existing durable file API remain in the adapter for now.
+
 ## Axia on Fedora: live battery status
 
 The battery uses the existing unprivileged `/sys/class/power_supply` reader. A

@@ -1,5 +1,11 @@
 # Shell nativo em Rust
 
+As configurações têm proprietário observável Rust por perfil e um observador
+`shell:settings` no root, sem polling. O SDK mantém apenas o espelho por revisão
+para os consumidores de compatibilidade, com referências estáveis para blocos
+inalterados. Padrões e migrações já são nativos; prazo de gravação e persistência
+continuam no adaptador. Contratos em [STATE-RUST.md](STATE-RUST.md).
+
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena
 Rust já existente, até não restarem consumidores do motor.
