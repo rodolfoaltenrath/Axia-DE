@@ -136,8 +136,9 @@ recargas de catálogos; notificações/alarmes não recebem contexto de locale p
 SDK. O store público de i18n espelha essa fonte por revisão, pelo observador
 `shell:settings`; idioma e direção são aplicados diretamente pela ABI C no
 contexto ativo. Leitores de outros perfis não alteram a interface. Updaters
-consultam o estado nativo e respostas antigas são descartadas. Tradução e
-formatação do SDK ainda precisam migrar. `native_locale_runtime` cobre quatro
+consultam o estado nativo e respostas antigas são descartadas. Tradução e nomes
+de apps do SDK consultam o resolvedor compartilhado Rust com o idioma atual;
+formatação e enumeração de idiomas ainda precisam migrar. `native_locale_runtime` cobre quatro
 variantes de tema/tamanho, com setters JS de texto bloqueados; o CI GPU=1
 publica `axia-native-locale`. Evidências em `build/validation/native-locale-session/`.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega

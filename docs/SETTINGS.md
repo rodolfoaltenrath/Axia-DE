@@ -335,9 +335,13 @@ read current native state, stale replies are discarded, and synchronous settings
 replies carry the current locale. Temporary language/region/direction overrides
 belong to Rust. The active interface applies language and direction directly
 through the C ABI; inactive profile readers cannot change global text state.
-The isolated `.lpk` host retains its local store. SDK translation and formatting
-remain pending migration. `native_locale_runtime` covers four theme/size cases
-with legacy locale reads and JS text setters disabled; CI GPU=1 publishes
+The isolated `.lpk` host retains its local store and translator. Main-session
+`t`, `tOptional` and `appName` use the shared Rust catalog resolver with current
+native language, even when the JS mirror is stale. The facade preserves JS
+interpolation and count coercion; plural selection stays native and preserves
+fractional counts. SDK formatting and language enumeration remain pending.
+`native_locale_runtime` covers four theme/size cases with legacy locale reads,
+JS catalog/language reads during translation and JS text setters disabled; CI GPU=1 publishes
 `axia-native-locale`. Local evidence: `build/validation/native-locale-session/`.
 This applies to every `notify()`:
 

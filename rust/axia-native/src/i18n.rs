@@ -48,10 +48,8 @@ impl I18n {
             let found = (valid(lang) && valid(ns))
                 .then(|| {
                     self.roots.iter().find_map(|root| {
-                        let text = crate::read(
-                            &root.join(lang).join(format!("{ns}.json")),
-                            1 << 20,
-                        );
+                        let text =
+                            crate::read(&root.join(lang).join(format!("{ns}.json")), 1 << 20);
                         serde_json::from_str::<Value>(&text)
                             .ok()?
                             .as_object()
@@ -84,7 +82,7 @@ impl I18n {
         }
         Some(value.clone())
     }
-    fn plural_rule(&mut self, n: u64) -> &'static str {
+    fn plural_rule(&mut self, n: f64) -> &'static str {
         let lang = self.lang.clone();
         let rule = self
             .catalog(&lang, "meta")
@@ -92,10 +90,10 @@ impl I18n {
             .and_then(Value::as_str)
             .unwrap_or("one-other")
             .to_owned();
-        let (m10, m100) = (n % 10, n % 100);
+        let (m10, m100) = (n % 10., n % 100.);
         match rule.as_str() {
             "zero-one-other" => {
-                if n <= 1 {
+                if n == 0. || n == 1. {
                     "one"
                 } else {
                     "other"
@@ -103,29 +101,40 @@ impl I18n {
             }
             "none" => "other",
             "east-slavic" | "polish" => {
-                if (rule == "polish" && n == 1) || (rule != "polish" && m10 == 1 && m100 != 11) {
+                if (rule == "polish" && n == 1.) || (rule != "polish" && m10 == 1. && m100 != 11.) {
                     "one"
-                } else if (2..=4).contains(&m10) && !(12..=14).contains(&m100) {
+                } else if (2. ..=4.).contains(&m10) && !(12. ..=14.).contains(&m100) {
                     "few"
                 } else {
                     "many"
                 }
             }
-            "czech-slovak" => match n {
-                1 => "one",
-                2..=4 => "few",
-                _ => "other",
-            },
-            "arabic" => match (n, m100) {
-                (0, _) => "zero",
-                (1, _) => "one",
-                (2, _) => "two",
-                (_, 3..=10) => "few",
-                (_, 11..) => "many",
-                _ => "other",
-            },
+            "czech-slovak" => {
+                if n == 1. {
+                    "one"
+                } else if (2. ..=4.).contains(&n) {
+                    "few"
+                } else {
+                    "other"
+                }
+            }
+            "arabic" => {
+                if n == 0. {
+                    "zero"
+                } else if n == 1. {
+                    "one"
+                } else if n == 2. {
+                    "two"
+                } else if (3. ..=10.).contains(&m100) {
+                    "few"
+                } else if m100 >= 11. {
+                    "many"
+                } else {
+                    "other"
+                }
+            }
             _ => {
-                if n == 1 {
+                if n == 1. {
                     "one"
                 } else {
                     "other"
@@ -135,21 +144,25 @@ impl I18n {
     }
     /// `t(key, vars)`: the user's language, then English, then the key itself.
     pub fn t(&mut self, key: &str, vars: &Map<String, Value>) -> String {
+        let count = vars.get("count").and_then(Value::as_f64).unwrap_or(0.);
+        self.t_count(key, vars, count)
+    }
+    /// Localized data without interpolation, with the same English fallback as captions.
+    pub fn localized(&mut self, key: &str) -> Option<Value> {
         let lang = self.lang.clone();
-        let found = self.lookup(&lang, key).or_else(|| {
+        self.lookup(&lang, key).or_else(|| {
             (lang != FALLBACK)
                 .then(|| self.lookup(FALLBACK, key))
                 .flatten()
-        });
+        })
+    }
+    /// SDK count coercion is separate from interpolation (e.g. count="01").
+    pub fn t_count(&mut self, key: &str, vars: &Map<String, Value>, count: f64) -> String {
+        let found = self.localized(key);
         let text = match found {
             None => key.to_owned(),
             Some(Value::Object(forms)) => {
-                let n = vars
-                    .get("count")
-                    .and_then(Value::as_f64)
-                    .unwrap_or(0.)
-                    .abs() as u64;
-                let form = self.plural_rule(n);
+                let form = self.plural_rule(count.abs());
                 forms
                     .get(form)
                     .or_else(|| forms.get("other"))

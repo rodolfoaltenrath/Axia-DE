@@ -227,6 +227,29 @@ impl Model {
             .expect("locale revision exhausted");
         self.rebuild();
     }
+    fn translate(&mut self, input: &Value) -> Value {
+        self.sync();
+        self.catalogs.lang = self.state.read().lang.clone();
+        let Some(key) = input["key"].as_str() else {
+            return json!({"error":"locale.invalidKey"});
+        };
+        let localized = self.catalogs.localized(key);
+        let value = if input["cmd"] == "appName" {
+            localized.unwrap_or_else(|| input["fallback"].clone())
+        } else if input["cmd"] == "optional" && localized.is_none() {
+            Value::Null
+        } else {
+            let empty = Map::new();
+            let vars = input["vars"].as_object().unwrap_or(&empty);
+            let count = input["count"]
+                .as_str()
+                .unwrap_or("0")
+                .parse::<f64>()
+                .unwrap_or(f64::NAN);
+            Value::from(self.catalogs.t_count(key, vars, count))
+        };
+        json!({"value":value})
+    }
 }
 thread_local! {static PROFILES:RefCell<BTreeMap<(String,String),Model>>=RefCell::new(BTreeMap::new());}
 pub(crate) fn reader(home: &str, assets: &str) -> Reader<State> {
@@ -286,6 +309,7 @@ fn request(home: &str, assets: &str, input: &Value) -> Value {
                 model.snapshot()
             }
             Some("snapshot") => model.snapshot(),
+            Some("translate" | "optional" | "appName") => model.translate(input),
             Some("patch" | "replace") => model.set(&input["value"], input["cmd"] == "replace"),
             Some("reload") => {
                 model.reload(home, false);

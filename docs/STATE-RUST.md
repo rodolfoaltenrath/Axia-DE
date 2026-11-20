@@ -595,8 +595,9 @@ Entrega e histórico usam o relógio civil nativo, inclusive para a agenda DND;
 expiração permanece monotônica. A formatação respeita idioma, região e preferência
 de 12/24 horas do perfil Rust, mesmo com espelho JS antigo. Idioma/região e revisão
 de catálogos dos serviços vêm de `locale.rs`, sem contexto enviado pelo SDK.
-O store público é um espelho do mesmo proprietário; tradução/formatação do SDK
-continuam pendentes. Catálogos privados e fallback inglês permanecem disponíveis.
+O store público é um espelho do mesmo proprietário; tradução e nomes de apps
+usam o resolvedor compartilhado Rust. Formatação do SDK continua pendente.
+Catálogos privados e fallback inglês permanecem disponíveis.
 
 O SDK da sessão não calcula nome/horário nem transporta timestamp/minuto na
 entrega. O host LPK mantém seu contrato local. Testes Rust verificam dados
@@ -624,7 +625,7 @@ Não há timer nem dependência de `lord.locale.get` pelo caminho dos serviços.
 Notificações e entrega de alarmes usam essa fonte. Pedidos do SDK não carregam
 lang/region/revision/localeRevision. `reloadCatalogs` mantém a invalidação dos
 consumidores JS e avisa a fonte nativa. O store público do SDK espelha essa fonte
-por revisão. Tradução, formatos e demais consumidores continuam pendentes.
+por revisão. Formatos, enumeração de idiomas e demais consumidores continuam pendentes.
 
 Os testes Rust cobrem precedência/validação, limite, preferência salva,
 invalidações silenciosas, seleção automática, metadados privados e recarga.
@@ -665,6 +666,34 @@ encerramento/menu, encerramento instalado, smoke e apps compilados em GPU=1.
 Compositor e bundles recompilados; captura inspecionada. Evidências locais em
 `build/validation/native-locale-session/`; CI GPU=1 exige o teste e publica
 `axia-native-locale`. Medições físicas continuam reservadas ao final do roadmap.
+
+### Tradução do SDK no resolvedor compartilhado
+
+Na sessão principal, `t`, `tOptional` e `appName` consultam os catálogos do
+proprietário Rust, com idioma atual mesmo quando o espelho JS está antigo.
+Catálogos do perfil precedem assets; fallback inglês e chave original continuam
+disponíveis. O SDK só adapta strings de interpolação e a coerção numérica de
+`count` na fronteira pública; seleção de plural e resolução ficam no `I18n`
+compartilhado com as views e serviços nativos. Interpolação mantém o valor
+original de `count` (por exemplo, `"01"`), independentemente da seleção numérica.
+Contagens fracionárias não são mais truncadas para inteiro no resolvedor nativo.
+
+Testes Rust cobrem as sete regras de plural, frações, NaN/infinito, fallback,
+placeholders ausentes, nomes com fallback de manifesto, recarga e leituras sem
+alteração de revisão. A integração `native_locale_runtime` também bloqueia os
+leitores JS `locale.catalog/languages` nas funções migradas, exige tradução com espelho antigo e
+atualização após instalar pacote. O contrato LPK exige tradução local sem usar
+a autoridade da sessão. Formatação de datas/horas/números e enumeração pública
+dos idiomas ainda precisam migrar. Ponto de retomada: esses caminhos de
+`sdk/i18n.js`, antes dos demais consumidores de preferências.
+
+Validação desta entrega: 611 testes da shell, sete contratos LPK, 24 cenários
+gráficos de locale/configurações/notificações/relógio/Forçar encerramento/menu,
+encerramento instalado, smoke e integração dos apps compilados passaram em
+GPU=1. Compositor e bundles recompilados; captura do texto recarregado inspecionada.
+Evidências locais em `build/validation/native-translation/`. O CI mantém o teste
+`native_locale_runtime` e o artefato `axia-native-locale`. Trabalho pausado a
+pedido do usuário após esta entrega; medições físicas permanecem para o final.
 
 ## Consulta nativa de permissões e firewall
 

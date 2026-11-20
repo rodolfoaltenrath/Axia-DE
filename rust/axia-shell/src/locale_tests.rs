@@ -2,6 +2,137 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn sdk_translation_uses_current_owner_shared_catalogs_and_fractional_plurals() {
+    let root = std::env::temp_dir().join(format!("axia-locale-translate-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let assets = root.join("assets");
+    let home = crate::settings::profile(root.to_str().unwrap());
+    let assets = assets.to_str().unwrap();
+    let pack = root.join(".local/share/axia/locales");
+    for (lang, rule) in [
+        ("en", "one-other"),
+        ("pt", "zero-one-other"),
+        ("ar", "arabic"),
+        ("ru", "east-slavic"),
+        ("pl", "polish"),
+        ("cs", "czech-slovak"),
+        ("ja", "none"),
+    ] {
+        let folder = pack.join(lang);
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("meta.json"), json!({"plural":rule}).to_string()).unwrap();
+        std::fs::write(folder.join("test.json"), json!({
+            "items":{"zero":"zero:{count}","one":"one:{count}","two":"two:{count}","few":"few:{count}","many":"many:{count}","other":"other:{count}"},
+            "greeting":format!("{lang}:{{name}}/{{absent}}")
+        }).to_string()).unwrap();
+    }
+    std::fs::write(pack.join("en/apps.json"), r#"{"sample":"Native app"}"#).unwrap();
+    std::fs::write(pack.join("en/fallback.json"), r#"{"hello":"Hello {name}"}"#).unwrap();
+    crate::settings::with(&home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("language", &json!("en"));
+    });
+    request(&home, assets, &json!({"cmd":"initialize"}));
+    for (lang, count, expected) in [
+        ("en", "1", "one"),
+        ("en", "1.5", "other"),
+        ("pt", "0", "one"),
+        ("pt", "0.5", "other"),
+        ("ar", "0", "zero"),
+        ("ar", "2", "two"),
+        ("ar", "2.5", "other"),
+        ("ar", "7", "few"),
+        ("ar", "11", "many"),
+        ("ru", "21", "one"),
+        ("ru", "22", "few"),
+        ("ru", "12", "many"),
+        ("pl", "21", "many"),
+        ("cs", "2.5", "few"),
+        ("ja", "1", "other"),
+        ("ar", "NaN", "other"),
+        ("ar", "Infinity", "other"),
+    ] {
+        crate::settings::with(&home, |s| {
+            s.set("language", &json!(lang));
+        });
+        let reply = request(
+            &home,
+            assets,
+            &json!({"cmd":"translate","key":"test.items","count":count,"vars":{"count":"01"}}),
+        );
+        assert_eq!(reply["value"], format!("{expected}:01"), "{lang}/{count}");
+    }
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"translate","key":"fallback.hello","vars":{"name":"[object Object]"}})
+        )["value"],
+        "Hello [object Object]"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"translate","key":"missing.{name}","vars":{"name":"Ada"}})
+        )["value"],
+        "missing.Ada"
+    );
+    assert!(request(
+        &home,
+        assets,
+        &json!({"cmd":"optional","key":"missing.key"})
+    )["value"]
+        .is_null());
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"appName","key":"apps.sample","fallback":"Manifest"})
+        )["value"],
+        "Native app"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"appName","key":"apps.unknown","fallback":"Manifest"})
+        )["value"],
+        "Manifest"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"translate","key":"../outside.secret"})
+        )["value"],
+        "../outside.secret"
+    );
+    let before = request(&home, assets, &json!({"cmd":"snapshot"}));
+    request(
+        &home,
+        assets,
+        &json!({"cmd":"translate","key":"test.greeting","vars":{"name":"Ada"}}),
+    );
+    assert_eq!(request(&home, assets, &json!({"cmd":"snapshot"})), before);
+    std::fs::write(
+        pack.join("ar/test.json"),
+        r#"{"greeting":"Reloaded {name}"}"#,
+    )
+    .unwrap();
+    request(&home, assets, &json!({"cmd":"reload"}));
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"optional","key":"test.greeting","vars":{"name":"Ada"}})
+        )["value"],
+        "Reloaded Ada"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn native_locale_session_owns_runtime_overrides_fonts_and_quiet_revisions() {
     let root = std::env::temp_dir().join(format!("axia-locale-session-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();

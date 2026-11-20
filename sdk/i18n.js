@@ -156,7 +156,15 @@ function lookup(lang, key) {
 
 const fill = (str, vars) => String(str).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? String(vars[k]) : m));
 
+function translate(cmd, key, vars) {
+  // Preserve JS interpolation/coercion at the public API boundary; resolution
+  // and plural selection use the current native locale, even with a stale mirror.
+  const values = Object.fromEntries(Object.entries(vars || {}).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]));
+  return nativeLocale({ cmd, key, vars: values, count: String(Number(vars?.count ?? 0)) }).value;
+}
+
 export function t(key, vars) {
+  if (!appHost) return translate('translate', key, vars);
   const { lang } = locale.get();
   let v = lookup(lang, key);
   if (v === undefined && lang !== FALLBACK) v = lookup(FALLBACK, key);
@@ -171,6 +179,7 @@ export function t(key, vars) {
 
 // Translation if it exists, or null (for strings with their own fallback, e.g. theme.json).
 export function tOptional(key, vars) {
+  if (!appHost) return translate('optional', key, vars);
   const { lang } = locale.get();
   const v = lookup(lang, key) ?? lookup(FALLBACK, key);
   return v === undefined ? null : t(key, vars);
@@ -178,7 +187,9 @@ export function tOptional(key, vars) {
 
 // Name of an app: apps.<id> in the catalog (the user's language, then English), else manifest.json's
 // name (English).
-export const appName = (app) => (app ? (lookup(locale.get().lang, `apps.${app.id}`) ?? lookup(FALLBACK, `apps.${app.id}`) ?? app.name) : '');
+export const appName = (app) => (app ? (appHost
+  ? (lookup(locale.get().lang, `apps.${app.id}`) ?? lookup(FALLBACK, `apps.${app.id}`) ?? app.name)
+  : nativeLocale({ cmd: 'appName', key: `apps.${app.id}`, fallback: app.name }).value) : '');
 
 // ---- formats (date, time, numbers) ----
 

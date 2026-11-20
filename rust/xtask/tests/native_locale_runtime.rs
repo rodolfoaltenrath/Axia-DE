@@ -35,6 +35,8 @@ fn locale_state_is_native_with_stale_mirrors_and_no_js_text_setters() {
                 "automatic",
                 "noJsLocale",
                 "saved",
+                "nativeTranslation",
+                "staleTranslation",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
             }
@@ -42,12 +44,15 @@ fn locale_state_is_native_with_stale_mirrors_and_no_js_text_setters() {
     }
 }
 const DRIVER: &str = r#"
-const timeout=globalThis.setTimeout;let legacy=0;
-for(const [object,key]of [[lord.locale,'get'],[lord.text,'setLanguage'],[lord.text,'setDirection']])object[key]=()=>{legacy++;throw Error('locale used JS '+key);};
+const timeout=globalThis.setTimeout;let legacy=0,translating=false;
+for(const [object,key]of [[lord.locale,'get'],[lord.locale,'languages'],[lord.text,'setLanguage'],[lord.text,'setDirection']])object[key]=()=>{legacy++;throw Error('locale used JS '+key);};
+// Formatting and launcher catalog import are separate, still pending consumers.
+// No catalog namespace may cross JS while exercising the migrated public API.
+const readCatalog=lord.locale.catalog;lord.locale.catalog=(lang,ns)=>{if(!translating&&(ns==='format'||ns==='apps'))return readCatalog(lang,ns);legacy++;throw Error('translation used JS catalog '+ns);};
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<180&&!fn();i++)await sleep(20);return!!fn();}
 async function run(){
- const [{createElement:h,useState},{render,View,Text},{SettingsSession},{locale,direction,reloadCatalogs,t},{localeBridge},{settings},{useStore},{ThemeProvider},{makeTheme},{configureWindows},{media}]=await Promise.all([
+ const [{createElement:h,useState},{render,View,Text},{SettingsSession},{locale,direction,reloadCatalogs,t,tOptional,appName},{localeBridge},{settings},{useStore},{ThemeProvider},{makeTheme},{configureWindows},{media}]=await Promise.all([
   import('react'),import('@lordos/runtime'),import('@ROOT@/sdk/settingssession.js'),import('@ROOT@/sdk/i18n.js'),import('@ROOT@/sdk/nativelocale.js'),import('@ROOT@/sdk/settings.js'),
   import('@ROOT@/sdk/store.js'),import('@ROOT@/sdk/theme.js'),import('@ROOT@/themes/default/tokens.js'),import('@ROOT@/sdk/windows.js'),import('@ROOT@/sdk/media.js')]);
  settings.set({language:'en',region:'',mode:'@MODE@'});configureWindows({apps:[]});
@@ -59,18 +64,25 @@ async function run(){
  const perform=localeBridge.perform;localeBridge.perform=effect=>{seen.push(effect.reply);if(!hold)perform(effect);};
  const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
  function App(){const[revision,setRevision]=useState(0);remount=()=>setRevision(n=>n+1);const value=useStore(locale);return h(ThemeProvider,{tokens:theme},
-  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg,padding:30}},h(SettingsSession,{key:revision}),h(Text,{style:{fontSize:18,color:theme.text}},'Locale: '+value.lang+' / '+direction())));}
+  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg,padding:30}},h(SettingsSession,{key:revision}),h(Text,{style:{fontSize:18,color:theme.text}},'Locale: '+value.lang+' / '+direction()+' / '+t('clock.timer.done'))));}
  render(h(App));await until(()=>handle);hold=true;
  if(!lord.locale.installPack('ar',{meta:JSON.stringify({direction:'rtl'})}))throw Error('RTL fixture install failed');
  const direct=lord.locale.state({cmd:'patch',value:{lang:'ar'}});
  const observed=await until(()=>seen.some(reply=>reply.revision===direct.revision));
  const mirrorStale=locale.get().lang==='en';const old=seen.find(reply=>reply.revision===direct.revision);
+ lord.locale.installPack('ar',{probe:JSON.stringify({greeting:'Native {name}',items:{one:'one:{count}',other:'other:{count}'}})});
+ translating=true;
+ const nativeTranslation=t('probe.greeting',{name:{x:1}})==='Native [object Object]'&&t('probe.items',{count:'01'})==='one:01'&&t('probe.items',{count:1.5})==='other:1.5'&&tOptional('probe.missing')===null&&t('probe.missing {value}',{value:'ok'})==='probe.missing ok'&&appName({id:'clock',name:'fallback'})==='Clock'&&appName({id:'probe-unknown',name:'Manifest'})==='Manifest';
+ translating=false;
  locale.set(value=>({...value,region:value.lang==='ar'?'ar_EG':'wrong'}));
  const nativeUpdater=locale.get().lang==='ar'&&locale.get().region==='ar_EG'&&direction()==='rtl';
  hold=false;if(old)perform({kind:'localeState',reply:old});const staleRejected=locale.get().region==='ar_EG';
  const before=lord.locale.state({cmd:'snapshot'}).revision;locale.set({lang:'ar',region:'ar_EG'});
  const quiet=lord.locale.state({cmd:'snapshot'}).revision===before;
  lord.settings.state({cmd:'patch',patch:{language:'pt',region:'pt_BR'}});
+ translating=true;
+ const staleTranslation=locale.get().lang==='ar'&&appName({id:'clock',name:'fallback'})==='Relógio';
+ translating=false;
  const savedProfile=await until(()=>locale.get().lang==='pt'&&locale.get().region==='pt_BR'&&direction()==='ltr');
  locale.set({dir:'rtl'});settings.set({accent:'green'});const explicitDirection=direction()==='rtl'&&locale.get().dir==='rtl';
  const previous=handle;remount();const remounted=await until(()=>handle!==previous)&&direction()==='rtl';
@@ -82,7 +94,7 @@ async function run(){
  const automatic=await until(()=>locale.get().lang==='pt'&&direction()==='ltr');
  await sleep(80);
  const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
- console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
+ console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
 }
 run().catch(error=>console.error('native_locale driver: '+(error.stack||error)));
 "#;

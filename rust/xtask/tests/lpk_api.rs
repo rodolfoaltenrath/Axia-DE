@@ -17,7 +17,7 @@ const deny=()=>{privileged++;throw Error('isolated locale reached native session
 globalThis.__localeProbe={settings:store({language:'en',region:''}),localeBridge:{},nativeLocale:deny};
 globalThis.lord={text:{setLanguage:value=>{language=value;},setDirection:value=>{rtl=value;}},locale:{
  languages:()=>['en','ar'].map(id=>({id,meta:JSON.stringify({direction:id==='ar'?'rtl':'ltr'})})),
- catalog:(lang,ns)=>JSON.stringify(ns==='format'?{hour12:false,regions:{en_US:{hour12:true}},am:'AM',pm:'PM'}:{}),
+ catalog:(lang,ns)=>JSON.stringify(ns==='format'?{hour12:false,regions:{en_US:{hour12:true}},am:'AM',pm:'PM'}:ns==='probe'?{hello:'Local {name}',items:{one:'one:{count}',other:'other:{count}'}}:ns==='apps'?{sample:'Local app'}:{}),
  state:deny,reload:deny}};
 const result=await build({entryPoints:[path.join(root,'sdk/i18n.js')],bundle:true,write:false,format:'esm',define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-locale',setup(build){
  build.onResolve({filter:/\.js$/},args=>{const name=path.basename(args.path);if(name==='settings.js'||name==='nativelocale.js')return{path:name,namespace:'probe'};});
@@ -27,7 +27,8 @@ const sdk=await import('data:text/javascript;base64,'+Buffer.from(result.outputF
 sdk.locale.set({lang:'ar'});const override=sdk.locale.get().lang==='ar'&&sdk.direction()==='rtl'&&rtl&&language==='ar';
 __localeProbe.settings.set({language:'en',region:'en_US'});const saved=sdk.locale.get().lang==='en'&&sdk.locale.get().region==='en_US'&&!rtl&&language==='en';
 const formatted=sdk.formatTime(new Date(2026,0,1,13,7))==='1:07 PM';sdk.reloadCatalogs();
-console.log(JSON.stringify({override,saved,formatted,reloaded:sdk.locale.get().revision===1,privileged}));
+const translated=sdk.t('probe.hello',{name:'Ada'})==='Local Ada'&&sdk.t('probe.items',{count:'01'})==='one:01'&&sdk.t('probe.items',{count:1.5})==='other:1.5'&&sdk.tOptional('probe.absent')===null&&sdk.appName({id:'sample',name:'Manifest'})==='Local app';
+console.log(JSON.stringify({override,saved,formatted,translated,reloaded:sdk.locale.get().revision===1,privileged}));
 "#;
     let output = Command::new("node")
         .current_dir(repo)
@@ -40,7 +41,7 @@ console.log(JSON.stringify({override,saved,formatted,reloaded:sdk.locale.get().r
         String::from_utf8_lossy(&output.stderr)
     );
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
-    for flag in ["override", "saved", "formatted", "reloaded"] {
+    for flag in ["override", "saved", "formatted", "reloaded", "translated"] {
         assert_eq!(report[flag], true, "{report}");
     }
     assert_eq!(report["privileged"], 0, "{report}");
