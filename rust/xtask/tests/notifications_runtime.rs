@@ -41,6 +41,7 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "rawPolicy",
                 "nativeAccess",
                 "noAccessFacts",
+                "nativeWrite",
                 "revisionOrder",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -76,7 +77,7 @@ import { NotificationBanner } from '@ROOT@/sdk/nativebanner.js';
 import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement, NOTIFY_DEFAULTS, notifyPrefs, appNotifyPrefs, setAppNotifyPrefs } from '@ROOT@/sdk/notify.js';
 import { clockRequest, ringing } from '@ROOT@/sdk/alarms.js';
 import { sound } from '@ROOT@/sdk/sound.js';
-import { perms } from '@ROOT@/sdk/privacy.js';
+import { perms, permsRev } from '@ROOT@/sdk/privacy.js';
 import { notificationBridge } from '@ROOT@/sdk/nativenotifications.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { makeTheme } from '@ROOT@/themes/default/tokens.js';
@@ -145,7 +146,7 @@ async function run(){
  notify({title:'Survives remount',sticky:false,timeout:1500,sound:false});await until(()=>find('Survives remount'));
  toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>find('Survives remount'));
  const remounted=!!find('Survives remount')&&await until(()=>!find('Survives remount'));
- const getPermission=perms.get,getBlocked=lord.fw.blocks;let jsAccess=0,nativeAccess=false,accessDetails={};
+ const getPermission=perms.get,getBlocked=lord.fw.blocks;let jsAccess=0,nativeAccess=false,accessDetails={},nativeWrite=false,writeDetails={};
  perms.get=()=>{jsAccess++;return'allow';};lord.fw.blocks=()=>{jsAccess++;return false;};
  try{
    lord.perms.set('access-probe','notifications','deny');
@@ -173,6 +174,22 @@ async function run(){
    accessDetails={deniedPrefs,denied,granted,blocked,isolated,builtin,exempt,linux,started,cancelled,jsAccess};
    dismissNotification(live.result);lord.perms.set('clock','notifications','ask');
    nativeAccess=deniedPrefs&&denied===0&&granted>0&&blocked===0&&isolated===0&&builtin===0&&exempt>0&&linux>0&&started&&cancelled&&jsAccess===0;
+   const setPermission=perms.set,setNative=lord.perms.set;let jsWrites=0;
+   perms.set=()=>{jsWrites++;return false;};lord.perms.set=()=>{jsWrites++;return false;};
+   try{
+     const revision=permsRev.get();
+     const off=permsRev.subscribe(()=>settings.set(s=>({...s,notifications:{...s.notifications,duringPermissionChange:'kept'}})));
+     setAppNotifyPrefs('access-probe',{allow:false});
+     off();
+     const deniedWrite=lord.perms.get('access-probe','notifications')==='deny'&&permsRev.get()===revision+1&&settings.get().notifications.duringPermissionChange==='kept';
+     setAppNotifyPrefs('access-probe',{allow:true});
+     const grantedWrite=lord.perms.get('access-probe','notifications')==='allow'&&permsRev.get()===revision+2;
+     setAppNotifyPrefs('access-probe',{sound:false});
+     const quietWrite=permsRev.get()===revision+2&&settings.get().notifications.apps['access-probe'].sound===false;
+     const invalidNative=setNative.call(lord.perms,'INVALID','notifications','deny')===false&&lord.perms.get('INVALID','notifications')==='ask';
+     writeDetails={deniedWrite,grantedWrite,quietWrite,invalidNative,jsWrites};
+     nativeWrite=deniedWrite&&grantedWrite&&quietWrite&&invalidNative&&jsWrites===0;
+   }finally{perms.set=setPermission;lord.perms.set=setNative;}
  }finally{configureWindows({apps:probeApps});perms.get=getPermission;lord.fw.blocks=getBlocked;for(const id of ['lpk:access-probe','lpk:isolated-probe','lordos'])lord.fw.setRestricted(id,[]);}
  const play=sound.play,repeat=globalThis.setInterval;let jsSounds=0;sound.play=()=>{jsSounds++;};
  let ringGuard=false,nativeRing=false,ordinary=0;
@@ -203,7 +220,7 @@ async function run(){
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,revisionOrder,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

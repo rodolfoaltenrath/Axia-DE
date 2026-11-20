@@ -32,8 +32,9 @@ static JSValue f_perm_set(JSContext *c, JSValueConst t, int argc, JSValueConst *
     const char *app = JS_ToCString(c, argv[0]), *pn = JS_ToCString(c, argv[1]), *st = JS_ToCString(c, argv[2]);
     int p = app && pn ? perm_from_name(pn) : -1;
     PermState ns = state_from(st);
-    int ok = app && lpk_valid_id(app) && p >= 0 && perm_set(app, (Perm)p, ns) == 0;
-    if (ok && ns != PERM_ALLOW) brokersrv_revoke(app, pn);      /* the isolated app releases the device instantly */
+    int ok = p == PERM_NOTIFICATIONS ? axia_notification_permission_set(app, ns)
+        : app && lpk_valid_id(app) && p >= 0 && perm_set(app, (Perm)p, ns) == 0;
+    if (ok && p != PERM_NOTIFICATIONS && ns != PERM_ALLOW) brokersrv_revoke(app, pn); /* the Rust notification path also revokes */
     if (app) JS_FreeCString(c, app);
     if (pn) JS_FreeCString(c, pn);
     if (st) JS_FreeCString(c, st);

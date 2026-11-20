@@ -489,9 +489,10 @@ o estado atual da permissão consultado pela API nativa; apps internos usam o ca
 Entrega, toque de alarmes e as APIs `notifyPrefs`/`appNotifyPrefs` da sessão
 usam essas funções Rust. Pedidos de entrega não transportam `appPrefs`
 pré-calculados, e o relógio não recebe opções efetivas produzidas pelo JS.
-`setAppNotifyPrefs` pede ao proprietário a alteração mesclada. Consultas e
-mesclagem são puras: não expiram banners, não drenam efeitos nem invalidam
-leitores. A persistência, a escrita da permissão, metadados de catálogo
+`setAppNotifyPrefs` pede ao proprietário a alteração mesclada e a gravação
+nativa da permissão, quando aplicável. Consultas e cálculo de patches são
+puros: não expiram banners, não drenam efeitos nem invalidam leitores.
+A persistência das configurações e metadados de catálogo
 e o snapshot de configurações ainda passam pelo adaptador; a migração completa
 de `settings.js` permanece pendente. O host `.lpk` conserva as funções locais.
 
@@ -513,14 +514,43 @@ verificação ocorre na entrada D-Bus.
 O toque conserva essa identidade no proprietário do contexto e reconsulta a
 permissão/firewall nos pulsos e antes de reproduzir uma tentativa enfileirada.
 Revogar uma permissão sem alterar `settings` cancela o toque; reautorização não
-retoma um alarme já cancelado. A escrita de permissões, seus espelhos/avisos de
-revisão no SDK e a migração do catálogo continuam pendentes.
+retoma um alarme já cancelado. Espelhos/avisos de revisão no SDK e a migração
+do catálogo continuam pendentes. A gravação de notificações também migrou,
+conforme a etapa abaixo.
 
 A integração gráfica modifica os armazenamentos reais enquanto as consultas JS
 simulam liberação: exige recusa de pacote, isolamento dos escopos do firewall,
 exceções preservadas e cancelamento de um toque por revogação. Também exige
 ausência dos fatos `permission`/`blocked` nos pedidos da sessão.
 Logs e capturas desta etapa: `build/validation/native-notification-access/`.
+
+## Gravação nativa das permissões de notificações
+
+`access::update` seleciona a escrita de permissão para pacotes com alteração de
+`allow`. O Rust reutiliza o validador de IDs `lpk_valid_id`, verifica o estado e
+chama `perm_set`, preservando o armazenamento protegido existente. Uma recusa
+ou retorno a `ask` só envia `brokersrv_revoke` após gravação bem-sucedida.
+IDs inválidos, UTF-8 inválido, ponteiro nulo e estados fora da enumeração não
+chegam à gravação. Outros campos e apps internos não alteram permissões.
+
+`setAppPreferences` aplica essa operação no controlador vinculado ao contexto.
+Uma recusa cancela o toque ativo e publica um aviso de revisão para o espelho
+de privacidade. O SDK executa somente essa atualização de compatibilidade;
+não chama `perms.set`/`lord.perms.set` para essa API da sessão. Assinantes do
+aviso podem alterar configurações: nesse caso, o adaptador pede uma nova
+mesclagem ao Rust antes de aplicar o patch, preservando as alterações recebidas.
+
+A entrada pública `lord.perms.set` para notificações delega ao mesmo Rust por
+`axia_notification_permission_set`, incluindo os pedidos do painel Configurações.
+As demais permissões conservam sua implementação anterior. O host `.lpk`
+mantém o contrato do SDK. Avisos de revisão, persistência de settings, catálogo
+e demais consumidores JS continuam pendentes da migração completa.
+
+Testes unitários verificam validação, falha sem revogação, transição para `ask`
+e cancelamento do toque. A integração usa os armazenamentos reais, impede
+chamadas aos setters JS pelo SDK e exige revisões corretas, ausência de revisão
+extra para mudanças de som e preservação de alterações feitas por assinantes.
+Logs e capturas desta etapa: `build/validation/native-notification-permission-write/`.
 
 ## Templates e ações de alarmes no proprietário Rust
 

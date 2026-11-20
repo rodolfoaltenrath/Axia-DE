@@ -228,6 +228,20 @@ impl Service {
             Some("preferencesPatch") => {
                 return json!({"result":preferences::patch(&input["prefs"],input["app"].as_str().unwrap_or(""),&input["patch"]),"effects":[]})
             }
+            Some("setAppPreferences") => {
+                let app = input["app"].as_str().unwrap_or("");
+                let source = access::Source::from(&input["source"]);
+                let result = preferences::patch(&input["prefs"], app, &input["patch"]);
+                let mut effects = Vec::new();
+                if let Some(saved) = access::update(app, &source, &input["patch"]) {
+                    self.expire(now);
+                    effects = self.effects();
+                    effects.push(
+                        json!({"kind":"notificationPermissionChanged","app":app,"saved":saved}),
+                    );
+                }
+                return json!({"result":result,"effects":effects});
+            }
             _ => {}
         }
         if input["action"] == "ringPolicy" {

@@ -316,6 +316,10 @@ read the host stores directly, including changes while an alarm rings.
 `sdk/notify.js` transports preferences and app identity and persists patches; the isolated `.lpk`
 host keeps its local policy implementation. This applies to every `notify()`:
 
+Notification permission writes from the SDK and `lord.perms.set` share the
+Rust validation/persistence path. Revocation is sent only after a successful
+write; the SDK revision signal still refreshes the compatibility privacy UI.
+
 - **Per app:** allow, style (none / banners / alerts: alerts stay until dismissed), sound, and
   "show on lock screen" (stored, shown disabled: the lock screen is the greeter and does not show
   notifications yet). Apps appear after their first notification, plus LordOS apps that notify

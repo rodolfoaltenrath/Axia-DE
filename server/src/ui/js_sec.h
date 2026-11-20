@@ -7,5 +7,7 @@
 #include "quickjs.h"
 
 void js_sec_register(JSContext *c, JSValue lord);
+/* Rust owns notification permission validation, persistence and revocation. */
+int axia_notification_permission_set(const char *app, int state);
 
 #endif

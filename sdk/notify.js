@@ -17,7 +17,7 @@ import { createStore, useStore } from './store.js';
 import { getApp } from './windows.js';
 import { sound } from './sound.js';
 import { settings } from './settings.js';
-import { perms } from './privacy.js';
+import { perms, permsRev } from './privacy.js';
 import { appName, formatTime } from './i18n.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { notificationBridge } from './nativenotifications.js';
@@ -60,6 +60,7 @@ function perform(effect) {
       }
     });
   } else if (effect.kind === 'settings') settings.set(effect.patch);
+  else if (effect.kind === 'notificationPermissionChanged') permsRev.set(v => v + 1);
   else if (effect.kind === 'notificationClose') {
     const callback = callbacks.get(effect.id), close = callback?.onClose;
     if (callback) callback.onClose = null;
@@ -96,9 +97,16 @@ export function appNotifyPrefs(app, s = settings.get()) {
   return p;
 }
 export function setAppNotifyPrefs(app, patch) {
+  if (!appHost) {
+    const base = settings.get().notifications;
+    const merged = command('setAppPreferences', { prefs: base, app, patch, source: notificationSource(app) });
+    // Permission listeners can update settings before this preference patch is applied.
+    settings.set(s => ({ ...s, notifications: s.notifications === base ? merged
+      : command('preferencesPatch', { prefs: s.notifications, app, patch }) }));
+    return;
+  }
   if (isPackage(app) && 'allow' in patch) perms.set(app, 'notifications', patch.allow ? 'allow' : 'deny');
   settings.set((s) => {
-    if (!appHost) return { ...s, notifications: command('preferencesPatch', { prefs: s.notifications, app, patch }) };
     const p = notifyPrefs(s);
     return { ...s, notifications: { ...p, apps: { ...p.apps, [app]: { ...(p.apps[app] || {}), ...patch } } } };
   });

@@ -111,6 +111,9 @@ transporta preferências brutas e identidade de catálogo, persiste alterações
 mantém snapshots de compatibilidade.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
+A gravação de permissões de notificações, validação de ID e revogação aos apps
+também ficam no Rust, tanto pelo SDK quanto pela entrada pública de permissões.
+O aviso de revisão do SDK continua como adaptação para os controles legados.
 O serviço chama o cliente de áudio diretamente pela ABI nativa; não há efeito
 de som na ponte JS nem callback de reprodução para alarmes/notificações.
 A repetição do toque já pertence ao

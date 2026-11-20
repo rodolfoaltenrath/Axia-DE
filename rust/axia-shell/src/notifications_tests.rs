@@ -450,3 +450,34 @@ fn revoking_a_live_package_permission_cancels_queued_and_future_alarm_pulses() {
     assert_eq!(sound::attempts(), played);
     assert!(service.wait_ms(now).is_none());
 }
+
+#[test]
+fn updating_a_package_permission_cancels_ringing_and_publishes_one_compatibility_revision() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    ring(&mut service, now, json!({"source":{"package":true}}));
+    let denied=service.command(&json!({"action":"setAppPreferences","app":"clock","source":{"package":true},"prefs":{"apps":{"notes":{"sound":false}}},"patch":{"allow":false}}),now);
+    assert!(service.reader().read().snapshot()["ringing"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(denied["result"]["apps"]["notes"]["sound"], false);
+    assert_eq!(denied["result"]["apps"]["clock"]["allow"], false);
+    assert_eq!(access::host::revoked(), ["clock"]);
+    let revisions: Vec<_> = denied["effects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "notificationPermissionChanged")
+        .collect();
+    assert_eq!(revisions.len(), 1);
+    assert_eq!(revisions[0]["saved"], true);
+    let allowed=service.command(&json!({"action":"setAppPreferences","app":"clock","source":{"package":true},"patch":{"allow":true}}),now);
+    assert_eq!(allowed["result"]["apps"]["clock"]["allow"], true);
+    assert!(service.reader().read().snapshot()["ringing"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(service.wait_ms(now).is_none());
+    assert_eq!(access::host::revoked(), ["clock"]);
+}
