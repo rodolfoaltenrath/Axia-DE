@@ -583,6 +583,28 @@ para ser regravado pelo SDK. Evidências dessa ligação direta em
 `build/validation/native-notification-settings/`. A migração das consultas e
 edições está em `build/validation/native-notification-edit/`.
 
+## Apresentação e horário de notificações
+
+`notifications/presentation.rs` compartilha catálogos e formatação com os alarmes.
+Nome e seleção do ícone vêm do registro nativo: tradução de `apps.<id>`, fallback
+inglês e nome do manifesto. Apps ausentes usam a legenda fornecida pelo emissor.
+O serviço ignora `hasApp`, `displayLabel` e `timeLabel` recebidos pela ponte na
+sessão principal. Catálogo é lido por empréstimo, sem copiar a lista.
+
+Entrega e histórico usam o relógio civil nativo, inclusive para a agenda DND;
+expiração permanece monotônica. A formatação respeita idioma, região e preferência
+de 12/24 horas do perfil Rust, mesmo com espelho JS antigo. O contexto de idioma
+e revisão de catálogos ainda vem do adaptador como fallback/invalidação; a migração
+completa de i18n continua pendente. Uma entrega interna sem revisão não apaga a
+revisão já observada. Catálogos privados e fallback inglês permanecem disponíveis.
+
+O SDK da sessão não calcula nome/horário nem transporta timestamp/minuto na
+entrega. O host LPK mantém seu contrato local. Testes Rust verificam dados
+forjados ignorados, tradução/fallback, ícone de app conhecido e horário nativo.
+`notifications_runtime` exige apresentação portuguesa e relógio de 24 horas com
+contexto JS inglês antigo, além da ausência desses fatos nos pedidos SDK.
+Capturas/logs em `build/validation/notification-presentation/`.
+
 ## Consulta nativa de permissões e firewall
 
 `notifications/access.rs` lê `perm_get` e `restrict_blocks` pela ABI do host,

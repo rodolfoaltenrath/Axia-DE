@@ -326,6 +326,10 @@ or reapplying patches in JavaScript. Access identity comes from the controller's
 shared native catalog reader; changes also invalidate ringing policy. The SDK
 still imports that catalog and supplies compatibility updates. The isolated `.lpk`
 host keeps its local policy implementation.
+Native delivery also resolves app captions/icons and formats timestamps from the
+profile's language, region and 12/24-hour preference. The SDK sends no computed
+caption, timestamp, minute or time label; locale context/revision remains a
+transitional fallback until the locale service migrates.
 This applies to every `notify()`:
 
 Notification permission writes from the SDK and `lord.perms.set` share the

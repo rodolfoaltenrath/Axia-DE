@@ -18,7 +18,7 @@ import { getApp } from './windows.js';
 import { sound } from './sound.js';
 import { settings } from './settings.js';
 import { perms, permsRev } from './privacy.js';
-import { appName, formatTime } from './i18n.js';
+import { locale } from './i18n.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { notificationBridge } from './nativenotifications.js';
 import { settingsBridge } from './nativesettings.js';
@@ -135,13 +135,12 @@ function fwNotifyBlocked(app) {
 export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null, _ring = false } = {}) {
   app = String(app);
   if (!appHost) {
-    const at = new Date(), registered = getApp(app);
     const selected = Array.isArray(actions) ? actions.slice(0, 3) : [];
     const reply = rawRequest('push', {
-      wallMs: at.getTime(), minute: at.getHours() * 60 + at.getMinutes(),
+      ...locale.get(),
       notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
-        sound: !!withSound, ring: !!_ring, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),
-        timeLabel: formatTime(at), actions: selected.map(a => ({ id: a.id, label: a.label, primary: !!a.primary })) } });
+        sound: !!withSound, ring: !!_ring, timeout,
+        actions: selected.map(a => ({ id: a.id, label: a.label, primary: !!a.primary })) } });
     if (reply.result) callbacks.set(reply.result, { actions: selected, onClose, icon: typeof icon === 'function' ? icon : null });
     applyReply(reply);
     return reply.result;

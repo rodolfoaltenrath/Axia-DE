@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 mod access;
 mod clock_delivery;
 mod preferences;
+mod presentation;
 mod sound;
 #[cfg(test)]
 #[path = "notifications/settings_tests.rs"]
@@ -82,7 +83,7 @@ pub struct Service {
     effects: Vec<Value>,
     ring_prefs: Value,
     clock_source: access::Source,
-    clock_delivery: clock_delivery::Delivery,
+    presentation: presentation::Presentation,
     clock_actions: std::collections::BTreeMap<u64, Vec<clock_delivery::Action>>,
     sounds: Vec<(u64, bool)>,
     settings: Option<(String, Reader<Value>, Subscription)>,
@@ -106,6 +107,10 @@ pub fn dnd(prefs: &Value, wall_ms: f64, minute: f64) -> bool {
 }
 
 impl Service {
+    fn configure_presentation(&mut self, input: &Value, config: &Value) {
+        let settings = self.settings.as_ref().map(|(home, reader, _)| (home, reader.read()));
+        self.presentation.configure(input, config, settings.as_ref().map(|(home, value)| (home.as_str(), &**value)));
+    }
     pub(crate) fn bind_catalog(&mut self, reader: Reader<Value>) {
         let changes = reader.subscribe();
         self.catalog = Some((reader, changes));
@@ -333,6 +338,10 @@ impl Service {
             Some("ringPolicy") => Value::Null,
             Some("push") => {
                 let n = &input["notice"];
+                let native = self.settings.is_some() || self.catalog.is_some();
+                let wall = if native { axia_clock::now() } else { input["wallMs"].as_i64().unwrap_or(0) };
+                let local = axia_clock::local(wall);
+                let minute = if native { (local.tm_hour * 60 + local.tm_min) as f64 } else { input["minute"].as_f64().unwrap_or(0.) };
                 let prefs = &if self.settings.is_some() {
                     self.ring_prefs.clone()
                 } else {
@@ -367,15 +376,25 @@ impl Service {
                     let actions: Vec<_>=n["actions"].as_array().into_iter().flatten().take(3).map(|a|json!({"id":a["id"],"label":a["label"],"primary":a["primary"]==true})).collect();
                     let ring_requested = n["ring"] == true && app == "clock";
                     let sticky = n["sticky"] == true || ap["style"] == "alert" || ring_requested;
+                    self.configure_presentation(input, &Value::Null);
+                    let catalog = self.catalog.as_ref().map(|(reader, _)| reader.read());
+                    let entry = catalog.as_ref().and_then(|catalog| catalog["registry"].as_array())
+                        .and_then(|apps| apps.iter().rev().find(|entry| entry["id"].as_str() == Some(app)));
+                    let (display_label, has_app) = if self.catalog.is_some() {
+                        self.presentation.app_name(app, entry, n["label"].as_str().unwrap_or(""))
+                    } else {
+                        (n["displayLabel"].as_str().unwrap_or("").to_owned(), n["hasApp"] == true)
+                    };
+                    let time_label = if native {self.presentation.time(wall)} else {n["timeLabel"].as_str().unwrap_or("").to_owned()};
                     let data = json!({"id":id,"app":app,"label":n["label"].as_str().unwrap_or(""),
-                        "displayLabel":n["displayLabel"].as_str().unwrap_or(""),"hasApp":n["hasApp"]==true,
+                        "displayLabel":display_label,"hasApp":has_app,
                         "title":n["title"].as_str().unwrap_or(""),"body":n["body"].as_str().unwrap_or(""),
-                        "actions":actions,"sticky":sticky,"time":input["wallMs"],"timeLabel":n["timeLabel"].as_str().unwrap_or("")});
+                        "actions":actions,"sticky":sticky,"time":wall,"timeLabel":time_label});
                     let visible = ap["style"] != "none"
                         && !dnd(
                             prefs,
-                            input["wallMs"].as_f64().unwrap_or(0.),
-                            input["minute"].as_f64().unwrap_or(0.),
+                            wall as f64,
+                            minute,
                         );
                     let timeout = n["timeout"]
                         .as_f64()

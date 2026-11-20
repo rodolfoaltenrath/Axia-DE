@@ -45,6 +45,8 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "revisionOrder",
                 "residentPreferences",
                 "nativeCatalog",
+                "nativePresentation",
+                "noPresentationFacts",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
             }
@@ -92,10 +94,10 @@ const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeV
 async function until(fn,tries=100){for(let i=0;i<tries&&!fn();i++)await sleep(20);return!!fn();}
 const ran=[], reasons=[];
 let bannerHandle=0,bound=false,noPayload=true,toggle;
-let noSoundEffects=true,rawPolicy=true,noAccessFacts=true,nativeCatalog=false;
+let noSoundEffects=true,rawPolicy=true,noAccessFacts=true,nativeCatalog=false,noPresentationFacts=true;
 const perform=notificationBridge.perform,request=lord.nativeApps.request;
 notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
-lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'){rawPolicy&&=!('prefs'in input)&&input.action!=='preferencesPatch';noAccessFacts&&=!('permission'in input)&&!('blocked'in input)&&!('source'in input);if(input.action==='push')rawPolicy&&=!('appPrefs'in input)&&!('prefs'in input);}if(input.cmd==='clockCommand')noAccessFacts&&=!('notificationPolicy'in input);if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy)&&!('prefs'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'){rawPolicy&&=!('prefs'in input)&&input.action!=='preferencesPatch';noAccessFacts&&=!('permission'in input)&&!('blocked'in input)&&!('source'in input);if(input.action==='push'){rawPolicy&&=!('appPrefs'in input)&&!('prefs'in input);noPresentationFacts&&=!('wallMs'in input)&&!('minute'in input)&&!('hasApp'in(input.notice||{}))&&!('displayLabel'in(input.notice||{}))&&!('timeLabel'in(input.notice||{}));}}if(input.cmd==='clockCommand')noAccessFacts&&=!('notificationPolicy'in input);if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy)&&!('prefs'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
 function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}))&&!('ungrouped'in(value.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
@@ -105,7 +107,7 @@ const push=(label,title,options={})=>notify({label,title,body:'Notification body
 const press=node=>{const[x,y,w,hh]=lord.getLayout(node);for(const type of ['down','up']){const mount=lord.nativeViews.pointer(type,node,x+w/2,y+hh/2,0);__lordEvent(type,mount,x+w/2,y+hh/2,0);}globalThis.__lordNativeView();};
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 settings.set({language:'en',mode:'@MODE@',notificationsNativeView:false,notifications:{grouping:'app',dnd:false}});
-const probeApps=[{id:'access-probe',name:'Access probe',package:true,Component:()=>null},{id:'isolated-probe',name:'Isolated probe',isolated:true,Component:()=>null}];
+const probeApps=[{id:'access-probe',name:'Access probe',package:true,Component:()=>null},{id:'isolated-probe',name:'Isolated probe',isolated:true,Component:()=>null},{id:'clock',name:'Clock',Component:()=>null}];
 configureWindows({apps:probeApps,workArea:{x:20,y:28,w:@WIDTH@-40,h:644}});
 function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},on?h(NotificationBanner):null));}
 render(h(App));
@@ -123,6 +125,16 @@ async function run(){
  const nativePreferences=defaults.grouping==='app'&&defaults.schedule.from===1320&&options.allow&&options.style==='banner'&&!options.sound
    &&edited.apps.clock.style==='alert'&&edited.apps.clock.custom===3&&!edited.apps.clock.sound&&!edited.apps.notes.lock&&edited.extra==='keep';
  settings.set({notifications:original});
+ const beforePresentation=lord.settings.state({cmd:'snapshot'}).state;
+ lord.settings.state({cmd:'patch',patch:{language:'pt',region:'en_US',clock:{hour24:'24'},notifications:{...beforePresentation.notifications,seen:['clock']}}});
+ const presented=request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'push',lang:'en',region:'',wallMs:0,minute:0,
+   notice:{app:'clock',title:'Native presentation',sound:false,sticky:true,hasApp:false,displayLabel:'Forged caption',timeLabel:'Forged time'}}));
+ for(const effect of presented.effects||[])notificationBridge.perform(effect);
+ const displayed=notifyHistory.get().find(n=>n.id===presented.result);
+ const captionVisible=await until(()=>find('Relógio')&&find('Native presentation'));
+ const nativePresentation=captionVisible&&locale.get().lang==='en'&&displayed?.displayLabel==='Relógio'&&displayed.hasApp===true&&/^\d{2}:\d{2}$/.test(displayed.timeLabel)&&displayed.time>0;
+ dismissNotification(presented.result);
+ lord.settings.state({cmd:'replace',value:beforePresentation});
  push('Grouped','Grouped old');push('Grouped','Grouped latest');
  await until(()=>find('Grouped latest'));const grouped=!!find('Grouped · +1')&&!find('Grouped old');
  const nativePrefs=()=>lord.settings.state({cmd:'snapshot'}).state.notifications;
@@ -162,7 +174,7 @@ async function run(){
  const timerGone=notifications.get().length===0&&!find('Timed banner');
  // Discard the compatibility snapshot: the native surface must still see the new notice.
  const direct=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',
-   wallMs:Date.now(),minute:0,notice:{title:'Direct native',label:'Direct',displayLabel:'Direct',sticky:true,sound:false}}));
+   notice:{title:'Direct native',label:'Direct',sticky:true,sound:false}}));
  const nativeDirect=await until(()=>find('Direct native'));
  const mirrorStale=!notifications.get().some(n=>n.title==='Direct native');
  lord.nativeViews.action(bannerHandle,{action:['dismiss',String(direct.result)]});__lordNativeView();await until(()=>!find('Direct native'));
@@ -189,7 +201,7 @@ async function run(){
    const linux=notify({app:'linux:probe',title:'Linux namespace',sound:false,sticky:true});dismissNotification(linux);
    lord.fw.setRestricted('lordos',[]);
    configureWindows({apps:[...probeApps,{id:'clock',name:'Clock',package:true,Component:()=>null}]});
-   const live=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',wallMs:Date.now(),minute:0,
+   const live=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',
      notice:{app:'clock',title:'Live permission',ring:true,sticky:true,sound:true}}));
    for(const effect of live.effects||[])notificationBridge.perform(effect);
    const started=ringing.get().includes(live.result);
@@ -200,7 +212,7 @@ async function run(){
    dismissNotification(live.result);
    configureWindows({apps:[...probeApps,{id:'clock',name:'Clock',Component:()=>null}]});
    await sleep(30); // catalog invalidations are coalesced in a microtask
-   const builtinClock=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',wallMs:Date.now(),minute:0,
+   const builtinClock=lord.nativeApps.request(JSON.stringify({cmd:'notifications',action:'push',
      notice:{app:'clock',title:'Catalog identity',ring:true,sticky:true,sound:true}}));
    for(const effect of builtinClock.effects||[])notificationBridge.perform(effect);
    const catalogStarted=ringing.get().includes(builtinClock.result);
@@ -255,7 +267,7 @@ async function run(){
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

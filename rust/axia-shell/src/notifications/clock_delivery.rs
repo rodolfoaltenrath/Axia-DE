@@ -1,6 +1,6 @@
 //! Clock completions create notifications and retain typed actions in their owner.
 use super::*;
-use axia_native::{date_format, i18n::I18n};
+
 
 #[derive(Clone)]
 pub(super) enum Action {
@@ -20,51 +20,7 @@ impl Action {
         });
     }
 }
-#[derive(Default)]
-pub(super) struct Delivery {
-    roots: Option<(String, Option<String>)>,
-    i18n: I18n,
-    region: String,
-    hours: String,
-    revision: Value,
-}
-impl Delivery {
-    fn configure(&mut self, input: &Value, config: &Value) {
-        let roots = crate::native_view::resource_roots();
-        if self.roots.as_ref() != Some(&roots) {
-            self.i18n = I18n::new(&roots.0, roots.1.as_deref());
-            self.roots = Some(roots);
-        }
-        let revision = input
-            .get("localeRevision")
-            .or_else(|| input.get("revision"))
-            .unwrap_or(&Value::Null);
-        if self.revision != *revision {
-            self.i18n.invalidate();
-            self.revision = revision.clone();
-        }
-        if let Some(lang) = input["lang"].as_str() {
-            self.i18n.lang = lang.into();
-        }
-        if let Some(region) = input["region"].as_str() {
-            self.region = region.into();
-        }
-        if config.is_object() {
-            self.hours = config["hour24"].as_str().unwrap_or("auto").into();
-        }
-    }
-    fn text(&mut self, key: &str) -> String {
-        self.i18n.t(key, &Default::default())
-    }
-    fn time(&mut self, wall: i64) -> String {
-        date_format::time(
-            &mut self.i18n,
-            &self.region,
-            &self.hours,
-            &axia_clock::local(wall),
-            false,
-        )
-    }
+impl super::presentation::Presentation {
     fn notice(&mut self, effect: &Value, wall: i64) -> (Value, Vec<Action>) {
         let stop = json!({"id":"stop","label":self.text("clock.alarm.stop"),"primary":true});
         let (title, body, other, action) = if effect["kind"] == "alarm" {
@@ -319,7 +275,7 @@ impl Service {
         wall: i64,
         now: Instant,
     ) -> Value {
-        self.clock_delivery.configure(input, &reply["config"]);
+        self.configure_presentation(input, &reply["config"]);
         let effects = reply
             .get_mut("effects")
             .map(std::mem::take)
@@ -328,7 +284,7 @@ impl Service {
         let mut notifications = Vec::new();
         for effect in effects.as_array().into_iter().flatten() {
             if effect["kind"] == "alarm" || effect["kind"] == "timer" {
-                let (notice, actions) = self.clock_delivery.notice(effect, wall);
+                let (notice, actions) = self.presentation.notice(effect, wall);
                 let local = axia_clock::local(wall);
                 let delivered = self.command(
                     &json!({"action":"push","notice":notice,"prefs":self.ring_prefs,

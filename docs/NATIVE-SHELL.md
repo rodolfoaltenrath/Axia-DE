@@ -128,6 +128,10 @@ reaplicar patches em JS. A identidade de acesso vem do leitor compartilhado do
 catálogo do controlador, sem `source`/`notificationPolicy` nos pedidos. Mudanças
 do catálogo invalidam a política de toque sem alterar settings. O adaptador
 ainda importa o catálogo e publica snapshots para os controles legados.
+Nome, seleção do ícone e horário dos banners também são resolvidos no serviço
+Rust. Timestamp e minuto de entrega vêm do relógio nativo; nome e horário
+calculados pelo JS não entram no pedido. Idioma/região/12–24 h salvos no perfil
+têm prioridade sobre o contexto de idioma ainda fornecido pelo adaptador.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

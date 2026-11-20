@@ -100,10 +100,10 @@ globalThis.clearTimeout=id=>timers.delete(id);
 const deny=()=>{privileged++;throw Error('isolated notification reached session authority');};
 const probe={getApp:()=>null,sound:{play:()=>{}},perms:{get:()=> 'allow',set:()=>{}},
  settings:{get:()=>preferences,set:patch=>{preferences=typeof patch==='function'?patch(preferences):{...preferences,...patch};}},
- appName:app=>app.name,formatTime:()=> '12:00',nativeAppRequest:deny,syncNativeCatalog:deny};
+ locale:{get:deny},nativeAppRequest:deny,syncNativeCatalog:deny};
 globalThis.__notificationProbe=probe;
 const names={'windows.js':['getApp'],'sound.js':['sound'],'privacy.js':['perms','permsRev'],
- 'settings.js':['settings'],'i18n.js':['appName','formatTime'],'nativeappmodel.js':['nativeAppRequest'],'nativecatalog.js':['syncNativeCatalog']};
+ 'settings.js':['settings'],'i18n.js':['locale'],'nativeappmodel.js':['nativeAppRequest'],'nativecatalog.js':['syncNativeCatalog']};
 const result=await build({entryPoints:[path.join(root,'sdk/notify.js')],bundle:true,write:false,format:'esm',
  define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'local-notifications',setup(build){
  build.onResolve({filter:/.*/},args=>{const name=path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
