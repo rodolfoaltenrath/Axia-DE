@@ -31,6 +31,8 @@ let seq = 1;
 const timers = new Map();
 const callbacks = new Map();
 export const notificationPlacement = createStore('top');
+export const ringingNotifications = createStore([]);
+let appliedRevision = -1;
 
 function rawRequest(action, extra = {}) {
   const reply = nativeAppRequest(lord.nativeApps, { cmd: 'notifications', action, ...extra });
@@ -39,12 +41,15 @@ function rawRequest(action, extra = {}) {
 }
 function perform(effect) {
   if (effect.kind === 'notificationState') {
+    if (effect.revision <= appliedRevision) return;
+    appliedRevision = effect.revision;
     const { shown, history, placement } = effect.state;
     const adapt = n => ({ ...n, actions: callbacks.get(n.id)?.actions || n.actions });
     notifications.set(() => shown.map(n => ({ ...adapt(n), Icon: callbacks.get(n.id)?.icon || null,
       onClose: callbacks.get(n.id)?.onClose })));
     notifyHistory.set(() => history.map(adapt));
     notificationPlacement.set(placement);
+    ringingNotifications.set(effect.state.ringing || []);
     // Drain close/action effects before releasing callbacks removed by this revision.
     Promise.resolve().then(() => {
       const active = new Set(notifications.get().map(n => n.id));
@@ -55,7 +60,10 @@ function perform(effect) {
       }
     });
   } else if (effect.kind === 'settings') settings.set(effect.patch);
-  else if (effect.kind === 'notificationSound') sound.play('notify');
+  else if (effect.kind === 'notificationSound') {
+    // A queued native pulse may have been dismissed before the shell drained it.
+    if (!effect.repeat || command('ringAudible', { id: effect.id })) sound.play('notify');
+  }
   else if (effect.kind === 'notificationClose') {
     const callback = callbacks.get(effect.id), close = callback?.onClose;
     if (callback) callback.onClose = null;
@@ -118,7 +126,7 @@ function fwNotifyBlocked(app) {
   } catch (e) { return false; }
 }
 
-export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null } = {}) {
+export function notify({ app = '', title = '', body = '', actions = [], sound: withSound = true, sticky = false, timeout = 6000, onClose, label = '', icon = null, _ring = false } = {}) {
   app = String(app);
   const ap = appNotifyPrefs(app);
   if (!appHost) {
@@ -127,7 +135,7 @@ export function notify({ app = '', title = '', body = '', actions = [], sound: w
     const reply = rawRequest('push', { prefs: notifyPrefs(), appPrefs: ap, blocked: fwNotifyBlocked(app),
       wallMs: at.getTime(), minute: at.getHours() * 60 + at.getMinutes(),
       notice: { app, title: String(title), body: String(body), label: String(label), sticky: !!sticky,
-        sound: !!withSound, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),
+        sound: !!withSound, ring: !!_ring, timeout, hasApp: !!registered, displayLabel: registered ? appName(registered) : String(label),
         timeLabel: formatTime(at), actions: selected.map(a => ({ id: a.id, label: a.label, primary: !!a.primary })) } });
     if (reply.result) callbacks.set(reply.result, { actions: selected, onClose, icon: typeof icon === 'function' ? icon : null });
     applyReply(reply);
@@ -177,6 +185,20 @@ export function runAction(n, a) {
   }
   dismissNotification(n.id, a.id || 'action');
   try { a.run?.(); } catch (e) { console.error('notify:', e); }
+}
+
+// Internal Clock bridge. The main session owns repeat cadence and cancellation in Rust.
+export const notifyRinging = options => notify({ ...options, sticky: true, sound: true, _ring: true });
+if (!appHost) {
+  let previous = settings.get().notifications;
+  settings.subscribe(() => {
+    const current = settings.get().notifications;
+    if (current === previous) return;
+    if (typeof lord === 'undefined' || typeof lord.greeter !== 'undefined' || typeof lord.appId === 'string'
+      || typeof lord.nativeApps?.request !== 'function') return;
+    previous = current;
+    command('ringPolicy', { prefs: notifyPrefs(), clock: appNotifyPrefs('clock'), blocked: fwNotifyBlocked('clock') });
+  });
 }
 
 // Grouping by app (Settings → Notifications): the newest banner of each app, with "+N".

@@ -405,7 +405,8 @@ reutiliza `axia-native::date_format`. Um clique revalida a aba pelo estado atual
 
 `sdk/alarms.js` ainda sincroniza preferências, publica snapshots para APIs
 legadas e executa templates, sons e callbacks dos alarmes. A repetição do toque
-mantém a correção de permissões/silêncio/retirada e ainda usa seu intervalo JS.
+agora usa o serviço nativo de notificações descrito abaixo, mantendo a correção
+de permissões/silêncio/retirada sem intervalo JS na sessão.
 O adaptador isolado preserva o caminho legado de agendamento e apresentação.
 Esses itens continuam pendentes para a sessão sem JS.
 
@@ -436,11 +437,36 @@ notificação removida ou reutilizada. Fechamento precede o callback da ação.
 `sdk/notify.js` fornece metadados, preferências, permissão efetiva e bloqueio
 de firewall; executa patches, som e callbacks. Os stores públicos recebem
 snapshots por revisão para compatibilidade, sem alimentar a view nativa.
+O adaptador descarta snapshots com revisão anterior ou igual à já aplicada;
+efeitos atrasados da view não podem ressuscitar itens removidos por um comando.
 Referências de callbacks são limitadas aos banners/histórico mantidos, com
 liberação após drenar efeitos. Geometria do mount segue tema, área útil,
 direção e posicionamento. O host LPK mantém seu serviço local sem acessar o
 controlador privilegiado. Configurações, permissões, som, alarmes e os
 consumidores dos stores continuam como pendências da migração completa.
+
+### Repetição do toque de alarmes
+
+O pedido interno de toque só aceita o app Clock. Um banner entregue e audível
+recebe um prazo monotônico de 60 segundos e um próximo pulso a cada 2,5 segundos.
+Não Perturbe, estilo sem banner, recusa, silêncio e firewall impedem o início;
+mudanças de preferências cancelam o toque ativo. A agenda DND é reavaliada com
+a hora local nos pulsos, inclusive quando cruza meia-noite. O adaptador publica
+as preferências efetivas ao modelo; o native view não recebe lista ou política.
+
+O prazo pertence à notificação no contexto. Remontar a view preserva a cadência;
+um atraso produz no máximo um pulso, sem recuperar sons perdidos em rajada.
+Dispensa, ação ou retirada pelo limite cancela o prazo. Aos 60 segundos, o toque
+termina e o banner continua para reconhecimento. Reativar o som/DND não retoma
+alarmes já cancelados. Sem toques ou banners temporários, não há prazo de refresh.
+
+Pulsos atualizam apenas o próximo instante interno, sem revisão de apresentação
+ou snapshot JS a cada som. O efeito identifica a notificação, e `ringAudible`
+revalida no Rust um pulso já enfileirado antes de `sound.play`; um banner
+dispensado ou silenciado não continua tocando por efeitos antigos. `ringing`
+agora é apenas um espelho de compatibilidade. O host isolado mantém o caminho
+local corrigido anteriormente. Templates, callbacks, configurações e execução
+final do som permanecem pendentes.
 
 ## Gestos horizontais de desktop
 

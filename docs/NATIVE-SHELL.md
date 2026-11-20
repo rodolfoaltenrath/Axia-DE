@@ -104,7 +104,9 @@ O item da barra monta `shell:clock-status`: texto, visibilidade e aba de destino
 são calculados no Rust, com símbolos vetoriais para evitar dependência de glifos
 emoji. A contagem tem atualização nativa apenas enquanto o timer executa; o
 estado não entra nos fatos JS. Preferências, snapshots de compatibilidade e
-efeitos de alarmes ainda usam o adaptador; a repetição do toque continua pendente.
+efeitos de alarmes ainda usam o adaptador. A repetição do toque já pertence ao
+serviço nativo de notificações: cadência e prazo monotônicos, cancelamento por
+política/retirada e validação de pulsos enfileirados antes do som.
 
 `native_clock_runtime` verifica os quatro cenários claro/escuro e 640/1000 px:
 fonte opaca, ausência de estado nos fatos, espelho JS parado, contagem,
@@ -146,7 +148,9 @@ duplicar ações, ação pelo corpo, fechamento, reapresentação do item anteri
 um grupo, Não Perturbe com histórico, expiração e posicionamento inferior em
 RTL numa área de trabalho deslocada. Também verifica fonte opaca, ausência de
 árvore/lista nos fatos, expiração sem armar timer JS, notificação nativa ausente
-do espelho e prazo preservado após remontar a view. Executa os quatro casos claro/escuro em
+do espelho e prazo preservado após remontar a view. O toque é observado com
+intervalos JS bloqueados, remontagem durante o alarme, retirada do banner e
+silêncio ativado enquanto toca. Executa os quatro casos claro/escuro em
 640/1000 px e salva PNGs com os tokens reais do tema, efeitos desligados:
 
 ```text

@@ -35,6 +35,8 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "mirrorStale",
                 "remounted",
                 "ringGuard",
+                "nativeRing",
+                "revisionOrder",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
             }
@@ -69,6 +71,7 @@ import { NotificationBanner } from '@ROOT@/sdk/nativebanner.js';
 import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement } from '@ROOT@/sdk/notify.js';
 import { clockRequest, ringing } from '@ROOT@/sdk/alarms.js';
 import { sound } from '@ROOT@/sdk/sound.js';
+import { notificationBridge } from '@ROOT@/sdk/nativenotifications.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { makeTheme } from '@ROOT@/themes/default/tokens.js';
 import { settings } from '@ROOT@/sdk/settings.js';
@@ -116,11 +119,14 @@ async function run(){
  const nativeDirect=await until(()=>find('Direct native'));
  const mirrorStale=!notifications.get().some(n=>n.title==='Direct native');
  lord.nativeViews.action(bannerHandle,{action:['dismiss',String(direct.result)]});__lordNativeView();await until(()=>!find('Direct native'));
+ notificationBridge.perform(direct.effects.find(effect=>effect.kind==='notificationState'));
+ const revisionOrder=!notifications.get().some(n=>n.title==='Direct native');
  notify({title:'Survives remount',sticky:false,timeout:1500,sound:false});await until(()=>find('Survives remount'));
  toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>find('Survives remount'));
  const remounted=!!find('Survives remount')&&await until(()=>!find('Survives remount'));
- const play=sound.play;let sounds=0;sound.play=()=>{sounds++;};
- let ringGuard=false;
+ const play=sound.play,repeat=globalThis.setInterval;let sounds=0;sound.play=()=>{sounds++;};
+ let ringGuard=false,nativeRing=false;
+ globalThis.setInterval=()=>{throw Error('alarm armed a JS ringing interval');};
  try{
    const fire=()=>{clockRequest('timerStart',{seconds:1,now:Date.now()-2000});clockRequest('arm');};
    settings.set(s=>({...s,notifications:{...s.notifications,dnd:true}}));fire();
@@ -130,16 +136,22 @@ async function run(){
    for(const n of notifications.get())dismissNotification(n.id);
    settings.set(s=>({...s,notifications:{...s.notifications,apps:{}}}));fire();
    const armed=ringing.get().length===1&&sounds===1;
+   toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>bannerHandle);
+   nativeRing=await until(()=>sounds>=2)&&sounds===2&&ringing.get().length===1;
    for(let i=0;i<4;i++)notify({title:'Eviction '+i,sticky:true,sound:false});
    await sleep(2700);
-   ringGuard=quietDnd&&quietMuted&&armed&&ringing.get().length===0&&sounds===1;
+   const evicted=ringing.get().length===0&&sounds===2;
+   fire();const restarted=ringing.get().length===1&&sounds===3;
+   settings.set(s=>({...s,notifications:{...s.notifications,apps:{clock:{sound:false}}}}));
+   const mutedWhileRinging=ringing.get().length===0&&sounds===3;
+   ringGuard=quietDnd&&quietMuted&&armed&&evicted&&restarted&&mutedWhileRinging;
    for(const n of notifications.get())dismissNotification(n.id);
- }finally{sound.play=play;}
+ }finally{sound.play=play;globalThis.setInterval=repeat;}
  setBannerPlacement('bottom');locale.set({lang:'en',region:'',dir:'rtl'});
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,revisionOrder,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

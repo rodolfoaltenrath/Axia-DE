@@ -5,11 +5,20 @@ use std::time::{Duration, Instant};
 
 const MAX_SHOWN: usize = 4;
 const HISTORY: usize = 50;
+const RING_FOR: Duration = Duration::from_secs(60);
+const RING_STEP: Duration = Duration::from_millis(2500);
+
+#[derive(Clone)]
+struct Ring {
+    until: Instant,
+    next: Instant,
+}
 
 #[derive(Clone)]
 pub struct Notice {
     pub data: Value,
     until: Option<Instant>,
+    ring: Option<Ring>,
 }
 impl Notice {
     pub fn id(&self) -> u64 {
@@ -50,7 +59,8 @@ impl State {
     }
     fn snapshot(&self) -> Value {
         json!({"shown":self.shown.iter().map(|n|&n.data).collect::<Vec<_>>(),"history":self.history,
-            "placement":if self.bottom {"bottom"} else {"top"}})
+            "placement":if self.bottom {"bottom"} else {"top"},
+            "ringing":self.shown.iter().filter(|n|n.ring.is_some()).map(Notice::id).collect::<Vec<_>>()})
     }
 }
 
@@ -60,6 +70,9 @@ pub struct Service {
     next: u64,
     sent: Option<u64>,
     effects: Vec<Value>,
+    ring_prefs: Value,
+    clock_prefs: Value,
+    ring_blocked: bool,
 }
 
 // Wall time is used for user schedules/history; elapsed banner time is monotonic.
@@ -87,7 +100,11 @@ impl Service {
             .read()
             .shown
             .iter()
-            .filter_map(|n| n.until)
+            .flat_map(|n| {
+                [n.until, n.ring.as_ref().map(|r| r.next.min(r.until))]
+                    .into_iter()
+                    .flatten()
+            })
             .min()
             .map(|until| until.saturating_duration_since(now).as_secs_f64() * 1000. + 0.01)
     }
@@ -99,6 +116,18 @@ impl Service {
         });
     }
     pub fn expire(&mut self, now: Instant) {
+        let wall = axia_clock::now();
+        let local = axia_clock::local(wall);
+        self.expire_at(now, wall as f64, (local.tm_hour * 60 + local.tm_min) as f64);
+    }
+    fn audible_policy(&self, wall: f64, minute: f64) -> bool {
+        !self.ring_blocked
+            && self.clock_prefs["allow"] != false
+            && self.clock_prefs["sound"] != false
+            && self.clock_prefs["style"] != "none"
+            && !dnd(&self.ring_prefs, wall, minute)
+    }
+    fn expire_at(&mut self, now: Instant, wall: f64, minute: f64) {
         let ids: Vec<_> = self
             .state
             .read()
@@ -107,13 +136,29 @@ impl Service {
             .filter(|n| n.until.is_some_and(|until| now >= until))
             .map(Notice::id)
             .collect();
-        if ids.is_empty() {
-            return;
-        }
-        self.state.update(|s| {
+        let allowed = self.audible_policy(wall, minute);
+        let sounds = self.state.update(|s| {
             s.shown.retain(|n| !ids.contains(&n.id()));
-            ((), true)
+            let mut changed = !ids.is_empty();
+            let mut sounds = Vec::new();
+            for notice in &mut s.shown {
+                if let Some(ring) = &mut notice.ring {
+                    if !allowed || now >= ring.until {
+                        notice.ring = None;
+                        changed = true;
+                    } else if now >= ring.next {
+                        ring.next = now + RING_STEP;
+                        sounds.push(notice.id());
+                    }
+                }
+            }
+            (sounds, changed)
         });
+        self.effects.extend(
+            sounds
+                .into_iter()
+                .map(|id| json!({"kind":"notificationSound","id":id,"repeat":true})),
+        );
         self.effects.extend(
             ids.into_iter()
                 .map(|id| json!({"kind":"notificationClose","id":id,"reason":"closed"})),
@@ -135,14 +180,43 @@ impl Service {
         let mut effects = Vec::new();
         if self.sent != Some(self.state.revision()) {
             self.sent = Some(self.state.revision());
-            effects.push(json!({"kind":"notificationState","state":self.state.read().snapshot()}));
+            effects.push(json!({"kind":"notificationState","revision":self.state.revision(),"state":self.state.read().snapshot()}));
         }
+        // A command can dismiss/evict a banner in the same turn that its pulse becomes due.
+        let state = self.state.read();
+        self.effects.retain(|effect| {
+            effect["kind"] != "notificationSound"
+                || state.shown.iter().any(|n| {
+                    n.data["id"] == effect["id"] && (effect["repeat"] != true || n.ring.is_some())
+                })
+        });
         effects.append(&mut self.effects);
         effects
     }
     pub fn command(&mut self, input: &Value, now: Instant) -> Value {
+        if input["action"] == "ringAudible" {
+            let wall = axia_clock::now();
+            let local = axia_clock::local(wall);
+            let allowed =
+                self.audible_policy(wall as f64, (local.tm_hour * 60 + local.tm_min) as f64);
+            let active = allowed
+                && self.state.read().shown.iter().any(|n| {
+                    n.data["id"] == input["id"] && n.ring.as_ref().is_some_and(|r| now < r.until)
+                });
+            return json!({"result":active,"effects":[]});
+        }
+        if input["action"] == "ringPolicy" {
+            self.ring_prefs = input["prefs"].clone();
+            self.clock_prefs = input["clock"].clone();
+            self.ring_blocked = input["blocked"] == true;
+        } else if input["action"] == "push" && input["notice"]["app"] == "clock" {
+            self.ring_prefs = input["prefs"].clone();
+            self.clock_prefs = input["appPrefs"].clone();
+            self.ring_blocked = input["blocked"] == true;
+        }
         self.expire(now);
         let result = match input["action"].as_str() {
+            Some("ringPolicy") => Value::Null,
             Some("policy") => json!(dnd(
                 &input["prefs"],
                 input["wallMs"].as_f64().unwrap_or(0.),
@@ -172,7 +246,8 @@ impl Service {
                     self.next = self.next.checked_add(1).expect("notification ID exhausted");
                     let id = self.next;
                     let actions: Vec<_>=n["actions"].as_array().into_iter().flatten().take(3).map(|a|json!({"id":a["id"],"label":a["label"],"primary":a["primary"]==true})).collect();
-                    let sticky = n["sticky"] == true || ap["style"] == "alert";
+                    let ring_requested = n["ring"] == true && app == "clock";
+                    let sticky = n["sticky"] == true || ap["style"] == "alert" || ring_requested;
                     let data = json!({"id":id,"app":app,"label":n["label"].as_str().unwrap_or(""),
                         "displayLabel":n["displayLabel"].as_str().unwrap_or(""),"hasApp":n["hasApp"]==true,
                         "title":n["title"].as_str().unwrap_or(""),"body":n["body"].as_str().unwrap_or(""),
@@ -198,6 +273,13 @@ impl Service {
                                     data,
                                     until: (!sticky)
                                         .then(|| now + Duration::from_millis(timeout as u64)),
+                                    ring: (ring_requested
+                                        && n["sound"] != false
+                                        && ap["sound"] != false)
+                                        .then(|| Ring {
+                                            until: now + RING_FOR,
+                                            next: now + RING_STEP,
+                                        }),
                                 },
                             );
                             s.shown.truncate(MAX_SHOWN);
@@ -205,7 +287,9 @@ impl Service {
                         ((), true)
                     });
                     if visible && n["sound"] != false && ap["sound"] != false {
-                        self.effects.push(json!({"kind":"notificationSound"}));
+                        self.effects.push(
+                            json!({"kind":"notificationSound","id":id,"repeat":ring_requested}),
+                        );
                     }
                     json!(id)
                 }

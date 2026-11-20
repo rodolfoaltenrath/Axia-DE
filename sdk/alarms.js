@@ -5,7 +5,7 @@ import { View, Text } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
 import { t, formatTime } from './i18n.js';
-import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive } from './notify.js';
+import { notify, dismissNotification, notifications, appNotifyPrefs, dndActive, notifyRinging, ringingNotifications } from './notify.js';
 import { sound } from './sound.js';
 import { registerStatusItem } from './statusitems.js';
 import { wm } from './windows.js';
@@ -72,8 +72,9 @@ export const arm = () => clockRequest('arm');
 
 // ---- ringing ----
 
-export const ringing = createStore([]);       // notification ids that are ringing
+export const ringing = appHost ? createStore([]) : ringingNotifications;
 function ring(notifyOpts) {
+  if (!appHost) return notifyRinging(notifyOpts);
   let iv = null, stopped = false, offNotices = () => {}, offPrefs = () => {};
   const stopAt = Date.now() + RING_MS;
   const stop = () => {

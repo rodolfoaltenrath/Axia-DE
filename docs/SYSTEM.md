@@ -705,7 +705,11 @@ running, and so does its JS.
   Repetition starts only for an audible, delivered banner. Denied, history-only,
   muted and Do Not Disturb notifications do not arm it. Removing or evicting the
   banner, changing its permission/sound settings, or reaching the one-minute
-  limit cancels the interval and releases its subscriptions and ringing entry.
+  limit cancels repetition and removes its ringing entry. In the main session,
+  the notification service owns the monotonic cadence/deadline, with no JS interval.
+  Remounting the banner view keeps the original deadline; delayed frames never
+  trigger catch-up bursts. Queued pulses are revalidated before playing sound.
+  The isolated compatibility host retains its local interval and cleanup.
 - **Menu bar:** `registerStatusItem('clock', …)` mounts `shell:clock-status`, which
   reads the native engine and shows ⏱ with the time left on the timer (redrawn
   natively every second only while running) or ⏰ with the next alarm within 24 h.

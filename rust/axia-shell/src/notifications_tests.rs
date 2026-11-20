@@ -1,5 +1,161 @@
 use super::*;
 
+fn ring(service: &mut Service, now: Instant, extra: Value) -> Value {
+    let mut input = json!({"notice":{"app":"clock","title":"Alarm","ring":true,"sound":true}});
+    for (key, value) in extra.as_object().into_iter().flatten() {
+        input[key] = value.clone();
+    }
+    push(service, now, "Alarm", input)
+}
+
+#[test]
+fn ringing_has_one_monotonic_deadline_no_catch_up_burst_and_no_revisions_per_pulse() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    let reply = ring(&mut service, now, json!({}));
+    assert!(kinds(&reply).contains(&"notificationSound"));
+    let reader = service.reader();
+    let revision = reader.revision();
+    assert!(service.wait_ms(now).unwrap() >= 2500.);
+    assert_eq!(reader.read().snapshot()["ringing"], json!([1]));
+    service.expire_at(now + Duration::from_millis(2499), 0., 0.);
+    assert!(service.effects().is_empty());
+    service.expire_at(now + RING_STEP, 0., 0.);
+    assert_eq!(
+        service.effects(),
+        vec![json!({"kind":"notificationSound","id":1,"repeat":true})]
+    );
+    assert_eq!(reader.revision(), revision);
+    service.expire_at(now + Duration::from_secs(30), 0., 0.);
+    assert_eq!(service.effects().len(), 1);
+    service.expire_at(now + RING_FOR, 0., 0.);
+    let effects = service.effects();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0]["state"]["ringing"], json!([]));
+    assert_eq!(
+        reader.read().shown.len(),
+        1,
+        "alarm stays available for acknowledgement"
+    );
+    assert!(service.wait_ms(now + RING_FOR).is_none());
+    service.expire_at(now + Duration::from_secs(120), 0., 0.);
+    assert!(service.effects().is_empty());
+}
+
+#[test]
+fn suppressed_rings_never_arm_and_other_apps_cannot_request_clock_repetition() {
+    let now = Instant::now();
+    for extra in [
+        json!({"appPrefs":{"allow":false}}),
+        json!({"blocked":true}),
+        json!({"prefs":{"dnd":true}}),
+        json!({"appPrefs":{"sound":false}}),
+        json!({"appPrefs":{"style":"none"}}),
+    ] {
+        let mut service = Service::default();
+        let reply = ring(&mut service, now, extra);
+        assert!(!kinds(&reply).contains(&"notificationSound"));
+        assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
+        assert!(service.wait_ms(now).is_none());
+    }
+    let mut service = Service::default();
+    let reply = ring(
+        &mut service,
+        now,
+        json!({"notice":{"app":"notes","ring":true,"sticky":true,"sound":true}}),
+    );
+    assert!(kinds(&reply).contains(&"notificationSound"));
+    assert!(reply["effects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "notificationSound")
+        .all(|e| e["repeat"] == false));
+    assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
+    assert!(service.wait_ms(now).is_none());
+}
+
+#[test]
+fn muting_dnd_denial_and_firewall_cancel_native_ringing_without_resuming_old_alarms() {
+    let now = Instant::now();
+    for policy in [
+        json!({"clock":{"sound":false}}),
+        json!({"clock":{"allow":false}}),
+        json!({"clock":{"style":"none"}}),
+        json!({"prefs":{"dnd":true}}),
+        json!({"blocked":true}),
+    ] {
+        let mut service = Service::default();
+        ring(&mut service, now, json!({}));
+        let mut input = json!({"action":"ringPolicy","prefs":{},"clock":{}});
+        for (key, value) in policy.as_object().unwrap() {
+            input[key] = value.clone();
+        }
+        let reply = service.command(&input, now + RING_STEP);
+        assert!(!kinds(&reply).contains(&"notificationSound"));
+        assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
+        assert!(service.wait_ms(now).is_none());
+        service.command(
+            &json!({"action":"ringPolicy","prefs":{},"clock":{}}),
+            now + Duration::from_secs(3),
+        );
+        service.expire_at(now + Duration::from_secs(10), 0., 0.);
+        assert!(service.effects().is_empty());
+    }
+}
+
+#[test]
+fn dismissal_and_eviction_cancel_due_and_already_queued_pulses() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    ring(&mut service, now, json!({}));
+    let reply = service.command(&json!({"action":"dismiss","id":1}), now + RING_STEP);
+    assert_eq!(kinds(&reply), ["notificationState", "notificationClose"]);
+    assert!(service.wait_ms(now).is_none());
+    ring(&mut service, now, json!({}));
+    service.expire_at(now + RING_STEP, 0., 0.);
+    assert_eq!(service.effects()[0]["repeat"], true);
+    service.command(&json!({"action":"dismiss","id":2}), now + RING_STEP);
+    assert_eq!(
+        service.command(&json!({"action":"ringAudible","id":2}), now + RING_STEP)["result"],
+        false
+    );
+    ring(&mut service, now, json!({}));
+    for _ in 0..4 {
+        push(
+            &mut service,
+            now,
+            "Other",
+            json!({"notice":{"app":"notes","sticky":true,"sound":false}}),
+        );
+    }
+    assert!(service.reader().read().snapshot()["ringing"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(service.wait_ms(now).is_none());
+    service.expire_at(now + RING_STEP, 0., 0.);
+    assert!(service.effects().is_empty());
+}
+
+#[test]
+fn dnd_schedule_is_rechecked_by_the_native_pulse_at_midnight() {
+    let now = Instant::now();
+    let mut service = Service::default();
+    ring(
+        &mut service,
+        now,
+        json!({"prefs":{"schedule":{"on":true,"from":1320,"to":420}},"minute":1319.}),
+    );
+    service.expire_at(now + RING_STEP, 0., 1320.);
+    assert_eq!(service.reader().read().snapshot()["ringing"], json!([]));
+    assert!(!service
+        .effects()
+        .iter()
+        .any(|e| e["kind"] == "notificationSound"));
+    assert!(service.wait_ms(now).is_none());
+}
+
 fn push(service: &mut Service, now: Instant, title: &str, extra: Value) -> Value {
     let mut input = json!({"action":"push","notice":{"app":"notes","title":title,"label":"Notes","sound":true},
         "prefs":{},"appPrefs":{},"wallMs":10000.,"minute":60.});
@@ -181,6 +337,7 @@ fn observable_revisions_are_quiet_when_idle_and_sessions_do_not_share_notificati
     let changes = reader.subscribe();
     let reply = push(&mut service.borrow_mut(), now, "One", json!({}));
     assert_eq!(reader.revision(), 1);
+    assert_eq!(reply["effects"][0]["revision"], 1);
     assert!(changes.pending());
     assert_eq!(
         clone

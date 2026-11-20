@@ -24,13 +24,13 @@ const probe={notifications,settings,sound,View:()=>null,Text:()=>null,t:key=>key
  appNotifyPrefs:()=>({allow:true,sound:true,style:'banner',...policy}),dndActive:()=>!!policy.dnd,
  notify:options=>{last=options;if(policy.allow===false)return 0;const id=++next;
    if(!policy.dnd&&policy.style!=='none'){notifications.set([...notifications.get(),{...options,id}]);if(policy.sound!==false)sound.play();}return id;},
- dismissNotification:()=>{},registerStatusItem:()=>{},wm:{},NativeView:()=>null,clockBridge:{}};
+ dismissNotification:()=>{},notifyRinging:()=>{throw Error('legacy Clock entered native ring bridge');},ringingNotifications:store([]),registerStatusItem:()=>{},wm:{},NativeView:()=>null,clockBridge:{}};
 globalThis.__clockProbe=probe;
 globalThis.lord={clock:{request:()=>{const effects=event?[event]:[];event=null;return{timer:{state:'idle',duration:1000,endsAt:0,left:0},stopwatch:{running:false,start:0,acc:0,laps:[]},nextAlarm:null,wait:null,effects};}}};
 const names={runtime:['View','Text'],'settings.js':['settings'],'i18n.js':['t','formatTime'],
- 'notify.js':['notify','dismissNotification','notifications','appNotifyPrefs','dndActive'],
+ 'notify.js':['notify','dismissNotification','notifications','appNotifyPrefs','dndActive','notifyRinging','ringingNotifications'],
  'sound.js':['sound'],'statusitems.js':['registerStatusItem'],'windows.js':['wm'],'nativeview.js':['NativeView'],'nativeclock.js':['clockBridge']};
-const result=await build({entryPoints:[path.join(root,'sdk/alarms.js')],bundle:true,write:false,format:'esm',plugins:[{name:'clock-services',setup(build){
+const result=await build({entryPoints:[path.join(root,'sdk/alarms.js')],bundle:true,write:false,format:'esm',define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'clock-services',setup(build){
  build.onResolve({filter:/.*/},args=>{const name=args.path==='@lordos/runtime'?'runtime':path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
  build.onLoad({filter:/.*/,namespace:'probe'},args=>({contents:names[args.path].map(name=>`export const ${name}=globalThis.__clockProbe.${name};`).join('\n')}));
  }}]});
