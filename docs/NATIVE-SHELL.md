@@ -138,9 +138,11 @@ SDK. O store público de i18n espelha essa fonte por revisão, pelo observador
 contexto ativo. Leitores de outros perfis não alteram a interface. Updaters
 consultam o estado nativo e respostas antigas são descartadas. Tradução e nomes
 de apps do SDK consultam o resolvedor compartilhado Rust com o idioma atual;
-formatação e enumeração de idiomas ainda precisam migrar. `native_locale_runtime` cobre quatro
-variantes de tema/tamanho, com setters JS de texto bloqueados; o CI GPU=1
-publica `axia-native-locale`. Evidências em `build/validation/native-locale-session/`.
+formatos de data/hora/número, nomes de meses/dias e lista de idiomas também usam
+esse proprietário, com caches invalidados por revisão e sem catálogos no JS.
+`native_locale_runtime` cobre quatro variantes de tema/tamanho, com setters JS
+de texto e leitores legados de formatos bloqueados; o CI GPU=1
+publica `axia-native-locale`. Evidências mais recentes em `build/validation/native-formats/`.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

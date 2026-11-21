@@ -10,6 +10,7 @@ pub mod i18n;
 pub mod icons;
 pub mod markdown;
 pub mod matching;
+pub mod number_format;
 pub mod paint;
 pub mod retained;
 pub mod services;

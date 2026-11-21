@@ -683,9 +683,9 @@ placeholders ausentes, nomes com fallback de manifesto, recarga e leituras sem
 alteração de revisão. A integração `native_locale_runtime` também bloqueia os
 leitores JS `locale.catalog/languages` nas funções migradas, exige tradução com espelho antigo e
 atualização após instalar pacote. O contrato LPK exige tradução local sem usar
-a autoridade da sessão. Formatação de datas/horas/números e enumeração pública
-dos idiomas ainda precisam migrar. Ponto de retomada: esses caminhos de
-`sdk/i18n.js`, antes dos demais consumidores de preferências.
+a autoridade da sessão. A entrega seguinte migra formatação e enumeração pública
+dos idiomas, descritas abaixo. Demais consumidores de preferências permanecem
+no escopo da Fase 2.
 
 Validação desta entrega: 611 testes da shell, sete contratos LPK, 24 cenários
 gráficos de locale/configurações/notificações/relógio/Forçar encerramento/menu,
@@ -694,6 +694,56 @@ GPU=1. Compositor e bundles recompilados; captura do texto recarregado inspecion
 Evidências locais em `build/validation/native-translation/`. O CI mantém o teste
 `native_locale_runtime` e o artefato `axia-native-locale`. Trabalho pausado a
 pedido do usuário após esta entrega; medições físicas permanecem para o final.
+
+### Formatos e idiomas públicos do SDK no Rust
+
+`formatDate`, `formatTime`, `formatNumber`, `monthName`, `weekdayName` e
+`languages` da sessão consultam o proprietário em `locale.rs`, usando idioma e
+região atuais e a preferência nativa de relógio, mesmo com espelhos JS antigos.
+O adaptador conserva apenas coerção pública e extração dos componentes locais de
+`Date`: não converte a data para UTC nem lê catálogos ou configurações para formatar.
+O host isolado `.lpk` mantém sua implementação local e não acessa a autoridade da sessão.
+
+`axia-native::date_format::Formats` resolve os catálogos completos do SDK e os
+mantém em cache por idioma/região/12–24 h/revisão. Nomes seguem o idioma; data
+numérica, separadores e relógio seguem a região. Os formatadores existentes dos
+apps nativos conservam seus fallbacks por campo para pacotes parciais.
+A interpolação percorre o padrão uma vez: chaves dentro de nomes traduzidos não
+são reinterpretadas. Datas inválidas conservam a apresentação legada com `NaN`.
+
+`axia-native::number_format` implementa precisão fixa com o valor binário exato,
+até 100 casas, sem nova dependência. Mantém zeros finais, sinal de valores
+negativos arredondados a zero, arredondamento de empate para longe de zero,
+NaN/infinito, representação exponencial e `RangeError` para precisão fora do limite.
+Sem precisão explícita, a string pública mantém a coerção anterior do SDK.
+
+A lista pública de idiomas lê `meta.json` com limite de 4 KiB, ignora metadados
+inválidos, preserva a precedência dos idiomas embarcados em duplicatas e marca
+pacotes exclusivos do perfil com `user`. A ordenação normaliza NFC e compara
+pontos de código, como o `localeCompare` do QuickJS do projeto. A lista fica no
+cache do proprietário; instalação e recarga de catálogos a invalidam. A tradução
+e a formatação continuam dando precedência ao catálogo do perfil.
+
+Testes Rust cobrem regiões diferentes do idioma, 12/24 h, pacotes parciais,
+recarga, metadados inválidos/grandes, duplicatas, ordenação Unicode e leituras
+sem alteração de revisão. `native_locale_runtime` compara 570 combinações de
+valor/precisão por cenário com o comportamento anterior, bloqueando `toFixed`
+durante as chamadas migradas; também bloqueia leitores JS de locale e catálogos
+de formatos e exige resultados com espelho antigo. O teste continua obrigatório
+no CI GPU=1, com capturas claro/escuro em 640/1000 px.
+
+Validação de 2026-11-21 no Fedora 44 em contêiner: 617 testes da shell,
+17 do toolkit, sete contratos LPK e 16 cenários gráficos de locale/configurações/
+relógio/notificações passaram. Compositor e bundles recompilados, instalação
+privada gerada e capturas dos formatos inspecionadas. Três amostras do coletor
+Rust, com oito segundos de aquecimento e vinte segundos de observação cada,
+passaram com imposição dos limites existentes: mediana de 12,200 poll/s e
+104,770 MiB de RSS (limites 15 poll/s e 120 MiB). Escopo: thread principal,
+renderização em software e rede desativada; não é comparação antes/depois nem
+medição de apresentação física. Evidências em `build/validation/native-formats/`.
+A sessão instalada do usuário não foi substituída nem reiniciada. Próxima frente:
+consumidores que ainda enviam locale e preferências nos fatos de `NativeBridge`
+em `sdk/nativeview.js`, além dos demais serviços da Fase 2.
 
 ## Consulta nativa de permissões e firewall
 

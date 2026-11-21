@@ -12,7 +12,9 @@ pub struct I18n {
     /// The digit group separator of the region (",", ".", a space, or none).
     pub group: String,
     roots: Vec<PathBuf>,
+    user_root: Option<PathBuf>,
     cache: HashMap<(String, String), Option<Map<String, Value>>>,
+    languages: Option<Vec<Value>>,
 }
 fn valid(id: &str) -> bool {
     !id.is_empty()
@@ -25,6 +27,7 @@ fn valid(id: &str) -> bool {
 impl I18n {
     pub fn invalidate(&mut self) {
         self.cache.clear();
+        self.languages = None;
     }
     pub fn new(assets: &str, home: Option<&str>) -> Self {
         let mut roots = Vec::new();
@@ -38,11 +41,15 @@ impl I18n {
             lang: FALLBACK.into(),
             decimal: ".".into(),
             group: ",".into(),
+            user_root: home
+                .filter(|h| !h.is_empty())
+                .map(|h| PathBuf::from(h).join(".local/share/axia/locales")),
             roots,
             cache: HashMap::new(),
+            languages: None,
         }
     }
-    fn catalog(&mut self, lang: &str, ns: &str) -> Option<&Map<String, Value>> {
+    pub(super) fn catalog(&mut self, lang: &str, ns: &str) -> Option<&Map<String, Value>> {
         let key = (lang.to_owned(), ns.to_owned());
         if !self.cache.contains_key(&key) {
             let found = (valid(lang) && valid(ns))
@@ -68,6 +75,51 @@ impl I18n {
     /// Raw localized service data, using the same roots and cache as captions.
     pub fn entry(&mut self, lang: &str, namespace: &str, key: &str) -> Option<Value> {
         self.catalog(lang, namespace)?.get(key).cloned()
+    }
+    /// SDK language choices. Preserve bundled-first duplicate precedence and
+    /// QuickJS's NFC/codepoint name ordering; reload invalidates this bounded metadata cache.
+    pub fn languages(&mut self) -> &[Value] {
+        if self.languages.is_none() {
+            let mut found = std::collections::BTreeMap::new();
+            for root in self.roots.iter().rev() {
+                let Ok(entries) = std::fs::read_dir(root) else {
+                    continue;
+                };
+                for entry in entries.flatten() {
+                    let Some(id) = entry.file_name().to_str().map(str::to_owned) else {
+                        continue;
+                    };
+                    if !valid(&id) || found.contains_key(&id) {
+                        continue;
+                    }
+                    let text = crate::read(&entry.path().join("meta.json"), 4097);
+                    if text.len() > 4096 {
+                        continue;
+                    }
+                    let Ok(Value::Object(meta)) = serde_json::from_str::<Value>(&text) else {
+                        continue;
+                    };
+                    let name = meta
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(&id);
+                    let mut value = serde_json::json!({"id":id,"name":name,
+                        "english":meta.get("english").and_then(Value::as_str).unwrap_or(""),
+                        "user": self.user_root.as_ref() == Some(root)});
+                    for key in ["plural", "region"] {
+                        if let Some(v) = meta.get(key) {
+                            value[key] = v.clone();
+                        }
+                    }
+                    found.insert(id, value);
+                }
+            }
+            let mut values: Vec<Value> = found.into_values().collect();
+            values.sort_by_cached_key(|v| super::unicode::nfc(v["name"].as_str().unwrap_or("")));
+            self.languages = Some(values);
+        }
+        self.languages.as_deref().unwrap()
     }
     fn lookup(&mut self, lang: &str, key: &str) -> Option<Value> {
         let (ns, id) = key.split_once('.')?;
@@ -314,7 +366,7 @@ impl I18n {
         }
     }
 }
-fn fill(text: &str, vars: &Map<String, Value>) -> String {
+pub(super) fn fill(text: &str, vars: &Map<String, Value>) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(start) = rest.find('{') {

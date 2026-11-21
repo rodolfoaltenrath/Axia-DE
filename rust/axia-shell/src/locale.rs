@@ -68,6 +68,10 @@ struct Model {
     observed: Option<u64>,
     state: Store<State>,
     catalogs: I18n,
+    formats: Option<(
+        (String, String, String, u64),
+        axia_native::date_format::Formats,
+    )>,
     automatic: String,
     generation: u64,
     runtime: Map<String, Value>,
@@ -85,6 +89,7 @@ impl Model {
             observed: None,
             state: Store::default(),
             catalogs,
+            formats: None,
             automatic,
             generation: 0,
             runtime: Map::new(),
@@ -227,6 +232,101 @@ impl Model {
             .expect("locale revision exhausted");
         self.rebuild();
     }
+    fn format(&mut self, input: &Value) -> Value {
+        self.sync();
+        let state = self.state.read();
+        let saved = self.settings.read();
+        let hours = saved["clock"]["hour24"].as_str().unwrap_or("auto");
+        if self
+            .formats
+            .as_ref()
+            .is_none_or(|((lang, region, clock, revision), _)| {
+                lang != &state.lang
+                    || region != &state.region
+                    || clock != hours
+                    || *revision != state.revision
+            })
+        {
+            self.catalogs.lang = state.lang.clone();
+            let formats =
+                axia_native::date_format::Formats::new(&mut self.catalogs, &state.region, hours);
+            self.formats = Some((
+                (
+                    state.lang.clone(),
+                    state.region.clone(),
+                    hours.to_owned(),
+                    state.revision,
+                ),
+                formats,
+            ));
+        }
+        let f = &self.formats.as_ref().unwrap().1;
+        let cmd = input["cmd"].as_str().unwrap_or("");
+        if cmd == "number" {
+            let digits = input.get("digits").filter(|v| !v.is_null()).map(|v| {
+                v.as_str()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .unwrap_or(f64::NAN)
+            });
+            return match axia_native::number_format::number(
+                input["value"].as_str().unwrap_or(""),
+                digits,
+                &f.decimal,
+                &f.group,
+            ) {
+                Ok(value) => json!({"value":value}),
+                Err(error) => json!({"error":error}),
+            };
+        }
+        if matches!(cmd, "month" | "weekday") {
+            let index = input["index"]
+                .as_i64()
+                .and_then(|n| i32::try_from(n).ok())
+                .or_else(|| {
+                    let text = input["index"].as_str()?;
+                    let n = text.parse::<i32>().ok()?;
+                    (n.to_string() == text).then_some(n)
+                });
+            return json!({"value":index.map(|n| f.name(cmd == "month", n, input["short"].as_bool().unwrap_or(false)))});
+        }
+        let keys: &[&str] = if cmd == "date" {
+            &["year", "month", "day", "weekday"]
+        } else {
+            &["hour", "minute", "second"]
+        };
+        let Some(values) = keys
+            .iter()
+            .map(|key| input[*key].as_i64().and_then(|n| i32::try_from(n).ok()))
+            .collect::<Option<Vec<_>>>()
+        else {
+            return json!({"value": if cmd == "date" { f.invalid_date(input["style"].as_str().unwrap_or("short")) } else { f.invalid_time(input["seconds"].as_bool().unwrap_or(false)) }});
+        };
+        if (cmd == "date"
+            && (!(-271821..=275760).contains(&values[0])
+                || !(0..12).contains(&values[1])
+                || !(1..=31).contains(&values[2])
+                || !(0..7).contains(&values[3])))
+            || (cmd == "time"
+                && (!(0..24).contains(&values[0])
+                    || !(0..60).contains(&values[1])
+                    || !(0..60).contains(&values[2])))
+        {
+            return json!({"error":"locale.invalidDate"});
+        }
+        let mut time: libc::tm = unsafe { std::mem::zeroed() };
+        if cmd == "date" {
+            time.tm_year = values[0].saturating_sub(1900);
+            time.tm_mon = values[1];
+            time.tm_mday = values[2];
+            time.tm_wday = values[3];
+            json!({"value":f.date(&time, input["style"].as_str().unwrap_or("short"))})
+        } else {
+            time.tm_hour = values[0];
+            time.tm_min = values[1];
+            time.tm_sec = values[2];
+            json!({"value":f.time(&time, input["seconds"].as_bool().unwrap_or(false))})
+        }
+    }
     fn translate(&mut self, input: &Value) -> Value {
         self.sync();
         self.catalogs.lang = self.state.read().lang.clone();
@@ -309,6 +409,8 @@ fn request(home: &str, assets: &str, input: &Value) -> Value {
                 model.snapshot()
             }
             Some("snapshot") => model.snapshot(),
+            Some("languages") => json!({"value": model.catalogs.languages()}),
+            Some("date" | "time" | "number" | "month" | "weekday") => model.format(input),
             Some("translate" | "optional" | "appName") => model.translate(input),
             Some("patch" | "replace") => model.set(&input["value"], input["cmd"] == "replace"),
             Some("reload") => {

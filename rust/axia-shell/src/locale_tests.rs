@@ -317,3 +317,195 @@ fn locale_conf_reads_are_bounded() {
     assert_eq!(read_lang(&path), Some("pt_BR.UTF-8".into()));
     std::fs::remove_file(path).unwrap();
 }
+
+#[test]
+fn sdk_formats_read_current_native_preferences_and_reload_without_mutating_state() {
+    let root = std::env::temp_dir().join(format!("axia-locale-formats-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    let home = crate::settings::profile(root.to_str().unwrap());
+    crate::settings::with(&home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("language", &json!("pt"));
+        s.set("region", &json!("en_US"));
+    });
+    request(&home, assets, &json!({"cmd":"initialize"}));
+    let date = |style: &str| json!({"cmd":"date","year":2026,"month":10,"day":13,"weekday":5,"style":style});
+    let time = json!({"cmd":"time","hour":13,"minute":7,"second":9,"seconds":true});
+    assert_eq!(
+        request(&home, assets, &date("long"))["value"],
+        "sexta-feira, 13 de novembro de 2026"
+    );
+    assert_eq!(
+        request(&home, assets, &date("numeric"))["value"],
+        "11/13/2026"
+    );
+    assert_eq!(request(&home, assets, &time)["value"], "1:07:09 PM");
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"number","value":"1234.5","digits":"2"})
+        )["value"],
+        "1,234.50"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"date","year":2026,"month":2147483647,"day":1,"weekday":0})
+        )["error"],
+        "locale.invalidDate"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"time","hour":24,"minute":0,"second":0})
+        )["error"],
+        "locale.invalidDate"
+    );
+    let before = request(&home, assets, &json!({"cmd":"snapshot"}));
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"month","index":10,"short":false})
+        )["value"],
+        "novembro"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"weekday","index":5,"short":true})
+        )["value"],
+        "sex"
+    );
+    assert_eq!(request(&home, assets, &json!({"cmd":"snapshot"})), before);
+    crate::settings::with(&home, |s| {
+        s.set("region", &json!("pt_PT"));
+        s.set("clock", &json!({"hour24":"24"}));
+    });
+    assert_eq!(request(&home, assets, &time)["value"], "13:07:09");
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"number","value":"1234567.5","digits":"2"})
+        )["value"],
+        "1 234 567,50"
+    );
+    let pack = root.join(".local/share/axia/locales/pt");
+    std::fs::create_dir_all(&pack).unwrap();
+    std::fs::write(pack.join("format.json"),r#"{"months":["{day}"],"date":{"short":"{month}/{day}"},"decimal":"!","group":"","hour12":true,"regions":{"pt_PT":{"pm":"tarde"}}}"#).unwrap();
+    request(&home, assets, &json!({"cmd":"reload"}));
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"date","year":2026,"month":0,"day":13,"weekday":5,"style":"short"})
+        )["value"],
+        "{day}/13"
+    );
+    assert_eq!(
+        request(
+            &home,
+            assets,
+            &json!({"cmd":"number","value":"1234.5","digits":"2"})
+        )["value"],
+        "1234!50"
+    );
+    crate::settings::with(&home, |s| {
+        s.set("clock", &json!({"hour24":"12"}));
+    });
+    assert_eq!(request(&home, assets, &time)["value"], "1:07:09 tarde");
+    request(
+        &home,
+        assets,
+        &json!({"cmd":"patch","value":{"lang":"unknown","region":"en_GB"}}),
+    );
+    assert_eq!(
+        request(&home, assets, &date("long"))["value"],
+        "Friday, November 13, 2026"
+    );
+    assert_eq!(
+        request(&home, assets, &date("numeric"))["value"],
+        "13/11/2026"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn language_choices_preserve_bundled_precedence_skip_bad_metadata_and_reload() {
+    let root = std::env::temp_dir().join(format!("axia-locale-languages-{}", std::process::id()));
+    let assets = root.join("assets");
+    let user = root.join(".local/share/axia/locales");
+    for (base, id, meta) in [
+        (
+            assets.join("locales"),
+            "en",
+            r#"{"name":"English","plural":"one-other","region":"en_US"}"#,
+        ),
+        (user.clone(), "en", r#"{"name":"User duplicate"}"#),
+        (
+            user.clone(),
+            "zz",
+            r#"{"name":"Zed","english":"Zed language"}"#,
+        ),
+        (user.clone(), "broken", "not JSON"),
+        (user.clone(), "array", "[]"),
+        (
+            user.clone(),
+            "huge",
+            &format!("{{\"name\":\"{}\"}}", "x".repeat(4096)),
+        ),
+    ] {
+        std::fs::create_dir_all(base.join(id)).unwrap();
+        std::fs::write(base.join(id).join("meta.json"), meta).unwrap();
+    }
+    let home = crate::settings::profile(root.to_str().unwrap());
+    let assets = assets.to_str().unwrap();
+    let list = || request(&home, assets, &json!({"cmd":"languages"}))["value"].clone();
+    let choices = list();
+    assert_eq!(choices.as_array().unwrap().len(), 2);
+    assert_eq!(
+        choices[0],
+        json!({"id":"en","name":"English","english":"","plural":"one-other","region":"en_US","user":false})
+    );
+    assert_eq!(choices[1]["user"], true);
+    std::fs::create_dir_all(user.join("new")).unwrap();
+    std::fs::write(user.join("new/meta.json"), r#"{"name":"A new language"}"#).unwrap();
+    assert_eq!(
+        list(),
+        choices,
+        "choices are cached until explicit catalog invalidation"
+    );
+    request(&home, assets, &json!({"cmd":"reload"}));
+    assert_eq!(list()[0]["id"], "new");
+    std::fs::remove_file(user.join("new/meta.json")).unwrap();
+    request(&home, assets, &json!({"cmd":"reload"}));
+    assert_eq!(list(), choices);
+    for (id, name) in [
+        ("bmp", "\u{e000}"),
+        ("astral", "\u{10000}"),
+        ("decomposed", "e\u{301}"),
+        ("zebra", "zebra"),
+    ] {
+        std::fs::create_dir_all(user.join(id)).unwrap();
+        std::fs::write(
+            user.join(id).join("meta.json"),
+            json!({"name":name}).to_string(),
+        )
+        .unwrap();
+    }
+    request(&home, assets, &json!({"cmd":"reload"}));
+    let ids: Vec<_> = list()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(ids, ["en", "zz", "zebra", "decomposed", "bmp", "astral"]);
+    std::fs::remove_dir_all(root).unwrap();
+}

@@ -68,6 +68,7 @@ function catalog(lang, ns) {
 
 // Available languages: [{ id, name (in its own language), english, plural, user }]
 export function languages() {
+  if (!appHost) return nativeLocale({ cmd: 'languages' }).value;
   const out = [];
   for (const l of lord.locale.languages()) {
     let m = {};
@@ -217,6 +218,7 @@ const pad = (n) => String(n).padStart(2, '0');
 
 // style: 'short' (Thu Oct 15), 'long' (Thursday, October 15, 2026), 'numeric' (10/15/2026)
 export function formatDate(d, style = 'short') {
+  if (!appHost) return nativeLocale({ cmd: 'date', year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), weekday: d.getDay(), style: String(style) }).value;
   const f = formats();
   const day = d.getDate(), month = d.getMonth(), year = d.getFullYear(), wd = d.getDay();
   const pattern = f.date?.[style] || '{dd}/{mm}/{yyyy}';
@@ -228,17 +230,20 @@ export function formatDate(d, style = 'short') {
 
 // Month name (0 = January) in the interface language: monthName(9) → "October", monthName(9, true) → "Oct".
 export function monthName(m, short = false) {
+  if (!appHost) return nativeLocale({ cmd: 'month', index: m, short: !!short }).value ?? String(m + 1);
   const f = formats();
   return (short ? f.monthsShort : f.months)?.[m] ?? String(m + 1);
 }
 
 // Weekday name (0 = Sunday) in the interface language: weekdayName(1) → "Mon".
 export function weekdayName(wd, short = true) {
+  if (!appHost) return nativeLocale({ cmd: 'weekday', index: wd, short: !!short }).value ?? String(wd);
   const f = formats();
   return (short ? f.weekdaysShort : f.weekdays)?.[wd] ?? String(wd);
 }
 
 export function formatTime(d, { seconds = false } = {}) {
+  if (!appHost) return nativeLocale({ cmd: 'time', hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds(), seconds: !!seconds }).value;
   const f = formats();
   let h = d.getHours();
   const m = pad(d.getMinutes()), s = seconds ? `:${pad(d.getSeconds())}` : '';
@@ -251,6 +256,12 @@ export function formatTime(d, { seconds = false } = {}) {
 }
 
 export function formatNumber(n, digits = null) {
+  if (!appHost) {
+    const reply = lord.locale.state({ cmd: 'number', value: String(digits == null ? n : Number(n)), digits: digits == null ? null : String(Number(digits)) });
+    if (reply?.error === 'locale.invalidDigits') throw new RangeError('toFixed() digits argument must be between 0 and 100');
+    if (!reply || reply.error) throw new Error(reply?.error || 'locale.invalidRequest');
+    return reply.value;
+  }
   const f = formats();
   const dec = f.decimal || '.', group = f.group ?? ',';
   const fixed = digits == null ? String(n) : Number(n).toFixed(digits);
