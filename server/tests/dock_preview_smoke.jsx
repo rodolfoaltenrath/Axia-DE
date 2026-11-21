@@ -41,7 +41,18 @@ const originalVisibility = lord.anim.dockVisibility;
 lord.anim.dockVisibility = (...args) => { visibility.push(args); return originalVisibility(...args); };
 const DockIcon = ({ size }) => { iconRenders++; return h(View, { style: { width: size, height: size, backgroundColor: '#5c946e' } }); };
 const originalPreview = lord.wm.preview;
-lord.wm.preview = (...args) => { const input = JSON.parse(args[0]), out = originalPreview(...args); if (input.op === 'activate') activatedPreview = input.id; if (input.id) previewStates.set(input.id, out); if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++; return out; };
+let slowSchedule = false;
+const hoverKeys = new Map();
+lord.wm.preview = (...args) => {
+  const input = JSON.parse(args[0]), out = originalPreview(...args);
+  if (input.op === 'activate') activatedPreview = input.id;
+  if (input.id && input.op !== 'schedule') previewStates.set(input.id, out);
+  if (input.key != null) hoverKeys.set(input.id, input.key);
+  if (hoverStarted && firstImageMs == null && out?.pending) pendingRequests++;
+  // Model a long capture cooldown; pointer departure still needs an earlier timer.
+  if (input.op === 'schedule' && slowSchedule && hoverKeys.get(input.id)) return { waitMs: 1000 };
+  return out;
+};
 const original = lord.wm.thumbnail;
 lord.wm.thumbnail = (...args) => { calls++; const ok = original(...args); if (ok) { captures++; lastSource = args[1]; capturedSizes.set(args[1], args.slice(3)); if (firstImageMs == null) firstImageMs = lord.now() - hoverStarted; } return ok; };
 const originalFocus = wm.focus;
@@ -61,7 +72,7 @@ function Harness() {
   const p = useDockPreviews({ hit: hover ? { id: 'app:preview-test' } : null, anchor: { x: 500, y: 580 },
     area: { x: 0, y: 0, w: 1000, h: 700 }, position: 'bottom', disabled: previewBlocked, theme });
   latest = p;
-  useEffect(() => { const timer = setInterval(() => { if (!pauseSource) setFrame((n) => n + 1); }, 170); return () => clearInterval(timer); }, []);
+  useEffect(() => { const timer = setInterval(() => { if (!pauseSource) setFrame((n) => n + 1); }, 16); return () => clearInterval(timer); }, []);
   useEffect(() => { source = root.current; setTimeout(() => run().catch((e) => console.error(e)), 120); }, []);
   return h(View, { style: { width: 1000, height: 700, backgroundColor: '#182036' } },
     h(View, { ref: (inst) => { root.current = inst; wm.frameRef('preview-test')(inst); }, style: { position: 'absolute', left: 50, top: 40, width: dimensions[0], height: dimensions[1], backgroundColor: frame % 2 ? '#bc4535' : '#255bad' } },
@@ -130,7 +141,11 @@ async function checkDisabledHover() {
   check(!latest.open && calls === stopped, 'disabled preview never captures after pointer re-entry');
   blockPreview(false);
   check(await until(() => latest.open), 'leaving and returning while disabled rearms preview when enabled');
+  slowSchedule = true; await sleep(100);
+  const left = lord.now();
   switchHover(false); await sleep(350);
+  check(!latest.open && lord.now() - left < 750, 'pointer departure shortens a long capture cooldown');
+  slowSchedule = false;
   console.log('dock disabled hover integration: passed');
 }
 async function checkPreviewSizingAndClose() {
@@ -162,10 +177,14 @@ async function checkPreviewSizingAndClose() {
   check(await until(() => !wm.get(second)), 'close button closes only its target window');
   check(await until(() => !!wm.get(previewId) && latest.open), 'other window stays open with its preview');
   check(focusCalls === focused, 'close never bubbles into card activation');
+  wm.minimize(previewId);
+  check(!!wm.get(previewId).minimized, 'guarded close starts with a minimized window');
   const release = wm.setCloseGuard(previewId, () => false);
   clickText('×');
   check(await until(() => !latest.open), 'guarded close dismisses preview so the app can ask about unsaved changes');
-  check(!!wm.get(previewId), 'close respects the app guard'); release();
+  check(!!wm.get(previewId), 'close respects the app guard');
+  check(await until(() => !wm.get(previewId).minimized), 'guarded close restores the window so confirmation is visible');
+  check(focusCalls === focused + 1, 'guarded close reveals the minimized native window once'); release();
   switchHover(false); await sleep(40); switchHover(true);
   check(await until(() => latest.open), 'guarded window can be previewed again');
   clickText('×');
@@ -250,9 +269,13 @@ async function run() {
   await sleep(600); check(latest.open && captures > 0, 'hover opens and captures real source');
   console.log('dock preview timing: ' + JSON.stringify({ firstImageMs, pendingRequests }));
   check(pendingRequests <= 3, 'hover waits for its deadline without repeated polling');
-  const before = captures; await sleep(600); check(captures > before, 'changed content produces live frames');
+  const before = captures, liveStart = lord.now(); await sleep(600);
+  const liveMs = lord.now() - liveStart, liveFrames = captures - before;
+  check(liveFrames > 0, 'changed content produces live frames');
+  check(liveFrames <= Math.ceil(liveMs * 20 / 1000) + 1, '20 fps budget stays aggregate');
+  console.log('dock preview cadence: ' + JSON.stringify({ fps: liveFrames * 1000 / liveMs, frames: liveFrames, ms: liveMs }));
   check(lastSource === source.id, 'captures original window, never the panel');
-  check(captures < 25, 'aggregate refresh remains bounded');
+  check(captures < 30, 'aggregate refresh remains bounded');
   const layout = lord.getLayout(source.id); check(layout[2] === 600 && layout[3] === 300, 'source size is preserved');
   switchHover(false); await sleep(500); check(!latest.open, 'leaving dismisses after grace');
   const stopped = calls; await sleep(350); check(calls === stopped, 'closed panel stops capture polling');

@@ -10,6 +10,7 @@ int paint_capture_mode, paint_preview_mode;
 static Node privacy;
 Node *node_get(int id) { return id==7?&privacy:NULL; }
 static double time_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return t.tv_sec*1000.0+t.tv_nsec/1e6;}
+static int compare_ms(const void *a,const void *b){double x=*(const double*)a,y=*(const double*)b;return (x>y)-(x<y);}
 int main(int argc,char **argv) {
     Kms k={.fd=open(argc>1?argv[1]:"/dev/dri/renderD128",O_RDWR|O_CLOEXEC),.width=512,.height=256};
     if(k.fd<0){perror("render node");return 77;}
@@ -65,6 +66,18 @@ int main(int argc,char **argv) {
     double start=time_ms();
     for(int i=0;i<40;i++) {surface.preview_gen++;canvas_clear(&c,0);canvas_backdrop_blur(&c,64,64,384,128,12,24);}
     printf("gpu-capture: full/window pixels, protected fullscreen, cropped glass and retained buffers passed; renderer=%s; changing glass %.3f ms/frame\n",gpu_renderer(),(time_ms()-start)/40);
+    /* Isolated retained-buffer readback cost, not a desktop frame-rate claim.
+     * Include the subsurface and the same downsampling used by Dock previews. */
+    enum{PW=232,PH=142,N=100};uint32_t preview[PW*PH];double times[N],total=0;
+    canvas_init(&c,preview,PW,PH,PW);paint_view=(PaintView){0,0,(float)PW/W,0,0,0};
+    for(int i=-10;i<N;i++) {
+        double began=time_ms();canvas_clear(&c,0);wl_preview_paint(&c,100,0,0,W,H,1);
+        double elapsed=time_ms()-began;
+        if(i>=0){times[i]=elapsed;total+=elapsed;}
+        assert(preview[0]==0xff20cc40);
+    }
+    qsort(times,N,sizeof *times,compare_ms);
+    printf("gpu-preview: 232x142 retained readback avg %.3f ms, p95 %.3f ms, max %.3f ms; capture-only UI work at 15 fps %.2f%%, at 20 fps %.2f%%\n",total/N,times[94],times[N-1],total/N*1.5,total/N*2.0);
     axia_glass_set_backdrop(NULL);gpu_tex_free(texture);close(fd);gbm_bo_destroy(bo);gbm_device_destroy(device);gpu_shutdown();close(k.fd);
     return 0;
 }

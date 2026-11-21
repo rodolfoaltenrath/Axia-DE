@@ -34,6 +34,17 @@ int main(void) {
     assert(out[0]==content[0]);assert(out[15]==child_px[0]);
     assert(!root.mapped && root.conf_w==0 && root.conf_h==0 && root.node==7);
     uint64_t gen=wl_preview_generation(100);child.preview_gen++;assert(gen!=wl_preview_generation(100));
+    /* Minimized clients that keep submitting video frames remain live. Capture
+     * must read each new buffer without restoring or configuring the window. */
+    root.xmin=1;
+    for(unsigned frame=1;frame<=24;frame++) {
+        uint64_t before=wl_preview_generation(100);
+        content[0]=0xff204080u+frame;root.preview_gen++;
+        canvas_clear(&c,0);wl_preview_paint(&c,100,0,0,4,4,1);
+        assert(wl_preview_generation(100)!=before && out[0]==content[0]);
+        assert(root.xmin && !root.mapped && root.conf_w==0 && root.conf_h==0);
+    }
+    content[0]=0xff204080u;root.xmin=0;
     root.has_geom=1;root.gw=3;root.gh=2;assert(wl_preview_size(100,&w,&h)&&w==3&&h==2);
     privacy.protect=1;assert(!wl_preview_size(100,&w,&h));privacy.protect=0;
     assert(!wl_preview_size(999,&w,&h));

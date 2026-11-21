@@ -7,6 +7,7 @@ use std::{
 };
 const OPEN_MS: f64 = 140.;
 const LEAVE_MS: f64 = 300.;
+const CAPTURE_MS: f64 = 1000. / 20.;
 #[derive(Default)]
 struct Preview {
     key: String,
@@ -62,7 +63,7 @@ impl Preview {
                 self.clear_interaction();
                 self.key = key.chars().take(1024).collect();
                 self.since = now;
-                self.interval = self.interval.max(67.);
+                self.interval = self.interval.max(CAPTURE_MS);
             }
             self.left = None;
         } else if !inside {
@@ -181,7 +182,10 @@ impl Preview {
             return false;
         }
         self.signatures.insert(source, signature);
-        self.next_capture = now + self.interval.max(67.);
+        let period = self.interval.max(CAPTURE_MS);
+        // Space captures from their actual start. Recovering a previous deadline
+        // after a late wake-up would bunch captures together instead of staying smooth.
+        self.next_capture = now + period;
         true
     }
     fn done(&mut self, cost: f64, now: f64) {
@@ -191,8 +195,21 @@ impl Preview {
             self.cost * 0.75 + cost * 0.25
         };
         // Target <= 3% of one UI thread, with an immediate backoff after a slow readback.
-        self.interval = (self.cost.max(cost) * 34.).clamp(67., 1000.);
-        self.next_capture = self.next_capture.max(now + self.interval);
+        let budget = (self.cost.max(cost) * 34.).min(1000.);
+        self.interval = budget.max(CAPTURE_MS);
+        // Measure periods from capture start: adding the readback duration to
+        // every period would keep even inexpensive captures below the target.
+        self.next_capture = self.next_capture.max(now - cost + budget);
+    }
+    fn wait(&self, now: f64) -> f64 {
+        let capture = if self.next_capture > now {
+            self.next_capture - now
+        } else {
+            // Unchanged content must not turn an expired deadline into a spin.
+            self.interval.max(CAPTURE_MS)
+        };
+        // Capture backoff must never postpone the pointer's dismissal deadline.
+        self.left.map_or(capture, |left| capture.min((left + LEAVE_MS - now).max(1.)))
     }
     fn finish(&mut self, source: i32, cost: f64, now: f64, success: bool) {
         self.done(cost, now);
@@ -224,7 +241,13 @@ fn request(v: Value, now: f64) -> Value {
         states
             .1
             .get_mut(&id)
-            .map(|s| s.update(&v, now))
+            .map(|s| {
+                if v["op"] == "schedule" {
+                    json!({"waitMs":s.wait(now)})
+                } else {
+                    s.update(&v, now)
+                }
+            })
             .unwrap_or(json!({"open":false,"pending":false}))
     })
 }
@@ -291,20 +314,20 @@ mod tests {
     fn failed_capture_retries_with_existing_pixels_without_bypassing_the_cooldown() {
         let mut s = Preview {
             open: true,
-            interval: 67.,
+            interval: CAPTURE_MS,
             ..Preview::default()
         };
         assert!(s.due(1, 10, 0., false));
         s.finish(1, 2., 2., true);
         assert!(s.due(2, 20, 70., false));
         s.finish(2, 2., 72., false);
-        assert!(!s.due(2, 20, 139., false));
+        assert!(!s.due(2, 20, 137., false));
         assert!(
             !s.due(1, 10, 140., false),
             "successful images remain deduplicated"
         );
         assert!(
-            s.due(2, 20, 140., false),
+            s.due(2, 20, 138., false),
             "retry even when the old image is still present"
         );
         s.finish(2, 2., 142., true);
@@ -393,7 +416,7 @@ mod tests {
         s.update(&input("a", false), 0.);
         s.update(&input("a", false), 140.);
         assert!(s.due(5, 1, 140., true));
-        s.done(20., 160.); // next capture cannot happen before 840 ms
+        s.done(20., 160.); // 680 ms between starts: next capture at 820 ms
         s.update(&input("b", false), 170.);
         assert_eq!(s.update(&input("b", false), 310.)["open"], true);
         assert!(!s.due(6, 1, 310., true));
@@ -424,7 +447,7 @@ mod tests {
     fn aggregate_budget_deduplicates_and_backs_off() {
         let mut s = Preview {
             open: true,
-            interval: 67.,
+            interval: CAPTURE_MS,
             ..Preview::default()
         };
         assert!(s.due(1, 10, 0., false));
@@ -437,6 +460,63 @@ mod tests {
         assert!(s.due(1, 11, 801., false));
         s.open = false;
         assert!(!s.due(1, 12, 2000., true));
+    }
+    #[test]
+    fn fast_captures_reach_20_fps_without_adding_readback_time_to_each_period() {
+        let mut s = Preview { open: true, ..Preview::default() };
+        let mut now = 0.;
+        for frame in 0..20 {
+            assert!(s.due(1, frame, now, false));
+            s.finish(1, 1., now + 1., true);
+            assert!(!s.due(2, frame, now + CAPTURE_MS - 0.01, false));
+            let wait = s.wait(now + 1.);
+            assert!((wait - (CAPTURE_MS - 1.)).abs() < 1e-6);
+            now += 1. + wait;
+        }
+        assert!((now - 1000.).abs() < 1e-6);
+    }
+    #[test]
+    fn expensive_captures_keep_the_existing_cpu_budget_and_idle_polling_is_bounded() {
+        let mut s = Preview { open: true, ..Preview::default() };
+        assert!(s.due(1, 1, 0., false));
+        s.finish(1, 8., 8., true);
+        assert!((s.wait(8.) - 264.).abs() < 1e-6);
+        assert!(!s.due(2, 1, 271., false));
+        assert!(s.due(2, 1, 272., false));
+        assert!(8. / s.interval < 0.03);
+        assert!(!s.due(1, 1, 2000., false));
+        assert!(s.wait(2000.) >= CAPTURE_MS);
+    }
+    #[test]
+    fn late_scheduler_and_idle_never_catch_up_in_a_burst() {
+        let mut s = Preview { open: true, ..Preview::default() };
+        assert!(s.due(1, 1, 0., false));
+        s.finish(1, 1., 1., true);
+        assert!(s.due(1, 2, CAPTURE_MS + 3., false));
+        s.finish(1, 1., CAPTURE_MS + 4., true);
+        assert!((s.next_capture - (CAPTURE_MS * 2. + 3.)).abs() < 1e-6);
+        // A wake-up just short of a full period late used to allow another
+        // cheap capture only 3.4 ms later.
+        let late = s.next_capture + CAPTURE_MS - 1.;
+        assert!(s.due(1, 3, late, false));
+        s.finish(1, 0.1, late + 0.1, true);
+        assert!(!s.due(2, 4, late + CAPTURE_MS - 0.01, false));
+        assert!((s.next_capture - (late + CAPTURE_MS)).abs() < 1e-6);
+        assert!(s.due(1, 4, 5000., false));
+        assert!((s.next_capture - (5000. + CAPTURE_MS)).abs() < 1e-6);
+        assert!(!s.due(2, 4, 5001., false));
+    }
+    #[test]
+    fn slow_readback_never_delays_leave_grace_and_entering_the_panel_cancels_it() {
+        let mut s = Preview::default();
+        s.update(&input("a", false), 0.);
+        s.update(&input("a", false), 140.);
+        assert!(s.due(5, 1, 140., true));
+        s.finish(5, 20., 160., true);
+        s.update(&input("", false), 200.);
+        assert_eq!(s.wait(200.), LEAVE_MS);
+        s.update(&input("", true), 250.);
+        assert_eq!(s.wait(250.), 570.);
     }
     #[test]
     fn each_thumbnail_keeps_its_source_ratio_inside_the_existing_capture_budget() {

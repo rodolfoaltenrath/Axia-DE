@@ -398,10 +398,11 @@ export const wm = {
   close(id, force = false) {
     const guard = guards.get(id);
     if (!force && guard && guard() === false) {
-      // it stays, and it may be asking something (unsaved changes): on another desktop that must be seen.
+      // It stays and may be asking about unsaved changes: reveal a minimized
+      // window or its desktop so the confirmation can be seen.
       // A Linux window always answers false here: its app closes it, or asks in a window of its own.
       const w = windows.get().find((x) => x.id === id);
-      if (w && !w.args?.surface && !onActiveDesktop(w)) wm.focus(id);
+      if (w && !w.args?.surface && (w.minimized || !onActiveDesktop(w))) wm.focus(id);
       return false;
     }
     guards.delete(id);

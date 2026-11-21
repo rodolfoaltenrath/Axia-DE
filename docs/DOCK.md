@@ -40,6 +40,8 @@ Each card has a close button beside its title. It requests the window's normal
 close operation, including the app's unsaved-change confirmation, and does not
 activate the card. Closing one window keeps the remaining cards available;
 closing the last one stops preview captures.
+If a native app refuses to close a minimized window, the window is restored so
+its confirmation is visible.
 For Linux windows, the panel waits for the client's asynchronous close response
 and keeps the other previews available.
 
@@ -47,8 +49,21 @@ Thumbnail dimensions follow the retained window or Wayland surface's aspect
 ratio, including after a resize. Square and portrait windows use narrower cards,
 and wide windows use shorter images, without stretching, cropping or fixed black
 bands. Reading those dimensions does not capture pixels or configure the client.
-Rust retains the existing hover deadline, 300 ms leave grace, aggregate capture
-budget, unchanged-content deduplication and slow-readback backoff.
+Rust retains the existing hover deadline and 300 ms leave grace. Live captures
+target 20 fps across the panel, with unchanged-content deduplication and an
+adaptive interval that targets capture work below about 3% of one UI thread.
+The renderer schedules the next poll from Rust's deadline after capture; slow
+readbacks back off immediately and unchanged content does not busy-poll.
+Late timer wake-ups start a fresh capture interval instead of catching up with
+closely spaced captures.
+
+Minimized Linux windows are captured from their retained surfaces without
+restoring the window or changing its size. New frames remain live if the client
+continues submitting them. A browser that suspends its own compositor when
+minimized (as [Chromium's window host](https://chromium.googlesource.com/chromium/src/+/main/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc)
+does without an internal video-capture lock) supplies no
+new pixels; the Dock retains its last thumbnail in that case. Capturing that
+thumbnail is separate from requesting screen capture inside the browser.
 
 ## Settings (`sdk/dock.js`: `DOCK_DEFAULTS`, `dockPrefs(settings)`)
 

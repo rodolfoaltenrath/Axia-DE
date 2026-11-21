@@ -13,7 +13,7 @@ const request = (v) => lord.wm?.preview?.(JSON.stringify(v));
 export function useDockPreviews({ hit, anchor, area, position, disabled, theme }) {
   const all = useStore(windows);
   const [state, setState] = useState(null);
-  const control = useRef({ id: null, inside: false, key: '', state: null, cursor: 0, timer: 0 });
+  const control = useRef({ id: null, inside: false, key: '', state: null, cursor: 0, timer: 0, deadline: 0 });
   const images = useRef(new Map()), props = useRef(null), poll = useRef(null);
   props.current = { all, hit, anchor, area, position, disabled };
   const sync = (op = 'poll', extra = {}, capture = false) => {
@@ -49,8 +49,15 @@ export function useDockPreviews({ hit, anchor, area, position, disabled, theme }
       }
     }
     if (out.open || out.pending) {
-      if (!c.timer) c.timer = setTimeout(() => { c.timer = 0; poll.current?.('poll', {}, true); }, out.pending ? Math.max(1, Math.ceil(out.waitMs ?? 30)) : firstOpen ? 10 : 70);
-    } else { clearTimeout(c.timer); c.timer = 0; }
+      // Timing stays outside renderer state. A pointer departure can shorten an
+      // already scheduled capture backoff, without delaying an earlier timer.
+      const delay = Math.max(1, Math.ceil(out.pending ? out.waitMs ?? 30 : firstOpen ? 10 : request({ op: 'schedule', id: c.id })?.waitMs ?? 1000 / 20));
+      const deadline = lord.now() + delay;
+      if (!c.timer || deadline < c.deadline - 1) {
+        clearTimeout(c.timer); c.deadline = deadline;
+        c.timer = setTimeout(() => { c.timer = 0; c.deadline = 0; poll.current?.('poll', {}, true); }, delay);
+      }
+    } else { clearTimeout(c.timer); c.timer = 0; c.deadline = 0; }
   };
   poll.current = sync;
   useEffect(() => {
