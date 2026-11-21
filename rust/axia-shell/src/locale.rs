@@ -232,7 +232,7 @@ impl Model {
             .expect("locale revision exhausted");
         self.rebuild();
     }
-    fn format(&mut self, input: &Value) -> Value {
+    fn formats(&mut self) -> &axia_native::date_format::Formats {
         self.sync();
         let state = self.state.read();
         let saved = self.settings.read();
@@ -260,7 +260,10 @@ impl Model {
                 formats,
             ));
         }
-        let f = &self.formats.as_ref().unwrap().1;
+        &self.formats.as_ref().unwrap().1
+    }
+    fn format(&mut self, input: &Value) -> Value {
+        let f = self.formats();
         let cmd = input["cmd"].as_str().unwrap_or("");
         if cmd == "number" {
             let digits = input.get("digits").filter(|v| !v.is_null()).map(|v| {
@@ -360,6 +363,17 @@ pub(crate) fn reader(home: &str, assets: &str) -> Reader<State> {
             .or_insert_with(|| Model::new(home, assets));
         model.sync();
         model.state.reader()
+    })
+}
+/// Small presentation values share the profile's format cache, not a catalog per view.
+pub(crate) fn separators(home: &str, assets: &str) -> (String, String) {
+    PROFILES.with(|profiles| {
+        let mut profiles = profiles.borrow_mut();
+        let model = profiles
+            .entry((home.into(), assets.into()))
+            .or_insert_with(|| Model::new(home, assets));
+        let formats = model.formats();
+        (formats.decimal.clone(), formats.group.clone())
     })
 }
 pub(crate) fn tick() {

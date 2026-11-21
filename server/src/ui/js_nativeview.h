@@ -11,6 +11,7 @@ void     axia_view_init(const char *assets, const char *home);
 void     axia_view_shutdown(void);
 unsigned axia_view_mount(int node, const char *app, const char *facts);
 unsigned axia_view_mount_windows(int node, const char *app, const char *facts, const AxiaWindows *windows);
+unsigned axia_view_mount_session(int node, const char *app, const char *facts, const AxiaWindows *windows);
 void     axia_view_unmount(unsigned handle);
 void     axia_view_facts(unsigned handle, const char *facts);
 void     axia_view_focus(unsigned handle, int focused);

@@ -1504,3 +1504,6 @@ fn notes_native_host_edits_long_unicode_text_and_flushes_on_focus_loss() {
     drop(host);
     scene::destroy(mount);
 }
+
+#[path = "locale_source_tests.rs"]
+mod locale_source_tests;

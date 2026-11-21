@@ -1,0 +1,103 @@
+use super::*;
+struct Probe(Rc<RefCell<Vec<Value>>>);
+impl NativeApp for Probe {
+    fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] != "sync" {
+            return json!({});
+        }
+        self.0.borrow_mut().push(input.clone());
+        json!({"tree":{"kind":"text","label":{"key":"apps.clock"}}})
+    }
+}
+#[test]
+fn bound_views_read_locale_without_transport_and_wake_only_on_changes() {
+    let root = std::env::temp_dir().join(format!("axia-view-locale-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let home = root.to_str().unwrap();
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    crate::settings::with(home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("language", &json!("pt"));
+        s.set("region", &json!("pt_PT"));
+    });
+    let mount = scene::create(scene::VIEW);
+    unsafe {
+        let n = crate::runtime::node_get(mount);
+        (*n).w = 640.;
+        (*n).h = 480.;
+    }
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Probe(log.clone())), assets, Some(home));
+    host.bind_locale(home, assets);
+    let stale = json!({"lang":"en","context":{"region":"en_US","direction":"rtl","decimal":"!","group":"!","localeRevision":999}});
+    host.facts(stale.clone());
+    assert_eq!(log.borrow()[0]["lang"], "pt");
+    assert_eq!(log.borrow()[0]["context"]["region"], "pt_PT");
+    assert_eq!(log.borrow()[0]["context"]["direction"], "ltr");
+    assert_eq!(log.borrow()[0]["context"]["decimal"], ",");
+    assert_eq!(log.borrow()[0]["context"]["group"], " ");
+    assert_eq!(log.borrow()[0]["context"]["localeRevision"], 0);
+    assert!(host.text().contains("Relógio"));
+    assert!(host.deadline().is_none());
+    host.facts(stale);
+    host.tick(1000.);
+    assert_eq!(
+        log.borrow().len(),
+        1,
+        "stale transport cannot repaint native locale"
+    );
+    crate::settings::with(home, |s| {
+        s.set("language", &json!("en"));
+        s.set("region", &json!("en_GB"));
+    });
+    crate::locale::tick();
+    assert_eq!(host.deadline(), Some(0.));
+    host.tick(2000.);
+    assert_eq!(log.borrow().len(), 2);
+    assert_eq!(log.borrow()[1]["lang"], "en");
+    assert_eq!(log.borrow()[1]["context"]["region"], "en_GB");
+    assert!(host.text().contains("Clock"));
+    assert!(host.deadline().is_none());
+    let folder = root.join(".local/share/axia/locales/en");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("apps.json"), r#"{"clock":"Reloaded view"}"#).unwrap();
+    std::fs::write(folder.join("meta.json"), r#"{"direction":"rtl"}"#).unwrap();
+    let c_home = std::ffi::CString::new(home).unwrap();
+    unsafe {
+        crate::locale::axia_locale_changed(c_home.as_ptr(), 0);
+    }
+    assert_eq!(host.deadline(), Some(0.));
+    host.tick(3000.);
+    assert_eq!(log.borrow()[2]["context"]["direction"], "rtl");
+    assert_eq!(log.borrow()[2]["context"]["localeRevision"], 1);
+    assert!(host.text().contains("Reloaded view"));
+    assert!(host.deadline().is_none());
+    host.tick(4000.);
+    assert_eq!(log.borrow().len(), 3);
+    drop(host);
+    scene::destroy(mount);
+    std::fs::remove_dir_all(root).unwrap();
+}
+#[test]
+fn unbound_app_host_retains_local_locale_facts_and_null_session_is_rejected() {
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Probe(log.clone())), "", None);
+    host.facts(json!({"lang":"ar","context":{"region":"ar_EG","direction":"rtl","decimal":"!"}}));
+    assert_eq!(log.borrow()[0]["lang"], "ar");
+    assert_eq!(log.borrow()[0]["context"]["decimal"], "!");
+    assert!(host.deadline().is_none());
+    assert_eq!(
+        unsafe {
+            super::super::axia_view_mount_session(
+                mount,
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        },
+        0
+    );
+    drop(host);
+    scene::destroy(mount);
+}

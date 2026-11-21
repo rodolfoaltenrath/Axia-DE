@@ -140,9 +140,15 @@ consultam o estado nativo e respostas antigas são descartadas. Tradução e nom
 de apps do SDK consultam o resolvedor compartilhado Rust com o idioma atual;
 formatos de data/hora/número, nomes de meses/dias e lista de idiomas também usam
 esse proprietário, com caches invalidados por revisão e sem catálogos no JS.
+Views da sessão recebem um leitor/assinatura nativos desse proprietário: idioma,
+região, direção, separadores e revisão não cruzam o NativeBridge em JS. O host
+acorda por invalidação, inclusive sem timer do app, e ignora fatos de locale
+antigos. Separadores usam o cache compartilhado do perfil. A ABI de montagem da
+sessão exige o proprietário do contexto validado pelo adaptador; apps isolados
+continuam no caminho de fatos locais. Snapshots de settings permanecem pendentes.
 `native_locale_runtime` cobre quatro variantes de tema/tamanho, com setters JS
 de texto e leitores legados de formatos bloqueados; o CI GPU=1
-publica `axia-native-locale`. Evidências mais recentes em `build/validation/native-formats/`.
+publica `axia-native-locale`. Evidências mais recentes em `build/validation/native-view-locale/`.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

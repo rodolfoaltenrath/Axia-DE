@@ -9,6 +9,8 @@ use super::{
 use crate::runtime::native as scene;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, VecDeque};
+#[path = "locale_source.rs"]
+mod locale_source;
 const CARET_BLINK: f64 = 530.;
 const BAR_SHOWN: f64 = 1000.;
 const WHEEL_STEP: f64 = 48.;
@@ -223,6 +225,7 @@ pub struct Host {
     mount: i32,
     app: Box<dyn NativeApp>,
     i18n: I18n,
+    locale: Option<locale_source::Source>,
     assets: String,
     facts: Value,
     render_epoch: u64,
@@ -299,6 +302,7 @@ impl Host {
             mount,
             app,
             i18n: I18n::new(assets, home),
+            locale: None,
             assets: assets.into(),
             facts: Value::Null,
             render_epoch: 0,
@@ -373,8 +377,13 @@ impl Host {
                 .map(|n| n.max(16.)).unwrap_or_else(|| (ms * 2.).max(2000.))
         })
     }
-    pub fn facts(&mut self, facts: Value) {
-        if facts["context"]["localeRevision"] != self.facts["context"]["localeRevision"] {
+    pub fn bind_locale(&mut self, home: &str, assets: &str) {
+        self.locale = Some(locale_source::Source::new(home, assets));
+    }
+    pub fn facts(&mut self, mut facts: Value) {
+        if let Some(source) = &mut self.locale { source.apply(&mut self.i18n, &mut facts); }
+
+        if self.locale.is_none() && facts["context"]["localeRevision"] != self.facts["context"]["localeRevision"] {
             self.i18n.invalidate();
         }
         if facts == self.facts {
@@ -1791,6 +1800,10 @@ impl Host {
         if self.icon_mode().is_some() {
             return;
         }
+        if self.locale.as_ref().is_some_and(|source| source.pending()) {
+            let facts = std::mem::take(&mut self.facts);
+            self.facts(facts);
+        }
         // The window was resized: update either viewport dimension, even for idle apps.
         let (width, height) = scene::frame(self.mount).map_or((0., 0.), |f| (f.2, f.3));
         let resized = width > 1. && (width - self.width).abs() >= 1.
@@ -1821,7 +1834,7 @@ impl Host {
         }
     }
     pub fn deadline(&self) -> Option<f64> {
-        if self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
+        if self.locale.as_ref().is_some_and(|source| source.pending()) || self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
         [
             self.next_sync,
             self.next_blink.filter(|_| self.field != 0),

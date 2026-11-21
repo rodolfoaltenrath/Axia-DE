@@ -9,12 +9,16 @@ fn locale_state_is_native_with_stale_mirrors_and_no_js_text_setters() {
         .ancestors()
         .nth(2)
         .unwrap();
+    let driver = DRIVER.replace(
+        "@CLOCK_CATALOG@",
+        &serde_json::to_string(include_str!("../../../assets/locales/pt/clock.json")).unwrap(),
+    );
     for mode in ["light", "dark"] {
         for width in [640, 1000] {
             let report = ui::run_ui(
                 repo,
                 "native_locale",
-                DRIVER,
+                &driver,
                 mode,
                 width,
                 "native-locale.png",
@@ -40,6 +44,8 @@ fn locale_state_is_native_with_stale_mirrors_and_no_js_text_setters() {
                 "nativeFormatting",
                 "nativeLanguages",
                 "fixedPrecision",
+                "nativeViewLocale",
+                "nativeViewReload",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
             }
@@ -55,19 +61,20 @@ const readCatalog=lord.locale.catalog;lord.locale.catalog=(lang,ns)=>{if(!transl
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<180&&!fn();i++)await sleep(20);return!!fn();}
 async function run(){
- const [{createElement:h,useState},{render,View,Text},{SettingsSession},{locale,direction,reloadCatalogs,t,tOptional,appName,formatDate,formatTime,formatNumber,monthName,weekdayName,languages},{localeBridge},{settings},{useStore},{ThemeProvider},{makeTheme},{configureWindows},{media}]=await Promise.all([
-  import('react'),import('@lordos/runtime'),import('@ROOT@/sdk/settingssession.js'),import('@ROOT@/sdk/i18n.js'),import('@ROOT@/sdk/nativelocale.js'),import('@ROOT@/sdk/settings.js'),
+ const [{createElement:h,useState},{render,View,Text},{SettingsSession},{NativeView},{locale,direction,reloadCatalogs,t,tOptional,appName,formatDate,formatTime,formatNumber,monthName,weekdayName,languages},{localeBridge},{settings},{useStore},{ThemeProvider},{makeTheme},{configureWindows},{media}]=await Promise.all([
+  import('react'),import('@lordos/runtime'),import('@ROOT@/sdk/settingssession.js'),import('@ROOT@/sdk/nativeview.js'),import('@ROOT@/sdk/i18n.js'),import('@ROOT@/sdk/nativelocale.js'),import('@ROOT@/sdk/settings.js'),
   import('@ROOT@/sdk/store.js'),import('@ROOT@/sdk/theme.js'),import('@ROOT@/themes/default/tokens.js'),import('@ROOT@/sdk/windows.js'),import('@ROOT@/sdk/media.js')]);
  settings.set({language:'en',region:'',mode:'@MODE@'});configureWindows({apps:[]});
- let handle=0,bound=true,noPayload=true,remount,hold=false;const seen=[];
+ let handle=0,clockHandle=0,clockFacts=0,bound=true,noPayload=true,remount,hold=false;const seen=[];
  const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts;
- const inspect=text=>{const value=JSON.parse(text);noPayload&&=Object.keys(value.args||{}).length===0&&!('locale'in value);};
- lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:settings'){inspect(text);bound&&=sources[0]===lord.windowList;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
- lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return facts(id,text);};
+ const inspect=text=>{const value=JSON.parse(text);noPayload&&=!('lang'in value)&&!('locale'in value)&&['region','direction','decimal','group','localeRevision'].every(key=>!(key in(value.context||{})));};
+ lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:settings'||id==='clock'){inspect(text);bound&&=sources[0]===lord.windowList;const result=mount(node,id,text,...sources);if(id==='clock')clockHandle=result;else handle=result;return result;}return mount(node,id,text,...sources);};
+ lord.nativeViews.facts=(id,text)=>{if(id===handle||id===clockHandle)inspect(text);if(id===clockHandle)clockFacts++;return facts(id,text);};
  const perform=localeBridge.perform;localeBridge.perform=effect=>{seen.push(effect.reply);if(!hold)perform(effect);};
+ const CLOCK={id:'clock',settings:true,size:[520,360]};
  const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
  function App(){const[revision,setRevision]=useState(0);remount=()=>setRevision(n=>n+1);const value=useStore(locale);return h(ThemeProvider,{tokens:theme},
-  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg,padding:30}},h(SettingsSession,{key:revision}),h(Text,{style:{fontSize:18,color:theme.text}},'Locale: '+value.lang+' / '+direction()+' / '+t('clock.timer.done')),h(Text,{style:{fontSize:15,color:theme.text,marginTop:12}},formatDate(new Date(2026,10,13),'long')+' | '+formatTime(new Date(2026,10,13,13,7,9),{seconds:true})+' | '+formatNumber(1234.5,2))));}
+  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg,padding:30}},h(SettingsSession,{key:revision}),h(View,{style:{height:360}},h(NativeView,{manifest:CLOCK})),h(Text,{style:{fontSize:18,color:theme.text}},'Locale: '+value.lang+' / '+direction()+' / '+t('clock.timer.done')),h(Text,{style:{fontSize:15,color:theme.text,marginTop:12}},formatDate(new Date(2026,10,13),'long')+' | '+formatTime(new Date(2026,10,13,13,7,9),{seconds:true})+' | '+formatNumber(1234.5,2))));}
  render(h(App));await until(()=>handle);hold=true;
  if(!lord.locale.installPack('ar',{meta:JSON.stringify({direction:'rtl'})}))throw Error('RTL fixture install failed');
  const direct=lord.locale.state({cmd:'patch',value:{lang:'ar'}});
@@ -76,7 +83,9 @@ async function run(){
  lord.locale.installPack('ar',{probe:JSON.stringify({greeting:'Native {name}',items:{one:'one:{count}',other:'other:{count}'}})});
  translating=true;
  const nativeTranslation=t('probe.greeting',{name:{x:1}})==='Native [object Object]'&&t('probe.items',{count:'01'})==='one:01'&&t('probe.items',{count:1.5})==='other:1.5'&&tOptional('probe.missing')===null&&t('probe.missing {value}',{value:'ok'})==='probe.missing ok'&&appName({id:'clock',name:'fallback'})==='Clock'&&appName({id:'probe-unknown',name:'Manifest'})==='Manifest';
+ const sentLocaleFacts=clockFacts;
  lord.locale.state({cmd:'patch',value:{lang:'pt',region:'en_US'}});
+ const nativeViewLocale=await until(()=>lord.nativeViews.text(clockHandle).includes('Relógio mundial'))&&clockFacts===sentLocaleFacts;
  const date=new Date(2026,10,13,13,7,9);
  const nativeFormatting=locale.get().lang==='en'&&formatDate(date,'long')==='sexta-feira, 13 de novembro de 2026'&&formatDate(date,'numeric')==='11/13/2026'&&formatTime(date,{seconds:true})==='1:07:09 PM'&&formatNumber(1234.5,2)==='1,234.50'&&monthName(10)==='novembro'&&weekdayName(5)==='sex'&&monthName('1')==='fevereiro'&&formatDate(new Date(NaN),'numeric')==='NaN/NaN/NaN'&&formatTime(new Date(NaN),{seconds:true})==='12:NaN:NaN PM';
  const choices=languages();
@@ -104,14 +113,16 @@ async function run(){
  locale.set({dir:'rtl'});settings.set({accent:'green'});const explicitDirection=direction()==='rtl'&&locale.get().dir==='rtl';
  const previous=handle;remount();const remounted=await until(()=>handle!==previous)&&direction()==='rtl';
  t('clock.timer.done');const generation=locale.get().revision;
- const installed=lord.locale.installPack('pt',{clock:JSON.stringify({'timer.done':'Native locale reload'})});
+ const clockCatalog=JSON.parse(@CLOCK_CATALOG@);clockCatalog['timer.done']='Native locale reload';clockCatalog['tab.world']='Relógio recarregado';
+ const installed=lord.locale.installPack('pt',{clock:JSON.stringify(clockCatalog)});
  const packReload=installed&&await until(()=>locale.get().revision>generation&&t('clock.timer.done')==='Native locale reload');
+ const nativeViewReload=await until(()=>lord.nativeViews.text(clockHandle).includes('Relógio recarregado'));
  let updates=0;const off=locale.subscribe(()=>updates++);reloadCatalogs();await sleep(120);off();const singleReload=updates===1;
  locale.set({dir:null});settings.set({language:null});lord.locale.set({LANG:'pt_BR.UTF-8'});
  const automatic=await until(()=>locale.get().lang==='pt'&&direction()==='ltr');
  await sleep(80);
  const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
- console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,nativeFormatting,nativeLanguages,fixedPrecision,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
+ console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,nativeFormatting,nativeLanguages,fixedPrecision,nativeViewLocale,nativeViewReload,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
 }
 run().catch(error=>console.error('native_locale driver: '+(error.stack||error)));
 "#;

@@ -42,7 +42,9 @@ static JSValue f_mount(JSContext *c, JSValueConst t, int argc, JSValueConst *arg
     AxiaWindows *windows = argc > 3 ? js_windows_borrow(c, argv[3]) : NULL;
     unsigned h = 0;
     if (allowed && facts && (argc <= 3 || windows))
-        h = windows ? axia_view_mount_windows(node, app, facts, windows) : axia_view_mount(node, app, facts);
+        h = windows ? (only_app[0] ? axia_view_mount_windows(node, app, facts, windows)
+                                  : axia_view_mount_session(node, app, facts, windows))
+                    : axia_view_mount(node, app, facts);
     if (app) JS_FreeCString(c, app);
     if (facts) JS_FreeCString(c, facts);
     JS_FreeValue(c, keep);

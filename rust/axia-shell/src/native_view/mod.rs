@@ -198,7 +198,7 @@ pub unsafe extern "C" fn axia_view_mount(
     id: *const c_char,
     facts: *const c_char,
 ) -> u32 {
-    mount(node, text(id), facts, None)
+    mount(node, text(id), facts, None, false)
 }
 
 /// A context-owned window list is borrowed only for this call. The title bar
@@ -208,11 +208,20 @@ pub unsafe extern "C" fn axia_view_mount_windows(
     node: i32, id: *const c_char, facts: *const c_char,
     windows: *const crate::winmodel::Session,
 ) -> u32 {
-    mount(node, text(id), facts, windows.as_ref().cloned())
+    mount(node, text(id), facts, windows.as_ref().cloned(), false)
 }
 
+/// Only the shell adapter selects this entry point, after validating its context owner.
+#[no_mangle]
+pub unsafe extern "C" fn axia_view_mount_session(
+    node: i32, id: *const c_char, facts: *const c_char,
+    windows: *const crate::winmodel::Session,
+) -> u32 {
+    let Some(owner) = windows.as_ref() else { return 0; };
+    mount(node, text(id), facts, Some(owner.clone()), true)
+}
 unsafe fn mount(node: i32, id: &str, facts: *const c_char,
-    owner: Option<crate::winmodel::Session>) -> u32 {
+    owner: Option<crate::winmodel::Session>, native_locale: bool) -> u32 {
     let windows=owner.as_ref().map(crate::winmodel::Session::reader);
     let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
     if matches!(id, "clock" | "shell:clock" | "shell:clock-status") && owner.is_some() {
@@ -257,6 +266,7 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     }
     let facts = json(facts);
     let mut host = Host::new(node, app, &assets, home.as_deref());
+    if native_locale { host.bind_locale(home.as_deref().unwrap_or(""), &assets); }
     if facts["windowId"].as_str().is_some_and(|id| !id.is_empty()) && facts["icon"].is_null() {
         if let Some(reader) = windows { host.bind_window(reader); }
     }

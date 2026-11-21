@@ -36,6 +36,7 @@ import { disks } from './disks.js';
 import { createFactsStore, createFactsEncoder, emptyFactsStore, sameFacts, sameRecord, nativeTheme } from './nativeviewfacts.js';
 // The nodes of the shell layers a native view may put its menus and popovers in ("layer": "popover").
 // Only when the shell has layers; otherwise the views stay in their window.
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 const LAYER_NAMES = ['popover', 'modal', 'tooltip'];
 function layerFacts() {
   if (!shellLayers()) return undefined;
@@ -182,7 +183,7 @@ export function NativeView(props) { return props.icon ? h(NativeIcon, props) : h
 // args: the window's (or a Settings section's).
 function NativeApp(props) {
   const source = useTheme(), win = useAppWindow() || {};
-  const { lang, region, dir, revision: localeRevision = 0 } = useLocale();
+  const { lang, region, dir, revision: localeRevision = 0 } = appHost ? useLocale() : {};
   const theme = nativeTheme(source, props.manifest), previous = useRef(null), previousArgs = useRef(null);
   if (!sameRecord(previous.current, theme)) previous.current = theme;
   const args = props.args || null;
@@ -215,20 +216,21 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   }, [manifest]);
   const windowArgs = useMemo(() => ({ ...(args || {}), ...(manifest.defaultArgs || {}) }), [args, manifest.defaultArgs]);
   const liveServices = useMemo(() => ({ ...polled, ...(clock ? { $clock: clock } : {}) }), [polled, clock]);
-  const formats = useMemo(() => ({ decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3) }), [lang, region, localeRevision]);
+  const formats = useMemo(() => appHost ? ({ decimal: formatNumber(1.5, 1)[1], group: formatNumber(1000).slice(1, -3) }) : null, [lang, region, localeRevision]);
   // Each block has its own revision/encoding. Focusing a window reuses the
   // theme/settings/catalog strings rather than stringifying the complete facts.
   const block = (name, value) => encoder.block(name, value);
   const contextFields = { theme: block('theme', theme), windowMode: block('windowMode', windowMode),
     ...(manifest.settings ? { preferenceRevision: block('preferenceRevision', settingsRevision()) } : {}),
-    region: block('region', region), direction: block('direction', dir), localeRevision: block('localeRevision', localeRevision),
-    scale: block('scale', typeScale), decimal: block('decimal', formats.decimal), group: block('group', formats.group),
+    ...(appHost ? { region: block('region', region), direction: block('direction', dir), localeRevision: block('localeRevision', localeRevision),
+      decimal: block('decimal', formats.decimal), group: block('group', formats.group) } : {}),
+    scale: block('scale', typeScale),
     ...(manifest.facts === 'system' ? { screen: block('screen', { width: screen.width, height: screen.height }),
       reactVersion: block('reactVersion', reactVersion), version: block('version', lord.version) } : {}) };
   const context = `{${Object.entries(contextFields).filter(([, value]) => value !== undefined).map(([key, value]) => `"${key}":${value}`).join(',')}}`;
   const parts = [
     `"args":${block('args', windowArgs)}`, `"keyboard":${block('keyboard', !!manifest.keyboard)}`,
-    `"lang":${block('lang', lang)}`,
+    ...(appHost ? [`"lang":${block('lang', lang)}`] : []),
     ...(windowSource ? [`"windowId":${block('windowId', winId)}`, `"inputAllowed":${block('inputAllowed', !!ownsKeyboard())}`]
       : [`"focused":${block('focused', !!ownsKeyboard())}`]),
     `"refreshMs":${block('refreshMs', manifest.refreshMs || 0)}`, `"width":${block('width', manifest.size?.[0] || 1000)}`,
@@ -241,7 +243,7 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {
     const m = mounted.current;
-    const source = stateSource || windowSource;
+    const source = stateSource || windowSource || (appHost ? null : lord.windowList);
     m.handle = ref.current ? (source ? lord.nativeViews.mount(ref.current.id, manifest.id, json, source)
       : lord.nativeViews.mount(ref.current.id, manifest.id, json)) : 0;
     m.sent = json;

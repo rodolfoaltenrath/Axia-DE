@@ -745,6 +745,56 @@ A sessão instalada do usuário não foi substituída nem reiniciada. Próxima f
 consumidores que ainda enviam locale e preferências nos fatos de `NativeBridge`
 em `sdk/nativeview.js`, além dos demais serviços da Fase 2.
 
+### Locale emprestado pelas views da sessão
+
+O NativeBridge da sessão não assina o espelho JS de locale nem calcula separadores
+por `formatNumber`. Seus fatos deixam de incluir `lang` e os campos de contexto
+`region`, `direction`, `decimal`, `group` e `localeRevision`. Cada view recebe o
+proprietário validado do contexto na montagem, inclusive overlays sem janela.
+Ícones continuam no caminho próprio, sem assinatura de locale ou timer adicional.
+
+O adaptador C seleciona `axia_view_mount_session` após validar `lord.windowList`;
+essa entrada recusa proprietário ausente. No processo isolado, a restrição de ID
+e a montagem anterior são preservadas. A escolha entre autoridade da sessão e
+fatos locais não depende de um booleano enviado nos fatos pelo aplicativo.
+
+`native_view/locale_source.rs` mantém leitor/assinatura de `locale::State` e
+somente os pequenos campos de apresentação. Se a revisão muda, o deadline do host
+fica imediato; o próximo tick sincroniza a árvore e consome a invalidação. Não há
+polling. Fatos de locale recebidos por engano são sobrescritos pelos valores atuais.
+Idioma, direção, região e recarga de catálogo funcionam com o espelho JS parado;
+leituras quietas não repintam a view. A assinatura é liberada ao desmontar.
+
+Os separadores consultam uma API Rust tipada que reutiliza o cache de formatos do
+perfil. Não se carregam catálogos de formatos por janela nem se copia uma lista
+entre JS e Rust. O pedido interno de sync dos modelos ainda recebe os campos
+escalares de apresentação; essa compatibilidade interna não serializa JSON pela
+ponte. O host isolado mantém o locale local. Snapshots de `settings`,
+`preferenceRevision`, escala, tema e outros serviços ainda estão no adaptador;
+retomar pela leitura tipada de preferências nos consumidores, sem introduzir uma
+cópia do perfil completo por view.
+
+Testes Rust verificam precedência sobre fatos falsos, português/inglês, região,
+direção explícita, recarga de catálogo, deadline imediato e retorno à ociosidade,
+além do caminho local e da recusa de proprietário nulo. `native_locale_runtime`
+monta um Relógio real, segura o espelho em inglês e exige texto em português sem
+novos fatos enviados à view. Inspeciona montagem e atualizações para proibir os
+campos removidos, em quatro combinações de modo e largura com capturas.
+
+Validação de 2026-11-21 no Fedora 44 em contêiner: 619 testes da shell,
+sete contratos LPK, integração dos apps compilados e 32 cenários gráficos de
+locale, menus, foco, configurações, relógio, notificações e barras de título
+passaram. A integração também exige recarga de texto no Relógio aberto após
+instalar o catálogo; capturas claro/escuro e 640/1000 px inspecionadas.
+Compositor/bundles recompilados e instalação privada gerada. Três amostras do
+coletor Rust passaram nos limites impostos: mediana de 12,350 poll/s e
+104,582 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Escopo: thread principal,
+software e offline, com oito segundos de aquecimento e vinte de observação por
+amostra; não é medição física nem comparação controlada antes/depois.
+Evidências em `build/validation/native-view-locale/`. A sessão instalada do
+usuário não foi substituída nem reiniciada. A Fase 2 continua aberta pelos
+consumidores de preferências e demais serviços, não por locale no NativeBridge.
+
 ## Consulta nativa de permissões e firewall
 
 `notifications/access.rs` lê `perm_get` e `restrict_blocks` pela ABI do host,
