@@ -9,6 +9,7 @@ typedef struct {
     void (*button)(int button, int down);
     void (*position)(double *x, double *y, int *w, int *h);
     void (*flush)(void);            /* dispatch pending buttons and motion (like a SYN) */
+    void (*sync_pointer)(void);     /* refresh hit/focus before routing a mouse wheel packet */
 } TpHost;
 
 void tp_route_init(const TpHost *h);

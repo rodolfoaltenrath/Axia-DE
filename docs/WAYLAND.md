@@ -51,6 +51,12 @@ switches while open sends `deco` and the same window changes presentation (see "
 frame" below). The keyboard goes to the frontmost Linux
 app; ❖ combinations still belong to LordOS.
 
+Mouse wheel packets refresh pointer hit testing and Wayland focus before routing
+scroll events, including high-resolution and horizontal wheels. Pending pointer
+motion or a window appearing under a stationary pointer must not send scrolling
+to the previous app or the native UI. High-resolution deltas remain accumulated
+per input report and retain their original `axis_value120` precision.
+
 ## How to open an app
 
 From the LordOS Terminal: every new tab has `WAYLAND_DISPLAY`, `XDG_SESSION_TYPE=wayland`,

@@ -1060,7 +1060,11 @@ static void tp_flush(void) {
     struct input_event syn = { .type = EV_SYN, .code = SYN_REPORT };
     on_input(active_server, &none, &syn);
 }
-static const TpHost tp_host = { tp_move, tp_warp, tp_button, tp_position, tp_flush };
+static void tp_sync_pointer(void) {
+    dispatch_pointer(active_server);
+    if (gpu_active() || active_server->hw_cursor) update_cursor(active_server);
+}
+static const TpHost tp_host = { tp_move, tp_warp, tp_button, tp_position, tp_flush, tp_sync_pointer };
 
 /* Layout and damage of the UI (once per frame, logical px). The damage goes to every display; each
  * one paints it when its flip is not pending (paint_out), at its own scale. */

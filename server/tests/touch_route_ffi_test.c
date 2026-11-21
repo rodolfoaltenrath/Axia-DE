@@ -11,6 +11,7 @@
 
 static int node_id=10, js_count, axis_count, pinch_count, swipe_count;
 static int moves, warps, buttons, flushes, touches, touch_frames;
+static int pointer_syncs, next_focus = -2;
 static int last_node, last_source, last_stop, last_natural, last_fingers, last_phase;
 static double a,b,c,d,last_x,last_y;
 static char last_kind[32],last_name[32];
@@ -62,7 +63,13 @@ static void move(double dx,double dy,double rx,double ry){assert(dx||dy||rx||ry)
 static void warp(double x,double y){last_x=x;last_y=y;warps++;}
 static void button(int button,int down){assert(button>=0&&button<=2);buttons++;last_stop=down;}
 static void flush(void){flushes++;}
-static const TpHost host={.move=move,.warp=warp,.button=button,.position=position,.flush=flush};
+static void sync_pointer(void){
+    pointer_syncs++;
+    if(next_focus!=-2)wli_focus=next_focus;
+    /* No routing lock may be held while refreshing the compositor's focus. */
+    tp_route_wheel120(0,0);
+}
+static const TpHost host={.move=move,.warp=warp,.button=button,.position=position,.flush=flush,.sync_pointer=sync_pointer};
 static void test_scroll_and_wheel(void){
     wli_focus=-1;node_id=10;tp_route_scroll(TP_BEGIN,1,2,TPR_FINGER);assert(js_count==1&&last_node==10&&!strcmp(last_name,"begin"));
     wli_focus=0;node_id=20;tp_route_scroll(TP_UPDATE,3,4,TPR_FINGER);assert(js_count==2&&last_node==10);
@@ -76,6 +83,25 @@ static void test_scroll_and_wheel(void){
     assert(last_node==21&&a==-48&&b==-48&&c==TPR_WHEEL);
     before=js_count;tp_route_wheel_flush();assert(js_count==before);
     wli_focus=0;tp_route_wheel120(-120,240);tp_route_wheel_flush();assert(last_phase==99&&a==-120&&b==240);
+}
+static void test_wheel_refreshes_pointer_destination(void){
+    /* Pending motion entered an app, but its old pointer focus is still native. */
+    wli_focus=-1;next_focus=0;
+    int before=js_count,synced=pointer_syncs;
+    unsigned wire=wli_nevents;
+    tp_route_wheel120(60,0);tp_route_wheel120(60,0);tp_route_wheel_flush();
+    assert(pointer_syncs==synced+1&&js_count==before&&wli_nevents>wire);
+    const WliEvent *event=wli_last(0,10,9);assert(event&&event->args[0]==0&&event->args[1]==-120);
+    /* Crossing between external clients must not scroll the old app. */
+    next_focus=1;wire=wli_nevents;tp_route_wheel120(0,-120);tp_route_wheel_flush();
+    for(unsigned i=wire;i<wli_nevents;i++)assert(wli_events[i].peer==1);
+    event=wli_last(1,10,9);assert(event&&event->args[0]==1&&event->args[1]==-120);
+    /* A native overlay under the pointer must receive the next wheel packet. */
+    next_focus=-1;wire=wli_nevents;node_id=42;
+    tp_route_wheel120(-120,0);tp_route_wheel_flush();
+    assert(wli_nevents==wire&&js_count==before+1&&last_node==42&&b==48);
+    synced=pointer_syncs;tp_route_wheel_flush();assert(pointer_syncs==synced);
+    next_focus=-2;
 }
 static void test_pinch_latching_and_rotation_deltas(void){
     wli_focus=0;tp_route_pinch(TP_BEGIN,2,0,0,1,0);assert(last_phase==TP_BEGIN&&d==0);
@@ -123,6 +149,6 @@ static void test_system_swipes_and_touchscreen(void){
     finger(device,0,1,5200,2000,30012);report(device,30012);assert(moves>0);tp_free(device);
 }
 int main(void){wli_init();ui.root=&root;ui.width=1000;ui.height=600;tp_route_init(&host);
-    test_scroll_and_wheel();test_pinch_latching_and_rotation_deltas();test_system_swipes_and_touchscreen();ui.root=NULL;wli_finish();
-    puts("touch router Rust ABI: latches, momentum, wheel120, rotation, swipes and real Wayland touch delivery passed");
+    test_scroll_and_wheel();test_wheel_refreshes_pointer_destination();test_pinch_latching_and_rotation_deltas();test_system_swipes_and_touchscreen();ui.root=NULL;wli_finish();
+    puts("touch router Rust ABI: latches, momentum, wheel120 focus refresh, rotation, swipes and real Wayland touch delivery passed");
 }

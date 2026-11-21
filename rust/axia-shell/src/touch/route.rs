@@ -14,6 +14,7 @@ pub struct Host {
     button: Option<unsafe extern "C" fn(c_int, c_int)>,
     position: Option<unsafe extern "C" fn(*mut f64, *mut f64, *mut c_int, *mut c_int)>,
     flush: Option<unsafe extern "C" fn()>,
+    sync_pointer: Option<unsafe extern "C" fn()>,
 }
 #[derive(Default, Clone, Copy)]
 struct Latch {
@@ -258,6 +259,13 @@ pub unsafe extern "C" fn tp_route_wheel_flush() {
         state.wheel_horizontal = 0;
         values
     };
+    // Wheel packets must use the current hit, just like the discrete-wheel
+    // dispatch in main.c. Motion may still be waiting for the next frame, or
+    // the scene may have changed underneath a stationary pointer.
+    let sync_pointer = routing().host.sync_pointer;
+    if let Some(sync) = sync_pointer {
+        sync();
+    }
     let (x, y, _, _) = position();
     if wl_input_has_focus() != 0 {
         wl_input_wheel120(v, h);
