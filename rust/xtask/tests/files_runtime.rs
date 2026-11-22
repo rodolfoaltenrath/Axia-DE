@@ -74,6 +74,9 @@ fn files_browser_is_native_with_old_preferences_and_uses_real_private_files() {
                     "preferencesMigrated",
                     "appearanceCached",
                     "appearanceBounded",
+                    "shellThemeNative",
+                    "shellThemeCached",
+                    "shellThemeBounded",
                     "pickerOpen",
                     "pickerSave",
                     "pickerFolder",
@@ -166,6 +169,25 @@ async function run(){
  const shared=appAppearance(styleSource);let same=true;for(let i=0;i<1000;i++)same&&=appAppearance(styleSource)===shared;
  const equal=appAppearance({...styleSource}),firstCalls=styleCalls,next=appAppearance({...styleSource,mode:'light'});
  const appearanceCached=same&&firstCalls===1&&styleCalls===2&&equal.chrome===shared.chrome&&shared.tokens.nativeStyle==='adwaita'&&shared.tokens.effects===true&&shared.tokens.blur===24&&shared.tokens.panelBg===styleSource.panelBg&&next.tokens.mode==='light';lord.appearance.request=appearance;settings.set({nativeAppearance:'@APPEARANCE@'});
+ // The shell palette uses Rust too. Equivalent settings and unrelated large
+ // catalogs must neither rebuild a plan nor enter the native request.
+ const themeRequest=lord.appearance.request,glass=lord.settings.glassMaterial;
+ let themeCalls=0,shellThemeBounded=true;
+ lord.appearance.request=raw=>{const input=JSON.parse(raw);if(input.op==='shellTheme'){themeCalls++;shellThemeBounded&&=raw.length<128&&Object.keys(input).every(k=>['op','mode','accent','effects'].includes(k));}return themeRequest(raw);};
+ lord.settings.glassMaterial=()=>{throw new Error('Legacy JS material path');};
+ let shellThemeNative=false,shellThemeCached=false;
+ try{
+   const source={mode:'@MODE@',accent:'violeta',effects:true,wallpapers:new Array(10000).fill('not transported'),windows:[{id:99}]};
+   const first=makeTheme(source);let stable=true;
+   for(let i=0;i<1000;i++)stable&&=makeTheme({...source,unrelated:i})===first;
+   const opaque=makeTheme({...source,effects:false});
+   const next=makeTheme({...source,accent:'verde',effects:false});
+   shellThemeCached=stable&&themeCalls===3&&first.wallpapers===opaque.wallpapers&&opaque.wallpapers===next.wallpapers;
+   shellThemeNative=first.accent==='#bf5af2'&&first.blur===24&&opaque.blur===0&&next.accent==='#30d158'
+     &&Object.keys(first.accents).join(',')==='azul,violeta,rosa,naranja,verde,grafito'
+     &&first.dockBg===('@MODE@'==='dark'?'rgba(46,46,56,0.3765)':'rgba(255,255,255,0.3412)')
+     &&opaque.dockBg===('@MODE@'==='dark'?'rgba(42,42,48,1.0000)':'rgba(242,242,245,1.0000)');
+ }finally{lord.appearance.request=themeRequest;lord.settings.glassMaterial=glass;}
  lord.fs.mkdir('files-integration');lord.fs.mkdir('files-integration/Folder');lord.fs.write('files-integration/Folder/inner.txt','inner bytes');
  lord.fs.write('files-integration/report.txt','preserved report bytes');lord.fs.mkdir('files-device');lord.fs.write('files-device/note.txt','Private simulated USB contents');
  // A known visible mark proves that the document pixels reached the scene.
@@ -200,7 +222,7 @@ async function run(){
  act(['volumeOpen','sdb1']);const mounted=await until(()=>visible('note.txt')&&wm.get(winId)?.title==='files-device');
  act(['volumeRelease','sdb1']);const ejected=await until(()=>!text().includes('USB integration')&&wm.get(winId)?.title!=='files-device');
  show(false);await until(()=>!handle);const closed=!handle&&!iconHandle;
- console.log('@KIND@-observation '+JSON.stringify({nativeBrowser,noReactBrowser,iconNative,listed,fileRect,navigated,back,filtered,menuOpened,menuEscaped,created,renamed,bytesKept,listView,pdfThumbnail,pdfPreview,previewClosed,zoomCached,preferencesMigrated,appearanceCached,appearanceBounded,pickerOpen,pickerSave,pickerFolder,hotplug,mounted,ejected,volumeCalls,menusPublished,menusStable,closed,saved:!!saved?.ok}));
+ console.log('@KIND@-observation '+JSON.stringify({nativeBrowser,noReactBrowser,iconNative,listed,fileRect,navigated,back,filtered,menuOpened,menuEscaped,created,renamed,bytesKept,listView,pdfThumbnail,pdfPreview,previewClosed,zoomCached,preferencesMigrated,appearanceCached,appearanceBounded,shellThemeNative,shellThemeCached,shellThemeBounded,pickerOpen,pickerSave,pickerFolder,hotplug,mounted,ejected,volumeCalls,menusPublished,menusStable,closed,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('@KIND@ driver: '+(error.stack||error))),200);
 "#;

@@ -1,15 +1,5 @@
-// Tokens of the "Lord Flow" theme. The base keys (text, accent, windowBg…) are the contract
-// with apps (see sdk/theme.js); the rest belongs to this theme.
+// Shell appearance is resolved in Rust; the wallpaper catalog stays shared with apps.
 import { lordosWallpapers } from '@lordos/sdk';
-
-export const accents = {
-  azul: '#0a84ff',
-  violeta: '#bf5af2',
-  rosa: '#ff375f',
-  naranja: '#ff9f0a',
-  verde: '#30d158',
-  grafito: '#8e8e93',
-};
 
 // The desktop collection (Horizons, Cosmos; sdk/wallpapers.js) and this theme's own
 // gradients (tools/gen-wallpaper.py). name: English fallback; the shown name is the translation of
@@ -22,36 +12,14 @@ const gradients = [
 ];
 export const wallpapers = [...lordosWallpapers, ...gradients];
 
+// Palette and materials belong to Rust; this adapter attaches the shared catalog.
+// Only the three appearance inputs cross the bridge, once per change.
+let previous = null, cached = null;
 export function makeTheme({ mode, accent, effects }) {
-  const dark = mode === 'dark';
-  const glass = lord.settings.glassMaterial(dark, effects !== false);
-  return {
-    mode,
-    accent: accents[accent] || accents.azul,
-    accents,
-    wallpapers,
-    effects,
-    text: dark ? '#f5f5f7' : '#1d1d1f',
-    textDim: dark ? 'rgba(235,235,245,0.55)' : 'rgba(60,60,67,0.6)',
-    windowBg: dark ? '#1f1f23' : '#ffffff',
-    sidebarBg: dark ? '#26262b' : '#f3f3f6',
-    separator: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-    hover: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
-    control: dark ? '#3a3a40' : '#e3e3e8',
-    inputBg: dark ? '#2a2a2f' : '#ffffff',
-    // This theme's own:
-    menuBg: dark ? 'rgba(24,24,30,0.42)' : 'rgba(250,250,252,0.55)',
-    menuText: dark ? '#f5f5f7' : '#1d1d1f',
-    menuHover: dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.08)',
-    panelBg: dark ? (effects ? 'rgba(36,36,42,0.72)' : '#2a2a30') : (effects ? 'rgba(246,246,248,0.78)' : '#f2f2f5'),
-    windowBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.14)',
-    titleBg: dark ? '#2b2b30' : '#ececef',
-    dockBg: glass.backgroundColor,
-    dockBorder: glass.borderColor,
-    lightOff: dark ? '#4a4a50' : '#c8c8cc',
-    // overlay scroll bars (sdk/components.jsx ScrollView): a soft pill
-    scrollThumb: dark ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.3)',
-    scrollThumbHover: dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)',
-    blur: effects ? 24 : 0,
-  };
+  if (previous && previous.mode === mode && previous.accent === accent && previous.effects === effects) return cached;
+  const plan = lord.appearance.request(JSON.stringify({ op: 'shellTheme', mode, accent, effects }));
+  if (!plan || !Array.isArray(plan.accents)) throw new Error('Invalid native shell appearance');
+  cached = { ...plan, accents: Object.fromEntries(plan.accents), wallpapers };
+  previous = { mode, accent, effects };
+  return cached;
 }

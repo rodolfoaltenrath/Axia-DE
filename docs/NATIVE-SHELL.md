@@ -32,6 +32,13 @@ de janelas empresta somente a posição solicitada, sem transportar a lista de
 posições pelo JS. Mapa e ordem de uso são gravados numa única revisão, com limite
 de 200 apps. Metadados de telas/área útil e o espelho público ainda usam adaptadores.
 
+A paleta da shell e os materiais da Dock são resolvidos por `shell_theme.rs`,
+com as primitivas de vidro do compositor. O adaptador `themes/default/tokens.js`
+envia somente modo, destaque e efeitos quando mudam, preserva a identidade do
+resultado entre renderizações e associa o catálogo compartilhado de papéis de
+parede. Cores e regras de transparência deixaram o JavaScript; montagem do tema,
+publicação para apps isolados e integração do portal ainda usam adaptadores.
+
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena
 Rust já existente, até não restarem consumidores do motor.

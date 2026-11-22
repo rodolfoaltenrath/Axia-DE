@@ -1515,3 +1515,43 @@ bundles e instalação privada gerados; evidências em
 `build/validation/resident-preference-publications/`. A sessão física não foi alterada.
 
 Três amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,785 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Medições físicas e comparação antes/depois permanecem para o encerramento.
+
+### Paleta da shell e materiais no Rust
+
+`native_style::shell_theme` (fonte `rust/axia-shell/src/shell_theme.rs`) resolve cores,
+seis destaques em ordem estável, superfícies, barras de rolagem e materiais da
+Dock. O transporte existente `lord.appearance.request` aceita `op: shellTheme`;
+não inicia serviços nem lê arquivos. Cor e alpha usam as primitivas Rust do
+compositor, com formato CSS independente do locale. O tratamento anterior de
+campos opcionais foi preservado: vidro fica ativo salvo `effects: false`,
+enquanto painel e blur seguem a presença de um valor verdadeiro.
+
+O adaptador `themes/default/tokens.js` deixou de conter as tabelas e decisões
+de cores. Solicita somente os três campos de aparência, retém um único plano e
+reutiliza sua identidade em renderizações equivalentes; mudanças de outros
+campos das configurações não atravessam a ponte. O catálogo de papéis de parede
+continua compartilhado por referência e é associado depois da resposta. Pares
+ordenados de destaques preservam a ordem dos controles ao cruzar JSON.
+
+Isso não conclui a migração do tema: árvore JSX, publicação de tokens aos LPK,
+integração do portal, geometria e transporte de aparência às views continuam
+no escopo. O tema não é oferecido a terceiros; a API dos apps isolados permanece.
+
+Validação em Fedora 44 privado em 2026-11-22: passaram os quatro testes novos
+(opcionais, ordem/fallback de destaques, materiais e limites do resultado),
+646 testes da shell no total, com sete ignorados de integrações específicas,
+e oito contratos LPK. A compilação completa GPU=1 e os bundles passaram após
+recompilar a árvore atualizada de dependências do trabalho paralelo.
+
+Passaram 24 cenários gráficos: Arquivos e cabeçalhos nos estilos Axia/Adwaita,
+mais Dock e menus, em claro/escuro e 640/1000 px. A integração de Arquivos
+bloqueia o antigo acesso JS ao material e exige paleta nativa, ordem dos
+controles, troca de efeitos/destaques e reaproveitamento de identidade em mil
+chamadas equivalentes; pedidos ficam abaixo de 128 bytes e não incluem
+catálogos ou janelas. As oito capturas de Arquivos são idênticas, byte a byte,
+às da etapa anterior (`resident-preference-publications`); claro e escuro
+foram inspecionados visualmente. Encerramento instalado por timeout/SIGTERM
+passou. Evidências em `build/validation/native-shell-theme/`; sem instalação
+ou reinício da sessão física.
+
+Três amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,590 MiB de RSS, abaixo de 15 poll/s e 120 MiB. São medidas headless do binário atual, sem prova de ganho causal; a medição física permanece para o encerramento.
