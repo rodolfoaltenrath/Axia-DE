@@ -519,7 +519,7 @@ The validators are unit-tested in `build/settings-hw-test`.
 - `build/bt-test` (`make test`): BlueZ parsing. 32 checks.
 - `build/brframe-test` (`make test`): the browsers' title bar switch (Chromium `Preferences`,
   Firefox `user.js`, running browsers, hostile profile folders). 90 checks.
-- `build/fan-test` (`make test`): curves, hysteresis, `fan.json`, the socket requests and the fan
+- `cargo test -p axia-fan` (`make test`): curves, hysteresis, `fan.json`, the socket requests and the fan
   driver on fake sysfs trees (see `FANS.md`).
 - On VM 118: live mode changes with revert and keep, persistence across a session restart,
   rotation, software Night Light, Bluetooth with `btvirt`, power profiles with

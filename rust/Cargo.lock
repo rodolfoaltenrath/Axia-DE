@@ -346,6 +346,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-fan"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-fs"
 version = "0.1.0"
 dependencies = [
@@ -430,6 +439,7 @@ dependencies = [
  "axia-backup",
  "axia-clock",
  "axia-codecs",
+ "axia-fan",
  "axia-native",
  "axia-print",
  "axia-state",

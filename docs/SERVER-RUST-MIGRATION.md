@@ -766,3 +766,34 @@ Behavior that is deliberately not identical:
   rejected them. Arguments come from `js_print.c`, which builds them itself.
 - Reading `HOME` for the scan folder and the thread's signal mask are as before; the worker stack is
   1 MiB instead of 512 KiB.
+
+## Fans: axia-fand (2026-11-22)
+
+`server/src/fan/{fancurve,fanhw,fand}.c`, `fanhw.h` and `server/tests/fan_test.c` are gone. The new
+crate `rust/axia-fan` has the pure rules (`curve.rs`: profiles, curves with hysteresis, `fan.json`,
+the socket requests), the sysfs side (`hw.rs`) and the daemon (`daemon.rs`, built as the binary
+`axia-fand` by `make -C server build/axia-fand`). `fancurve.h` keeps only what `js_fan.c` needs:
+`fan_profile_canonical` and `fan_curve_points_valid`, with the request limits. The daemon is still
+libc-only at run time, executes nothing and opens no network sockets.
+
+Validation:
+
+- `cargo test -p axia-fan` ports every case of `fan_test.c` and adds the daemon's ticks, requests and
+  status on the fake trees, and the real program over its socket (status, a refused and an accepted
+  change depending on the group of the user running the test, SIGTERM giving the fan back, `--detect`,
+  `--restore`, the usage error).
+- A temporary differential harness linked the original `fancurve.c` (symbols renamed) beside the
+  crate. It was not committed. 300,000 random `fan.json` texts (including repeated keys, trailing text
+  and truncations) are accepted or refused by both, give the same configuration and, when accepted,
+  the same file when written back; 300,000 random socket lines parse to the same request;
+  200,000 random curves agree on validity, step with hysteresis, duty and output clamping.
+- The sysfs side (`hw.rs`) was not compared with the C: the fake-tree cases of `fan_test.c` were ported
+  as they were.
+
+Behavior that is deliberately not identical:
+
+- Directory entries (hwmon, thermal zones, cooling devices) are visited in numeric order; the C used
+  the order `readdir` returned.
+- `--root`, `--config` and `--run` and every request and the status line are as before; the
+  `build/fan-test mkfake DIR pi5|pc|none` mode is gone (the fake trees are built by the tests).
+

@@ -95,10 +95,9 @@ static JSValue f_set_profile(JSContext *c, JSValueConst t, int argc, JSValueCons
     if (argc < 1 || !JS_IsString(argv[0])) return js_throw_code(c, "fan.badRequest", NULL);
     const char *s = JS_ToCString(c, argv[0]);
     if (!s) return JS_EXCEPTION;
-    FanProfile p;
-    char req[48];
-    int ok = strlen(s) < 20 && fan_profile_parse(s, &p) == 0;
-    if (ok) snprintf(req, sizeof req, "PROFILE %s", fan_profile_name(p));
+    char name[24], req[48];
+    int ok = strlen(s) < 20 && fan_profile_canonical(s, name, sizeof name) == 0;
+    if (ok) snprintf(req, sizeof req, "PROFILE %s", name);
     JS_FreeCString(c, s);
     if (!ok) return js_throw_code(c, "fan.badRequest", NULL);
     return fan_command(c, req);
@@ -112,7 +111,7 @@ static JSValue f_set_curve(JSContext *c, JSValueConst t, int argc, JSValueConst 
     if (JS_ToInt32(c, &n, lv)) n = -1;
     JS_FreeValue(c, lv);
     if (n < 1 || n > FAN_MAX_POINTS) return js_throw_code(c, "fan.badRequest", NULL);
-    FanCurve cu = { 0 };
+    int temps[FAN_MAX_POINTS], pcts[FAN_MAX_POINTS];
     for (int i = 0; i < n; i++) {
         JSValue pt = JS_GetPropertyUint32(c, argv[0], (uint32_t)i);
         JSValue a = JS_GetPropertyUint32(c, pt, 0), b = JS_GetPropertyUint32(c, pt, 1);
@@ -120,14 +119,13 @@ static JSValue f_set_curve(JSContext *c, JSValueConst t, int argc, JSValueConst 
         int bad = !JS_IsNumber(a) || !JS_IsNumber(b) || JS_ToFloat64(c, &x, a) || JS_ToFloat64(c, &y, b);
         JS_FreeValue(c, a); JS_FreeValue(c, b); JS_FreeValue(c, pt);
         if (bad || x != (int)x || y != (int)y) return js_throw_code(c, "fan.badRequest", NULL);
-        cu.p[i].temp = (int)x;
-        cu.p[i].pct = (int)y;
-        cu.n++;
+        temps[i] = (int)x;
+        pcts[i] = (int)y;
     }
-    if (fan_curve_valid(&cu)) return js_throw_code(c, "fan.badCurve", NULL);
+    if (fan_curve_points_valid(temps, pcts, n)) return js_throw_code(c, "fan.badCurve", NULL);
     char req[FAN_REQ_MAX];
     size_t k = (size_t)snprintf(req, sizeof req, "CURVE ");
-    for (int i = 0; i < cu.n; i++) k += (size_t)snprintf(req + k, sizeof req - k, "%s%d:%d", i ? "," : "", cu.p[i].temp, cu.p[i].pct);
+    for (int i = 0; i < n; i++) k += (size_t)snprintf(req + k, sizeof req - k, "%s%d:%d", i ? "," : "", temps[i], pcts[i]);
     return fan_command(c, req);
 }
 

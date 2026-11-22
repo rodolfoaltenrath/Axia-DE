@@ -323,22 +323,20 @@ build/npcompile-test: tests/npcompile_test.c src/fw/rules_json.c src/sec/json.c 
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/fw/rules_json.c src/sec/json.c $(NP_LIB) $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
-# axia-fand (src/fan, docs/FANS.md): the root service that drives the fans by temperature. libc
-# only; it executes nothing and has no network. tests/fan_test.c: curves, fan.json, requests and a
-# fake sysfs (run by tests/run_suites.sh).
-FAN_SRC := src/fan/fancurve.c src/fan/fanhw.c src/sec/json.c
-build/axia-fand: src/fan/fand.c $(FAN_SRC) $(wildcard src/fan/*.h) src/sec/json.h
+# axia-fand (rust/axia-fan, docs/FANS.md): the root service that drives the fans by temperature. libc
+# only; it executes nothing and has no network. Its tests (curves, fan.json, requests, a fake sysfs
+# and the program over its socket) are in rust/axia-fan (cargo test, part of test-rust).
+FAN_TARGET := build/fan
+.PHONY: build/axia-fand
+build/axia-fand: $(wildcard ../rust/axia-fan/src/*.rs) ../rust/axia-fan/Cargo.toml $(RUST_MANIFEST) ../rust/Cargo.lock
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ src/fan/fand.c $(FAN_SRC)
+	$(CARGO) build --manifest-path $(RUST_MANIFEST) -p axia-fan --bin axia-fand --release --locked --offline --target-dir $(FAN_TARGET)
+	cp $(FAN_TARGET)/release/axia-fand $@
 test: build/ptrlock-test
 build/ptrlock-test: tests/ptrlock_test.c src/wl/ptrlock.h src/testbench/lockkey.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -Isrc -o $@ tests/ptrlock_test.c
 	./$@ || { rm -f $@; exit 1; }
-test: build/fan-test
-build/fan-test: tests/fan_test.c $(FAN_SRC) $(wildcard src/fan/*.h) src/sec/json.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fan_test.c $(FAN_SRC)
 all: $(ALL)
 
 # Headless tests: terminal emulator (tests/vt_dump.c), OpenType shaping against

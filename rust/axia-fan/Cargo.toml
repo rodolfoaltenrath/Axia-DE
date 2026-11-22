@@ -1,0 +1,19 @@
+[package]
+name = "axia-fan"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "axia-fand: the root service that drives the fans by temperature, and the curve rules Settings shares with it"
+
+[lib]
+name = "axia_fan"
+path = "src/lib.rs"
+
+[[bin]]
+name = "axia-fand"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+serde = "1"
+serde_json = "1"

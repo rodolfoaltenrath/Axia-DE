@@ -142,7 +142,6 @@ EOF
     run "canvas-test" build/canvas-test
     run "arcpath-test" build/arcpath-test
     run "tp-test" build/tp-test
-    run "fan-test" build/fan-test
     # the Dock's pinned-list model (sdk/dockmodel.js)
     # Files model tests are part of test-rust; the former JS suite was removed.
     if have node && have cargo; then run "osk-model-test (Rust model + sdk/oskmodel.js)" node tests/osk_model_test.mjs

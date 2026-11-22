@@ -10,19 +10,19 @@ hardware live, with the curve and a temperature/fan history.
 
 | Piece | Code |
 |---|---|
-| Root service | `server/src/fan/fand.c` (`axia-fand`), unit `tools/iso/rootfs/etc/systemd/system/axia-fand.service` |
-| Curves, presets, `fan.json`, socket requests | `server/src/fan/fancurve.c` (pure, tested) |
-| Temperature and fan discovery, duty writes, giving control back | `server/src/fan/fanhw.c` |
+| Root service | `rust/axia-fan/src/daemon.rs` (`axia-fand`, built by `make -C server build/axia-fand`), unit `tools/iso/rootfs/etc/systemd/system/axia-fand.service` |
+| Curves, presets, `fan.json`, socket requests | `rust/axia-fan/src/curve.rs` (pure, tested) |
+| Temperature and fan discovery, duty writes, giving control back | `rust/axia-fan/src/hw.rs` |
 | Session API `lord.fan` | `server/src/ui/js_fan.c` (registered from `js_hw.c`) |
 | Shared UI: status store, illustrations, curve chart | `sdk/cooling.jsx` |
 | Settings → Cooling | `apps/settings/cooling.rs` |
 | Monitor → Cooling | `apps/monitor/ui.rs` |
 | Case accessories (Raspberry Pi 5) | admin action `rpi-case` in `server/src/hw/hw_admin.c` |
-| Tests | `server/tests/fan_test.c` (`build/fan-test`, in `tests/run_suites.sh`) |
+| Tests | `rust/axia-fan` (`cargo test -p axia-fan`, part of `make -C server test-rust`) |
 
 ## What it drives
 
-`axia-fand` scans sysfs once at start (`fanhw_scan`). A client never names a path or a device: it
+`axia-fand` scans sysfs once at start (`FanHw::scan`). A client never names a path or a device: it
 only picks a profile, and the daemon drives every fan it found.
 
 | Kind | Found as | How it is driven |
@@ -103,7 +103,7 @@ daemon reads `pwm1` back and rewrites it if it differs, so a kernel step in betw
 seconds after a large change, while the governor's state settles) is corrected within 2 s.
 `user_space` would be the cleaner governor, but the Raspberry Pi kernel only offers `step_wise`.
 
-**Giving control back** (`fanhw_release`): the original trip temperatures are written back and
+**Giving control back** (`FanHw::release`): the original trip temperatures are written back and
 the cooling device's `cur_state` is set to the level the kernel would pick for the current
 temperature, so there is no gap. This happens:
 
@@ -246,13 +246,15 @@ case gets nothing Argon-specific. The illustration shows the Argon only after it
 
 ## Tests
 
-- `build/fan-test` (`make test`, `tests/run_suites.sh`), 4 183 checks: curve steps and hysteresis
+- `cargo test -p axia-fan` (part of `make -C server test-rust`): curve steps and hysteresis
   (thresholds, jumps, oscillation, clamping), presets, output clamping, `fan.json` (valid files,
-  round trip, 37 broken files, 4 000 random mutations and truncations), socket requests (28
-  refused lines), and the sysfs driver on fake trees: a Raspberry Pi 5 (trips raised and restored,
-  the kick, read-back correction, RPM, crash restore file), a PC (`nct6798` taken and given back,
-  the `amdgpu` fan never touched, a tampered restore file ignored) and a passive machine.
-  `build/fan-test mkfake DIR pi5|pc|none` builds a tree for manual runs and screenshots.
+  round trip, 37 broken files including repeated keys, 4 000 random mutations and truncations),
+  socket requests (28 refused lines), and the sysfs driver on fake trees: a Raspberry Pi 5 (trips
+  raised and restored, the kick, read-back correction, RPM, crash restore file), a PC (`nct6798`
+  taken and given back, the `amdgpu` fan never touched, a tampered restore file ignored) and a
+  passive machine. The daemon's ticks and requests run on those trees too, and the real program is
+  started against a fake root: it serves its socket, takes the fan, and on SIGTERM gives it back and
+  removes the socket; `--detect`, `--restore` and the usage error are checked.
 - On the Raspberry Pi 5 in the Argon ONE V5 case (as root from the build folder, temporary config
   and socket under `/run/lordos-test`): detection; Balanced kept the fan off at 50–53 °C during a
   4-thread `yes` load (the aluminium case is a large heatsink); test curves drove it to 55 % (4 500
