@@ -1,4 +1,5 @@
 //! Complete Monitor widget tree. The shared host binds widgets, pixels and localization only.
+use super::theme::Context;
 use super::{arr, charts, dashboard, theme, worker, App, Tab};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, sync::OnceLock};
@@ -30,7 +31,7 @@ fn selected_button(label: Value, cmd: &str, arg: &str, on: bool) -> Value {
     b["style"] = json!({"opacity":if on{1.}else{0.65}});
     b
 }
-fn card(label: Value, children: Vec<Value>, context: &Value) -> Value {
+fn card(label: Value, children: Vec<Value>, context: &Context<'_>) -> Value {
     let p = theme::palette(context);
     let mut content = vec![{
         let mut t = text(label);
@@ -90,13 +91,13 @@ fn chart(
     top: f64,
     capacity: usize,
     height: usize,
-    context: &Value,
+    context: &Context<'_>,
 ) -> Value {
     let width = content_width(app, context) - 32.;
     chart_at(app, id, series, top, capacity, height, width)
 }
 /// Window width minus the sidebar and the content padding.
-fn content_width(app: &App, context: &Value) -> f64 {
+fn content_width(app: &App, context: &Context<'_>) -> f64 {
     let side = if app.embedded() {
         0.
     } else {
@@ -157,7 +158,7 @@ pub fn icon(size: f64) -> Value {
     };
     view(json!({"width":size,"height":size,"borderRadius":size*0.22,"backgroundColor":"#30a448","flexDirection":"row","alignItems":"center","justifyContent":"center","gap":size*0.06}),[0.3,0.65,0.45,0.8].iter().map(|h|view(json!({"width":size*0.1,"height":size*h,"backgroundColor":"#fff","borderRadius":size*0.03}),vec![])).collect())
 }
-fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> Vec<Value> {
+fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Context<'_>) -> Vec<Value> {
     let m = &last["mem"];
     let total = n(&m["total"]).max(1.);
     let used = n(&m["used"]);
@@ -244,7 +245,7 @@ fn memory(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -
         ]),
     ]
 }
-fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> Vec<Value> {
+fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Context<'_>) -> Vec<Value> {
     let graph = chart(
         app,
         "cpu-total",
@@ -294,7 +295,7 @@ fn cpu(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> V
     ]));
     out
 }
-fn processes(app: &mut App, snapshot: &worker::Snapshot, c: &Value) -> Vec<Value> {
+fn processes(app: &mut App, snapshot: &worker::Snapshot, c: &Context<'_>) -> Vec<Value> {
     let query = app.query.to_lowercase();
     let mut procs: Vec<_> = arr(&snapshot.processes["list"])
         .iter()
@@ -459,7 +460,7 @@ fn processes(app: &mut App, snapshot: &worker::Snapshot, c: &Value) -> Vec<Value
     }
     out
 }
-fn disks(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> Vec<Value> {
+fn disks(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Context<'_>) -> Vec<Value> {
     let list = arr(&last["disk"]["disks"]);
     let mut rows = Vec::new();
     for disk in list {
@@ -571,7 +572,7 @@ fn disks(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) ->
     ]));
     out
 }
-fn cooling(app: &mut App, snapshot: &worker::Snapshot, c: &Value) -> Vec<Value> {
+fn cooling(app: &mut App, snapshot: &worker::Snapshot, c: &Context<'_>) -> Vec<Value> {
     let sensor = &snapshot.sensors;
     let mut stats = Vec::new();
     for t in arr(&sensor["temps"]) {
@@ -655,7 +656,7 @@ pub fn primary_voltage(v: &Value) -> Option<(String, f64)> {
     }
     None
 }
-fn voltage(app: &mut App, snapshot: &worker::Snapshot, c: &Value) -> Vec<Value> {
+fn voltage(app: &mut App, snapshot: &worker::Snapshot, c: &Context<'_>) -> Vec<Value> {
     let voltage = &snapshot.sensors["voltage"];
     let mut out = Vec::new();
     if let Some((name, value)) = primary_voltage(voltage) {
@@ -727,7 +728,7 @@ fn country_positions() -> &'static Value {
     POSITIONS
         .get_or_init(|| serde_json::from_str(super::countries::POSITIONS).unwrap_or(Value::Null))
 }
-fn network(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) -> Vec<Value> {
+fn network(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Context<'_>) -> Vec<Value> {
     if app.prefs["connections"] == false {
         return vec![
             dim(key("monitor.net.disabled")),
@@ -925,7 +926,7 @@ fn network(app: &mut App, snapshot: &worker::Snapshot, last: &Value, c: &Value) 
     }
     out
 }
-fn privacy(app: &App, c: &Value) -> Vec<Value> {
+fn privacy(app: &App, c: &Context<'_>) -> Vec<Value> {
     let mut rows = Vec::new();
     for (field, label, hint, default) in [
         (
@@ -974,7 +975,7 @@ fn privacy(app: &App, c: &Value) -> Vec<Value> {
         dim(key("monitor.privacy.local")),
     ]
 }
-fn firewall(app: &App, c: &Value) -> Vec<Value> {
+fn firewall(app: &App, c: &Context<'_>) -> Vec<Value> {
     let fw = &app.services["fw"];
     let status = &fw["status"];
     let mut out = vec![
@@ -1069,7 +1070,7 @@ fn field(app: &App, name: &str, label: &str) -> Value {
         ],
     )
 }
-fn rules(app: &App, c: &Value) -> Vec<Value> {
+fn rules(app: &App, c: &Context<'_>) -> Vec<Value> {
     let mut out = vec![app_choices(app), text(json!(app.app))];
     if app.app.is_empty() {
         return vec![card(key("fwrules.title"), out, c)];
@@ -1177,7 +1178,7 @@ fn rules(app: &App, c: &Value) -> Vec<Value> {
     }
     vec![card(key("fwrules.title"), out, c)]
 }
-fn blocklists(app: &App, c: &Value) -> Vec<Value> {
+fn blocklists(app: &App, c: &Context<'_>) -> Vec<Value> {
     let mut rows = vec![button(
         key("firewall.lists.update"),
         "rule",
@@ -1229,6 +1230,8 @@ fn apply_text_color(node: &mut Value, color: &Value) {
     }
 }
 pub fn tree(app: &mut App, context: &Value) -> Value {
+    let appearance = app.appearance.clone();
+    let context = &Context::new(context, appearance.as_deref());
     let snapshot = app.frozen.clone().unwrap_or_else(|| app.snapshot.clone());
     let last = snapshot
         .samples

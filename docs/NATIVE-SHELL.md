@@ -71,7 +71,15 @@ Transferências órfãs continuam recebendo mudanças após o navegador fechar.
 O host isolado preserva o tema local. Respostas internas do navegador nativo
 deixam de devolver uma cópia separada da paleta; a moldura de compatibilidade
 ainda inclui cores e só é recalculada quando elas mudam.
-Senhas e as cenas da shell ainda precisam migrar seus fatos de aparência;
+Calculadora, Monitor, Sobre o Axia, Loja, Encerrar Forçadamente, Sobre o App e o
+fallback de Sandbox Probe também recebem a referência nativa. Monitor e Loja
+preservam suas paletas próprias de dados/layout, usando modo e destaque atuais.
+O Monitor empresta cores e fatos separadamente, sem construir JSON de tema;
+a troca efetiva invalida o cache visual e repetir a referência não o invalida.
+Sandbox Probe continua executando as verificações no processo isolado; o novo
+caminho vale para sua view de fallback da sessão. Senhas mantém o adaptador do
+processo isolado e os fatos locais da API; sua UI já é Rust. Esse transporte e
+as cenas da shell continuam no escopo da migração;
 os subpainéis internos de rede/privacidade conservam seus contratos existentes.
 Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
 Fase 3; o proprietário das cores já é Rust.

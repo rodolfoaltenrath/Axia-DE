@@ -7,7 +7,7 @@ fn text(label: Value, style: Value) -> Value {
     json!({"kind":"text","label":label,"style":style})
 }
 pub fn tree(app: &App, context: &Value) -> Value {
-    let t = &context["theme"];
+    let t = app.appearance.as_deref().unwrap_or(&context["theme"]);
     let dark = t["mode"] == "dark";
     let traditional = t["nativeStyle"] == "adwaita";
     let decimal = context["decimal"].as_str().unwrap_or(".");

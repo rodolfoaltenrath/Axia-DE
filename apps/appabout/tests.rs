@@ -1,7 +1,7 @@
 use super::*;
 #[test]
 fn system_package_linux_and_unknown_metadata_use_the_right_fields() {
-    let mut app = App;
+    let mut app = App::default();
     let system=app.request(&json!({"cmd":"sync","args":{"key":"calculator"},"catalog":[{"id":"calculator","name":"Calculadora","version":"old"}],"registry":[{"id":"calculator","version":"0.9.0","system":true,"description":"Rust"}]}));
     assert_eq!(system["title"]["params"]["app"], "Calculadora");
     let tree = system["tree"].to_string();
@@ -23,7 +23,7 @@ fn system_package_linux_and_unknown_metadata_use_the_right_fields() {
 }
 #[test]
 fn empty_and_changing_targets_do_not_reuse_previous_data() {
-    let mut app = App;
+    let mut app = App::default();
     app.request(&json!({"cmd":"sync","args":{"key":"one"},"registry":[{"id":"one","name":"One","version":"1.0.0"}]}));
     let empty = app.request(&json!({"cmd":"sync"}));
     assert_eq!(empty["title"]["params"]["app"], "");
@@ -31,7 +31,7 @@ fn empty_and_changing_targets_do_not_reuse_previous_data() {
 }
 #[test]
 fn icons_and_untrusted_descriptions_are_widget_data_not_code() {
-    let mut app = App;
+    let mut app = App::default();
     let data=app.request(&json!({"cmd":"sync","args":{"key":"one"},"catalog":[{"id":"one","icon":true,"comment":"<script>alert(1)</script>"}]}))["tree"].clone();
     assert_eq!(data["children"][0]["kind"], "view");
     assert!(data.to_string().contains("<script>"));

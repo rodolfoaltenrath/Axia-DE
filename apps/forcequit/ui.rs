@@ -25,7 +25,7 @@ pub fn icon(size: f64) -> Value {
     )
 }
 pub fn tree(app: &App, context: &Value) -> Value {
-    let t = &context["theme"];
+    let t = app.appearance.as_deref().unwrap_or(&context["theme"]);
     let mut rows = Vec::new();
     for g in &app.groups {
         let on = app.selected.as_ref() == Some(&g.key);

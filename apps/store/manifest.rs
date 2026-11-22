@@ -4,10 +4,10 @@ pub const ID: &str = "store";
 pub fn manifest() -> serde_json::Value {
     serde_json::json!({
         "id": ID, "version": "0.9.0", "name": "Axia Store",
-        "description": "Apps for Axia DE: discover, install and manage them",
+        "description": "Apps for Axia: discover, install and manage them",
         "size": [1080, 700], "minSize": [760, 480], "dock": true,
         "permissions": ["packages:install", "apps:launch"], "category": "System",
-        "nativeView": "rust", "facts": "apps",
+        "nativeView": "rust","appearanceSource":"native", "facts": "apps",
         "reads": {"apps": ["packages", "inspectPackage"], "sign": ["status", "userKey"]},
         "calls": {"apps": ["installPackage", "removePackage"], "sign": ["restore", "share"]}
     })

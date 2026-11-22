@@ -156,6 +156,17 @@ jobs:
           AXIA_FILES_APPEARANCE_FOLDER_OUTPUT: ${{ runner.temp }}/axia-files-appearance/folder
           AXIA_FILES_APPEARANCE_TRANSFER_OUTPUT: ${{ runner.temp }}/axia-files-appearance/transfer
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_files_appearance_runtime -- --ignored --nocapture
+      - name: Native appearance in core app views
+        if: matrix.gpu == 1
+        env:
+          AXIA_APPEARANCE_CALCULATOR_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/calculator
+          AXIA_APPEARANCE_MONITOR_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/monitor
+          AXIA_APPEARANCE_ABOUT_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/about
+          AXIA_APPEARANCE_STORE_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/store
+          AXIA_APPEARANCE_FORCEQUIT_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/forcequit
+          AXIA_APPEARANCE_APPABOUT_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/appabout
+          AXIA_APPEARANCE_SYSPROBE_OUTPUT: ${{ runner.temp }}/axia-core-app-appearance/sysprobe
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_core_app_appearance_runtime -- --ignored --nocapture
       - name: Native locale ownership
         if: matrix.gpu == 1
         env:
@@ -377,6 +388,12 @@ jobs:
         with:
           name: axia-files-appearance
           path: ${{ runner.temp }}/axia-files-appearance
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-core-app-appearance
+          path: ${{ runner.temp }}/axia-core-app-appearance
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

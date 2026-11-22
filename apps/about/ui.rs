@@ -105,9 +105,8 @@ fn badge(color: &str, k: &str, t: &Value) -> Value {
         ],
     )
 }
-pub fn tree(input: &Value) -> Value {
+pub fn tree(input: &Value, t: &Value) -> Value {
     let c = &input["context"];
-    let t = &c["theme"];
     let info = &input["services"]["system"]["info"];
     let st = &input["services"]["$root"]["stats"];
     let code = &input["services"]["code"]["status"];

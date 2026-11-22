@@ -103,6 +103,7 @@ impl Tab {
     }
 }
 pub struct App {
+    appearance: Option<std::rc::Rc<Value>>,
     lease: Option<worker::Lease>,
     pub tab: Tab,
     pub section: String,
@@ -157,6 +158,7 @@ struct Built {
 impl Default for App {
     fn default() -> Self {
         Self {
+            appearance: None,
             lease: None,
             tab: Tab::Overview,
             section: String::new(),
@@ -202,6 +204,13 @@ impl Default for App {
 }
 /// Mounted directly into the scene by the native view host (no React).
 impl crate::native_view::NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        if self.appearance.as_ref().is_some_and(|old| std::rc::Rc::ptr_eq(old, &theme)) { return; }
+        self.appearance = Some(theme);
+        self.built = None;
+    }
+
     fn uses_preferences(&self) -> bool { true }
     fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
         self.request_with_preferences(input, preferences)

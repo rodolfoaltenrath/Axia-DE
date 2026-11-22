@@ -105,3 +105,17 @@ fn an_error_after_a_long_result_is_shown_at_full_size() {
     assert!(app.error);
     assert_eq!(size(&app), json!(44));
 }
+
+#[test]
+fn shared_native_palette_preserves_expression_and_local_number_format() {
+    use crate::native_view::NativeApp;
+    let mut app = App::default();
+    for key in ["1", ".", "5", "+", "2", "="] { press(&mut app, key); }
+    let expression=app.expression.clone();let result=app.result.clone();
+    let colors=std::rc::Rc::new(json!({"mode":"light","text":"#13579b","accent":"#30d158"}));
+    app.set_native_appearance(colors.clone());
+    let reply=app.request(&json!({"cmd":"sync","context":{"decimal":",","theme":{"text":"#ff0000"}}}));
+    let tree=reply["tree"].to_string();assert!(tree.contains("#13579b"));assert!(!tree.contains("#ff0000"));
+    assert!(tree.contains("3,5"));assert_eq!(app.expression,expression);assert_eq!(app.result,result);
+    assert!(std::rc::Rc::ptr_eq(app.appearance.as_ref().unwrap(),&colors));
+}

@@ -27,9 +27,11 @@ import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {AppWindowContext} from '@ROOT@/sdk/components.jsx';
 import {locale} from '@ROOT@/sdk/i18n.js';
+import {settings} from '@ROOT@/sdk/settings.js';
 import {media} from '@ROOT@/sdk/media.js';
 import {runningApps,forceQuit} from '@ROOT@/sdk/appcontrol.js';
 locale.set({...locale.get(),lang:'en'});
+settings.set({mode:'@MODE@',accent:'azul',effects:false,nativeAppearance:'axia'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 const manifest=lord.nativeApps.request(JSON.stringify({cmd:'catalog'})).find(app=>app.id==='forcequit'),app=nativeApp(manifest);

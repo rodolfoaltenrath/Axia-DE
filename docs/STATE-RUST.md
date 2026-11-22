@@ -1870,3 +1870,53 @@ Instalação privada gerada, sem instalar nem reiniciar a sessão física. Três
 amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,754 MiB de RSS,
 abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal; medições físicas
 continuam reservadas ao encerramento.
+
+
+### Aparência direta nos demais modelos de apps da sessão
+
+Calculadora, Monitor, Sobre o Axia, Loja, Encerrar Forçadamente, Sobre o App e o
+fallback de Sandbox Probe passam a declarar `appearanceSource: native` e a reter
+Rc do plano. Seus corpos não consultam o provider JS nem recebem theme/scale nos
+fatos da sessão. Hosts isolados conservam o contrato local; o teste de Probe usa
+explicitamente a view de fallback, preservando as verificações do processo
+isolado. O adaptador de Senhas permanece pendente: sua UI é Rust, mas os serviços
+de cofre/FIDO/descritores ainda são fornecidos pelo app isolado em JS.
+
+O Monitor empresta cores e fatos da janela por um contexto de leitura, sem
+construir ou guardar um JSON com a paleta. Trocar a referência invalida o cache
+retido; repetir a referência preserva a árvore. As paletas próprias do Monitor
+e da Loja continuam em uso, selecionadas pelo modo nativo; destaques vêm da
+mesma fonte. Catálogo, navegação, amostras e seleção não são substituídos pela
+mudança de aparência. Campos locais de idioma/números continuam disponíveis.
+
+Os três testes novos verificam expressão/formato decimal da Calculadora,
+invalidação/reuso do cache do Monitor sem substituir amostras/seleção e troca
+de cores da Loja sem reconstruir catálogo/navegação. O teste gráfico dos treze
+apps anteriores compartilha o mesmo driver com a integração deste grupo, sem
+mudar suas asserções. Cenas da shell, subpainéis internos, montagem do tema,
+adaptadores de outros apps e montagem JS dos seletores/transferências continuam
+no escopo. Nenhuma caixa de fase inteira é concluída por esta entrega.
+
+Validação em Fedora 44 privado: passaram 656 testes da shell (sete ignorados),
+72 dos sete apps (um ignorado de integração específica) e oito contratos LPK.
+Compositor GPU=1 e bundles default/app-host gerados. A integração nova está no CI
+com capturas: 28 cenários, claro/escuro e 640/1000 px, exigindo metadado compilado,
+montagem real, ausência de theme/scale, troca sem novos fatos JS, espelho antigo
+e rejeição de aparência antiga. Verifica pixels de texto nativo ou o fundo da
+paleta própria do Monitor/Loja. Sobre o App recebe explicitamente o alvo
+Calculadora. Capturas de Monitor/Loja em claro/escuro, Sobre o App e Probe
+inspecionadas.
+
+Passaram 108 cenários de regressão: treze apps anteriores, Relógio,
+Configurações, Arquivos/seletores/transferências, cabeçalhos, Encerrar
+Forçadamente e tokens em processos isolados reais. O fixture funcional de
+Encerrar Forçadamente agora explicita o modo/estilo no perfil privado para
+acompanhar a preferência autoritativa. As oito capturas de Arquivos são
+idênticas byte a byte às de `native-files-appearance`. O encerramento instalado
+passou por timeout/SIGTERM. Evidências em
+`build/validation/native-core-app-appearance/`.
+
+Instalação privada gerada, sem instalar ou reiniciar a sessão física. Três
+amostras de ociosidade passaram com limites impostos: 12,600 poll/s e 104,414 MiB de RSS,
+abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal; medições físicas
+continuam reservadas ao encerramento.

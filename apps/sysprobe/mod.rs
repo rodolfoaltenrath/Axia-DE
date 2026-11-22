@@ -3,12 +3,17 @@
 use crate::native_view::NativeApp;
 use serde_json::{json, Value};
 #[derive(Default)]
-pub struct App;
+pub struct App {
+    appearance: Option<std::rc::Rc<Value>>,
+}
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
+
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "icon" => icon(input["size"].as_f64().unwrap_or(32.)),
-            "sync" => json!({"tree":{"kind":"view","key":"probe-fallback","style":{"flex":1,"padding":20,"justifyContent":"center"},"children":[{"kind":"text","label":{"key":"sysinfo.probe.inProcess"},"style":{"fontSize":13,"color":input["context"]["theme"]["textDim"],"textAlign":"center","lineHeight":1.4}}]}}),
+            "sync" => json!({"tree":{"kind":"view","key":"probe-fallback","style":{"flex":1,"padding":20,"justifyContent":"center"},"children":[{"kind":"text","label":{"key":"sysinfo.probe.inProcess"},"style":{"fontSize":13,"color":self.appearance.as_deref().unwrap_or(&input["context"]["theme"])["textDim"],"textAlign":"center","lineHeight":1.4}}]}}),
             _ => Value::Null,
         }
     }

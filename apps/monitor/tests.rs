@@ -772,3 +772,23 @@ fn dashboard_links_open_sorted_processes_and_settings_panels_hide_the_chrome() {
     assert!(!embedded.contains("axia-icon-128.png"));
     assert!(!embedded.contains("\"monitor.title\""));
 }
+
+#[test]
+fn native_palette_invalidates_cached_tree_without_replacing_samples_or_selection() {
+    use crate::native_view::NativeApp;
+    let frozen=Arc::new(fixture());
+    let mut app=App{frozen:Some(frozen.clone()),selected:Some((7,9)),..Default::default()};
+    let facts=json!({"cmd":"sync","context":{"width":1180},"services":{},"catalog":[]});
+    let light=std::rc::Rc::new(json!({"mode":"light","accent":"#13579b"}));
+    app.set_native_appearance(light.clone());
+    let first=app.request(&facts);assert!(first["tree"].to_string().contains("#13579b"));
+    let generation=app.generation;
+    app.set_native_appearance(light);assert_eq!(app.request(&facts)["same"],true);
+    assert_eq!(app.generation,generation);
+    let dark=std::rc::Rc::new(json!({"mode":"dark","accent":"#abcdef"}));
+    app.set_native_appearance(dark.clone());
+    let next=app.request(&facts);assert!(next["tree"].to_string().contains("#abcdef"));
+    assert!(app.generation>generation);assert!(std::rc::Rc::ptr_eq(app.appearance.as_ref().unwrap(),&dark));
+    assert!(Arc::ptr_eq(app.frozen.as_ref().unwrap(),&frozen));assert_eq!(app.selected,Some((7,9)));
+    assert!(app.built.as_ref().unwrap().context.get("theme").is_none());
+}

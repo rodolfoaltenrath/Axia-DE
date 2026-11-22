@@ -30,8 +30,8 @@ struct Palette {
     field: &'static str,
     card: &'static str,
 }
-fn palette(context: &Value) -> Palette {
-    if context["theme"]["mode"] == "light" {
+fn palette(theme: &Value) -> Palette {
+    if theme["mode"] == "light" {
         Palette {
             main: "#ffffff",
             sidebar: "#ececf0e0",
@@ -63,8 +63,8 @@ struct Ui {
     accent: String,
     width: f64,
 }
-fn accent(context: &Value) -> String {
-    context["theme"]["accent"]
+fn accent(theme: &Value) -> String {
+    theme["accent"]
         .as_str()
         .filter(|a| a.len() == 7 && a.starts_with('#'))
         .unwrap_or("#0a84ff")
@@ -799,10 +799,12 @@ fn file(app: &App, ui: &Ui, path: &str) -> Vec<Value> {
     out
 }
 pub fn tree(app: &mut App, context: &Value) -> Value {
+    let appearance = app.appearance.clone();
+    let theme = appearance.as_deref().unwrap_or(&context["theme"]);
     let width = context["width"].as_f64().unwrap_or(1080.);
     let ui = Ui {
-        p: palette(context),
-        accent: accent(context),
+        p: palette(theme),
+        accent: accent(theme),
         width: (width - SIDEBAR - PAD * 2.).max(280.),
     };
     cache_icons(app);

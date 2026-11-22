@@ -70,6 +70,7 @@ pub struct PackageFile {
     pub size: u64,
 }
 pub struct App {
+    appearance: Option<std::rc::Rc<Value>>,
     pub page: Page,
     history: Vec<Page>,
     pub query: String,
@@ -100,6 +101,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
+            appearance: None,
             page: Page::Discover,
             history: Vec::new(),
             query: String::new(),
@@ -124,6 +126,9 @@ impl Default for App {
 }
 /// Rust mounts the store into the scene (no React).
 impl crate::native_view::NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
+
     fn request(&mut self, input: &Value) -> Value {
         App::request(self, input)
     }

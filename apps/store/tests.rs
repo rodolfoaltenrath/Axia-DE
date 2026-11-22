@@ -342,3 +342,18 @@ fn the_list_is_rebuilt_only_when_the_catalog_or_desktop_files_change() {
     sync(&mut app);
     assert_eq!(READS.load(Ordering::SeqCst), 2, "new .desktop files are read");
 }
+
+#[test]
+fn native_palette_changes_colors_without_rebuilding_catalog_or_navigation() {
+    use crate::native_view::NativeApp;
+    let mut app=store();sync(&mut app);app.page=Page::Installed;
+    let count=app.entries.len();let built=app.built_from.clone();
+    let light=std::rc::Rc::new(json!({"mode":"light","accent":"#13579b"}));
+    app.set_native_appearance(light);
+    let first=sync(&mut app).to_string();assert!(first.contains("#13579b"));assert!(first.contains("#ffffff"));
+    let dark=std::rc::Rc::new(json!({"mode":"dark","accent":"#abcdef"}));
+    app.set_native_appearance(dark.clone());let next=sync(&mut app).to_string();
+    assert!(next.contains("#abcdef"));assert!(next.contains("#1e1e21"));
+    assert_eq!(app.page,Page::Installed);assert_eq!(app.entries.len(),count);assert_eq!(app.built_from,built);
+    assert!(std::rc::Rc::ptr_eq(app.appearance.as_ref().unwrap(),&dark));
+}

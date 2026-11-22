@@ -1,4 +1,4 @@
 pub const ID: &str = "sysprobe";
 pub fn manifest() -> serde_json::Value {
-    serde_json::json!({"id":ID,"version":"0.8.5","name":"Sandbox Probe","description":"System Information's test app: tries what an isolated app must not be able to do","size":[420,220],"minSize":[420,220],"dock":false,"permissions":[],"category":"System","process":"isolated","hidden":true,"nativeView":"rust"})
+    serde_json::json!({"id":ID,"version":"0.8.5","name":"Sandbox Probe","description":"System Information's test app: tries what an isolated app must not be able to do","size":[420,220],"minSize":[420,220],"dock":false,"permissions":[],"category":"System","process":"isolated","hidden":true,"nativeView":"rust","appearanceSource":"native"})
 }

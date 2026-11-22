@@ -23,6 +23,7 @@ pub struct Group {
 }
 #[derive(Default)]
 pub struct App {
+    appearance: Option<std::rc::Rc<Value>>,
     groups: Vec<Group>,
     selected: Option<String>,
     error: String,
@@ -258,6 +259,9 @@ impl App {
 /// The window uses the session controller with fresh shell facts. It never
 /// executes the surface handles from its last rendered snapshot.
 impl crate::native_view::NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
+
     fn invalidated(&self) -> bool {
         self.source.as_ref().is_some_and(|source| self.revision != Some(source.revision()))
     }

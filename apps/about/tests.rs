@@ -4,7 +4,7 @@ fn facts() -> Value {
 }
 #[test]
 fn original_content_branding_regional_formatting_and_optional_rows() {
-    let mut app = App;
+    let mut app = App::default();
     let tree = app.request(&facts())["tree"].to_string();
     for expected in [
         "Test Linux",
@@ -40,7 +40,7 @@ fn original_content_branding_regional_formatting_and_optional_rows() {
 }
 #[test]
 fn report_effect_icons_and_missing_services() {
-    let mut app = App;
+    let mut app = App::default();
     assert_eq!(
         app.request(&json!({"cmd":"report"}))["effect"],
         json!({"kind":"openApp","app":"sysinfo"})

@@ -7,7 +7,7 @@ mod tests {
     fn original_fallback_and_icon_mount_without_react() {
         let mount=scene::create(1);
         let assets=concat!(env!("CARGO_MANIFEST_DIR"),"/../../assets");
-        let mut host=Host::new(mount,Box::new(App),assets,None);
+        let mut host=Host::new(mount,Box::new(App::default()),assets,None);
         host.facts(json!({"lang":"en","context":{"theme":{"textDim":"#aabbcc"}}}));
         let mut i18n=crate::native_view::i18n::I18n::new(assets,None);
         assert_eq!(scene::gather_text(mount),i18n.caption(&json!({"key":"sysinfo.probe.inProcess"})));

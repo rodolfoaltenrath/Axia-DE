@@ -3,7 +3,9 @@
 mod tests;
 use serde_json::{json, Value};
 #[derive(Default)]
-pub struct App;
+pub struct App {
+    appearance: Option<std::rc::Rc<Value>>,
+}
 fn s<'a>(v: &'a Value, key: &str) -> &'a str {
     v[key].as_str().unwrap_or("")
 }
@@ -23,7 +25,7 @@ impl App {
             "sync" => {
                 let id = s(&input["args"], "key");
                 let context = &input["context"];
-                let theme = &context["theme"];
+                let theme = self.appearance.as_deref().unwrap_or(&context["theme"]);
                 let find = |field: &str| {
                     input[field]
                         .as_array()
@@ -116,6 +118,9 @@ fn icon(size: f64) -> Value {
 }
 
 impl crate::native_view::NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
+
     fn request(&mut self, input: &Value) -> Value {
         App::request(self, input)
     }

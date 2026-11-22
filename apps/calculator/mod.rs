@@ -11,6 +11,7 @@ pub const KEYS: [[&str; 4]; 5] = [
     ["0", ".", "⌫", "="],
 ];
 pub struct App {
+    appearance: Option<std::rc::Rc<Value>>,
     expression: String,
     result: String,
     error: bool,
@@ -20,6 +21,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
+            appearance: None,
             expression: String::new(),
             result: "0".into(),
             error: false,
@@ -29,6 +31,9 @@ impl Default for App {
     }
 }
 impl crate::native_view::NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
+
     fn request(&mut self, input: &Value) -> Value {
         App::request(self, input)
     }

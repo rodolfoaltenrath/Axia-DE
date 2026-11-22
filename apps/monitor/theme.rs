@@ -1,6 +1,18 @@
 //! Monitor palette. The mode follows the system theme sent by the host; data colors
 //! stay the same in both modes so a series keeps its meaning.
 use serde_json::Value;
+/// Borrow facts and native colors independently, without constructing a JSON overlay.
+pub struct Context<'a> { facts: &'a Value, colors: Option<&'a Value> }
+impl<'a> Context<'a> {
+    pub fn new(facts: &'a Value, colors: Option<&'a Value>) -> Self { Self { facts, colors } }
+}
+impl std::ops::Index<&str> for Context<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        if key == "theme" { self.colors.unwrap_or(&self.facts[key]) } else { &self.facts[key] }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Palette {
     pub dark: bool,
@@ -39,7 +51,7 @@ pub fn rgba(hex: &str) -> [u8; 4] {
         if h.len() >= 8 { byte(6) } else { 255 },
     ]
 }
-pub fn palette(context: &Value) -> Palette {
+pub fn palette(context: &Context<'_>) -> Palette {
     if context["theme"]["mode"] == "light" {
         Palette {
             dark: false,

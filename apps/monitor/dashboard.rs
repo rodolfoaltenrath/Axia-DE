@@ -1,5 +1,6 @@
 //! Window layout and the dashboard: sidebar, header and the summary cards.
 //! The window frame (title bar and its buttons) belongs to the window manager.
+use super::theme::Context;
 use super::{
     arr, charts,
     paint::{self, Icon, Ring},
@@ -59,14 +60,14 @@ pub fn icon(app: &mut App, icon: Icon, size: f64, color: [u8; 4]) -> Value {
     // A constant generation: the host copies an icon's pixels once.
     json!({"kind":"raster","image":id,"generation":1,"style":{"width":size,"height":size}})
 }
-fn accent(context: &Value) -> String {
+fn accent(context: &Context<'_>) -> String {
     context["theme"]["accent"]
         .as_str()
         .filter(|a| a.len() == 7 && a.starts_with('#'))
         .unwrap_or("#0a84ff")
         .to_owned()
 }
-pub fn sidebar(app: &mut App, context: &Value, voltage: bool) -> Value {
+pub fn sidebar(app: &mut App, context: &Context<'_>, voltage: bool) -> Value {
     let p = theme::palette(context);
     let tint = theme::rgba(&accent(context));
     let entries = [
@@ -131,7 +132,7 @@ fn uptime(seconds: f64) -> Value {
         json!({"key":"monitor.uptimeHours","params":{"h":h,"m":m}})
     }
 }
-pub fn header(snapshot: &worker::Snapshot, last: &Value, context: &Value) -> Value {
+pub fn header(snapshot: &worker::Snapshot, last: &Value, context: &Context<'_>) -> Value {
     let p = theme::palette(context);
     let sys = &snapshot.system;
     let host = sys["host"]
@@ -777,7 +778,7 @@ pub fn view_cards(
     app: &mut App,
     snapshot: &worker::Snapshot,
     last: &Value,
-    context: &Value,
+    context: &Context<'_>,
 ) -> Vec<Value> {
     let p = theme::palette(context);
     let accent = accent(context);

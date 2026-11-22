@@ -96,13 +96,13 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     install_services();
     match id {
         crate::native_apps::settings::ID=>Some(Box::new(crate::settings_app::App::default())),
-        crate::native_apps::sysprobe::ID => Some(Box::new(crate::sysprobe_app::App)),
+        crate::native_apps::sysprobe::ID => Some(Box::new(crate::sysprobe_app::App::default())),
         crate::native_apps::reminders::ID => Some(Box::new(crate::reminders_app::App::default())),
         crate::native_apps::contacts::ID => Some(Box::new(crate::contacts_app::App::default())),
         crate::native_apps::calendar::ID => Some(Box::new(crate::calendar_app::App::default())),
         crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
         crate::native_apps::files::ID => Some(Box::new(crate::files::FilesView::default())),
-        crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App)),
+        crate::native_apps::appabout::ID => Some(Box::new(crate::appabout::App::default())),
         crate::native_apps::help::ID => Some(Box::new(crate::help::App::default())),
         crate::native_apps::clock::ID => Some(Box::new(crate::clock_app::App::default())),
         crate::native_apps::characters::ID => Some(Box::new(crate::characters::App::default())),
