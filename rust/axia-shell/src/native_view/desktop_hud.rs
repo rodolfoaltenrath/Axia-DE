@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 const VISIBLE: Duration = Duration::from_millis(800);
 
 pub struct DesktopHud {
+    appearance: Option<std::rc::Rc<Value>>,
     windows: Reader<WindowState>,
     changes: Subscription,
     active: Option<i64>,
@@ -19,6 +20,7 @@ impl DesktopHud {
     pub fn new(windows: Reader<WindowState>) -> Self {
         let changes = windows.subscribe();
         Self {
+            appearance: None,
             windows,
             changes,
             active: None,
@@ -47,7 +49,7 @@ impl DesktopHud {
             return json!({"kind":"view","key":"desktop-hud","style":{"pointerEvents":"none"}});
         }
         let state = self.windows.read();
-        let theme = &input["context"]["theme"];
+        let theme = self.appearance.as_deref().unwrap_or(&input["context"]["theme"]);
         let display = &input["args"]["display"];
         let width = display["w"].as_f64().unwrap_or(0.);
         let height = display["h"].as_f64().unwrap_or(0.);
@@ -80,6 +82,9 @@ impl DesktopHud {
 }
 
 impl NativeApp for DesktopHud {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn invalidated(&self) -> bool {
         self.changes.pending()
     }
@@ -120,6 +125,31 @@ mod tests {
     use super::*;
     use crate::winmodel::Session;
 
+    #[test]
+    fn native_colors_do_not_reopen_or_extend_the_indicator() {
+        let mut session = Session::default();
+        session.call("setDesktops", &[json!({}),json!([1,2]),json!(1)]).unwrap();
+        let mut hud = DesktopHud::new(session.reader());
+        let input = json!({"cmd":"sync","args":{"display":{"w":640,"h":700}},"context":{"theme":{"text":"#ff0000"}}});
+        hud.request(&input);
+        let theme = std::rc::Rc::new(crate::native_style::shell_theme::tokens(&json!({"mode":"light","accent":"verde"})));
+        hud.set_native_appearance(theme.clone());
+        assert!(hud.request(&input)["same"] == true);
+        assert!(hud.until.is_none(), "recoloring a hidden indicator must not show it");
+        hud.request(&json!({"cmd":"show"}));
+        let until = hud.until;
+        let tree = hud.request(&input)["tree"].clone();
+        assert_eq!(tree["children"][0]["children"][0]["style"]["color"], "#1d1d1f");
+        assert_eq!(tree["children"][0]["children"][1]["children"][0]["style"]["backgroundColor"], "#30d158");
+        hud.set_native_appearance(std::rc::Rc::new(crate::native_style::shell_theme::tokens(&json!({"mode":"dark","accent":"rosa"}))));
+        assert!(hud.request(&input)["tree"].is_object());
+        assert_eq!(hud.until, until);
+        hud.update(until.unwrap(), false);
+        hud.set_native_appearance(theme);
+        assert!(hud.request(&input)["tree"].is_object());
+        assert!(hud.until.is_none());
+        assert!(hud.refresh_ms().is_none());
+    }
     #[test]
     fn revisions_show_once_extend_from_the_latest_switch_and_expire_without_polling() {
         let mut session = Session::default();

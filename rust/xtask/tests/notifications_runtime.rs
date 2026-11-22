@@ -14,13 +14,19 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
         .unwrap();
     for mode in ["light", "dark"] {
         for width in [640u32, 1000] {
-            let report = ui::run_ui(
+            let report = ui::run_ui_with_capture(
                 repo,
                 "notifications",
                 DRIVER,
                 mode,
                 width,
                 "notifications.png",
+                |path| {
+                    let pixels = image::open(path).unwrap().into_rgb8();
+                    let ink = if mode == "light" { [29,29,31] } else { [245,245,247] };
+                    assert!(pixels.pixels().filter(|p| p.0 == ink).count() > 10, "native notice ink: {mode}/{width}");
+                    assert!(pixels.pixels().filter(|p| p.0 == [48,209,88]).count() > 50, "native notice accent: {mode}/{width}");
+                },
             );
             assert_eq!(report["ran"], json!(["second", "body"]), "{report}");
             assert_eq!(report["grouped"], true, "{report}");
@@ -28,6 +34,10 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
             assert_eq!(report["dndSuppressed"], true, "{report}");
             assert_eq!(report["timerGone"], true, "{report}");
             for flag in [
+                "noAppearanceFacts",
+                "withoutAppearanceFacts",
+                "staleAppearanceMirror",
+                "appearanceRetained",
                 "bound",
                 "noPayload",
                 "noJsDeadline",
@@ -89,11 +99,23 @@ import { notificationBridge } from '@ROOT@/sdk/nativenotifications.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { makeTheme } from '@ROOT@/themes/default/tokens.js';
 import { settings } from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import { localeBridge } from '@ROOT@/sdk/nativelocale.js';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import { configureWindows } from '@ROOT@/sdk/windows.js';
 import { media } from '@ROOT@/sdk/media.js';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const opposite='@MODE@'==='light'?'dark':'light';
+let noAppearanceFacts=true,appearanceFacts=0,lastAppearanceFacts;
+function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}))&&!('surface'in(input.args||{}))&&!('radius'in(input.args||{}));}
+async function changeAppearance(){
+ const perform=settingsBridge.perform;settingsBridge.perform=()=>{};const before=appearanceFacts;
+ lord.settings.state({cmd:'patch',patch:{mode:'@MODE@',accent:'verde',effects:false,nativeAppearance:'adwaita'}});await sleep(120);
+ const withoutAppearanceFacts=appearanceFacts===before,staleAppearanceMirror=settings.get().mode===opposite;
+ facts(bannerHandle,JSON.stringify({...lastAppearanceFacts,args:{...lastAppearanceFacts.args,surface:{backgroundColor:'#ff0000'},radius:999},context:{...lastAppearanceFacts.context,theme:{mode:opposite,text:'#ff0000',accent:'#ff0000'},scale:{body:200}}}));
+ settingsBridge.perform=perform;
+ return {withoutAppearanceFacts,staleAppearanceMirror};
+}
 const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeViews.findText(handle,label);if(node)return node;}return 0;};
 async function until(fn,tries=100){for(let i=0;i<tries&&!fn();i++)await sleep(20);return!!fn();}
 const ran=[], reasons=[];
@@ -103,14 +125,14 @@ const perform=notificationBridge.perform,request=lord.nativeApps.request;
 notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
 lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='notifications'||input.cmd==='clockCommand')for(const key of ['lang','region','revision','localeRevision'])noLocaleFacts&&=!(key in input);if(input.cmd==='notifications'){rawPolicy&&=!('prefs'in input)&&input.action!=='preferencesPatch';noAccessFacts&&=!('permission'in input)&&!('blocked'in input)&&!('source'in input);if(input.action==='push'){rawPolicy&&=!('appPrefs'in input)&&!('prefs'in input);noPresentationFacts&&=!('wallMs'in input)&&!('minute'in input)&&!('hasApp'in(input.notice||{}))&&!('displayLabel'in(input.notice||{}))&&!('timeLabel'in(input.notice||{}));}}if(input.cmd==='clockCommand')noAccessFacts&&=!('notificationPolicy'in input);if(input.notificationPolicy){rawPolicy&&=!('clock'in input.notificationPolicy)&&!('prefs'in input.notificationPolicy);noAccessFacts&&=!('permission'in input.notificationPolicy)&&!('blocked'in input.notificationPolicy);}if(input.action==='ringPolicy')rawPolicy&&=!('clock'in input);const reply=request.call(lord.nativeApps,text);for(const effect of [...(reply.effects||[]),...(reply.notificationEffects||[])])if(effect.kind==='notificationSound')noSoundEffects=false;return reply;};
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,facts=lord.nativeViews.facts;
-function inspect(text){const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}))&&!('ungrouped'in(value.args||{}));}
+function inspect(text){inspectAppearance(text);const value=JSON.parse(text);noPayload&&=!('tree'in(value.args||{}))&&!('shown'in(value.args||{}))&&!('notifications'in(value.args||{}))&&!('ungrouped'in(value.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'){inspect(text);bound=sources[0]===lord.windowList;bannerHandle=mount(node,id,text,...sources);return bannerHandle;}return mount(node,id,text,...sources);};
-lord.nativeViews.facts=(handle,text)=>{if(handle===bannerHandle)inspect(text);return facts(handle,text);};
+lord.nativeViews.facts=(handle,text)=>{if(handle===bannerHandle){inspect(text);appearanceFacts++;}return facts(handle,text);};
 lord.nativeViews.unmount=handle=>{if(handle===bannerHandle)bannerHandle=0;return unmount(handle);};
 const push=(label,title,options={})=>notify({label,title,body:'Notification body',sticky:true,sound:false,onClose:reason=>reasons.push(reason),...options});
 const press=node=>{const[x,y,w,hh]=lord.getLayout(node);for(const type of ['down','up']){const mount=lord.nativeViews.pointer(type,node,x+w/2,y+hh/2,0);__lordEvent(type,mount,x+w/2,y+hh/2,0);}globalThis.__lordNativeView();};
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
-settings.set({language:'en',mode:'@MODE@',notificationsNativeView:false,notifications:{grouping:'app',dnd:false}});
+settings.set({language:'en',mode:opposite,accent:'azul',effects:false,nativeAppearance:'axia',notificationsNativeView:false,notifications:{grouping:'app',dnd:false}});
 const probeApps=[{id:'access-probe',name:'Access probe',package:true,Component:()=>null},{id:'isolated-probe',name:'Isolated probe',isolated:true,Component:()=>null},{id:'clock',name:'Clock',Component:()=>null}];
 configureWindows({apps:probeApps,workArea:{x:20,y:28,w:@WIDTH@-40,h:644}});
 function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},on?h(NotificationBanner):null));}
@@ -289,9 +311,11 @@ async function run(){
  const nativeSound=ordinary>0&&jsSounds===0&&noSoundEffects;
  setBannerPlacement('bottom');locale.set({lang:'en',region:'',dir:'rtl'});
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
+ const appearanceUpdate=await changeAppearance();await sleep(60);
+ const appearanceRetained=!!find('Final banner')&&!!find('Open');
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,backgroundExpired,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,nativeLocaleSource,nativePackReload,nativeBootstrap,jsLocaleReads,noLocaleFacts,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({noAppearanceFacts,...appearanceUpdate,appearanceRetained,ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,backgroundExpired,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,nativeLocaleSource,nativePackReload,nativeBootstrap,jsLocaleReads,noLocaleFacts,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

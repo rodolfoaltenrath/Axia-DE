@@ -8,7 +8,7 @@ import { notificationPlacement } from './notify.js';
 import { AppNotificationBanner } from '../runtime/lpk/notifications.js';
 import { NativeView } from './nativeview.js';
 
-const MANIFEST = { id: 'shell:notifications', shell: true, fullTheme: true };
+const MANIFEST = { id: 'shell:notifications', shell: true, appearanceSource: 'native', fullTheme: true };
 function NativeBanners() {
   const { dir } = useLocale();
   const placement = useStore(notificationPlacement);

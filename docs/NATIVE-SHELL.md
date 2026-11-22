@@ -99,6 +99,15 @@ tokens, chrome e controls saíram do transporte da sessão. Fatos antigos não
 substituem a aparência nativa. Mudanças mantêm hover, título e foco do leitor
 WindowState; controladores sem ligação nativa conservam estilos locais explícitos.
 O contorno, sombra e corpo externo da janela ainda são montados pelo tema JS.
+Banners, alternador de apps e indicador de desktops compartilham a variante da
+paleta da shell, independente de Adwaita nos apps. Seus adaptadores não usam
+provider nem enviam theme/scale. O alternador deriva vidro, borda, blur e raio
+em Rust; surface/radius JS saíram do transporte, e fatos antigos são ignorados.
+Trocar aparência conserva seleção e origem do alternador, IDs e prazos das
+notificações e o vencimento do indicador, sem reabrir indicadores ocultos.
+Serviços, seleção, relógios de expiração e roteamento de ações mantêm seus
+proprietários existentes; posição/montagem e callbacks continuam nos adaptadores.
+
 Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
 Fase 3; o proprietário das cores já é Rust.
 

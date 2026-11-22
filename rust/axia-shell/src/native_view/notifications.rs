@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub struct Banners {
+    appearance: Option<std::rc::Rc<Value>>,
     service: Rc<RefCell<Service>>,
     state: Reader<State>,
     changes: Subscription,
@@ -15,6 +16,7 @@ impl Banners {
         let state = service.borrow().reader();
         let changes = state.subscribe();
         Self {
+            appearance: None,
             service,
             state,
             changes,
@@ -22,7 +24,7 @@ impl Banners {
         }
     }
     fn tree(&self, input: &Value) -> Value {
-        let th = &input["context"]["theme"];
+        let th = self.appearance.as_deref().unwrap_or(&input["context"]["theme"]);
         let light = th["mode"] == "light";
         let color = |key: &str, fallback: &str| th[key].as_str().unwrap_or(fallback).to_owned();
         let bg = if light {
@@ -88,6 +90,9 @@ impl Banners {
     }
 }
 impl super::NativeApp for Banners {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn invalidated(&self) -> bool {
         self.changes.pending() || { let service = self.service.borrow(); !service.resident && (service.settings_pending() || service.catalog_pending()) }
     }
@@ -126,5 +131,40 @@ impl super::NativeApp for Banners {
             }
             _ => json!({}),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native_view::NativeApp;
+    #[test]
+    fn native_colors_keep_notice_identity_deadline_and_actions() {
+        let service = Rc::new(RefCell::new(Service::default()));
+        let now = Instant::now();
+        let reply = service.borrow_mut().command(&json!({"action":"push","prefs":{},
+            "notice":{"app":"notes","title":"Native notice","timeout":60000,"sound":false,
+                "actions":[{"id":"open","label":"Open","primary":true}]}}), now);
+        let id = reply["result"].as_u64().unwrap();
+        assert!(id > 0);
+        let mut view = Banners::new(service.clone());
+        let reader = service.borrow().reader();
+        let revision = reader.revision();
+        let deadline = service.borrow().wait_ms(now);
+        let input = json!({"cmd":"sync","context":{"theme":{"mode":"dark","text":"#ff0000","accent":"#ff0000"}}});
+        for mode in ["light","dark"] {
+            let theme = Rc::new(crate::native_style::shell_theme::tokens(&json!({"mode":mode,"accent":"verde","effects":false})));
+            view.set_native_appearance(theme.clone());
+            let tree = view.request(&input)["tree"].clone();
+            assert_eq!(tree["children"][0]["key"], id.to_string());
+            let action = &tree["children"][0]["children"][1]["children"][0];
+            assert_eq!(action["style"]["backgroundColor"], "#30d158");
+            assert!(Rc::ptr_eq(view.appearance.as_ref().unwrap(), &theme));
+            assert_eq!(reader.revision(), revision);
+            assert_eq!(service.borrow().wait_ms(now), deadline, "recoloring must not extend the notice timeout");
+            assert_eq!(view.request(&input)["same"], true);
+        }
+        let reply = view.request(&json!({"cmd":"act","key":format!("{id}:0")}));
+        assert!(reply["effects"].as_array().unwrap().iter().any(|e| e["kind"] == "notificationAction" && e["id"] == id), "{reply}");
     }
 }

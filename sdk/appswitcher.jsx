@@ -3,15 +3,13 @@
 import { createElement as h } from 'react';
 import { mainDisplay } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
-import { useTheme } from './theme.js';
 import { Layer } from './layers.js';
 import { wm } from './windows.js';
 export { cycleAppWindows } from './appcontrol.js';
-import { dockGlass } from './glass.js';
 import { NativeView } from './nativeview.js';
 import { switcherBridge } from './nativeswitcher.js';
 
-const MANIFEST = { id: 'shell:switcher', shell: true, facts: 'appcontrol', fullTheme: true };
+const MANIFEST = { id: 'shell:switcher', shell: true, appearanceSource: 'native', facts: 'appcontrol', fullTheme: true };
 // Lifecycle only. Entries and the selected index are private to the Rust view.
 export const switcherState = createStore(null);
 export const switcherOpen = () => !!switcherState.get();
@@ -54,13 +52,13 @@ export function switcherKey(e) {
 }
 
 export function AppSwitcher() {
-  const state = useStore(switcherState), theme = useTheme();
+  const state = useStore(switcherState);
   if (!state) return null;
   const display = mainDisplay();
   return h(Layer, { name: 'overlay' }, h(NativeView, {
     key: state.nonce, manifest: MANIFEST,
     stateSource: lord.windowList, handleRef: switcherBridge.handle,
-    args: { ...state, surface: dockGlass(theme), radius: theme.groupRadius ? theme.groupRadius + 10 : 20 },
+    args: state,
     style: { position: 'absolute', left: display.x, top: display.y, width: display.w, height: display.h, pointerEvents: 'box-none' },
   }));
 }

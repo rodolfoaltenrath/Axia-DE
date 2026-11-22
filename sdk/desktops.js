@@ -24,7 +24,7 @@ import { cycleWindows } from './trackpad.js';
 import { nativeAnim, whenAnimDone } from './anim.js';
 import { toggleOverview, toggleAppWindows } from './overview.jsx';
 
-const NATIVE_DESKTOP_HUD = { id: 'shell:desktop-hud', shell: true, fullTheme: true };
+const NATIVE_DESKTOP_HUD = { id: 'shell:desktop-hud', shell: true, appearanceSource: 'native', fullTheme: true };
 const hudHandle = { current: 0 };
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 function sessionCommand(action, extra = {}) {

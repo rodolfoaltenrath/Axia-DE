@@ -18,6 +18,8 @@ struct Entry {
 }
 
 pub struct Switcher {
+    appearance: Option<std::rc::Rc<Value>>,
+    surface: Value,
     windows: Reader<WindowState>,
     changes: Subscription,
     catalog: crate::forcequit::App,
@@ -34,6 +36,8 @@ impl Switcher {
         let changes = windows.subscribe();
         let catalog = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.clone())));
         Self {
+            appearance: None,
+            surface: Value::Null,
             windows,
             changes,
             catalog,
@@ -187,7 +191,10 @@ impl Switcher {
             .selected
             .saturating_sub(per_row / 2)
             .min(self.selector.items.len().saturating_sub(per_row));
-        let theme = &input["context"]["theme"];
+        let theme = self.appearance.as_deref().unwrap_or(&input["context"]["theme"]);
+        let surface = if self.appearance.is_some() { &self.surface } else { &input["args"]["surface"] };
+        let radius = if self.appearance.is_some() { theme["groupRadius"].as_f64().unwrap_or(10.) + 10. }
+            else { input["args"]["radius"].as_f64().unwrap_or(20.) };
         let cells: Vec<_> = self.selector.items.iter().enumerate().skip(start).take(per_row).map(|(index, (key, source))| {
             let entry = &self.entries[*source];
             json!({"kind":"view","key":key,"events":{"onClick":["choose",key]},
@@ -205,13 +212,20 @@ impl Switcher {
             }
         }
         json!({"kind":"view","style":{"flex":1,"alignItems":"center","justifyContent":"center","pointerEvents":"box-none"},"children":[
-            {"kind":"view","style":[input["args"]["surface"],{"alignItems":"center","padding":16,"borderRadius":input["args"]["radius"].as_f64().unwrap_or(20.),
+            {"kind":"view","style":[surface,{"alignItems":"center","padding":16,"borderRadius":radius,
                 "maxWidth":width-48.,"boxShadow":"0 18px 48px rgba(0,0,0,0.45)"}],"children":[
                 {"kind":"view","style":{"flexDirection":"row","direction":"ltr"},"children":cells},
                 {"kind":"view","style":{"flexDirection":"row","marginTop":10,"justifyContent":"center"},"children":label}]}]})
     }
 }
 impl NativeApp for Switcher {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        if self.appearance.as_ref().is_some_and(|old| std::rc::Rc::ptr_eq(old, &theme)) { return; }
+        self.surface = crate::native_style::shell_theme::dock_surface(&theme);
+        self.appearance = Some(theme);
+    }
     fn invalidated(&self) -> bool {
         self.changes.pending()
     }
@@ -248,5 +262,39 @@ impl NativeApp for Switcher {
             }
             _ => Value::Null,
         }
+    }
+}
+
+#[cfg(test)]
+mod appearance_tests {
+    use super::*;
+    #[test]
+    fn native_material_keeps_selection_and_ignores_old_surface_facts() {
+        let mut session = crate::winmodel::Session::default();
+        for id in ["files","notes","calculator"] {
+            session.call("open", &[json!({}),json!({"app":id})]).unwrap();
+        }
+        let mut view = Switcher::new(session.reader());
+        let input = json!({"cmd":"sync","registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}],
+            "context":{"width":640,"theme":{"text":"#ff0000"}},"args":{"nonce":7,"radius":999,"surface":{"backgroundColor":"#ff0000"}}});
+        view.request(&input);
+        view.request(&json!({"cmd":"move","key":1}));
+        let selected = view.selected().unwrap().window.clone();
+        let origin = view.origin.clone();
+        for mode in ["light","dark"] { for effects in [false,true] {
+            let theme = Rc::new(crate::native_style::shell_theme::tokens(&json!({"mode":mode,"effects":effects,"accent":"verde"})));
+            view.set_native_appearance(theme.clone());
+            let tree = view.request(&input)["tree"].clone();
+            assert_eq!(tree["children"][0]["style"][0], crate::native_style::shell_theme::dock_surface(&theme));
+            assert_eq!(tree["children"][0]["style"][1]["borderRadius"], 20.);
+            assert_eq!(view.selected().unwrap().window, selected);
+            assert_eq!(view.origin, origin);
+            assert!(Rc::ptr_eq(view.appearance.as_ref().unwrap(), &theme));
+            assert!(!view.done);
+        } }
+        view.request(&json!({"cmd":"commit"}));
+        let effects = view.request(&input)["effects"].clone();
+        assert_eq!(effects[0]["focus"], selected);
+        assert_eq!(effects[0]["nonce"], 7);
     }
 }

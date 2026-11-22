@@ -69,6 +69,18 @@ pub(crate) fn tokens(source: &Value) -> Value {
     result
 }
 
+/// The Dock material used by shell overlays, with the same glass/effects policy.
+pub(crate) fn dock_surface(theme: &Value) -> Value {
+    let dark = theme["mode"] == "dark";
+    let effects = theme["effects"] != false;
+    let material = rgba(crate::glass::axia_glass_tint(dark, effects));
+    let background = if effects { theme["dockBg"].as_str().filter(|s| !s.is_empty()).unwrap_or(&material) } else { &material };
+    let outline = rgba(crate::glass::axia_glass_outline(dark));
+    let border = theme["dockBorder"].as_str().filter(|s| !s.is_empty()).unwrap_or(&outline);
+    let blur = if effects { theme["blur"].as_f64().unwrap_or(24.) } else { 0. };
+    json!({"backgroundColor":background,"backdropFilter":format!("blur({blur}px)"),"border":format!("1px solid {border}")})
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +121,22 @@ mod tests {
         let absent = tokens(&json!({}));
         assert!(absent.get("mode").is_none()); assert!(absent.get("effects").is_none());
         assert_eq!(absent["windowBg"], "#ffffff");
+    }
+    #[test]
+    fn overlay_material_preserves_glass_and_opaque_policy() {
+        for (mode, opaque) in [("dark","rgba(42,42,48,1.0000)"),("light","rgba(242,242,245,1.0000)")] {
+            let mut theme = tokens(&json!({"mode":mode,"effects":true}));
+            let on = dock_surface(&theme);
+            assert_eq!(on["backgroundColor"], theme["dockBg"]);
+            assert_eq!(on["backdropFilter"], "blur(24px)");
+            theme["dockBg"] = json!("#abcdef"); theme["dockBorder"] = json!("#112233");
+            assert_eq!(dock_surface(&theme)["backgroundColor"], "#abcdef");
+            theme["effects"] = json!(false);
+            let off = dock_surface(&theme);
+            assert_eq!(off["backgroundColor"], opaque);
+            assert_eq!(off["backdropFilter"], "blur(0px)");
+            assert_eq!(off["border"], "1px solid #112233");
+        }
     }
     #[test]
     fn only_palette_inputs_enter_the_result() {

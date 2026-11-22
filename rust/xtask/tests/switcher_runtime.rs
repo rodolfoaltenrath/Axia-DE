@@ -16,15 +16,29 @@ fn switcher_reads_native_state_and_renders_both_styles() {
         let driver = contract::DRIVER.replace("@APPEARANCE@", appearance);
         for mode in ["light", "dark"] {
             for width in [640, 1000] {
-                let report = ui::run_ui(
+                let mut captured = None;
+                let report = ui::run_ui_with_capture(
                     repo,
                     &format!("switcher_{appearance}"),
                     &driver,
                     mode,
                     width,
                     "switcher.png",
+                    |path| { captured = Some(image::open(path).unwrap().into_rgb8()); },
                 );
                 contract::verify(&report).unwrap();
+                let pixels = captured.unwrap();
+                let rect = report["rect"].as_array().unwrap();
+                let columns = ((width - 96) / 104).max(1).min(18);
+                let x = width / 2 + (columns - 1) * 52 + 44;
+                let y = (rect[1].as_f64().unwrap() - 62.) as u32;
+                let actual = pixels.get_pixel(x,y).0;
+                let bg = if mode == "light" { [242.,242.,245.] } else { [42.,42.,48.] };
+                for channel in 0..3 {
+                    let expected = [48.,209.,88.][channel] / 3. + bg[channel] * 2. / 3.;
+                    assert!((actual[channel] as f64 - expected).abs() <= 3.,
+                        "native switcher highlight/material: {appearance}/{mode}/{width}: {actual:?}");
+                }
             }
         }
     }

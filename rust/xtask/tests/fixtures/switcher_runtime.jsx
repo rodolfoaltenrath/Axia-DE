@@ -5,6 +5,7 @@ import {configureWindows,registerBuiltinApp,wm,setDesktops,setActiveDesktop} fro
 import {openSwitcher,switcherKey,cancelSwitcher,switcherOpen,AppSwitcher} from '@ROOT@/sdk/appswitcher.jsx';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {settings} from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {locale} from '@ROOT@/sdk/i18n.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
@@ -13,17 +14,28 @@ import {media} from '@ROOT@/sdk/media.js';
 const c=globalThis.__AXIA_UI_TEST__||{mode:'@MODE@',width:Number('@WIDTH@'),image:@IMAGE@};
 const kind=c.kind||'switcher_@APPEARANCE@';
 const appearance=kind.endsWith('adwaita')?'adwaita':'axia';
-settings.set({nativeStyle:appearance,shortcutProfile:'macos'});locale.set({...locale.get(),lang:'en'});
+const opposite=c.mode==='light'?'dark':'light';
+settings.set({mode:opposite,accent:'azul',effects:true,nativeAppearance:'axia',nativeStyle:appearance,shortcutProfile:'macos'});locale.set({...locale.get(),lang:'en'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
+let noAppearanceFacts=true,appearanceFacts=0,lastAppearanceFacts;
+function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}))&&!('surface'in(input.args||{}))&&!('radius'in(input.args||{}));}
+async function changeAppearance(){
+ const perform=settingsBridge.perform;settingsBridge.perform=()=>{};const before=appearanceFacts;
+ lord.settings.state({cmd:'patch',patch:{mode:c.mode,accent:'verde',effects:false,nativeAppearance:'adwaita'}});await sleep(120);
+ const withoutAppearanceFacts=appearanceFacts===before,staleAppearanceMirror=settings.get().mode===opposite;
+ facts(handle,JSON.stringify({...lastAppearanceFacts,args:{...lastAppearanceFacts.args,surface:{backgroundColor:'#ff0000'},radius:999},context:{...lastAppearanceFacts.context,theme:{mode:opposite,text:'#ff0000',accent:'#ff0000'},scale:{body:200}}}));
+ settingsBridge.perform=perform;
+ return {withoutAppearanceFacts,staleAppearanceMirror};
+}
 const Icon=()=>null;Icon.nativeIcon={kind:'app',id:'notes',name:'Notes'};
 const app=(id,name)=>({id,name,Component:()=>null,Icon});
 configureWindows({apps:[app('files','Files'),app('notes','Notes'),app('calculator','Calculator'),app('help','Help')]});
 let handle=0,mountNode=0,mounts=0,unmounts=0,bound=false,noWindowTransport=true;
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
-function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('items'in (input.args||{}))&&!('index'in(input.args||{}));}
+function inspect(text){inspectAppearance(text);const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('items'in (input.args||{}))&&!('index'in(input.args||{}));}
 lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:switcher'){handle=value;mountNode=node;mounts++;bound=source[0]===lord.windowList;inspect(text);}return value;};
-lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return facts(id,text);};
+lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);appearanceFacts++;}return facts(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounts++;return unmount(id);};
 const has=label=>!!lord.nativeViews.findText(handle,label);
 const raw=(op,...args)=>lord.windowList.call(op,JSON.stringify([{},...args]));
@@ -69,7 +81,8 @@ async function run(){
  const apps=Array.from({length:18},(_,i)=>app('probe'+i,'Probe '+i));configureWindows({apps});
  const ids=apps.map(item=>wm.open(item.id));openSwitcher(8,true);await until(()=>has('Probe 0'));
  // Backwards opening selects the tail of MRU: Probe 0. The row must scroll.
- await sleep(120);
+ await sleep(200);const appearanceUpdate=await changeAppearance();await sleep(60);
+ const appearanceRetained=has('Probe 0');
  const label=lord.nativeViews.findText(handle,'Probe 0'),r=label?lord.getLayout(label):null;
  const viewport=!!r&&r[0]>=0&&r[0]+r[2]<=c.width&&r[1]>=0&&r[1]+r[3]<=700;
  const mountRect=lord.getLayout(mountNode);
@@ -80,6 +93,6 @@ async function run(){
  const pointerCommit=await until(()=>!switcherOpen()&&wm.focused()===ids[0]);
  cancelSwitcher();for(const id of ids)raw('close',id);openSwitcher(8);const empty=await until(()=>!switcherOpen());
  await until(()=>mounts===unmounts);
- console.log(kind+'-observation '+JSON.stringify({bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
+ console.log(kind+'-observation '+JSON.stringify({noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
 }
 setTimeout(()=>run().catch(error=>console.error(kind+' driver: '+(error.stack||error))),200);
