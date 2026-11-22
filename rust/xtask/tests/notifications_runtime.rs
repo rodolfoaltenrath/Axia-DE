@@ -89,6 +89,7 @@ import { notificationBridge } from '@ROOT@/sdk/nativenotifications.js';
 import { ThemeProvider } from '@ROOT@/sdk/theme.js';
 import { makeTheme } from '@ROOT@/themes/default/tokens.js';
 import { settings } from '@ROOT@/sdk/settings.js';
+import { localeBridge } from '@ROOT@/sdk/nativelocale.js';
 import { locale } from '@ROOT@/sdk/i18n.js';
 import { configureWindows } from '@ROOT@/sdk/windows.js';
 import { media } from '@ROOT@/sdk/media.js';
@@ -128,6 +129,7 @@ async function run(){
  const nativePreferences=defaults.grouping==='app'&&defaults.schedule.from===1320&&options.allow&&options.style==='banner'&&!options.sound
    &&edited.apps.clock.style==='alert'&&edited.apps.clock.custom===3&&!edited.apps.clock.sound&&!edited.apps.notes.lock&&edited.extra==='keep';
  settings.set({notifications:original});
+ const localePerform=localeBridge.perform;localeBridge.perform=()=>{};
  const beforePresentation=lord.settings.state({cmd:'snapshot'}).state;
  lord.settings.state({cmd:'patch',patch:{language:'pt',region:'en_US',clock:{hour24:'24'},notifications:{...beforePresentation.notifications,seen:['clock']}}});
  const presented=request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'push',lang:'en',region:'',wallMs:0,minute:0,
@@ -150,7 +152,7 @@ async function run(){
    const automatic=notify({app:'clock',title:'Native locale bootstrap',sound:false,sticky:true});
    nativeBootstrap=configured&&notifyHistory.get().find(n=>n.id===automatic)?.displayLabel==='Native pack caption'&&locale.get().lang==='en';
    dismissNotification(automatic);
- }finally{lord.locale.get=originalLocaleGet;}
+ }finally{lord.locale.get=originalLocaleGet;localeBridge.perform=localePerform;}
  const nativeLocaleSource=nativePackReload&&nativeBootstrap&&jsLocaleReads===0;
  lord.settings.state({cmd:'replace',value:beforePresentation});
  push('Grouped','Grouped old');push('Grouped','Grouped latest');

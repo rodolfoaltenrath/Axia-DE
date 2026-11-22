@@ -889,6 +889,7 @@ struct SessionCore {
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
+    preference_publications: std::cell::RefCell<Option<crate::native_view::services::preferences::Service>>,
     memory: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::window_memory::Memory>>>>,
     clock: std::cell::RefCell<Option<crate::native_view::services::clock::Scheduler>>,
     resident: std::cell::Cell<bool>,
@@ -910,6 +911,12 @@ impl Session {
         self.core.notifications.borrow_mut().resident = true;
         self.core.clock.borrow_mut().get_or_insert_with(||
             crate::native_view::services::clock::Scheduler::new(self.notification_service()));
+    }
+    pub(crate) fn bind_preference_publications(&self, home: &str, assets: &str) {
+        let mut service = self.core.preference_publications.borrow_mut();
+        if service.as_ref().is_none_or(|service| !service.matches(home, assets)) {
+            *service = Some(crate::native_view::services::preferences::Service::new(home, assets));
+        }
     }
     pub(crate) fn downgrade(&self) -> WeakSession { WeakSession(std::rc::Rc::downgrade(&self.core)) }
     pub(crate) fn resident(&self) -> bool { self.core.resident.get() }
@@ -945,16 +952,21 @@ impl Session {
         if notifications.background_wait(now).is_some_and(|wait| wait <= 0.) {
             self.queue_service_effects(notifications.background_tick(now));
         }
+        drop(notifications);
+        if let Some(service) = self.core.preference_publications.borrow_mut().as_mut() {
+            if service.invalidated() { self.queue_service_effects(service.tick()); }
+        }
     }
     fn queue_service_effects(&self, effects: Vec<Value>) {
         let mut queued = self.core.effects.borrow_mut();
         for effect in effects {
             // Compatibility preferences are complete revisioned snapshots: keep the latest.
-            if matches!(effect["kind"].as_str(), Some("settingsState" | "notificationState")) { queued.retain(|old| old["kind"] != effect["kind"]); }
+            if matches!(effect["kind"].as_str(), Some("settingsState" | "localeState" | "notificationState")) { queued.retain(|old| old["kind"] != effect["kind"]); }
             queued.push(effect);
         }
     }
     pub(crate) fn service_wait(&self, now: std::time::Instant) -> Option<f64> {
+        if self.core.preference_publications.borrow().as_ref().is_some_and(|service| service.invalidated()) { return Some(0.); }
         if self.core.desktops.borrow().as_ref().is_some_and(|service| service.borrow().invalidated()) { return Some(0.); }
         [self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now)),
          self.core.clock.borrow().as_ref().and_then(|clock| clock.wait_ms(now)),

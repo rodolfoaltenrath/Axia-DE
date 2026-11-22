@@ -274,3 +274,90 @@ fn disabled_memory_drops_its_deadline_and_enabling_collects_the_current_owner() 
     tick(now + Duration::from_secs(1)); tick(now + Duration::from_millis(1800));
     assert_eq!(profile(&home)["windowPlaces"]["app:notes"]["x"], 99.);
 }
+
+fn locale_command(home: &Profile, input: &Value) -> Value {
+    use std::ffi::{CStr, CString};
+    let path = CString::new(home.0.as_str()).unwrap();
+    let input = CString::new(input.to_string()).unwrap();
+    unsafe {
+        let result = crate::locale::axia_locale_request(path.as_ptr(), input.as_ptr());
+        assert!(!result.is_null());
+        let value = serde_json::from_slice(CStr::from_ptr(result).to_bytes()).unwrap();
+        drop(CString::from_raw(result));
+        value
+    }
+}
+
+#[test]
+fn preference_publications_are_resident_coalesced_and_not_recreated_by_context_reattachment() {
+    let (home, session, _) = fixture("preference-publisher", "off", Value::Null);
+    let assets = crate::native_view::resource_roots().0;
+    session.bind_preference_publications(&home.0, &assets);
+    let now = Instant::now(); tick(now); session.take_service_effects();
+    for probe in 1..=4 {
+        crate::settings::with(&home.0, |s| { s.set("publisherProbe", &json!(probe)); });
+        assert_eq!(timeout(now), Some(0.));
+        crate::locale::tick(); tick(now);
+    }
+    let effects = session.take_service_effects().unwrap();
+    let states: Vec<_> = effects.as_array().unwrap().iter().filter(|e| e["kind"]=="settingsState").collect();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0]["reply"]["state"]["publisherProbe"], 4);
+    let weak = session.downgrade();
+    let copy = session.clone(); drop(session);
+    copy.bind_preference_publications(&home.0, &assets);
+    assert!(timeout(now).is_none(), "reattachment keeps the publisher's consumed revisions");
+    tick(now); assert!(!pending());
+    let reader = crate::settings::with(&home.0, |s| s.reader());
+    drop(copy); assert!(weak.upgrade().is_none());
+    assert_eq!(reader.read()["publisherProbe"], 4);
+    assert!(timeout(now).is_none());
+}
+
+#[test]
+fn locale_changes_and_reload_revisions_publish_without_any_scene_or_profile_copy() {
+    let (home, session, _) = fixture("locale-publisher", "off", Value::Null);
+    let assets = crate::native_view::resource_roots().0;
+    session.bind_preference_publications(&home.0, &assets);
+    let now = Instant::now(); tick(now); session.take_service_effects();
+    assert!(timeout(now).is_none(), "an inactive locale must not create an idle retry loop");
+    locale_command(&home, &json!({"cmd":"initialize"}));
+    for region in ["en_US", "pt_BR", "en_GB"] {
+        locale_command(&home, &json!({"cmd":"patch","value":{"lang":"pt","region":region,"dir":"rtl"}}));
+        crate::locale::tick(); tick(now);
+    }
+    let effects = session.take_service_effects().unwrap();
+    let states: Vec<_> = effects.as_array().unwrap().iter().filter(|e| e["kind"]=="localeState").collect();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0]["reply"]["state"]["region"], "en_GB");
+    assert_eq!(states[0]["reply"]["direction"], "rtl");
+    let revision = states[0]["reply"]["revision"].as_u64().unwrap();
+    let home_c = std::ffi::CString::new(home.0.as_str()).unwrap();
+    unsafe { crate::locale::axia_locale_changed(home_c.as_ptr(), 0); }
+    assert_eq!(timeout(now), Some(0.));
+    tick(now);
+    let effects = session.take_service_effects().unwrap();
+    let reloaded = effects.as_array().unwrap().iter().find(|e| e["kind"]=="localeState").unwrap();
+    assert!(reloaded["reply"]["revision"].as_u64().unwrap() > revision);
+    tick(now); assert!(!pending()); assert!(timeout(now).is_none());
+}
+
+#[test]
+fn preference_publication_queues_keep_profiles_isolated() {
+    let (a_home, a, _) = fixture("preference-profile-a", "off", Value::Null);
+    let (b_home, b, _) = fixture("preference-profile-b", "off", Value::Null);
+    let assets = crate::native_view::resource_roots().0;
+    a.bind_preference_publications(&a_home.0, &assets);
+    b.bind_preference_publications(&b_home.0, &assets);
+    let now = Instant::now(); tick(now); a.take_service_effects(); b.take_service_effects();
+    crate::settings::with(&a_home.0, |s| { s.set("publisherProfile", &json!("a")); });
+    crate::settings::with(&b_home.0, |s| { s.set("publisherProfile", &json!("b")); });
+    crate::locale::tick(); tick(now);
+    for (session, value) in [(&a,"a"), (&b,"b")] {
+        let effects = session.take_service_effects().unwrap();
+        let state = effects.as_array().unwrap().iter().find(|e|e["kind"]=="settingsState").unwrap();
+        assert_eq!(state["reply"]["state"]["publisherProfile"], value);
+    }
+    tick(now); assert!(!pending());
+    assert!(timeout(now).is_none());
+}

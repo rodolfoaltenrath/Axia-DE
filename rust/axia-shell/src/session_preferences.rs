@@ -1,9 +1,9 @@
-//! Preference changes reach compatibility consumers without polling.
-use axia_native::NativeApp;
+//! Revisioned compatibility publications belong to the context, not a scene host.
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
 use std::time::Instant;
-pub struct Observer {
+pub struct Service {
+    assets: String,
     home: String,
     reader: Reader<Value>,
     changes: Subscription,
@@ -12,17 +12,18 @@ pub struct Observer {
     locale_changes: Subscription,
     locale_sent: Option<u64>,
 }
-impl Observer {
-    pub fn new(home: &str) -> Self {
+impl Service {
+    pub fn new(home: &str, assets: &str) -> Self {
         let home = crate::settings::profile(home);
         let reader = crate::settings::with(&home, |s| {
             s.rearm(Instant::now());
             s.reader()
         });
         let changes = reader.subscribe();
-        let locale = crate::locale::reader(&home, &super::resource_roots().0);
+        let locale = crate::locale::reader(&home, assets);
         let locale_changes = locale.subscribe();
         Self {
+            assets: assets.into(),
             home,
             reader,
             changes,
@@ -32,15 +33,13 @@ impl Observer {
             locale_sent: None,
         }
     }
-}
-impl NativeApp for Observer {
-    fn invalidated(&self) -> bool {
+    pub(crate) fn matches(&self, home: &str, assets: &str) -> bool {
+        self.home == crate::settings::profile(home) && self.assets == assets
+    }
+    pub(crate) fn invalidated(&self) -> bool {
         self.changes.pending() || self.locale_changes.pending()
     }
-    fn request(&mut self, input: &Value) -> Value {
-        if input["cmd"] != "sync" {
-            return json!({});
-        }
+    pub(crate) fn tick(&mut self) -> Vec<Value> {
         self.changes.take();
         let revision = self.reader.revision();
         self.locale_changes.take();
@@ -51,13 +50,13 @@ impl NativeApp for Observer {
             effects.push(json!({"kind":"settingsState","reply":reply}));
         }
         if self.locale_sent != Some(self.locale.revision()) {
-            self.locale_sent = Some(self.locale.revision());
             if let Some(reply) =
-                crate::locale::snapshot_if_active(&self.home, &super::resource_roots().0)
+                crate::locale::snapshot_if_active(&self.home, &self.assets)
             {
+                self.locale_sent = Some(self.locale.revision());
                 effects.push(json!({"kind":"localeState","reply":reply}));
             }
         }
-        json!({"tree":{"kind":"view","style":{"pointerEvents":"none"}},"effects":effects})
+        effects
     }
 }

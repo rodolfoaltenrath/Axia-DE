@@ -1,7 +1,8 @@
 # Shell nativo em Rust
 
-As configurações têm proprietário observável Rust por perfil e um observador
-`shell:settings` no root, sem polling. O SDK mantém apenas o espelho por revisão
+As configurações têm proprietário observável Rust por perfil. O contexto
+publica suas revisões e as do idioma pelo loop nativo, sem view observadora
+ou polling; `SettingsSession` e `shell:settings` foram retirados. O SDK mantém o espelho por revisão
 para os consumidores de compatibilidade, com referências estáveis para blocos
 inalterados. Padrões, migrações, carregamento, prazo de gravação e serialização
 são nativos. O prazo participa do loop mesmo sem views; o arquivo usa as

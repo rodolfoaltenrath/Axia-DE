@@ -65,6 +65,7 @@ import {configureWindows,wm,useWindows,setActiveDesktop} from '@ROOT@/sdk/window
 import {WindowShell} from '@ROOT@/sdk/windowshell.jsx';
 import {startDesktops} from '@ROOT@/sdk/desktops.js';
 import {settings} from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {locale} from '@ROOT@/sdk/i18n.js';
@@ -94,11 +95,13 @@ async function run(){
  const bound=bindingCalls>=2;setActiveDesktop(2);await sleep(60);const before=renders;await sleep(230);const noFrameRenders=renders===before;
  setActiveDesktop(1);await sleep(25);setActiveDesktop(2);await sleep(25);setActiveDesktop(1);await sleep(250);
  const old=bindingCalls,removed=unbindings;remount();const remounted=await until(()=>bindingCalls>old+2&&unbindings>removed&&bindings.has(b));
+ const settingsPerform=settingsBridge.perform;settingsBridge.perform=()=>{};
  lord.settings.state({cmd:'patch',patch:{reduceMotion:true}});await sleep(40);
  const stale=settings.get().reduceMotion===false;
  setActiveDesktop(2);await sleep(20);
  const reducedImage=lord.media.screenshot('screenshots'),reducedSaved=await media.saveImage(reducedImage,@IMAGE@+'.reduced.png');media.close(reducedImage);
  const reduced=stale&&legacyObservers===0&&!!reducedSaved?.ok;
+ settingsBridge.perform=settingsPerform;
  setActiveDesktop(1);await sleep(60);
  settings.set({reduceMotion:false});await sleep(80);setActiveDesktop(2);await sleep(300);
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);

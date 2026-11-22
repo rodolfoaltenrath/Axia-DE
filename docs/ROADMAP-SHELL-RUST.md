@@ -38,21 +38,21 @@ desenvolvedores de fora; levaria meses e hoje não há quem dependa dela. A opç
 não a impede: o manifesto, as permissões e a assinatura dos `.lpk` ficam
 independentes da forma como o app executa.
 
-## Onde estamos (2026-11-19)
+## Onde estamos (2026-11-22)
 
 **Já em Rust, sem React:** Monitor, Calculadora, Axia Store, Sobre, Ajuda, Relógio,
 Caracteres, Notas, Lembretes, Contatos, Calendário, Câmera, Fotos, Gravador,
-Scanner, Backup, Registros, Fontes, Force Quit, Configurações e Arquivos (esse
-último atrás de chave). Host em `rust/axia-shell/src/native_view/`.
+Scanner, Backup, Registros, Fontes, Force Quit, Configurações e Arquivos. Host em `rust/axia-shell/src/native_view/`.
 
 **Menus definitivos em Rust:** barra de menus e menus de contexto da sessão;
 as chaves `menuBarNativeView` e `menuNativeView` não selecionam mais caminhos.
 O menu React dos apps `.lpk` é mantido somente no bundle do host isolado.
 
 **Banners definitivos no host Rust:** a apresentação das notificações da sessão
-não consulta mais `notificationsNativeView`. Serviços, timers e descrição da
-árvore ainda estão em JS e continuam no escopo da Fase 2; o banner React fica
-somente no host `.lpk` para compatibilidade da API.
+não consulta mais `notificationsNativeView`. Estado, histórico, política,
+prazos, toque e apresentação já pertencem ao contexto Rust. Callbacks e
+consumidores de compatibilidade ainda usam adaptadores JS; o banner React
+fica somente no host `.lpk` para compatibilidade da API.
 
 **Partes da Dock definitivas no host Rust:** dicas e fantasma de arraste não
 consultam mais `dockNativeView`. Montagem da barra, estado e prévias ainda
@@ -84,7 +84,7 @@ brilho e energia, método de entrada, aparência.
 
 - 9 apps: `disks`, `editor`, `mail`, `passwords`, `pdf`, `player`,
   `screenshots`, `sysinfo`, `terminal`.
-- `sdk/`: 116 arquivos JS/JSX. A divisão histórica da Fase 0 está em
+- `sdk/`: 122 arquivos JS/JSX na árvore de 2026-11-22. A divisão histórica da Fase 0 está em
   `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
 - `themes/default/` (a montagem da shell) e `runtime/` (reconciler React e eventos).
 - A captura da Fase 0 encontrou 386 caminhos `lord.*` distintos na AST do JS
@@ -369,7 +369,8 @@ views nativas lerem direto, sem JSON.
 - [ ] Configurações, idioma e regiões (`settings.js`, `i18n.js`).
       Configurações já têm proprietário observável Rust por perfil, com padrões
       compartilhados, schemas 1–3, patches, substituições e leitores nativos.
-      O SDK é um espelho por revisão, com observador sem polling no root;
+      O SDK é um espelho por revisão, publicado pelo serviço do contexto no loop
+      nativo, sem view observadora, fatos de apresentação ou polling;
       preserva referências de campos inalterados e descarta snapshots antigos.
       Dados pendentes sobrevivem à recriação do adaptador. Carregamento, prazo
       monotônico de 300 ms e serialização/gravação já pertencem ao modelo;
@@ -380,8 +381,8 @@ views nativas lerem direto, sem JSON.
       preferência salva, LANG dos arquivos do perfil/sistema, fallback inglês e
       revisão dos catálogos, com recargas por eventos do host. Store público já
       espelha essa fonte por revisão; overrides temporários e bootstrap são
-      nativos, com idioma/direção aplicados diretamente pela ABI C. Observador
-      do root transmite revisões sem polling; updaters usam estado atual e
+      nativos, com idioma/direção aplicados diretamente pela ABI C. O publicador
+      do contexto transmite revisões sem polling e sem hosts visuais; updaters usam estado atual e
       respostas antigas são descartadas. Tradução (t/tOptional) e nomes dos apps
       usam o resolvedor compartilhado Rust com o idioma atual, incluindo fallback,
       interpolação e plural sem truncar frações. Formatação de datas/horas/números,
@@ -664,3 +665,4 @@ mostraram.
 | 2026-11-22 | Fase 2: serviços de desktops e restauração no loop Rust | Commit desta linha | Contexto compartilhado com registro fraco; revisões e prazos são atendidos sem hosts visuais e sem snapshot alocado por frame. Removido observador invisível de desktops; confirmação só apresenta estado. Catálogo nativo por assinatura e fila de efeitos por contexto, com snapshots agrupados e drenagem silenciosa restrita ao controlador do root. Passaram 631 testes da shell, oito contratos LPK, 44 cenários gráficos e encerramento instalado por timeout/SIGTERM. Regressões exigem confirmação e autosave sem view; vida útil e isolamento cobertos em Rust. Compositor, bundles e instalação privada gerados. Mensagens da shell usam Axia nos três idiomas; captura de confirmação inspecionada. Três amostras de ociosidade do binário final passaram com limites impostos: 12,450 poll/s e 105,016 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Evidências em build/validation/resident-session-services. Relógio, notificações e memória de posições ainda dependem de views; adaptadores JS de efeitos permanecem. Medições físicas no encerramento. |
 | 2026-11-22 | Fase 2: relógio e notificações atendidos sem views | Commit desta linha | Agendador do contexto no loop Rust; retirados ClockSession, shell:clock e árvore invisível. Banner residente não agenda expiração/toque; preferências, catálogo e prazos são atendidos sem apresentação. Fila do contexto publica clockReply/notificações, agrupa snapshots e preserva callbacks. Três testes novos verificam expiração sem banner, conclusão única/vida útil e toque/política sem view; testes do agendador realocados. Passaram 634 testes da shell, oito contratos LPK, 24 cenários gráficos e encerramento instalado por timeout/SIGTERM. Integração exige conclusão com indicador/banner desmontados e expiração/callback antes da remontagem; capturas inspecionadas. Compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,754 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Evidências em build/validation/resident-clock-notifications. Memória de posições ainda usa observador; espelhos, callbacks e demais consumidores JS permanecem no escopo. Medições físicas no encerramento. |
 | 2026-11-22 | Fase 2: memória de posições residente com fonte física de telas | Commit desta linha | Coletor/cache no contexto e prazo no loop Rust, sem NativeApp, WindowMemory ou shell:window-memory. Catálogo emprestado do controlador; eventos físicos do compositor atualizam fonte observável antes do JS, sem nova ponte de geometria do tema. Campos projetados, limite de 16 telas, equivalência/validação da ABI e leitores sem ponteiros C/JS. Bootstrap envia só ativação; perfil/ordem preservam escrita atômica e limite de 200 apps. Cinco testes novos; passaram 639 testes da shell, oito contratos LPK, 40 cenários gráficos e encerramento instalado por timeout/SIGTERM. Integração exige coleta sem observador/conteúdo e mantém fonte física com cópia JS adulterada; catálogo/disposição mudam sem fatos de janela nos testes Rust. Capturas geradas e confirmação inspecionada. Compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Evidências em build/validation/resident-window-memory. Política inicial de sessão/live, restauração com áreas/opções do tema, efeitos e espelhos seguem pendentes. Medições físicas no encerramento. |
+| 2026-11-22 | Fase 2: publicação de preferências e idioma sem observador | Commit desta linha | Serviço por contexto retém leitores/assinaturas e revisões; atende alterações depois dos demais serviços, agrupa snapshots de configurações/locale e preserva revisões ao religar o controlador. Removidos SettingsSession, sdk/settingssession.js, shell:settings e o antigo NativeApp observador. Fonte inativa não gera polling; bridges existentes mantêm consumidores de compatibilidade. Três testes novos; passaram 642 testes da shell, oito contratos LPK, 44 cenários gráficos e encerramento instalado por timeout/SIGTERM. Integrações exigem publicação antes da primeira renderização e com relógio desmontado; fixtures de espelho antigo congelam explicitamente as pontes. Capturas inspecionadas, compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,785 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Evidências em build/validation/resident-preference-publications. Adaptadores, callbacks, consumidores JS e tema permanecem no escopo; Fase 2 continua aberta. Medições físicas no encerramento. |

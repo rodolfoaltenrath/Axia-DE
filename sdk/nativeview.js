@@ -64,6 +64,7 @@ globalThis.__lordNativeView = () => {
       for (let n = 0, list; n < 64 && (list = lord.nativeApps?.takeServices?.()); n++)
         for (const effect of list) {
           if (effect.kind === 'settingsState') settingsBridge.perform?.(effect);
+          else if (effect.kind === 'localeState') localeBridge.perform?.(effect);
           else if (effect.kind === 'sessionRestore') restoreBridge.perform?.(effect);
           else if (effect.kind === 'clockReply') clockBridge.perform?.(effect);
           else notificationBridge.perform?.(effect);
@@ -93,11 +94,6 @@ function runner(handle, manifest, winId, node = () => 0) {
     }
     if (manifest.id === 'shell:switcher' && !effect.host) { switcherBridge.perform?.(effect); return; }
     if (manifest.id === 'shell:notifications' && !effect.host) { notificationBridge.perform?.(effect); return; }
-    if (manifest.id === 'shell:settings' && !effect.host) {
-      if (effect.kind === 'localeState') localeBridge.perform?.(effect);
-      else settingsBridge.perform?.(effect);
-      return;
-    }
     if (manifest.id === 'shell:restore' && !effect.host) { restoreBridge.perform?.(effect); return; }
     // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)
     if (manifest.id === 'shell:menubar' && !effect.host) { barEffect(effect, handle); return; }

@@ -72,12 +72,13 @@ pub unsafe extern "C" fn axia_native_app_new_windows(
         return std::ptr::null_mut();
     }
     crate::native_view::install_services();
-    let (_, home) = crate::native_view::resource_roots();
+    let (assets, home) = crate::native_view::resource_roots();
     crate::clock_settings::bind(home.as_deref().unwrap_or(""));
     (*windows).notification_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
     (*windows).restore_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
     let mut control = crate::app_control::Controller::new((*windows).clone());
     control.bind_settings(home.as_deref().unwrap_or(""));
+    (*windows).bind_preference_publications(home.as_deref().unwrap_or(""), &assets);
     (*windows).activate_services();
     (*windows).activate_clock_and_notifications();
     Box::into_raw(Box::new(NativeApp::Control(control)))

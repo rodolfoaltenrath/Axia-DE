@@ -25,6 +25,9 @@ fn locale_state_is_native_with_stale_mirrors_and_no_js_text_setters() {
             );
             for flag in [
                 "bound",
+                "noObserver",
+                "backgroundObserved",
+                "afterUnmount",
                 "noPayload",
                 "mirrorStale",
                 "observed",
@@ -62,21 +65,24 @@ const readCatalog=lord.locale.catalog;lord.locale.catalog=(lang,ns)=>{if(!transl
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<180&&!fn();i++)await sleep(20);return!!fn();}
 async function run(){
- const [{createElement:h,useState},{render,View,Text},{SettingsSession},{NativeView},{locale,direction,reloadCatalogs,t,tOptional,appName,formatDate,formatTime,formatNumber,monthName,weekdayName,languages},{localeBridge},{settings},{useStore},{ThemeProvider},{makeTheme},{configureWindows},{media}]=await Promise.all([
-  import('react'),import('@lordos/runtime'),import('@ROOT@/sdk/settingssession.js'),import('@ROOT@/sdk/nativeview.js'),import('@ROOT@/sdk/i18n.js'),import('@ROOT@/sdk/nativelocale.js'),import('@ROOT@/sdk/settings.js'),
+ const [{createElement:h,useState},{render,View,Text},{NativeView},{locale,direction,reloadCatalogs,t,tOptional,appName,formatDate,formatTime,formatNumber,monthName,weekdayName,languages},{localeBridge},{settings},{useStore},{ThemeProvider},{makeTheme},{configureWindows},{media}]=await Promise.all([
+  import('react'),import('@lordos/runtime'),import('@ROOT@/sdk/nativeview.js'),import('@ROOT@/sdk/i18n.js'),import('@ROOT@/sdk/nativelocale.js'),import('@ROOT@/sdk/settings.js'),
   import('@ROOT@/sdk/store.js'),import('@ROOT@/sdk/theme.js'),import('@ROOT@/themes/default/tokens.js'),import('@ROOT@/sdk/windows.js'),import('@ROOT@/sdk/media.js')]);
  settings.set({language:'en',region:'',mode:'@MODE@'});configureWindows({apps:[]});
- let handle=0,clockHandle=0,clockFacts=0,bound=true,noPayload=true,remount,hold=false;const seen=[];
+ let clockHandle=0,clockFacts=0,bound=true,noObserver=true,noPayload=true,remount,toggle,hold=false;const seen=[];
  const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts;
  const inspect=text=>{const value=JSON.parse(text);noPayload&&=!('lang'in value)&&!('locale'in value)&&!('settings'in value)&&['region','direction','decimal','group','localeRevision','preferenceRevision'].every(key=>!(key in(value.context||{})));};
- lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:settings'||id==='clock'){inspect(text);bound&&=sources[0]===lord.windowList;const result=mount(node,id,text,...sources);if(id==='clock')clockHandle=result;else handle=result;return result;}return mount(node,id,text,...sources);};
- lord.nativeViews.facts=(id,text)=>{if(id===handle||id===clockHandle)inspect(text);if(id===clockHandle)clockFacts++;return facts(id,text);};
+ lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:settings'){noObserver=false;throw Error('legacy preference observer mounted');}if(id==='clock'){inspect(text);bound&&=sources[0]===lord.windowList;const result=mount(node,id,text,...sources);clockHandle=result;return result;}return mount(node,id,text,...sources);};
+ lord.nativeViews.facts=(id,text)=>{if(id===clockHandle)inspect(text);if(id===clockHandle)clockFacts++;return facts(id,text);};
+ const unmount=lord.nativeViews.unmount;lord.nativeViews.unmount=id=>{if(id===clockHandle)clockHandle=0;return unmount(id);};
  const perform=localeBridge.perform;localeBridge.perform=effect=>{seen.push(effect.reply);if(!hold)perform(effect);};
  const CLOCK={id:'clock',settings:true,size:[520,360]};
  const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
- function App(){const[revision,setRevision]=useState(0);remount=()=>setRevision(n=>n+1);const value=useStore(locale);return h(ThemeProvider,{tokens:theme},
-  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg,padding:30}},h(SettingsSession,{key:revision}),h(View,{style:{height:360}},h(NativeView,{manifest:CLOCK})),h(Text,{style:{fontSize:18,color:theme.text}},'Locale: '+value.lang+' / '+direction()+' / '+t('clock.timer.done')),h(Text,{style:{fontSize:15,color:theme.text,marginTop:12}},formatDate(new Date(2026,10,13),'long')+' | '+formatTime(new Date(2026,10,13,13,7,9),{seconds:true})+' | '+formatNumber(1234.5,2))));}
- render(h(App));await until(()=>handle);hold=true;
+ function App(){const[revision,setRevision]=useState(0),[shown,setShown]=useState(true);remount=()=>setRevision(n=>n+1);toggle=setShown;const value=useStore(locale);return h(ThemeProvider,{tokens:theme},
+  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg,padding:30}},h(View,{style:{height:360}},shown?h(NativeView,{manifest:CLOCK,key:revision}):null),h(Text,{style:{fontSize:18,color:theme.text}},'Locale: '+value.lang+' / '+direction()+' / '+t('clock.timer.done')),h(Text,{style:{fontSize:15,color:theme.text,marginTop:12}},formatDate(new Date(2026,10,13),'long')+' | '+formatTime(new Date(2026,10,13,13,7,9),{seconds:true})+' | '+formatNumber(1234.5,2))));}
+ lord.locale.state({cmd:'patch',value:{region:'en_US'}});
+ const backgroundObserved=await until(()=>locale.get().region==='en_US')&&clockHandle===0;
+ render(h(App));await until(()=>clockHandle);hold=true;
  if(!lord.locale.installPack('ar',{meta:JSON.stringify({direction:'rtl'})}))throw Error('RTL fixture install failed');
  const direct=lord.locale.state({cmd:'patch',value:{lang:'ar'}});
  const observed=await until(()=>seen.some(reply=>reply.revision===direct.revision));
@@ -123,18 +129,22 @@ async function run(){
  translating=false;
  const savedProfile=await until(()=>locale.get().lang==='pt'&&locale.get().region==='pt_BR'&&direction()==='ltr');
  locale.set({dir:'rtl'});settings.set({accent:'green'});const explicitDirection=direction()==='rtl'&&locale.get().dir==='rtl';
- const previous=handle;remount();const remounted=await until(()=>handle!==previous)&&direction()==='rtl';
+ const previous=clockHandle;remount();const remounted=await until(()=>clockHandle&&clockHandle!==previous)&&direction()==='rtl';
  t('clock.timer.done');const generation=locale.get().revision;
  const clockCatalog=JSON.parse(@CLOCK_CATALOG@);clockCatalog['timer.done']='Native locale reload';clockCatalog['tab.world']='Relógio recarregado';
  const installed=lord.locale.installPack('pt',{clock:JSON.stringify(clockCatalog)});
  const packReload=installed&&await until(()=>locale.get().revision>generation&&t('clock.timer.done')==='Native locale reload');
  const nativeViewReload=await until(()=>lord.nativeViews.text(clockHandle).includes('Relógio recarregado'));
  let updates=0;const off=locale.subscribe(()=>updates++);reloadCatalogs();await sleep(120);off();const singleReload=updates===1;
+ toggle(false);await until(()=>!clockHandle);
+ lord.locale.state({cmd:'patch',value:{lang:'en',region:'en_GB'}});
+ const afterUnmount=await until(()=>locale.get().lang==='en'&&locale.get().region==='en_GB')&&!clockHandle;
+ toggle(true);await until(()=>clockHandle);
  locale.set({dir:null});settings.set({language:null});lord.locale.set({LANG:'pt_BR.UTF-8'});
  const automatic=await until(()=>locale.get().lang==='pt'&&direction()==='ltr');
  await sleep(80);
  const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
- console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,nativeFormatting,nativeLanguages,fixedPrecision,nativeViewLocale,nativeViewReload,nativeViewPreferences,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
+ console.log('native_locale-observation '+JSON.stringify({bound,noObserver,backgroundObserved,afterUnmount,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,nativeFormatting,nativeLanguages,fixedPrecision,nativeViewLocale,nativeViewReload,nativeViewPreferences,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
 }
 run().catch(error=>console.error('native_locale driver: '+(error.stack||error)));
 "#;

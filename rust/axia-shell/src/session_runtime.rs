@@ -8,6 +8,9 @@ pub(crate) mod clock;
 #[path = "session_displays.rs"]
 pub(crate) mod displays;
 
+#[path = "session_preferences.rs"]
+pub(crate) mod preferences;
+
 thread_local! { static CONTEXTS: RefCell<Vec<WeakSession>> = const { RefCell::new(Vec::new()) }; }
 
 pub(crate) fn register(owner: WeakSession) {

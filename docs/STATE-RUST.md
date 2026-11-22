@@ -46,9 +46,9 @@ em `sdk/settings.js` é um espelho com revisões: descartam-se respostas atrasad
 e campos inalterados conservam suas referências para as assinaturas existentes.
 A mesma preservação de referências vale para `migrateSettings`.
 
-O root monta `shell:settings`, vinculado ao proprietário validado da sessão e
-independente do tema. Esse observador consome invalidações e publica snapshots
-somente quando a revisão muda, sem polling. As views da sessão que consomem
+O contexto validado possui o publicador `session_preferences.rs`, atendido pelo
+loop Rust sem montar `shell:settings`. Ele consome invalidações e publica
+snapshots somente quando a revisão muda, sem polling ou estado de apresentação. As views da sessão que consomem
 preferências agora as leem por empréstimo do proprietário Rust; esses dados
 não entram nos fatos JSON de NativeBridge.
 O host `.lpk` preserva o store e as migrações locais.
@@ -653,10 +653,10 @@ revisões do proprietário.
 O comando de inicialização ativa apenas um contexto de interface e aplica idioma
 da fonte e direção diretamente pela ABI C. Leitores de outros perfis não alteram
 o estado global de texto. O loop sincroniza revisões de preferências sem polling;
-o observador não visual `shell:settings` transmite também `localeState`, sem fatos
+o publicador do contexto transmite também `localeState`, sem fatos
 de locale vindos do SDK. Respostas síncronas de settings incluem o locale atual,
-preservando a atualização imediata dos consumidores existentes. Remontar o
-observador mantém overrides; reinicializar o contexto os descarta.
+preservando a atualização imediata dos consumidores existentes. Remontar a
+apresentação mantém overrides; reinicializar o contexto os descarta.
 
 `native_locale_runtime` cobre claro/escuro em 640/1000 px: espelho parado,
 updater sobre estado atual, respostas antigas, direção por metadados e explícita,
@@ -884,7 +884,7 @@ a comparação é com a configuração atual do engine, sem aguardar confirmaç�
 
 `startAlarms` não assina nem serializa configurações na sessão; pedidos
 `clockCommand` não transportam `config`. A lista pública de alarmes consulta o
-engine atual. O observador `shell:settings` continua publicando revisões para
+engine atual. O serviço de publicações do contexto transmite revisões para
 consumidores legados. Idioma/região, fatos gerais da janela do app e os espelhos
 de timer/cronômetro continuam pendentes da migração completa.
 
@@ -1469,3 +1469,49 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 `build/validation/resident-window-memory/`; a sessão física foi preservada.
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
+
+### Publicação de preferências e idioma sem observador
+
+`session_preferences.rs` pertence ao `SessionCore` e é vinculado pelo construtor
+validado do controlador, com perfil e assets nativos. Guarda leitores e
+assinaturas de configurações/idioma, além das revisões já publicadas; não possui
+árvore, handle visual nem ponteiros C/JS. Ligar novamente o mesmo contexto com
+o mesmo perfil/assets preserva o serviço e suas revisões consumidas.
+
+O prazo de gravação continua no proprietário de configurações, independente de
+qualquer view. O serviço de publicação mantém o rearm inicial de dados pendentes
+e apenas pede atendimento imediato quando suas assinaturas têm alterações.
+A publicação ocorre depois dos demais serviços do contexto, de modo que coleta
+e persistência anteriores no tick já estejam incluídas no snapshot atual.
+Locale inativo não cria tentativa periódica; alterações e recargas nativas
+invalidam seu leitor quando há novas revisões a transmitir.
+
+A fila do contexto agrupa também `localeState`, além de `settingsState` e
+`notificationState`, mantendo o snapshot mais recente de cada espécie. O SDK
+usa suas pontes existentes para compatibilidade; updaters continuam consultando
+o proprietário atual e consumidores rejeitam respostas antigas. Leitores Rust
+dos apps e serviços continuam acessando o estado por empréstimo.
+
+`SettingsSession`, o arquivo `sdk/settingssession.js`, a montagem `shell:settings`
+e o antigo `native_view/settings.rs` foram removidos. A publicação funciona
+antes de renderizar a interface e depois de desmontar os apps. O módulo JS de
+drenagem continua enquanto houver consumidores de compatibilidade; os stores,
+callbacks e interfaces restantes da sessão continuam no roadmap. O host LPK
+preserva seu estado e seus efeitos locais.
+
+Validação em Fedora 44 privado em 2026-11-22: passaram 642 testes da shell
+(sete ignorados de integrações específicas), oito contratos LPK e 44 cenários
+gráficos de configurações, locale, desktops, Arquivos, relógio, notificações,
+restauração, cabeçalhos e memória de posições. Encerramento instalado por timeout
+e SIGTERM também passou. Três testes novos cobrem agrupamento de snapshots,
+reattachment/vida útil, isolamento de perfis e idioma/recarga sem cenas.
+
+As fixtures de configurações/locale proíbem o antigo observador e exigem
+publicação antes de renderizar; locale também muda com o relógio desmontado.
+As verificações de movimento reduzido e apresentação de notificações congelam
+explicitamente a ponte JS para preservar a prova de independência do espelho.
+Capturas de configurações e relógio traduzido foram inspecionadas. Compositor,
+bundles e instalação privada gerados; evidências em
+`build/validation/resident-preference-publications/`. A sessão física não foi alterada.
+
+Três amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,785 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Medições físicas e comparação antes/depois permanecem para o encerramento.
