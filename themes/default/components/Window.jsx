@@ -9,9 +9,9 @@ import { Menu } from './Menu.jsx';
 
 const TITLE_H = 40;
 const LIGHTS = [
-  { key: 'close', color: '#ff5f57', glyph: '×', act: (id) => wm.close(id) },
-  { key: 'min', color: '#febc2e', glyph: '−', act: (id) => wm.minimize(id) },
-  { key: 'max', color: '#28c840', glyph: '+', act: (id) => wm.toggleMaximize(id) },
+  { key: 'close', act: (id) => wm.close(id) },
+  { key: 'min', act: (id) => wm.minimize(id) },
+  { key: 'max', act: (id) => wm.toggleMaximize(id) },
 ];
 
 // leaving: the minimize effect is drawing it on its way to the Dock (natively, see index.jsx).
@@ -22,7 +22,6 @@ export function Window({ win, app, t, focused, leaving = false }) {
   const plan = win.app === 'files' && win.args?.nativeChrome ? win.args.nativeChrome : shared.chrome;
   const chrome = plan?.schema === 1 && Array.isArray(plan.buttons) ? plan : null;
   t = chrome ? { ...t, ...chrome.tokens } : t;
-  const controls = chrome ? chrome.buttons.map((b) => ({ ...b, act: LIGHTS.find((l) => l.key === b.key)?.act })).filter((b) => b.act) : LIGHTS;
   const geo = wm.frame(win);
   const fxs = leaving ? { pointerEvents: 'none' } : null;
 
@@ -64,11 +63,9 @@ export function Window({ win, app, t, focused, leaving = false }) {
       boxShadow: focused ? chrome?.shadowFocused || '0 24px 56px rgba(0,0,0,0.55)' : chrome?.shadowInactive || '0 10px 28px rgba(0,0,0,0.32)',
       ...fxs,
     }}>
-      <NativeTitleBar id={win.id} fallbackTitle={appName(app) || ''} height={chrome?.header?.height ?? TITLE_H} chrome={chrome}
-        controls={controls.map(({ key, color, glyph }) => ({ key, color, glyph }))}
-        tokens={{ titleBg: t.titleBg, text: t.text, textDim: t.textDim, lightOff: t.lightOff }}
+      <NativeTitleBar id={win.id} fallbackTitle={appName(app) || ''} height={TITLE_H}
         onDrag={(x, y) => { if (!wm.beginMove(win.id)) drag.current = { dx: x - geo.x, dy: y - geo.y }; }}
-        onMax={() => wm.toggleMaximize(win.id)} onAct={(key) => controls.find((c) => c.key === key)?.act(win.id)} />
+        onMax={() => wm.toggleMaximize(win.id)} onAct={(key) => LIGHTS.find((c) => c.key === key)?.act(win.id)} />
       <View style={{ height: 1, backgroundColor: app.transparent ? solidOver(t.separator, t.titleBg) : t.separator }} />
       <View style={{ flex: 1 }}><AppHost id={win.id} focused={focused} /></View>
     </WindowShell>

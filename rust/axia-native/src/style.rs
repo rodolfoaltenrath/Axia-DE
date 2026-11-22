@@ -67,12 +67,19 @@ pub fn files_theme(source: &Value) -> Value {
 // The host binds its action names to the existing window manager only. Heights
 // stay identical to Axia's current chrome, preserving content/window geometry.
 pub fn frame(theme: &Value) -> Value {
+    let mut plan = frame_layout(theme);
+    if let Some(plan) = plan.as_object_mut() { plan.insert("tokens".into(), theme.clone()); }
+    plan
+}
+
+/// Native consumers borrow their palette separately instead of copying it into the frame.
+pub fn frame_layout(theme: &Value) -> Value {
     if theme["nativeStyle"] != "adwaita" {
         return Value::Null;
     }
     let dark = theme["mode"] != "light";
     json!({
-        "schema":1,"tokens":theme,"radius":6,
+        "schema":1,"radius":6,
         "header":{"height":40,"flexDirection":"row","alignItems":"center",
             "background":if dark{"linear-gradient(180deg, #3b3b3b, #303030)"}else{"linear-gradient(180deg, #eae9e7, #deddda)"}},
         "title":{"paddingHorizontal":112,"textOverflow":"ellipsis","numberOfLines":1,"overflow":"hidden"},
@@ -146,6 +153,12 @@ mod tests {
     #[test]
     fn traditional_frame_keeps_geometry_and_action_semantics() {
         let plan = frame(&files_theme(&json!({"mode":"dark"})));
+        let theme = files_theme(&json!({"mode":"dark"}));
+        let layout = frame_layout(&theme);
+        assert!(layout.get("tokens").is_none());
+        let mut without_tokens = plan.clone();
+        without_tokens.as_object_mut().unwrap().remove("tokens");
+        assert_eq!(layout, without_tokens);
         assert_eq!(plan["header"]["height"], 40);
         assert_eq!(
             plan["buttons"]

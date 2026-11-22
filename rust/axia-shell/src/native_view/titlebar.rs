@@ -1,11 +1,10 @@
 //! A window's title bar (title, close/minimize/zoom lights) as a native view: the shell mounts one
 //! per framed window (`shell:titlebar`, sdk/nativetitlebar.jsx) in place of the React header of
 //! themes/default/components/Window.jsx. The shell binds its context-owned window reader for title
-//! and focus; facts only carry `args = {"id","fallbackTitle","height",
-//! "controls":[{"key","color","glyph"}],"tokens":{"titleBg","text","textDim","lightOff"},
-//! "chrome": null | {"header","controls","button","buttonHover","glyph","title"}}`, the `chrome`
-//! plan being the one Rust already made for the window's appearance. The effects go to the shell,
-//! which owns the window manager: `{"kind":"winDrag"|"winMax"|"winAct","id","key","x","y"}`.
+//! and focus. The session borrows native appearance and derives its frame/controls locally;
+//! facts carry only the window identity, localized fallback title and mount geometry.
+//! Unbound controllers retain explicit local styling facts. Effects go to the shell:
+//! `{"kind":"winDrag"|"winMax"|"winAct","id","key","x","y"}`.
 use super::NativeApp;
 use serde_json::{json, Value};
 use axia_state::{Reader, Subscription};
@@ -16,6 +15,8 @@ const TITLE_H: f64 = 40.;
 #[derive(Default)]
 pub struct TitleBar {
     windows: Option<(Reader<WindowState>, Subscription)>,
+    appearance: Option<std::rc::Rc<Value>>,
+    chrome: Value,
     /// The light under the pointer, "*" over the group between them, "" elsewhere.
     hot: String,
     last: Value,
@@ -39,9 +40,11 @@ impl TitleBar {
         Self { windows: Some((windows, changes)), ..Self::default() }
     }
     fn tree(&self, args: &Value, title_text: &str, focused: bool) -> Value {
-        let tokens = &args["tokens"];
-        let chrome = args["chrome"].is_object().then(|| &args["chrome"]);
-        let height = args["height"].as_f64().unwrap_or(TITLE_H);
+        let tokens = self.appearance.as_deref().unwrap_or(&args["tokens"]);
+        let native = self.appearance.is_some();
+        let plan = if native { &self.chrome } else { &args["chrome"] };
+        let chrome = plan.is_object().then_some(plan);
+        let height = if native { TITLE_H } else { args["height"].as_f64().unwrap_or(TITLE_H) };
         let header = chrome.map(|c| c["header"].clone()).filter(Value::is_object).unwrap_or_else(|| {
             json!({"height":TITLE_H,"flexDirection":"row","alignItems":"center","paddingLeft":14,"backgroundColor":tokens["titleBg"]})
         });
@@ -52,7 +55,15 @@ impl TitleBar {
             &chrome.map_or(Value::Null, |c| c["title"].clone()),
         );
         let group_hot = !self.hot.is_empty();
-        let lights: Vec<Value> = args["controls"]
+        static LIGHTS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+        let controls = if native {
+            chrome.map(|plan| &plan["buttons"]).unwrap_or_else(|| LIGHTS.get_or_init(|| json!([
+                {"key":"close","color":"#ff5f57","glyph":"×"},
+                {"key":"min","color":"#febc2e","glyph":"−"},
+                {"key":"max","color":"#28c840","glyph":"+"}
+            ])))
+        } else { &args["controls"] };
+        let lights: Vec<Value> = controls
             .as_array()
             .map(Vec::as_slice)
             .unwrap_or(&[])
@@ -92,6 +103,12 @@ impl TitleBar {
 }
 
 impl NativeApp for TitleBar {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        if self.appearance.as_ref().is_some_and(|old| std::rc::Rc::ptr_eq(old, &theme)) { return; }
+        self.chrome = crate::native_style::frame_layout(&theme);
+        self.appearance = Some(theme);
+    }
     fn invalidated(&self) -> bool {
         self.windows.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
@@ -215,6 +232,40 @@ mod tests {
         let tree = sync(&mut app, args(chrome, true))["tree"].clone();
         assert_eq!(tree["children"][1]["children"][0]["style"]["backgroundColor"], "#333");
         assert_eq!(tree["children"][1]["children"][1]["style"], json!({"width":24}), "only the hovered one");
+    }
+    #[test]
+    fn native_palette_replaces_stale_frame_facts_without_resetting_hover() {
+        let mut app = TitleBar::default();
+        let stale = args(json!({"header":{"backgroundColor":"#ff0000"},"buttons":[]}), true);
+        for mode in ["dark", "light"] {
+            for appearance in ["axia", "adwaita"] {
+                let theme = std::rc::Rc::new(crate::native_style::files_theme(&json!({
+                    "mode":mode,"nativeAppearance":appearance,"titleBg":"#112233","text":"#223344","textDim":"#334455"
+                })));
+                app.set_native_appearance(theme.clone());
+                act(&mut app, "hot", json!("close"));
+                let tree = sync(&mut app, stale.clone())["tree"].clone();
+                assert!(std::rc::Rc::ptr_eq(app.appearance.as_ref().unwrap(), &theme));
+                assert!(app.chrome.get("tokens").is_none(), "the frame must not copy the palette");
+                assert_eq!(tree["children"][0]["style"]["color"], theme["text"]);
+                let lights = tree["children"][1]["children"].as_array().unwrap();
+                assert_eq!(lights.len(), 3, "controls come from Rust rather than the supplied JSON");
+                let close = lights.iter().find(|light| light["key"] == "close").unwrap();
+                assert_eq!(close["children"][0]["label"], "×");
+                if appearance == "adwaita" {
+                    assert_eq!(lights[0]["key"], "min");
+                    assert_eq!(close["style"]["backgroundColor"], theme["hover"]);
+                } else {
+                    assert_eq!(lights[0]["key"], "close");
+                    assert_eq!(tree["style"]["backgroundColor"], "#112233");
+                    assert_eq!(close["style"]["backgroundColor"], "#ff5f57");
+                }
+                app.set_native_appearance(theme);
+                assert_eq!(sync(&mut app, stale.clone())["same"], true);
+                assert_eq!(app.hot, "close");
+                assert_eq!(act(&mut app, "act", json!("close"))["effects"][0]["key"], "close");
+            }
+        }
     }
     #[test]
     fn the_effects_carry_the_window_and_the_pointer() {

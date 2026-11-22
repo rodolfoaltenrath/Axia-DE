@@ -121,3 +121,48 @@ fn double_click_on_the_header_emits_one_maximize_and_keeps_drag_coordinates() {
     drop(host);
     scene::destroy(mount);
 }
+
+#[test]
+fn profile_revisions_restyle_bound_headers_without_facts_and_keep_profile_ownership() {
+    let root = std::env::temp_dir().join(format!("axia-titlebar-appearance-{}", std::process::id()));
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    let homes = [root.join("a"), root.join("b")];
+    let mut session = crate::winmodel::Session::default();
+    session.call("open", &[json!({}), json!({"app":"probe"})]).unwrap();
+    session.call("patch", &[json!({}), json!("probe"), json!({"title":"Native title"})]).unwrap();
+    let mut hosts = Vec::new();
+    let mut mounts = Vec::new();
+    for home in &homes {
+        std::fs::create_dir_all(home).unwrap();
+        let home = home.to_str().unwrap();
+        crate::settings::with(home, |s| {
+            s.command(&json!({"cmd":"initialize"}));
+            s.set("mode", &json!("dark"));
+            s.set("nativeAppearance", &json!("adwaita"));
+        });
+        let mount = scene::create(scene::VIEW);
+        let mut host = Host::new(mount, Box::new(TitleBar::with_windows(session.reader())), assets, Some(home));
+        host.bind_locale(home, assets);
+        host.facts(json!({"args":{"id":"probe","tokens":{"text":"#ff0000"},"controls":[],"chrome":{"header":{}}}}));
+        let title = host.find_text("Native title");
+        assert_ne!(title, 0);
+        assert_eq!(unsafe { (*crate::runtime::node_get(title)).s.color }, 0xffeeeeec);
+        assert_ne!(host.find_text("□"), 0);
+        assert!(host.deadline().is_none());
+        mounts.push(mount); hosts.push(host);
+    }
+    crate::settings::with(homes[0].to_str().unwrap(), |s| {
+        s.set("mode", &json!("light")); s.set("nativeAppearance", &json!("axia"));
+    });
+    assert_eq!(hosts[0].deadline(), Some(0.));
+    assert!(hosts[1].deadline().is_none());
+    hosts[0].tick(1000.);
+    let title = hosts[0].find_text("Native title");
+    assert_eq!(unsafe { (*crate::runtime::node_get(title)).s.color }, 0xff1d1d1f);
+    assert_eq!(hosts[0].find_text("□"), 0);
+    assert_ne!(hosts[1].find_text("□"), 0);
+    assert!(hosts[0].deadline().is_none());
+    drop(hosts);
+    for mount in mounts { scene::destroy(mount); }
+    std::fs::remove_dir_all(root).unwrap();
+}

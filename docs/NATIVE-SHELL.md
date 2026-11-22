@@ -89,7 +89,16 @@ variante, sem reter proprietários através de referências às cores. O launche
 passa Rc diretamente para seu modelo de menu, sem serializar a paleta no contexto.
 Mudar cores preserva menu aberto, seleção pelo teclado, busca e viewport medido;
 o host isolado mantém seu contrato local. Callbacks, catálogo e efeitos ainda
-passam pelos adaptadores JS. Esta etapa não migra a barra de título por janela.
+passam pelos adaptadores JS.
+O cabeçalho de cada janela também retém a paleta nativa de apps e deriva seu
+plano/botões em Rust, mantendo o estilo Axia ou Adwaita do perfil. O plano
+visual empresta a paleta separadamente: `frame_layout` não copia tokens; a API
+`frame` conserva o JSON completo para consumidores existentes da moldura.
+`NativeTitleBar` envia somente identidade, título alternativo e geometria;
+tokens, chrome e controls saíram do transporte da sessão. Fatos antigos não
+substituem a aparência nativa. Mudanças mantêm hover, título e foco do leitor
+WindowState; controladores sem ligação nativa conservam estilos locais explícitos.
+O contorno, sombra e corpo externo da janela ainda são montados pelo tema JS.
 Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
 Fase 3; o proprietário das cores já é Rust.
 
