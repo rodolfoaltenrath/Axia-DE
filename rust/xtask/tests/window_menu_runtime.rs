@@ -34,6 +34,7 @@ fn native_window_menu_reads_current_titles_and_executes_live_actions() {
                 "bringAll",
                 "staleAction",
                 "nativeDesktopMoves",
+                "nativeStateActions",
                 "legacyMenu",
                 "noJsRows",
                 "noWindowTransport",
@@ -99,6 +100,14 @@ const win=id=>state().windows.find(w=>w.id===id)?.w;
 function point(label,type){const node=lord.nativeViews.findText(handle,label);if(!node)return;
  const[x,y,w,h]=lord.getLayout(node),owner=lord.nativeViews.pointer(type,node,x+w/2,y+h/2,0);__lordEvent(type,owner||0,x+w/2,y+h/2,0);__lordNativeView();}
 function click(label){point(label,'down');point(label,'up');}
+let legacyStateActions=0,checkingStateAction=false;
+for(const name of ['focus','minimize','toggleMaximize','moveToDesktop']){
+ const original=wm[name];wm[name]=(...args)=>{if(checkingStateAction)legacyStateActions++;return original(...args);};
+}
+const request=lord.nativeApps.request;
+lord.nativeApps.request=function(text){const input=JSON.parse(text);if(checkingStateAction&&input.cmd==='desktopSession'&&['move','moveNew'].includes(input.action))legacyStateActions++;return request.call(this,text);};
+function nativeClick(label){checkingStateAction=true;try{click(label);}finally{checkingStateAction=false;}}
+
 async function open(){click('Window');await until(()=>has(t('shell.window.minimize')));}
 async function run(){
  setDesktops([1,2],1);const a=wm.open('notes',{instance:'a'}),calc=wm.open('calculator'),away=wm.open('notes',{instance:'away',desktop:2});wm.open('panel');
@@ -113,8 +122,8 @@ async function run(){
  raw('close','notes#temporary');const directMembership=added&&await until(()=>!has('Added title'));
  const suffix='Away · '+t('shell.desktops.name',{n:2}),desktopSuffix=has(suffix);
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
- click(suffix);const focusDesktop=await until(()=>state().active===2&&state().views.front===away);
- setActiveDesktop(1);wm.focus('notes#native');await open();click(t('shell.window.minimize'));
+ nativeClick(suffix);const focusDesktop=await until(()=>state().active===2&&state().views.front===away);
+ setActiveDesktop(1);wm.focus('notes#native');await open();nativeClick(t('shell.window.minimize'));
  const rawMinimize=await until(()=>win('notes#native')?.minimized===true);
  wm.focus(calc);raw('open',{app:'notes',instance:'latest'});raw('patch','notes#latest',{title:'Latest'});await open();
  point(t('shell.window.moveResize'),'move');await until(()=>has(t('shell.window.arrange.leftRight')));
@@ -130,20 +139,24 @@ async function run(){
  let nativeDesktopMoves=false;
  try{
    wm.focus(a);await open();point(t('shell.desktops.moveTo'),'move');await until(()=>has(t('shell.desktops.name',{n:2})));
-   const beforeMove=state();click(t('shell.desktops.name',{n:2}));
+   const beforeMove=state();nativeClick(t('shell.desktops.name',{n:2}));
    const moved=await until(()=>win(a)?.desktop===2);
    const afterMove=state();
    wm.focus(a);await open();point(t('shell.desktops.moveTo'),'move');await until(()=>has(t('shell.desktops.new')));
-   const beforeNew=state();click(t('shell.desktops.new'));
+   const beforeNew=state();nativeClick(t('shell.desktops.new'));
    const created=await until(()=>state().desktops.length===beforeNew.desktops.length+1);
    const afterNew=state();
    nativeDesktopMoves=moved&&created&&afterMove.active===beforeMove.active&&afterMove.desktops.length===beforeMove.desktops.length
      &&win(a)?.desktop===afterNew.desktops.at(-1)&&afterNew.active===beforeNew.active&&legacyMoves===0;
  }finally{lord.windowList.call=call;}
+ wm.focus(a);await open();nativeClick(t('shell.window.zoom'));const zoomed=await until(()=>win(a)?.maximized===true);
+ await open();nativeClick(t('shell.window.zoom'));const restored=await until(()=>win(a)?.maximized===false);
+ const nativeStateActions=zoomed&&restored&&legacyStateActions===0;
+
 
  click('Help');await until(()=>has('Legacy help'));click('Legacy help');const legacyMenu=help===1;
  hideBar();await until(()=>unmounted&&!lord.nativeViews.text(handle));
- console.log('window_menu-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
+ console.log('window_menu-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,nativeStateActions,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_menu driver: '+(error.stack||error))),200);
 "#;

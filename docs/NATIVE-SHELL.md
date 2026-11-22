@@ -121,6 +121,13 @@ sem monitor/geometria nos fatos ou assinatura React de tela na sessão. Trocar
 o principal ou conectar/desconectar monitores invalida a apresentação sem
 reiniciar o prazo; não há polling para telas. O mount de compatibilidade mantém
 a geometria explícita, selecionado pela entrada nativa do host, não pelos fatos.
+O menu Janela da barra também executa minimizar, alternar maximização, focar e
+mover/criar desktop no Session nativo. Cada ação revalida o ID e devolve só o
+snapshot de compatibilidade, sem wrappers wm ou fatos de apps/telas no JS.
+Focar conserva a regra de mostrar o desktop da janela e reabrir minimizadas.
+O mount de compatibilidade por Reader mantém efeitos explícitos. Encaixe,
+centralização, mudança de monitor, arranjos e guardas de fechar continuam nos
+adaptadores existentes; a barra da sessão não reconstrói suas linhas no SDK.
 O menu de contexto de janelas CSD/ownFrame também pertence a uma view Rust,
 `shell:window-context`. O tema monta a view com apenas o ID: coordenadas,
 maximização, desktops e capacidade vêm do leitor do contexto. Não constrói

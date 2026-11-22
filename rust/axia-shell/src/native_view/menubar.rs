@@ -74,10 +74,13 @@ impl MenuBar {
             ..Self::default()
         }
     }
+    pub fn with_session(session: crate::winmodel::Session, assets: &str, home: Option<&str>) -> Self {
+        Self { window_menu: Some(super::window_menu::WindowMenu::with_session(session, assets, home)), ..Self::default() }
+    }
     fn window_run(&mut self, action: &Value) -> Value {
         let reply = self
             .window_menu
-            .as_ref()
+            .as_mut()
             .map_or_else(|| json!({}), |menu| menu.effect(action));
         self.close();
         reply

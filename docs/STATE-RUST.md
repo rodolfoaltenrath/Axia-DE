@@ -319,7 +319,7 @@ completo nem medição física nesta etapa.
 
 ## Menu Janela da barra
 
-`native_view/window_menu.rs` pertence à barra vinculada ao leitor do contexto.
+`native_view/window_menu.rs` pertence à barra vinculada ao Session do contexto.
 Monta a lista, títulos, sufixos de desktop, estados habilitados e submenus no
 Rust. A montagem de `MenuBar.jsx` passa o proprietário opaco e metadados de
 telas/apps; o getter JS `window` foi retirado. As linhas não fazem uma viagem
@@ -335,8 +335,33 @@ Arranjar janelas e trazer todas à frente escolhem os alvos no controlador Rust,
 ignorando painéis e janelas minimizadas ou de outro desktop. Os IDs não são
 enviados pelo JS. Arranjos recebem somente geometria de telas e tamanhos de
 apps; esses fatos agora vêm do registro, sem percorrer o espelho de janelas.
-Cada comando publica no máximo uma revisão. Demais comandos ainda executam
-`wm` e guardas pelo adaptador, e o retorno do modelo mantém o espelho existente.
+Cada comando publica no máximo uma revisão. Minimizar, alternar maximização,
+focar e mover/criar desktop são executados pela própria barra via
+`AppCommand::WindowAction`, sem efeitos wm ou requisição desktopSession no JS.
+Foco usa a regra compartilhada: mostra o desktop, reabre minimizadas e traz à
+frente numa atualização. A resposta windowModel atualiza somente o espelho.
+O mesmo tipo de ação atende o contexto CSD com guarda de menu aberto e limpeza
+do pedido; a barra não depende desse pedido nem altera seu campo.
+Encaixe, centralização, mudança de monitor, arranjos e guardas de fechamento
+continuam nos adaptadores. O mount antigo por Reader preserva efeitos explícitos;
+somente a entrada de sessão validada escolhe o proprietário com comandos nativos.
+
+A execução pela barra foi validada em Fedora 44 privado: 679 testes da shell
+passaram (sete ignorados), além de oito contratos LPK, quatro cenários ampliados
+da barra e 16 de regressão de contexto CSD/cabeçalhos/menus genéricos. O novo
+teste Rust verifica revisão única, janela minimizada em outro desktop, foco,
+maximização, mover/criar, destino ausente, janela ausente e manutenção do efeito
+de fechamento para a guarda. A integração intercepta os wrappers wm e pedidos
+desktopSession durante os cliques, exigindo contagem zero nos comandos migrados.
+As quatro capturas são idênticas byte a byte às de `native-desktop-menu-moves`.
+Build completa GPU=1, bundles default/app-host, instalação privada e
+encerramento por timeout/SIGTERM passaram. Evidências em
+`build/validation/native-window-bar-commands/`.
+
+Três amostras de ociosidade passaram com limites impostos: 12.500 poll/s e
+104.391 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal;
+medições físicas ficam para o encerramento, e nenhuma caixa inteira da fase
+é concluída por esta entrega.
 
 As APIs públicas `windowMenuItems`/`moveResizeItems` continuam disponíveis ao SDK
 legado e aos `.lpk`; a barra da sessão não usa esses produtores. Menus de apps,

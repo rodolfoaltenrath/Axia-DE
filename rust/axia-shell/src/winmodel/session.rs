@@ -1015,10 +1015,10 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum WindowMenuAction { Dismiss, Minimize, Zoom, MoveDesktop(Option<i64>) }
+pub enum WindowMenuAction { Dismiss, Minimize, Zoom, Focus, MoveDesktop(Option<i64>) }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, WindowMenu(WindowMenuAction), MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, WindowAction(WindowMenuAction), WindowMenu(WindowMenuAction), MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
 
 impl WindowState {
     // Both the isolated-host API and native desktop gestures use the same selection rule.
@@ -1062,16 +1062,18 @@ impl WindowState {
                 if let Some(id) = id.as_i64() { self.active = id; }
                 return id;
             }
-            AppCommand::WindowMenu(action) => {
+            AppCommand::WindowMenu(action) | AppCommand::WindowAction(action) => {
                 let Some(index) = ids.first().and_then(|id| self.find(id)) else { return Value::Null; };
-                if Window(&self.wins[index]).window_menu().is_none() { return Value::Null; }
+                let dismiss = matches!(command, AppCommand::WindowMenu(_));
+                if dismiss && Window(&self.wins[index]).window_menu().is_none() { return Value::Null; }
                 let result = match action {
                     WindowMenuAction::Dismiss => json!(true),
                     WindowMenuAction::Minimize => { self.wins[index].set("minimized",json!(true)); json!(true) }
                     WindowMenuAction::Zoom => { self.toggle_maximize(index); json!(true) }
+                    WindowMenuAction::Focus => { self.focus(ids[0]); json!(true) }
                     WindowMenuAction::MoveDesktop(target) => self.app_command(AppCommand::MoveWindowToDesktop(target),ids,facts),
                 };
-                self.wins[index].set("windowMenu", Value::Null);
+                if dismiss { if let Some(index) = self.find(ids[0]) { self.wins[index].set("windowMenu", Value::Null); } }
                 return result;
             }
             AppCommand::MoveWindowToDesktop(target) => {

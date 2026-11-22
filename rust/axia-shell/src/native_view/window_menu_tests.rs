@@ -103,3 +103,48 @@ fn native_window_menu_keyboard_uses_native_actions_and_closed_menus_do_not_poll(
     drop(host);
     scene::destroy(node);
 }
+
+#[test]
+fn bound_window_bar_executes_native_state_actions_without_effect_callbacks() {
+    use super::NativeApp;
+    let mut session = Session::default();
+    session.call("setDesktops",&[json!({}),json!([1,2]),json!(1)]).unwrap();
+    for app in ["notes","calculator"] { session.call("open",&[json!({}),json!({"app":app})]).unwrap(); }
+    let reader = session.reader();
+    let mut bar = MenuBar::with_session(session.clone(),"",None);
+    let run = |bar: &mut MenuBar, action: serde_json::Value| bar.request(&json!({"cmd":"windowMenu","key":action}));
+    let revision = reader.revision();
+    let reply = run(&mut bar,json!({"action":"minimize","id":"calculator"}));
+    assert_eq!(reply["effects"][0]["kind"],"windowModel");
+    assert!(reader.read().window("calculator").unwrap().minimized());
+    assert_eq!(reader.revision(),revision+1);
+    session.call("moveToDesktop",&[json!({}),json!("calculator"),json!(2)]).unwrap();
+    let revision = reader.revision();
+    run(&mut bar,json!({"action":"focus","id":"calculator"}));
+    assert_eq!(reader.read().focused_window(),Some("calculator"));
+    assert!(!reader.read().window("calculator").unwrap().minimized());
+    assert_eq!(reader.read().active_desktop(),2);
+    assert_eq!(reader.revision(),revision+1);
+    let revision = reader.revision();
+    run(&mut bar,json!({"action":"zoom","id":"calculator"}));
+    assert!(reader.read().window("calculator").unwrap().maximized());
+    assert_eq!(reader.revision(),revision+1);
+    let revision = reader.revision();
+    run(&mut bar,json!({"action":"newDesktop","id":"calculator"}));
+    assert_eq!(reader.read().desktops(),&[1,2,3]);
+    assert_eq!(reader.read().window("calculator").unwrap().desktop(),3);
+    assert_eq!(reader.read().active_desktop(),2);
+    assert_eq!(reader.revision(),revision+1);
+    let revision = reader.revision();
+    run(&mut bar,json!({"action":"desktop","id":"calculator","desktop":1}));
+    assert_eq!(reader.read().window("calculator").unwrap().desktop(),1);
+    assert_eq!(reader.revision(),revision+1);
+    let revision = reader.revision();
+    for action in [json!({"action":"desktop","id":"calculator","desktop":999}),json!({"action":"newDesktop","id":"gone"})] {
+        run(&mut bar,action);
+    }
+    assert_eq!(reader.revision(),revision);
+    let reply = run(&mut bar,json!({"action":"close","id":"calculator"}));
+    assert_eq!(reply["effects"][0]["kind"],"windowMenu","app close guards remain in their existing adapter");
+    assert_eq!(reader.revision(),revision);
+}

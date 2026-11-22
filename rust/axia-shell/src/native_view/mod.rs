@@ -242,7 +242,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     } else if id == "shell:window-context" {
         owner.clone().map(|session| Box::new(window_context::WindowContext::new(session)) as Box<dyn NativeApp>)
     } else if id == "shell:menubar" {
-        windows.clone().map(|reader| Box::new(menubar::MenuBar::with_windows(reader,&assets,home.as_deref())) as Box<dyn NativeApp>).or_else(||app(id))
+        owner.clone().map(|session| Box::new(if native_locale {
+            menubar::MenuBar::with_session(session,&assets,home.as_deref())
+        } else { menubar::MenuBar::with_windows(session.reader(),&assets,home.as_deref()) }) as Box<dyn NativeApp>).or_else(||app(id))
     } else if id == "shell:switcher" {
         windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:desktop-hud" {

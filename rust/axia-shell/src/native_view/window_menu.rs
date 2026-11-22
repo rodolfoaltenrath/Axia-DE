@@ -1,10 +1,11 @@
 //! The session's Window menu reads its context directly; no row list visits JS.
 use super::i18n::I18n;
-use crate::winmodel::WindowState;
+use crate::winmodel::{AppCommand, Session, WindowMenuAction, WindowState};
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
 
 pub struct WindowMenu {
+    session: Option<Session>,
     windows: Reader<WindowState>,
     changes: Subscription,
     anchor: Option<String>,
@@ -21,6 +22,7 @@ impl WindowMenu {
     pub fn new(windows: Reader<WindowState>, assets: &str, home: Option<&str>) -> Self {
         let changes = windows.subscribe();
         Self {
+            session: None,
             windows,
             changes,
             anchor: None,
@@ -28,13 +30,16 @@ impl WindowMenu {
             locale_revision: Value::Null,
         }
     }
+    pub fn with_session(session: Session, assets: &str, home: Option<&str>) -> Self {
+        Self { session: Some(session.clone()), ..Self::new(session.reader(), assets, home) }
+    }
     pub fn pending(&self) -> bool {
         self.changes.pending()
     }
     pub fn open(&mut self) {
         self.anchor = self.windows.read().focused_window().map(str::to_owned);
     }
-    pub fn effect(&self, action: &Value) -> Value {
+    pub fn effect(&mut self, action: &Value) -> Value {
         let global = matches!(action["action"].as_str(), Some("overview" | "bringAll"));
         if !global
             && !action["id"]
@@ -42,6 +47,25 @@ impl WindowMenu {
                 .is_some_and(|id| self.windows.read().window(id).is_some())
         {
             return json!({});
+        }
+        if let Some(session) = &mut self.session {
+            let selected = match action["action"].as_str() {
+                Some("minimize") => Some(WindowMenuAction::Minimize),
+                Some("zoom") => Some(WindowMenuAction::Zoom),
+                Some("focus") => Some(WindowMenuAction::Focus),
+                Some("desktop") => match action["desktop"].as_i64() {
+                    Some(desktop) => Some(WindowMenuAction::MoveDesktop(Some(desktop))),
+                    None => return json!({}),
+                },
+                Some("newDesktop") => Some(WindowMenuAction::MoveDesktop(None)),
+                _ => None,
+            };
+            if let Some(selected) = selected {
+                let Some(id) = action["id"].as_str() else { return json!({}); };
+                return session.app_command(AppCommand::WindowAction(selected), &[id])
+                    .map(|reply|json!({"effects":[{"kind":"windowModel","reply":reply}]}))
+                    .unwrap_or_else(|_|json!({}));
+            }
         }
         json!({"effects":[{"kind":"windowMenu","command":action}]})
     }
