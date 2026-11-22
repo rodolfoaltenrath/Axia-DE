@@ -107,6 +107,14 @@ Trocar aparência conserva seleção e origem do alternador, IDs e prazos das
 notificações e o vencimento do indicador, sem reabrir indicadores ocultos.
 Serviços, seleção, relógios de expiração e roteamento de ações mantêm seus
 proprietários existentes; posição/montagem e callbacks continuam nos adaptadores.
+A view dos banners resolve topo/base pelo State de notificações e lado pelo
+locale nativo vinculado ao host. O adaptador da sessão não assina placement
+nem locale para posicionar; fornece somente a área útil ainda reservada pelo
+tema. A view empresta telas físicas para limitar a base à altura da sessão e
+usar o monitor principal quando não há área explícita. O mount ocupa a camada
+com pointerEvents box-none; apenas os banners recebem cliques. Posição e troca
+de monitores não alteram notificações, ações ou vencimentos. O renderer React
+do host isolado continua com seu contrato local.
 O indicador de desktops também empresta as telas físicas publicadas pelo
 compositor. Escolhe a marcada como principal, com fallback para a primeira,
 sem monitor/geometria nos fatos ou assinatura React de tela na sessão. Trocar

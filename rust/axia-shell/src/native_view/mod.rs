@@ -247,7 +247,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
             desktop_hud::DesktopHud::with_displays(reader, services::displays::reader())
         } else { desktop_hud::DesktopHud::new(reader) }) as Box<dyn NativeApp>)
     } else if id == "shell:notifications" {
-        owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
+        owner.clone().map(|session| Box::new(if native_locale {
+            notifications::Banners::with_displays(session.notification_service(), services::displays::reader())
+        } else { notifications::Banners::new(session.notification_service()) }) as Box<dyn NativeApp>)
     } else if id == "shell:clock-status" {
         owner.as_ref().map(|_| Box::new(clock::Status::default()) as Box<dyn NativeApp>)
     } else if id == "shell:restore" {

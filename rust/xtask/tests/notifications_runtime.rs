@@ -36,6 +36,8 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
             assert_eq!(report["timerGone"], true, "{report}");
             for flag in [
                 "noAppearanceFacts",
+                "nativePlacement",
+                "clickThrough",
                 "withoutAppearanceFacts",
                 "staleAppearanceMirror",
                 "appearanceRetained",
@@ -92,7 +94,7 @@ const DRIVER: &str = r#"
 import { createElement as h, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { NotificationBanner } from '@ROOT@/sdk/nativebanner.js';
-import { notify, dismissNotification, notifications, notifyHistory, setBannerPlacement, NOTIFY_DEFAULTS, notifyPrefs, appNotifyPrefs, setAppNotifyPrefs, dndActive } from '@ROOT@/sdk/notify.js';
+import { notify, dismissNotification, notifications, notifyHistory, notificationPlacement, setBannerPlacement, NOTIFY_DEFAULTS, notifyPrefs, appNotifyPrefs, setAppNotifyPrefs, dndActive } from '@ROOT@/sdk/notify.js';
 import { clockRequest, ringing } from '@ROOT@/sdk/alarms.js';
 import { sound } from '@ROOT@/sdk/sound.js';
 import { perms, permsRev } from '@ROOT@/sdk/privacy.js';
@@ -102,7 +104,7 @@ import { makeTheme } from '@ROOT@/themes/default/tokens.js';
 import { settings } from '@ROOT@/sdk/settings.js';
 import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import { localeBridge } from '@ROOT@/sdk/nativelocale.js';
-import { locale } from '@ROOT@/sdk/i18n.js';
+import { locale, direction } from '@ROOT@/sdk/i18n.js';
 import { configureWindows } from '@ROOT@/sdk/windows.js';
 import { media } from '@ROOT@/sdk/media.js';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -121,6 +123,7 @@ const find=label=>{for(let handle=1;handle<256;handle++){const node=lord.nativeV
 async function until(fn,tries=100){for(let i=0;i<tries&&!fn();i++)await sleep(20);return!!fn();}
 const ran=[], reasons=[];
 let bannerHandle=0,bound=false,noPayload=true,toggle;
+const background={current:null};
 let noSoundEffects=true,rawPolicy=true,noAccessFacts=true,nativeCatalog=false,noPresentationFacts=true,noLocaleFacts=true;
 const perform=notificationBridge.perform,request=lord.nativeApps.request;
 notificationBridge.perform=effect=>{if(effect.kind==='notificationSound')noSoundEffects=false;perform(effect);};
@@ -131,12 +134,12 @@ lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:notifications'
 lord.nativeViews.facts=(handle,text)=>{if(handle===bannerHandle){inspect(text);appearanceFacts++;}return facts(handle,text);};
 lord.nativeViews.unmount=handle=>{if(handle===bannerHandle)bannerHandle=0;return unmount(handle);};
 const push=(label,title,options={})=>notify({label,title,body:'Notification body',sticky:true,sound:false,onClose:reason=>reasons.push(reason),...options});
-const press=node=>{const[x,y,w,hh]=lord.getLayout(node);for(const type of ['down','up']){const mount=lord.nativeViews.pointer(type,node,x+w/2,y+hh/2,0);__lordEvent(type,mount,x+w/2,y+hh/2,0);}globalThis.__lordNativeView();};
+const press=async node=>{await until(()=>{const r=lord.getLayout(node);return r&&r[2]>0&&r[3]>0;});const[x,y,w,hh]=lord.getLayout(node);for(const type of ['down','up']){const mount=lord.nativeViews.pointer(type,lord.nativeViews.hitTest(x+w/2,y+hh/2),x+w/2,y+hh/2,0);__lordEvent(type,mount,x+w/2,y+hh/2,0);}globalThis.__lordNativeView();};
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 settings.set({language:'en',mode:opposite,accent:'azul',effects:false,nativeAppearance:'axia',notificationsNativeView:false,notifications:{grouping:'app',dnd:false}});
 const probeApps=[{id:'access-probe',name:'Access probe',package:true,Component:()=>null},{id:'isolated-probe',name:'Isolated probe',isolated:true,Component:()=>null},{id:'clock',name:'Clock',Component:()=>null}];
 configureWindows({apps:probeApps,workArea:{x:20,y:28,w:@WIDTH@-40,h:644}});
-function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},on?h(NotificationBanner):null));}
+function App(){const[on,setOn]=useState(true);toggle=setOn;return h(ThemeProvider,{tokens:theme},h(View,{ref:background,style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},on?h(NotificationBanner):null));}
 render(h(App));
 async function run(){
  const grouping=NOTIFY_DEFAULTS.grouping;NOTIFY_DEFAULTS.grouping='off';
@@ -201,11 +204,11 @@ async function run(){
  lord.settings.state({cmd:'patch',patch:{notifications:beforeNativeEdit}});
  const residentPreferences=staleGrouping&&ungroupedNative&&regroupedNative&&staleDnd&&nativeHidden&&nativeQueries&&nativeEdit;
  push('Actions','Action primary',{actions:[{id:'first',label:'First',run:()=>ran.push('first')},{id:'second',label:'Second',run:()=>ran.push('second')}]});
- await until(()=>find('Second'));press(find('Second'));await until(()=>!find('Action primary'));
+ await until(()=>find('Second'));await press(find('Second'));await until(()=>!find('Action primary'));
  push('Body','Body action',{actions:[{id:'first',label:'Default action',run:()=>ran.push('body')}]});
- await until(()=>find('Body action'));press(find('Body action'));await until(()=>!find('Body action'));
- press(find('×'));await until(()=>find('Grouped old'));const oldRevealed=!!find('Grouped old')&&!find('Grouped latest');
- press(find('×'));await until(()=>notifications.get().length===0);
+ await until(()=>find('Body action'));await press(find('Body action'));await until(()=>!find('Body action'));
+ await press(find('×'));await until(()=>find('Grouped old'));const oldRevealed=!!find('Grouped old')&&!find('Grouped latest');
+ await press(find('×'));await until(()=>notifications.get().length===0);
  settings.set(s=>({...s,notifications:{...s.notifications,dnd:true}}));
  push('DND','Suppressed');await sleep(50);
  const dndSuppressed=notifications.get().length===0&&notifyHistory.get().some(n=>n.title==='Suppressed');
@@ -310,13 +313,24 @@ async function run(){
    ordinary=notify({title:'Native audio',sound:true,sticky:true});dismissNotification(ordinary);
  }finally{sound.play=play;globalThis.setInterval=repeat;}
  const nativeSound=ordinary>0&&jsSounds===0&&noSoundEffects;
- setBannerPlacement('bottom');locale.set({lang:'en',region:'',dir:'rtl'});
- push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
+ // Mutate native placement and direction while their compatibility mirrors stay stale.
+ setBannerPlacement('top');locale.set({lang:'en',region:'',dir:'ltr'});
+ const route=notificationBridge.perform,localeRoute=localeBridge.perform;
+ notificationBridge.perform=effect=>{if(effect.kind!=='notificationState')route(effect);};
+ localeBridge.perform=()=>{};
+ request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'placement',placement:'bottom'}));
+ lord.locale.state({cmd:'patch',value:{lang:'en',region:'',dir:'rtl'}});
+ await sleep(80);
+ let nativePlacement=notificationPlacement.get()==='top'&&direction()==='ltr';
+ request.call(lord.nativeApps,JSON.stringify({cmd:'notifications',action:'push',notice:{label:'Capture',title:'Final banner',body:'Notification body',sticky:true,sound:false,actions:[{id:'open',label:'Open',primary:true}]}}));await until(()=>find('Final banner'));await sleep(200);
  const appearanceUpdate=await changeAppearance();await sleep(60);
  const appearanceRetained=!!find('Final banner')&&!!find('Open');
  const finalBounds=lord.getLayout(find('Final banner'));
+ const clickThrough=lord.nativeViews.hitTest(5,350)===background.current?.id;
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({noAppearanceFacts,...appearanceUpdate,appearanceRetained,ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,backgroundExpired,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,nativeLocaleSource,nativePackReload,nativeBootstrap,jsLocaleReads,noLocaleFacts,finalBounds,saved:!!saved?.ok}));
+ nativePlacement&&=notificationPlacement.get()==='top'&&direction()==='ltr';
+ notificationBridge.perform=route;localeBridge.perform=localeRoute;
+ console.log('notifications-observation '+JSON.stringify({noAppearanceFacts,nativePlacement,clickThrough,...appearanceUpdate,appearanceRetained,ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,backgroundExpired,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,nativeLocaleSource,nativePackReload,nativeBootstrap,jsLocaleReads,noLocaleFacts,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

@@ -1491,6 +1491,46 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
 
+### Posicionamento dos banners no proprietário Rust
+
+`Banners::with_displays` é escolhido pelo mount validado da sessão. A view
+empresta State de notificações para escolher topo/base e usa a direção do
+locale vinculado ao host; fatos externos não substituem essa direção. A fonte
+física de telas fornece o limite inferior da sessão e o monitor principal como
+fallback de área. Revisões de tela invalidam a árvore sem criar timers.
+O SDK deixa de assinar `notificationPlacement` e `useLocale` para posicionar.
+Apenas a área útil do tema continua nos argumentos. O mount preenche a camada
+com `pointerEvents: box-none`; a lista posicionada mantém tamanho e interação.
+O host isolado conserva o renderer React e as regras locais de compatibilidade.
+
+A decisão não altera notices, agrupamento, callbacks ou prazos. A área inferior
+é limitada ao fim da sessão, inclusive quando a área útil chega de fora da tela.
+Sem área válida e sem monitores, a view fica vazia; importar áreas úteis e
+montar a shell sem JS continuam no roadmap.
+
+Validação em Fedora 44 privado: 673 testes da shell passaram (sete ignorados),
+além dos oito contratos LPK e quatro cenários de relógio. A regressão do
+indicador de desktops passou em quatro casos. Build completa GPU=1, bundles
+default/app-host e instalação privada gerados; encerramento instalado passou
+por timeout e SIGTERM. A primeira tentativa paralela dos contratos esgotou o
+limite de processos do container; após ampliar esse limite apenas no ambiente
+de validação e executar os contratos em sequência, todos passaram. Logs finais
+em `contracts-clock.log`; a tentativa anterior foi preservada separadamente.
+Evidências em `build/validation/native-banner-placement/`.
+
+Os quatro cenários de notificações passaram com os espelhos de posição e
+direção congelados em topo/LTR e a view nativa mostrando base/RTL. O driver
+usa hit test real após a geometria dos controles ficar pronta e exige que um
+ponto fora dos banners alcance a view de fundo. As capturas claro/mínimo e
+escuro foram inspecionadas; nas quatro comparações com a entrega de aparência,
+os únicos pixels diferentes ficam no horário dinâmico. O novo teste Rust
+cobre deslocamento da área, fallback de monitor, clamp inferior, revisão de
+tela e preservação do ID/prazo da notificação.
+
+Três amostras de ociosidade passaram com limites impostos: 12.600 poll/s e 104.664 MiB de RSS,
+abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal desta entrega.
+Medições físicas seguem para o encerramento; nenhuma caixa inteira concluída.
+
 ### Monitor do indicador de desktops por referência
 
 `DesktopHud` recebe o Reader da fonte física de telas no mount da sessão.

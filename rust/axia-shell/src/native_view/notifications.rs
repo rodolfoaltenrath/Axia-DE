@@ -9,6 +9,7 @@ pub struct Banners {
     service: Rc<RefCell<Service>>,
     state: Reader<State>,
     changes: Subscription,
+    displays: Option<(Reader<Vec<Value>>, Subscription)>,
     last: Value,
 }
 impl Banners {
@@ -20,8 +21,13 @@ impl Banners {
             service,
             state,
             changes,
+            displays: None,
             last: Value::Null,
         }
+    }
+    pub fn with_displays(service: Rc<RefCell<Service>>, displays: Reader<Vec<Value>>) -> Self {
+        let changes = displays.subscribe();
+        Self { displays: Some((displays, changes)), ..Self::new(service) }
     }
     fn tree(&self, input: &Value) -> Value {
         let th = self.appearance.as_deref().unwrap_or(&input["context"]["theme"]);
@@ -86,7 +92,28 @@ impl Banners {
                 "backgroundColor":bg,"border":format!("1px solid {separator}"),"boxShadow":"0 10px 30px rgba(0,0,0,0.4)"},"children":children,
                 "events":{"onClick":if has_actions {json!(["act",format!("{id}:0")])} else {json!(["dismiss",id.to_string()])}}})
         }).collect();
-        json!({"kind":"view","key":"banners","style":{"width":340,"gap":10},"children":children})
+        let mut banners = json!({"kind":"view","key":"banners","style":{"width":340,"gap":10},"children":children});
+        if let Some((source, _)) = &self.displays {
+            let displays = source.read();
+            let main = displays.iter().find(|display| display["main"] == true).or_else(|| displays.first());
+            let area = crate::winmodel::Rect::from_value(&input["args"]["area"])
+                .or_else(|| main.and_then(crate::winmodel::Rect::from_value));
+            let Some(area) = area.filter(|area| area.w > 0. && area.h > 0.) else {
+                return json!({"kind":"view","key":"notification-area","style":{"pointerEvents":"none"}});
+            };
+            let height = displays.iter().filter_map(|display| crate::winmodel::Rect::from_value(display))
+                .map(|display| display.y + display.h).fold(0., f64::max);
+            let available = if height > 0. { area.h.min((height-area.y).max(0.)) } else { area.h };
+            let top = if state.bottom && height > 0. { area.y.min(height) } else { area.y };
+            let mut style = json!({"position":"absolute","width":340,"gap":10,
+                "left":if input["context"]["direction"] == "rtl" { 12. } else { area.w-352. }});
+            if state.bottom { style["bottom"] = json!(12); } else { style["top"] = json!(10); }
+            banners["style"] = style;
+            return json!({"kind":"view","key":"notification-area","style":{
+                "position":"absolute","left":area.x,"top":top,"width":area.w,"height":available,
+                "pointerEvents":"box-none"},"children":[banners]});
+        }
+        banners
     }
 }
 impl super::NativeApp for Banners {
@@ -94,7 +121,7 @@ impl super::NativeApp for Banners {
     fn uses_shell_appearance(&self) -> bool { true }
     fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn invalidated(&self) -> bool {
-        self.changes.pending() || { let service = self.service.borrow(); !service.resident && (service.settings_pending() || service.catalog_pending()) }
+        self.changes.pending() || self.displays.as_ref().is_some_and(|(_, changes)| changes.pending()) || { let service = self.service.borrow(); !service.resident && (service.settings_pending() || service.catalog_pending()) }
     }
     fn refresh_ms(&self) -> Option<f64> {
         let service = self.service.borrow();
@@ -111,6 +138,7 @@ impl super::NativeApp for Banners {
                 let effects = service.effects();
                 drop(service);
                 self.changes.take();
+                if let Some((_, changes)) = &self.displays { changes.take(); }
                 let tree = self.tree(input);
                 if tree == self.last {
                     json!({"same":true,"effects":effects})
@@ -138,6 +166,48 @@ impl super::NativeApp for Banners {
 mod tests {
     use super::*;
     use crate::native_view::NativeApp;
+    #[test]
+    fn native_placement_uses_state_direction_and_display_extent_without_changing_notices() {
+        let now = Instant::now();
+        let service = Rc::new(RefCell::new(Service::default()));
+        let id = service.borrow_mut().command(&json!({"action":"push","prefs":{},
+            "notice":{"title":"Keep deadline","timeout":60000,"sound":false}}), now)["result"].clone();
+        let source = axia_state::Store::new(vec![json!({"x":0,"y":0,"w":1000,"h":700,"main":true})]);
+        let mut view = Banners::with_displays(service.clone(), source.reader());
+        let input = json!({"cmd":"sync","context":{"direction":"ltr"},
+            "args":{"area":{"x":20,"y":28,"w":960,"h":644},"placement":"bottom","direction":"rtl"}});
+        let deadline = service.borrow().wait_ms(now);
+        let tree = view.request(&input)["tree"].clone();
+        let style = &tree["children"][0]["style"];
+        assert_eq!(style["left"], 608.);
+        assert_eq!(style["top"], 10);
+        assert!(style["bottom"].is_null());
+        service.borrow_mut().command(&json!({"action":"placement","placement":"bottom"}), now);
+        assert!(view.invalidated());
+        let mut rtl = input.clone(); rtl["context"]["direction"] = json!("rtl");
+        let tree = view.request(&rtl)["tree"].clone();
+        let list = &tree["children"][0];
+        assert_eq!(list["style"]["left"], 12.);
+        assert_eq!(list["style"]["bottom"], 12);
+        assert!(list["style"]["top"].is_null());
+        assert_eq!(list["children"][0]["key"], id.as_u64().unwrap().to_string());
+        assert_eq!(service.borrow().wait_ms(now), deadline);
+        source.update(|displays| { displays[0]["h"] = json!(600); ((), true) });
+        assert!(view.invalidated());
+        assert_eq!(view.request(&rtl)["tree"]["style"]["height"], 572.);
+        assert!(!view.invalidated());
+        let mut offscreen = rtl.clone(); offscreen["args"]["area"]["y"] = json!(800);
+        let tree = view.request(&offscreen)["tree"].clone();
+        assert_eq!(tree["style"]["top"], 600.);
+        assert_eq!(tree["style"]["height"], 0.);
+        let fallback = view.request(&json!({"cmd":"sync","context":{"direction":"ltr"}}))["tree"].clone();
+        assert_eq!(fallback["style"]["width"], 1000.);
+        assert_eq!(fallback["style"]["height"], 600.);
+        source.update(|displays| { displays.clear(); ((), true) });
+        assert!(view.request(&json!({"cmd":"sync"}))["tree"]["children"].is_null());
+        assert_eq!(service.borrow().wait_ms(now), deadline);
+    }
+
     #[test]
     fn native_colors_keep_notice_identity_deadline_and_actions() {
         let service = Rc::new(RefCell::new(Service::default()));
