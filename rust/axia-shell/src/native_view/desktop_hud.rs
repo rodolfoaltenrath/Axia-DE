@@ -11,6 +11,7 @@ pub struct DesktopHud {
     appearance: Option<std::rc::Rc<Value>>,
     windows: Reader<WindowState>,
     changes: Subscription,
+    displays: Option<(Reader<Vec<Value>>, Subscription)>,
     active: Option<i64>,
     until: Option<Instant>,
     last: Value,
@@ -23,14 +24,21 @@ impl DesktopHud {
             appearance: None,
             windows,
             changes,
+            displays: None,
             active: None,
             until: None,
             last: Value::Null,
         }
     }
 
+    pub fn with_displays(windows: Reader<WindowState>, displays: Reader<Vec<Value>>) -> Self {
+        let changes = displays.subscribe();
+        Self { displays: Some((displays, changes)), ..Self::new(windows) }
+    }
+
     fn update(&mut self, now: Instant, requested: bool) {
         self.changes.take();
+        if let Some((_, changes)) = &self.displays { changes.take(); }
         let state = self.windows.read();
         let active = state.active_desktop();
         let switched = self.active.is_some_and(|old| old != active);
@@ -50,7 +58,13 @@ impl DesktopHud {
         }
         let state = self.windows.read();
         let theme = self.appearance.as_deref().unwrap_or(&input["context"]["theme"]);
-        let display = &input["args"]["display"];
+        let displays = self.displays.as_ref().map(|(source, _)| source.read());
+        let display = if let Some(displays) = &displays {
+            displays.iter().find(|display| display["main"] == true).or_else(|| displays.first())
+        } else { Some(&input["args"]["display"]) };
+        let Some(display) = display else {
+            return json!({"kind":"view","key":"desktop-hud","style":{"pointerEvents":"none"}});
+        };
         let width = display["w"].as_f64().unwrap_or(0.);
         let height = display["h"].as_f64().unwrap_or(0.);
         let active = state.active_desktop();
@@ -86,7 +100,7 @@ impl NativeApp for DesktopHud {
     fn uses_shell_appearance(&self) -> bool { true }
     fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn invalidated(&self) -> bool {
-        self.changes.pending()
+        self.changes.pending() || self.displays.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.until.map(|until| {
@@ -124,6 +138,44 @@ impl NativeApp for DesktopHud {
 mod tests {
     use super::*;
     use crate::winmodel::Session;
+
+    #[test]
+    fn physical_displays_reposition_without_restarting_the_indicator() {
+        let mut session = Session::default();
+        session.call("setDesktops", &[json!({}), json!([1,2]), json!(1)]).unwrap();
+        let source = axia_state::Store::new(vec![
+            json!({"x":-800,"y":0,"w":800,"h":600,"main":false}),
+            json!({"x":0,"y":20,"w":1000,"h":700,"main":true}),
+        ]);
+        let mut hud = DesktopHud::with_displays(session.reader(), source.reader());
+        let input = json!({"cmd":"sync","args":{"display":{"x":9999,"y":9999,"w":1,"h":1}}});
+        hud.request(&input);
+        hud.request(&json!({"cmd":"show"}));
+        let until = hud.until;
+        let tree = hud.request(&input)["tree"].clone();
+        assert_eq!(tree["style"]["left"], 0);
+        assert_eq!(tree["style"]["top"], 118.);
+        assert_eq!(tree["style"]["width"], 1000.);
+        source.update(|displays| {
+            displays[0]["main"] = json!(true); displays[1]["main"] = json!(false);
+            ((), true)
+        });
+        assert!(hud.invalidated());
+        let tree = hud.request(&input)["tree"].clone();
+        assert_eq!(tree["style"]["left"], -800);
+        assert_eq!(tree["style"]["width"], 800.);
+        assert_eq!(hud.until, until);
+        assert!(!hud.invalidated());
+        source.update(|displays| { displays.clear(); ((), true) });
+        assert!(hud.request(&input)["tree"]["children"].is_null());
+        assert_eq!(hud.until, until, "unplugging all displays must not restart expiry");
+        source.update(|displays| { displays.push(json!({"x":40,"y":0,"w":640,"h":480})); ((), true) });
+        assert_eq!(hud.request(&input)["tree"]["style"]["left"], 40);
+        hud.update(until.unwrap(), false);
+        source.update(|displays| { displays[0]["x"] = json!(80); ((), true) });
+        assert!(hud.request(&input)["tree"]["children"].is_null());
+        assert!(hud.refresh_ms().is_none(), "display updates must not reopen an expired indicator");
+    }
 
     #[test]
     fn native_colors_do_not_reopen_or_extend_the_indicator() {

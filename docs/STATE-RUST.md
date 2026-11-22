@@ -1491,6 +1491,38 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
 
+### Monitor do indicador de desktops por referência
+
+`DesktopHud` recebe o Reader da fonte física de telas no mount da sessão.
+A fonte passa a preservar o booleano `main`; uma troca desse sinal publica
+revisão mesmo sem mudar coordenadas. A view empresta a lista, escolhe o primeiro
+monitor principal ou o primeiro disponível e deriva a posição em Rust. Sem
+monitores válidos, não monta o conteúdo; a reconexão respeita o prazo original.
+A assinatura participa de `invalidated` e é consumida junto da revisão de
+janelas. Mudanças de tela não mostram um indicador oculto nem prolongam o prazo.
+
+O SDK da sessão não assina `onScreenChange`, não consulta `mainDisplay` e não
+envia `args.display` para o indicador. O componente local continua disponível
+para o host isolado, com o contrato anterior. A entrada de mount validada
+seleciona a fonte; fatos antigos não podem substituir a geometria nativa.
+Áreas úteis de janelas, barra, Dock e demais montagens JS continuam no roadmap.
+
+Validação em Fedora 44 privado: passaram 672 testes da shell (sete ignorados),
+oito contratos LPK, quatro cenários gráficos ampliados do indicador e oito de
+regressão de memória/restauração. O teste Rust cobre monitor principal fora da
+primeira posição, troca só da marca principal, todos desconectados, fallback
+na reconexão e expiração sem reabertura. A integração real exige ausência de
+`args.display` e posicionamento por pixels apesar do espelho JS adulterado e
+de fatos antigos enviados à view. As quatro capturas são idênticas byte a byte
+às de `native-shell-overlays-appearance`; claro/mínimo e escuro inspecionados.
+Build completa GPU=1, bundles default/app-host e instalação privada gerados;
+encerramento instalado passou por timeout/SIGTERM. Evidências em
+`build/validation/native-desktop-hud-displays/`.
+
+Três amostras de ociosidade passaram com limites impostos: 12.500 poll/s e 103.914 MiB de RSS,
+abaixo de 15 poll/s e 120 MiB. Não demonstra ganho causal; medições físicas
+continuam para o encerramento e nenhuma caixa de fase inteira é concluída.
+
 ### Consulta de posição sem cópia do catálogo
 
 `memoryFrame` empresta o catálogo atual do controlador com `metadata_reader`,

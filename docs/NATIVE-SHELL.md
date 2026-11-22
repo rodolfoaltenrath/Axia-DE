@@ -107,6 +107,12 @@ Trocar aparência conserva seleção e origem do alternador, IDs e prazos das
 notificações e o vencimento do indicador, sem reabrir indicadores ocultos.
 Serviços, seleção, relógios de expiração e roteamento de ações mantêm seus
 proprietários existentes; posição/montagem e callbacks continuam nos adaptadores.
+O indicador de desktops também empresta as telas físicas publicadas pelo
+compositor. Escolhe a marcada como principal, com fallback para a primeira,
+sem monitor/geometria nos fatos ou assinatura React de tela na sessão. Trocar
+o principal ou conectar/desconectar monitores invalida a apresentação sem
+reiniciar o prazo; não há polling para telas. O mount de compatibilidade mantém
+a geometria explícita, selecionado pela entrada nativa do host, não pelos fatos.
 A confirmação de restauração também retém a paleta da shell e lê o catálogo
 nativo por empréstimo. O serviço deixa de guardar outra cópia dos metadados;
 o controlador não cria uma cópia por comando, e a view não recebe registry,

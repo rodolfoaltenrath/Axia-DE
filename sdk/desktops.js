@@ -193,10 +193,15 @@ if (appHost) activeDesktop.subscribe(() => {
   animate(list.indexOf(to) >= list.indexOf(from) ? 1 : -1);
 });
 
-export function DesktopHud() {
-  const d = useSyncExternalStore(onScreenChange, mainDisplay);
+function desktopHud(args) {
   return h(Layer, { name: 'tooltip' },
-    h(NativeView, { manifest: NATIVE_DESKTOP_HUD, stateSource: lord.windowList, handleRef: hudHandle,
-      args: { display: { x: d.x, y: d.y, w: d.w, h: d.h } },
+    h(NativeView, { manifest: NATIVE_DESKTOP_HUD, stateSource: lord.windowList, handleRef: hudHandle, args,
       style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'none' } }));
+}
+function LocalDesktopHud() {
+  const d = useSyncExternalStore(onScreenChange, mainDisplay);
+  return desktopHud({ display: { x: d.x, y: d.y, w: d.w, h: d.h } });
+}
+export function DesktopHud() {
+  return appHost ? h(LocalDesktopHud) : desktopHud();
 }

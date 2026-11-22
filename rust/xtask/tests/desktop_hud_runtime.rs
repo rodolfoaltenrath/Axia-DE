@@ -16,10 +16,12 @@ fn desktop_indicator_uses_native_state_and_expiry() {
                 let pixels = image::open(path).unwrap().into_rgb8();
                 let ink = if mode == "light" { [29,29,31] } else { [245,245,247] };
                 assert!(pixels.pixels().filter(|p| p.0 == ink).count() > 10, "native desktop caption: {mode}/{width}");
-                assert!(pixels.pixels().filter(|p| p.0 == [48,209,88]).count() > 30, "native desktop accent: {mode}/{width}");
+                assert!(pixels.enumerate_pixels().filter(|(x,y,p)| *x > width/4 && *x < width*3/4 && *y >= 90 && *y < 180 && p.0 == [48,209,88]).count() > 30, "native main-display placement despite forged JS geometry: {mode}/{width}");
             });
             for flag in [
                 "noAppearanceFacts",
+                "noDisplayFacts",
+                "staleDisplayMirror",
                 "withoutAppearanceFacts",
                 "staleAppearanceMirror",
                 "appearanceRetained",
@@ -54,7 +56,7 @@ fn desktop_indicator_uses_native_state_and_expiry() {
 
 const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
-import {render,View} from '@lordos/runtime';
+import {render,View,screen} from '@lordos/runtime';
 import {setDesktops,setActiveDesktop,activeDesktop,desktopList,windows} from '@ROOT@/sdk/windows.js';
 import {DesktopHud,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch,desktopSwipe} from '@ROOT@/sdk/desktops.js';
 import {settings} from '@ROOT@/sdk/settings.js';
@@ -65,6 +67,9 @@ import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {locale} from '@ROOT@/sdk/i18n.js';
 import {media} from '@ROOT@/sdk/media.js';
 locale.set({...locale.get(),lang:'en'});enableShellLayers();
+const originalDisplays=screen.displays;
+screen.displays=originalDisplays.map(d=>({...d,x:10000,y:10000,w:20,h:20}));
+const staleDisplayMirror=screen.displays[0].x===10000;
 const opposite='@MODE@'==='light'?'dark':'light';
 settings.set({mode:opposite,accent:'azul',effects:false,nativeAppearance:'axia',desktopCount:1,themeDesktops:null});
 const nativeSettings=lord.settings.state;
@@ -78,13 +83,13 @@ const started=settings.get().themeDesktops===null&&desktopList.get().length===3&
 setDesktops([10,20,30],10);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
-let noAppearanceFacts=true,appearanceFacts=0,lastAppearanceFacts;
+let noAppearanceFacts=true,noDisplayFacts=true,appearanceFacts=0,lastAppearanceFacts;
 function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}))&&!('surface'in(input.args||{}))&&!('radius'in(input.args||{}));}
 async function changeAppearance(){
  const perform=settingsBridge.perform;settingsBridge.perform=()=>{};const before=appearanceFacts;
  lord.settings.state({cmd:'patch',patch:{mode:'@MODE@',accent:'verde',effects:false,nativeAppearance:'adwaita'}});await sleep(120);
  const withoutAppearanceFacts=appearanceFacts===before,staleAppearanceMirror=settings.get().mode===opposite;
- send(handle,JSON.stringify({...lastAppearanceFacts,args:{...lastAppearanceFacts.args,surface:{backgroundColor:'#ff0000'},radius:999},context:{...lastAppearanceFacts.context,theme:{mode:opposite,text:'#ff0000',accent:'#ff0000'},scale:{body:200}}}));
+ send(handle,JSON.stringify({...lastAppearanceFacts,args:{...lastAppearanceFacts.args,display:{x:10000,y:10000,w:20,h:20},surface:{backgroundColor:'#ff0000'},radius:999},context:{...lastAppearanceFacts.context,theme:{mode:opposite,text:'#ff0000',accent:'#ff0000'},scale:{body:200}}}));
  settingsBridge.perform=perform;
  return {withoutAppearanceFacts,staleAppearanceMirror};
 }
@@ -92,7 +97,7 @@ const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.
 let handle=0,bound=false,legacyObservers=0,noWindowTransport=true,unmounted=false,hide,remount,mounts=0;
 const request=lord.nativeApps.request;
 lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='desktopCommand')noWindowTransport&&=!('active'in input)&&!('desktops'in input)&&!('id'in input);if(input.cmd==='desktopSession')noWindowTransport&&=!('settings'in input)&&!('windows'in input)&&!('desktops'in input)&&!('active'in input);return request.call(lord.nativeApps,text);};
-function inspect(text){inspectAppearance(text);const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('desktops'in(input.args||{}))&&!('active'in(input.args||{}));}
+function inspect(text){inspectAppearance(text);const input=JSON.parse(text);noDisplayFacts&&=!('display'in(input.args||{}));noWindowTransport&&=!('windows'in input)&&!('desktops'in(input.args||{}))&&!('active'in(input.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:desktops')legacyObservers++;if(id==='shell:desktop-hud'){inspect(text);bound=sources[0]===source;mounts++;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);appearanceFacts++;}return send(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounted=true;return unmount(id);};
@@ -152,7 +157,7 @@ async function run(){
  }finally{desktopList.get=listGet;}
  direct('setDesktops',[10],10);
  direct('createDesktop');const withoutHud=legacyObservers===0&&await until(()=>settings.get().desktopCount===2);
- console.log('desktop_hud-observation '+JSON.stringify({noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok}));
+ console.log('desktop_hud-observation '+JSON.stringify({noAppearanceFacts,noDisplayFacts,staleDisplayMirror,...appearanceUpdate,appearanceRetained,bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('desktop_hud driver: '+(error.stack||error))),150);
 "#;

@@ -243,7 +243,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     } else if id == "shell:switcher" {
         windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:desktop-hud" {
-        windows.clone().map(|reader| Box::new(desktop_hud::DesktopHud::new(reader)) as Box<dyn NativeApp>)
+        windows.clone().map(|reader| Box::new(if native_locale {
+            desktop_hud::DesktopHud::with_displays(reader, services::displays::reader())
+        } else { desktop_hud::DesktopHud::new(reader) }) as Box<dyn NativeApp>)
     } else if id == "shell:notifications" {
         owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:clock-status" {

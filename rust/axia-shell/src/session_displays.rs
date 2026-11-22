@@ -13,7 +13,7 @@ fn normalize(input: &Value) -> Result<Vec<Value>, ()> {
         if ![frame.x, frame.y, frame.w, frame.h].into_iter().all(f64::is_finite)
             || frame.w <= 0. || frame.h <= 0. { return None; }
         Some(json!({"id":display["id"],"name":display["name"],"connector":display["connector"],
-            "x":frame.x,"y":frame.y,"w":frame.w,"h":frame.h}))
+            "x":frame.x,"y":frame.y,"w":frame.w,"h":frame.h,"main":display["main"] == true}))
     }).collect())
 }
 pub(crate) fn update(input: &Value) -> Result<bool, ()> {

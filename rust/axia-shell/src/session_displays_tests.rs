@@ -19,6 +19,12 @@ fn compositor_events_publish_only_physical_changes_and_ignore_invalid_ffi_input(
     }
     assert_eq!(unsafe { axia_session_displays_update(std::ptr::null()) }, -1);
     assert_eq!(source.revision(), revision);
+    let mut main = event.clone(); main["displays"][0]["main"] = json!(true);
+    assert_eq!(update(&main), Ok(true));
+    assert!(changes.pending()); changes.take();
+    assert_eq!(source.read()[0]["main"], true);
+    assert_eq!(update(&main), Ok(false));
+    assert!(!changes.pending());
     let mut moved = event; moved["displays"][0]["x"] = json!(0);
     assert_eq!(update(&moved), Ok(true));
     assert!(changes.pending());
