@@ -8,6 +8,7 @@ pub struct WindowMenu {
     session: Option<Session>,
     windows: Reader<WindowState>,
     changes: Subscription,
+    displays: Option<(Reader<Vec<Value>>, Subscription)>,
     anchor: Option<String>,
     i18n: I18n,
     locale_revision: Value,
@@ -25,16 +26,18 @@ impl WindowMenu {
             session: None,
             windows,
             changes,
+            displays: None,
             anchor: None,
             i18n: I18n::new(assets, home),
             locale_revision: Value::Null,
         }
     }
-    pub fn with_session(session: Session, assets: &str, home: Option<&str>) -> Self {
-        Self { session: Some(session.clone()), ..Self::new(session.reader(), assets, home) }
+    pub fn with_displays(session: Session, displays: Reader<Vec<Value>>, assets: &str, home: Option<&str>) -> Self {
+        let changes = displays.subscribe();
+        Self { session: Some(session.clone()), displays: Some((displays, changes)), ..Self::new(session.reader(), assets, home) }
     }
     pub fn pending(&self) -> bool {
-        self.changes.pending()
+        self.changes.pending() || self.displays.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
     pub fn open(&mut self) {
         self.anchor = self.windows.read().focused_window().map(str::to_owned);
@@ -47,6 +50,13 @@ impl WindowMenu {
                 .is_some_and(|id| self.windows.read().window(id).is_some())
         {
             return json!({});
+        }
+        if action["action"] == "display" {
+            if let Some((source, _)) = &self.displays {
+                if action["display"].is_null() || !source.read().iter().any(|display| display["id"] == action["display"]) {
+                    return json!({});
+                }
+            }
         }
         if let Some(session) = &mut self.session {
             let selected = match action["action"].as_str() {
@@ -71,6 +81,7 @@ impl WindowMenu {
     }
     pub fn items(&mut self, input: &Value) -> Vec<Value> {
         self.changes.take();
+        if let Some((_, changes)) = &self.displays { changes.take(); }
         if self.locale_revision != input["context"]["localeRevision"] {
             self.i18n.invalidate();
             self.locale_revision = input["context"]["localeRevision"].clone();
@@ -150,10 +161,9 @@ impl WindowMenu {
         resize.push(json!({"label":caption("shell.window.previousSize"),"disabled":!window.as_ref().is_some_and(|w|w.maximized()||w.snapped().is_some()),
             "action":["windowMenu",{"action":"snap","id":id,"zone":"restore"}]}));
         items.push(json!({"label":caption("shell.window.moveResize"),"disabled":id.is_none(),"submenu":if id.is_some(){json!(resize)}else{json!([])}}));
-        let displays = input["args"]["displays"]
-            .as_array()
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
+        let physical = self.displays.as_ref().map(|(source, _)| source.read());
+        let displays = if let Some(displays) = &physical { displays.as_slice() }
+            else { input["args"]["displays"].as_array().map(Vec::as_slice).unwrap_or(&[]) };
         if let Some(window) = &window {
             if displays.len() > 1 {
                 let frame = window.frame();

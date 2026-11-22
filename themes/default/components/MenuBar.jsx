@@ -108,7 +108,7 @@ function NativeMenuBar({ t, height, focused, onLaunchpad, onControlCenter, contr
         position: 'absolute', left: area.x, top: area.y, width: area.w, height, flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: 8, backgroundColor: t.menuBg, backdropFilter: `blur(${t.blur}px)`,
       }}>
-        <NativeView manifest={NATIVE_MENUBAR} stateSource={lord.windowList} args={{ bar: { items, height }, displays: screen.displays }} style={{ height }} />
+        <NativeView manifest={NATIVE_MENUBAR} stateSource={lord.windowList} args={{ bar: { items, height } }} style={{ height }} />
         <NativeBarGroup owner="bar-keyboard" onAction={() => keyboard.next()}
           tree={barNode('kb', t, [barLabel(t, keyboard.label(keyboard.active()))], { action: 'kb' })} />
         <StatusItems color={t.menuText} />

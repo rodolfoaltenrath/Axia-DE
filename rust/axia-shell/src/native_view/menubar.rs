@@ -75,7 +75,10 @@ impl MenuBar {
         }
     }
     pub fn with_session(session: crate::winmodel::Session, assets: &str, home: Option<&str>) -> Self {
-        Self { window_menu: Some(super::window_menu::WindowMenu::with_session(session, assets, home)), ..Self::default() }
+        Self::with_displays(session, super::services::displays::reader(), assets, home)
+    }
+    pub fn with_displays(session: crate::winmodel::Session, displays: axia_state::Reader<Vec<Value>>, assets: &str, home: Option<&str>) -> Self {
+        Self { window_menu: Some(super::window_menu::WindowMenu::with_displays(session, displays, assets, home)), ..Self::default() }
     }
     fn window_run(&mut self, action: &Value) -> Value {
         let reply = self

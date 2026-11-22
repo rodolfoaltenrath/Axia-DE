@@ -19,6 +19,8 @@ fn native_window_menu_reads_current_titles_and_executes_live_actions() {
                     "current shell ink was not painted: {mode}/{width}");
             });
             for flag in [
+                "noDisplayTransport",
+                "physicalDisplays",
                 "noAppearanceFacts",
                 "withoutAppearanceFacts",
                 "staleAppearanceMirror",
@@ -72,7 +74,7 @@ async function changeAppearance(){
  const before=appearanceFacts;
  lord.settings.state({cmd:'patch',patch:{mode:'@MODE@',accent:'verde',effects:false,nativeAppearance:'adwaita'}});await sleep(200);
  const withoutAppearanceFacts=appearanceFacts===before,staleAppearanceMirror=settings.get().mode===opposite;
- appearanceSend(handle,JSON.stringify({...lastAppearanceFacts,context:{...lastAppearanceFacts.context,theme:{mode:opposite,menuText:'#ff0000',effects:true},scale:{body:200}}}));
+ appearanceSend(handle,JSON.stringify({...lastAppearanceFacts,args:{...lastAppearanceFacts.args,displays:[{id:90,name:'Forged first',x:-10000,y:0,w:100,h:700},{id:91,name:'Forged second',x:0,y:0,w:10000,h:700}]},context:{...lastAppearanceFacts.context,theme:{mode:opposite,menuText:'#ff0000',effects:true},scale:{body:200}}}));
  await sleep(100);settingsBridge.perform=perform;
  return {withoutAppearanceFacts,staleAppearanceMirror};
 }
@@ -80,9 +82,9 @@ async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn(
 const Icon=()=>null;Icon.nativeIcon={kind:'app',id:'notes',name:'Notes'};
 configureWindows({apps:['notes','calculator'].map(id=>({id,name:id==='notes'?'Notes':'Calculator',Component:()=>null,Icon}))});
 registerBuiltinApp({id:'panel',name:'Hidden panel',builtin:true,Component:()=>null,Icon});
-let handle=0,bound=false,noWindowTransport=true,unmounted=false,hideBar;
+let handle=0,bound=false,noWindowTransport=true,noDisplayTransport=true,unmounted=false,hideBar;
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
-function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('windowRows'in input.args);}
+function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('windowRows'in input.args);noDisplayTransport&&=!('displays'in input.args);}
 lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:menubar'){handle=value;bound=source[0]===lord.windowList;inspect(text);inspectAppearance(text);}return value;};
 lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);inspectAppearance(text);appearanceFacts++;}return facts(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounted=true;return unmount(id);};
@@ -91,7 +93,7 @@ barBridge.menus={get window(){jsRows++;throw Error('Window rows reached JS');},h
 barBridge.prepare=()=>prepared++;
 function Harness(){const[shown,setShown]=useState(true);hideBar=()=>setShown(false);
  return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'azul',effects:false})},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#222':'#eee',padding:20}},
- shown&&h(NativeView,{manifest:NATIVE_MENUBAR,stateSource:lord.windowList,args:{bar:{items:[{id:'window',label:'Window'},{id:'help',label:'Help'}],height:28},displays:screen.displays},style:{width:@WIDTH@-40,height:28,flex:0}})));}
+ shown&&h(NativeView,{manifest:NATIVE_MENUBAR,stateSource:lord.windowList,args:{bar:{items:[{id:'window',label:'Window'},{id:'help',label:'Help'}],height:28}},style:{width:@WIDTH@-40,height:28,flex:0}})));}
 render(h(Harness));
 const has=label=>!!lord.nativeViews.findText(handle,label);
 const raw=(op,...args)=>JSON.parse(lord.windowList.call(op,JSON.stringify([{},...args])));
@@ -115,6 +117,7 @@ async function run(){
  raw('open',{app:'notes',instance:'native'});raw('patch','notes#native',{title:'Native title'});const rawOnly=!wm.get('notes#native');
  await until(()=>handle&&has('Window'));await open();
  const appearance=await changeAppearance();
+ const physicalDisplays=!has('Move to Forged first (1)')&&!has('Move to Forged second (2)');
  const appearanceRetained=has('Alpha')&&has('Native title');
  const initial=rawOnly&&has('Native title')&&has('Alpha')&&!has('Hidden panel');
  raw('patch','notes#native',{title:'Fresh title'});const directTitle=await until(()=>has('Fresh title')&&!has('Native title'));
@@ -156,7 +159,7 @@ async function run(){
 
  click('Help');await until(()=>has('Legacy help'));click('Legacy help');const legacyMenu=help===1;
  hideBar();await until(()=>unmounted&&!lord.nativeViews.text(handle));
- console.log('window_menu-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,nativeStateActions,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
+ console.log('window_menu-observation '+JSON.stringify({noDisplayTransport,physicalDisplays,noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,nativeStateActions,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_menu driver: '+(error.stack||error))),200);
 "#;

@@ -148,3 +148,64 @@ fn bound_window_bar_executes_native_state_actions_without_effect_callbacks() {
     assert_eq!(reply["effects"][0]["kind"],"windowMenu","app close guards remain in their existing adapter");
     assert_eq!(reader.revision(),revision);
 }
+
+#[test]
+fn bound_window_menu_borrows_physical_displays_and_rebuilds_after_hotplug() {
+    let mut session = Session::default();
+    session.call("open", &[json!({}),json!({"app":"notes","frame":{"x":10,"y":40,"w":200,"h":200}})]).unwrap();
+    let source = axia_state::Store::new(vec![json!({"id":0,"name":"Internal","x":0,"y":0,"w":640,"h":700})]);
+    let mut menu = super::window_menu::WindowMenu::with_displays(session.clone(),source.reader(),"",None);
+    menu.open();
+    let stale = json!({"args":{"displays":[{"id":9,"name":"Forged","x":0,"y":0,"w":100,"h":100},
+        {"id":10,"name":"Forged second","x":100,"y":0,"w":100,"h":100}]}});
+    let moves = |items: Vec<serde_json::Value>| items.into_iter().filter(|item|item["action"][1]["action"]=="display").collect::<Vec<_>>();
+    assert!(moves(menu.items(&stale)).is_empty(),"stale JS displays must not replace the physical source");
+    assert!(!menu.pending());
+    source.update(|displays| { displays.push(json!({"id":1,"name":"External","x":640,"y":0,"w":800,"h":600})); ((),true) });
+    assert!(menu.pending());
+    let items = moves(menu.items(&stale));
+    assert_eq!(items.len(),1);
+    assert_eq!(items[0]["action"][1]["display"],1);
+    assert_eq!(menu.effect(&items[0]["action"][1])["effects"][0]["kind"],"windowMenu","geometry effects remain with the adapter");
+    assert!(!menu.pending());
+    session.call("setFrame",&[json!({}),json!("notes"),json!({"x":700,"y":40,"w":200,"h":200})]).unwrap();
+    assert_eq!(moves(menu.items(&stale))[0]["action"][1]["display"],0,"window geometry chooses the owning display");
+    source.update(|displays| { displays.remove(0); ((),true) });
+    assert!(menu.pending());
+    assert!(moves(menu.items(&stale)).is_empty(),"unplug removes the stale destination");
+    source.update(|displays| { displays.clear(); ((),true) });
+    assert!(moves(menu.items(&stale)).is_empty(),"an empty physical source must not fall back to forged JS");
+    assert_eq!(menu.effect(&items[0]["action"][1]),json!({}),"a queued action cannot target a disconnected display");
+    assert_eq!(menu.effect(&json!({"action":"display","id":"notes","display":90})),json!({}));
+    source.update(|displays| { displays.push(json!({"id":2,"name":"Reconnected","x":0,"y":0,"w":1000,"h":700})); ((),true) });
+    assert!(menu.pending());
+    assert!(moves(menu.items(&stale)).is_empty());
+}
+
+#[test]
+fn hotplug_refreshes_the_open_native_menu_without_facts_and_closed_menus_stay_idle() {
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"),"/../../assets");
+    let mut session = Session::default();
+    session.call("open",&[json!({}),json!({"app":"notes","frame":{"x":10,"y":40,"w":200,"h":200}})]).unwrap();
+    let source = axia_state::Store::new(vec![json!({"id":0,"name":"Internal","x":0,"y":0,"w":640,"h":700})]);
+    let node = scene::create(scene::VIEW);
+    let mut host = Host::new(node,Box::new(MenuBar::with_displays(session,source.reader(),assets,None)),assets,None);
+    host.facts(json!({"width":1000,"lang":"en","args":{"bar":{"items":[{"id":"window","label":"Window"}]}}}));
+    host.action(&json!({"action":["bar","window"]}));
+    host.take();
+    assert_eq!(host.find_text("Move to External (2)"),0);
+    source.update(|displays| { displays.push(json!({"id":1,"name":"External","x":640,"y":0,"w":800,"h":600})); ((),true) });
+    assert_eq!(host.deadline(),Some(0.));
+    host.tick(0.);
+    assert_ne!(host.find_text("Move to External (2)"),0,"a physical revision repaints the open menu without new facts");
+    assert!(host.deadline().is_none());
+    source.update(|displays| { displays.pop(); ((),true) });
+    assert_eq!(host.deadline(),Some(0.));
+    host.tick(0.);
+    assert_eq!(host.find_text("Move to External (2)"),0);
+    host.key("Escape","",0);
+    source.update(|displays| { displays.clear(); ((),true) });
+    assert!(host.deadline().is_none(),"a disconnected display must not wake a closed menu");
+    drop(host);
+    scene::destroy(node);
+}
