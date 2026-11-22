@@ -7,7 +7,7 @@ import {wm,applyNativeWindowState} from './windows.js';
 import {moveWindowToDesktop} from './desktops.js';
 import {arrangeWindowMenu,bringAllWindows} from './appcontrol.js';
 import {openOverview} from './overview.jsx';
-export const NATIVE_MENUBAR = { id: 'shell:menubar', shell: true, appearanceSource: 'native', keyboard: true, fullTheme: true, facts: 'appcontrol' };
+export const NATIVE_MENUBAR = { id: 'shell:menubar', shell: true, appearanceSource: 'native', catalogSource: 'native', keyboard: true, fullTheme: true };
 
 // menus: { name: { items } } as getters, so only the opened one is built; prepare: what opening a
 // menu closes first (the Control Center, Spotlight).

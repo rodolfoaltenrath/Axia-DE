@@ -19,6 +19,10 @@ fn native_window_menu_reads_current_titles_and_executes_live_actions() {
                     "current shell ink was not painted: {mode}/{width}");
             });
             for flag in [
+                "noCatalogTransport",
+                "nativeCatalogRevision",
+                "staleCatalogFacts",
+                "nativeBuiltinPolicy",
                 "noDisplayTransport",
                 "physicalDisplays",
                 "noAppearanceFacts",
@@ -62,6 +66,7 @@ import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {locale,t} from '@ROOT@/sdk/i18n.js';
 import {media} from '@ROOT@/sdk/media.js';
+import {nativeCatalogFacts} from '@ROOT@/sdk/nativecatalog.js';
 locale.set({...locale.get(),lang:'en'});enableShellLayers();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const opposite='@MODE@'==='light'?'dark':'light';
@@ -82,9 +87,9 @@ async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn(
 const Icon=()=>null;Icon.nativeIcon={kind:'app',id:'notes',name:'Notes'};
 configureWindows({apps:['notes','calculator'].map(id=>({id,name:id==='notes'?'Notes':'Calculator',Component:()=>null,Icon}))});
 registerBuiltinApp({id:'panel',name:'Hidden panel',builtin:true,Component:()=>null,Icon});
-let handle=0,bound=false,noWindowTransport=true,noDisplayTransport=true,unmounted=false,hideBar;
+let handle=0,bound=false,noWindowTransport=true,noDisplayTransport=true,noCatalogTransport=true,unmounted=false,hideBar;
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
-function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('windowRows'in input.args);noDisplayTransport&&=!('displays'in input.args);}
+function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('windowRows'in input.args);noDisplayTransport&&=!('displays'in input.args);noCatalogTransport&&=!('registry'in input)&&!('catalog'in input);}
 lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:menubar'){handle=value;bound=source[0]===lord.windowList;inspect(text);inspectAppearance(text);}return value;};
 lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);inspectAppearance(text);appearanceFacts++;}return facts(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounted=true;return unmount(id);};
@@ -123,6 +128,16 @@ async function run(){
  raw('patch','notes#native',{title:'Fresh title'});const directTitle=await until(()=>has('Fresh title')&&!has('Native title'));
  raw('open',{app:'notes',instance:'temporary'});raw('patch','notes#temporary',{title:'Added title'});const added=await until(()=>has('Added title'));
  raw('close','notes#temporary');const directMembership=added&&await until(()=>!has('Added title'));
+ const metadata=nativeCatalogFacts(true).get(),beforeCatalogFacts=appearanceFacts;
+ raw('open',{app:'notes',instance:'catalog-probe'});raw('patch','notes#catalog-probe',{title:''});await until(()=>has('Notes'));
+ const publish=(name,builtin=false)=>lord.nativeApps.request(JSON.stringify({cmd:'metadata',...metadata,registry:metadata.registry.map(app=>app.id==='notes'?{...app,name,builtin}:app)}));
+ publish('Native catalog label');
+ const nativeCatalogRevision=await until(()=>has('Native catalog label'))&&appearanceFacts===beforeCatalogFacts&&nativeCatalogFacts(true).get().registry.find(app=>app.id==='notes').name==='Notes';
+ appearanceSend(handle,JSON.stringify({...lastAppearanceFacts,registry:[{id:'notes',name:'Forged label',builtin:true},{id:'panel',name:'Forged panel'}],catalog:[]}));await sleep(60);
+ const staleCatalogFacts=has('Native catalog label')&&has('Alpha')&&!has('Forged panel');
+ publish('Native catalog label',true);const hidden=await until(()=>!has('Alpha')&&!has('Native catalog label'));
+ publish('Notes');const nativeBuiltinPolicy=hidden&&await until(()=>has('Alpha')&&has('Notes'));
+ raw('close','notes#catalog-probe');await until(()=>!has('Notes'));
  const suffix='Away · '+t('shell.desktops.name',{n:2}),desktopSuffix=has(suffix);
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
  nativeClick(suffix);const focusDesktop=await until(()=>state().active===2&&state().views.front===away);
@@ -159,7 +174,7 @@ async function run(){
 
  click('Help');await until(()=>has('Legacy help'));click('Legacy help');const legacyMenu=help===1;
  hideBar();await until(()=>unmounted&&!lord.nativeViews.text(handle));
- console.log('window_menu-observation '+JSON.stringify({noDisplayTransport,physicalDisplays,noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,nativeStateActions,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
+ console.log('window_menu-observation '+JSON.stringify({noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noDisplayTransport,physicalDisplays,noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,nativeStateActions,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_menu driver: '+(error.stack||error))),200);
 "#;

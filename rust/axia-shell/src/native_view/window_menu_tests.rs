@@ -209,3 +209,47 @@ fn hotplug_refreshes_the_open_native_menu_without_facts_and_closed_menus_stay_id
     drop(host);
     scene::destroy(node);
 }
+
+#[test]
+fn window_menu_borrows_session_catalog_and_recreation_preserves_its_source() {
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"),"/../../assets");
+    let mut session = Session::default();
+    for app in ["notes","panel"] { session.call("open",&[json!({}),json!({"app":app})]).unwrap(); }
+    let node = scene::create(scene::VIEW);
+    let mut host = Host::new(node,Box::new(MenuBar::with_session(session.clone(),assets,None)),assets,None);
+    let facts = json!({"width":1000,"lang":"en","registry":[{"id":"notes","name":"Forged Notes","builtin":true},{"id":"panel","name":"Forged panel"}],"args":{"bar":{"items":[{"id":"window","label":"Window"}]}}});
+    host.facts(facts.clone());
+    host.action(&json!({"action":["bar","window"]}));
+    host.take();
+    assert_eq!(host.find_text("Forged panel"),0,"an empty native catalog cannot fall back to view facts");
+    let mut control = crate::app_control::Controller::new(session.clone());
+    let metadata = json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Native Notes"},{"id":"panel","name":"Native panel","builtin":true}]});
+    assert_eq!(control.request(&metadata)["ok"],true);
+    assert_eq!(host.deadline(),Some(0.));
+    host.tick(0.);
+    assert_ne!(host.find_text("Native Notes"),0);
+    for title in ["Native panel","Forged Notes","Forged panel"] { assert_eq!(host.find_text(title),0); }
+    assert!(host.deadline().is_none());
+    let catalog = session.catalog_reader();
+    let revision = catalog.revision();
+    drop(control);
+    let mut control = crate::app_control::Controller::new(session.clone());
+    assert_eq!(catalog.revision(),revision,"recreating the adapter must not replace or clear the catalog");
+    assert_eq!(control.request(&metadata)["ok"],true);
+    assert_eq!(catalog.revision(),revision,"identical metadata does not invalidate readers");
+    let updated = json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Updated Notes","builtin":true},{"id":"panel","name":"Visible panel"}]});
+    control.request(&updated);
+    host.tick(0.);
+    assert_eq!(host.find_text("Native Notes"),0);
+    assert_ne!(host.find_text("Visible panel"),0);
+    host.facts(facts);
+    assert_eq!(host.find_text("Forged panel"),0);
+    let mut other = crate::app_control::Controller::new(Session::default());
+    other.request(&metadata);
+    assert_eq!(catalog.read()["registry"][0]["name"],"Updated Notes","another context cannot replace this catalog");
+    host.key("Escape","",0);
+    control.request(&metadata);
+    assert!(host.deadline().is_none(),"catalog revisions do not wake closed menus");
+    drop(host);
+    scene::destroy(node);
+}

@@ -22,7 +22,7 @@ import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
 import { wm, applyNativeWindowState } from './windows.js';
 import { launchApp } from './apps.js';
-import { nativeCatalogFacts } from './nativecatalog.js';
+import { nativeCatalogFacts, syncNativeCatalog } from './nativecatalog.js';
 import { switcherBridge } from './nativeswitcher.js';
 import { restoreBridge } from './nativerestore.js';
 export { appFacts } from './nativecatalog.js';
@@ -257,6 +257,7 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {
     const m = mounted.current;
+    if (!appHost && manifest.catalogSource === 'native') syncNativeCatalog();
     const source = stateSource || windowSource || (appHost ? null : lord.windowList);
     m.handle = ref.current ? (source ? lord.nativeViews.mount(ref.current.id, manifest.id, json, source)
       : lord.nativeViews.mount(ref.current.id, manifest.id, json)) : 0;

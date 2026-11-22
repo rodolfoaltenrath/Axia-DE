@@ -886,6 +886,7 @@ pub struct Session {
 #[derive(Default)]
 struct SessionCore {
     state: Store<WindowState>,
+    catalog: Store<Value>,
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
@@ -903,6 +904,8 @@ impl WeakSession {
 }
 
 impl Session {
+    pub(crate) fn catalog_store(&self) -> Store<Value> { self.core.catalog.clone() }
+    pub(crate) fn catalog_reader(&self) -> Reader<Value> { self.core.catalog.reader() }
     pub(crate) fn activate_services(&self) {
         self.core.resident.set(true);
         crate::native_view::services::register(self.downgrade());

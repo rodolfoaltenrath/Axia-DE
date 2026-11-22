@@ -21,7 +21,7 @@ pub struct Controller {
 }
 impl Controller {
     pub fn new(windows: Session) -> Self {
-        let app = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.reader())));
+        let app = crate::forcequit::App::with_window_metadata(Rc::new(WindowReader(windows.reader())), windows.catalog_store());
         windows.notification_service().borrow_mut().bind_catalog(app.metadata_reader());
         windows.restore_service().borrow_mut().bind_catalog(app.metadata_reader());
         windows.memory_service().borrow_mut().bind_catalog(app.metadata_reader());

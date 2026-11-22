@@ -150,6 +150,9 @@ impl App {
     pub fn with_windows(source: Rc<dyn WindowSource>) -> Self {
         Self { source: Some(source), ..Self::default() }
     }
+    pub fn with_window_metadata(source: Rc<dyn WindowSource>, metadata: axia_state::Store<Value>) -> Self {
+        Self { source: Some(source), metadata, ..Self::default() }
+    }
     fn refresh(&mut self, input: &Value) {
         self.groups = if let Some(source) = &self.source {
             let metadata = self.metadata.read();

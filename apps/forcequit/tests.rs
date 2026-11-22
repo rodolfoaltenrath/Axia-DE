@@ -293,3 +293,25 @@ fn native_window_sends_a_group_key_and_displays_the_session_controllers_result()
     assert!(app.error.is_empty());
     assert!(NativeApp::request(&mut app, &json!({"cmd":"quit"})).is_null());
 }
+
+#[test]
+fn session_metadata_is_shared_by_reference_and_survives_controller_recreation() {
+    let source = Rc::new(Source::default());
+    let metadata = axia_state::Store::default();
+    let mut app = App::with_window_metadata(source.clone(), metadata.clone());
+    let input = json!({"cmd":"metadata","registry":[{"id":"notes","name":"Native Notes"}],"catalog":[]});
+    assert_eq!(app.request(&input)["ok"],true);
+    {
+        let owner = metadata.read();
+        let consumer = app.metadata();
+        assert!(std::ptr::eq(&*owner,&*consumer),"no metadata copy is retained by the controller");
+    }
+    let revision = metadata.revision();
+    drop(app);
+    let mut app = App::with_window_metadata(source,metadata.clone());
+    assert_eq!(app.metadata()["registry"][0]["name"],"Native Notes");
+    app.request(&input);
+    assert_eq!(metadata.revision(),revision);
+    app.request(&json!({"cmd":"metadata","registry":null,"catalog":[]}));
+    assert_eq!(metadata.revision(),revision,"invalid imports cannot clear the shared catalog");
+}

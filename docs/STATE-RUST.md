@@ -180,7 +180,7 @@ janela recém-aberta no modelo não depende do espelho JS para ser encerrada.
 
 `sdk/nativecatalog.js` compartilha os metadados de apps com a view. O adaptador
 envia um pedido `metadata` quando muda o catálogo, o registro ou o idioma;
-o controlador guarda esse catálogo num `axia-state::Store` e o empresta aos pedidos seguintes.
+o controlador compartilha o `axia-state::Store` do Session e o empresta aos pedidos seguintes.
 Atualizações inválidas preservam os dados anteriores e o limite do transporte
 JSON continua valendo. O controlador expõe um leitor nativo para notificações;
 a descoberta e importação do catálogo ainda precisam sair do JS.
@@ -326,8 +326,8 @@ completo nem medição física nesta etapa.
 
 `native_view/window_menu.rs` pertence à barra vinculada ao Session do contexto.
 Monta a lista, títulos, sufixos de desktop, estados habilitados e submenus no
-Rust. A montagem de `MenuBar.jsx` passa o proprietário opaco e metadados de
-apps; o getter JS `window` foi retirado. As linhas não fazem uma viagem
+Rust. A montagem de `MenuBar.jsx` passa o proprietário opaco;
+o getter JS `window` foi retirado. As linhas não fazem uma viagem
 por `barOpen`/`barBridge` nem retornam como uma árvore JSON ao host.
 
 O menu mantém a janela de origem da abertura, inclusive se o foco mudar depois.
@@ -335,6 +335,27 @@ Revisões atualizam título, ordem e pertencimento enquanto estiver aberto.
 Antes de enviar uma ação, o host consome mudanças pendentes e o menu verifica
 se a janela ainda existe. Fechar o menu desativa essa invalidação; a assinatura
 não estabelece timer. Idioma e revisões de catálogo também atualizam as legendas.
+
+O catálogo importado pertence ao `Session`: o controlador compartilha seu Store
+e o menu empresta o Reader original, incluindo nomes e a classificação builtin.
+Recriar o controlador mantém dados e identidade da fonte; contextos diferentes
+mantêm catálogos independentes. A barra declara `catalogSource: 'native'`, que
+inicializa a importação compartilhada antes do mount. Ela deixou de assinar o
+store JS de fatos e de enviar `registry`/`catalog` à view. Revisões do catálogo
+atualizam o menu aberto, e fatos antigos não substituem a fonte, mesmo vazia.
+O contrato de controladores locais por Reader permanece. A coleta e importação
+inicial do catálogo ainda pertencem a `sdk/nativecatalog.js`.
+
+Validação da fonte do catálogo: 683 testes da shell, 14 de Force Quit, oito
+contratos LPK e quatro cenários gráficos do menu passaram, assim como 16 cenários
+de notificações, restauração, comandos e memória de janelas, além do encerramento
+instalado por timeout/SIGTERM. A integração muda nomes/builtin pela importação
+nativa, com o catálogo JS antigo e sem fatos novos da barra, e injeta fatos
+obsoletos que a view rejeita. Os testes Rust cobrem identidade por empréstimo,
+recriação do controlador e isolamento de contextos. Quatro capturas do menu
+permanecem idênticas às anteriores. Build GPU=1, bundles e instalação privada
+passaram; três amostras de ociosidade respeitaram os limites: 12,600 poll/s e
+104,066 MiB de RSS. Evidências em `build/validation/native-window-menu-catalog/`.
 
 Na entrada da sessão, a lista de monitores vem por empréstimo do Reader físico
 do compositor. A montagem não envia `displays`; fatos antigos não substituem a

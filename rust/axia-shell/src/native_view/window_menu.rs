@@ -9,6 +9,7 @@ pub struct WindowMenu {
     windows: Reader<WindowState>,
     changes: Subscription,
     displays: Option<(Reader<Vec<Value>>, Subscription)>,
+    catalog: Option<(Reader<Value>, Subscription)>,
     anchor: Option<String>,
     i18n: I18n,
     locale_revision: Value,
@@ -27,6 +28,7 @@ impl WindowMenu {
             windows,
             changes,
             displays: None,
+            catalog: None,
             anchor: None,
             i18n: I18n::new(assets, home),
             locale_revision: Value::Null,
@@ -34,10 +36,13 @@ impl WindowMenu {
     }
     pub fn with_displays(session: Session, displays: Reader<Vec<Value>>, assets: &str, home: Option<&str>) -> Self {
         let changes = displays.subscribe();
-        Self { session: Some(session.clone()), displays: Some((displays, changes)), ..Self::new(session.reader(), assets, home) }
+        let catalog = session.catalog_reader();
+        let catalog_changes = catalog.subscribe();
+        Self { session: Some(session.clone()), displays: Some((displays, changes)), catalog: Some((catalog,catalog_changes)), ..Self::new(session.reader(), assets, home) }
     }
     pub fn pending(&self) -> bool {
         self.changes.pending() || self.displays.as_ref().is_some_and(|(_, changes)| changes.pending())
+            || self.catalog.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
     pub fn open(&mut self) {
         self.anchor = self.windows.read().focused_window().map(str::to_owned);
@@ -82,13 +87,15 @@ impl WindowMenu {
     pub fn items(&mut self, input: &Value) -> Vec<Value> {
         self.changes.take();
         if let Some((_, changes)) = &self.displays { changes.take(); }
+        if let Some((_, changes)) = &self.catalog { changes.take(); }
         if self.locale_revision != input["context"]["localeRevision"] {
             self.i18n.invalidate();
             self.locale_revision = input["context"]["localeRevision"].clone();
         }
         self.i18n.lang = input["lang"].as_str().unwrap_or("en").to_owned();
         let state = self.windows.read();
-        let registry = input["registry"]
+        let metadata = self.catalog.as_ref().map(|(source, _)| source.read());
+        let registry = metadata.as_deref().unwrap_or(input)["registry"]
             .as_array()
             .map(Vec::as_slice)
             .unwrap_or(&[]);
