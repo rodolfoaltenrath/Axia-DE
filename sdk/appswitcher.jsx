@@ -7,6 +7,7 @@ import { wm, applyNativeWindowState } from './windows.js';
 export { cycleAppWindows } from './appcontrol.js';
 import { NativeView } from './nativeview.js';
 import { switcherBridge } from './nativeswitcher.js';
+import { nativeAppRequest } from './nativeappmodel.js';
 
 const MANIFEST = { id: 'shell:switcher', shell: true, appearanceSource: 'native', catalogSource: 'native', fullTheme: true };
 // Lifecycle only. Entries and the selected index are private to the Rust view.
@@ -25,10 +26,12 @@ export function openSwitcher(hold, back = false) {
   const surface = fullscreen ? lord.wayland?.fullscreenWindow?.() : 0;
   if (fullscreen && !surface) return;
   if (switcherOpen()) cancelSwitcher();
-  const origin = surface ? `linux#${surface}` : '';
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'switcherPrepare', fullscreen, surface });
+  if (!reply.result?.opened) return;
+  applyNativeWindowState(reply);
+  const origin = reply.result.origin;
   switcherBridge.reset();
   switcherState.set({ hold, back, origin, nonce: ++nonce });
-  if (origin) wm.minimize(origin);
 }
 export function cancelSwitcher() {
   const state = switcherState.get();
@@ -36,7 +39,7 @@ export function cancelSwitcher() {
   if (switcherBridge.handle.current) switcherBridge.send(['cancel']);
   else {
     switcherState.set(null);switcherBridge.reset();
-    if (state.origin) wm.focus(state.origin);
+    if (state.origin) applyNativeWindowState(nativeAppRequest(lord.nativeApps, { cmd: 'switcherCancel', origin: state.origin }));
   }
 }
 export function switcherKey(e) {

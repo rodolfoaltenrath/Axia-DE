@@ -1,5 +1,5 @@
 //! Session commands borrow native groups and mutate their context's window owner.
-use crate::winmodel::{AppCommand, Session, WindowReader};
+use crate::winmodel::{AppCommand, Session, WindowMenuAction, WindowReader};
 use serde_json::{json, Value};
 use std::rc::Rc;
 #[cfg(test)]
@@ -44,6 +44,20 @@ impl Controller {
         self.windows.as_ref().and_then(Session::take_service_effects)
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "switcherPrepare" {
+            let (Some(windows),Some(fullscreen),Some(surface)) = (&mut self.windows,input["fullscreen"].as_bool(),input["surface"].as_i64()) else {
+                return json!({"error":"app.invalidRequest"});
+            };
+            return windows.app_command(AppCommand::PrepareSwitcher { fullscreen, surface }, &[])
+                .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
+        }
+        if input["cmd"] == "switcherCancel" {
+            let (Some(windows),Some(origin)) = (&mut self.windows,input["origin"].as_str()) else {
+                return json!({"error":"app.invalidRequest"});
+            };
+            return windows.app_command(AppCommand::WindowAction(WindowMenuAction::Focus), &[origin])
+                .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
+        }
         if input["cmd"] == "clockCommand" {
             let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };
             // Historical/reference times belong to pure calculations only.

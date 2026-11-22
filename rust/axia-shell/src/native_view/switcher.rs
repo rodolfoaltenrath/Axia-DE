@@ -132,7 +132,7 @@ impl Switcher {
                     self.selector.focus(key);
                 }
             }
-            // A fullscreen origin was minimized by the adapter to reveal the shell.
+            // Preparation minimized the fullscreen origin to reveal the shell.
             // Its group must retain the rank it had before that temporary minimize.
             if !self.origin.is_empty() {
                 if let Some(key) = key_of(&self.origin) {

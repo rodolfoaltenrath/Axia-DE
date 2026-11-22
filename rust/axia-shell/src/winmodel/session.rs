@@ -1035,7 +1035,7 @@ impl Session {
 pub enum WindowMenuAction { Dismiss, Minimize, Zoom, Focus, MoveDesktop(Option<i64>) }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, WindowAction(WindowMenuAction), WindowMenu(WindowMenuAction), MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, PrepareSwitcher { fullscreen: bool, surface: i64 }, WindowAction(WindowMenuAction), WindowMenu(WindowMenuAction), MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
 
 impl WindowState {
     // Both the isolated-host API and native desktop gestures use the same selection rule.
@@ -1052,6 +1052,16 @@ impl WindowState {
 
     fn app_command(&mut self, command: AppCommand, ids: &[&str], facts: &Facts) -> Value {
         match command {
+            AppCommand::PrepareSwitcher { fullscreen, surface } => {
+                if !fullscreen { return json!({"opened":true,"origin":""}); }
+                if surface <= 0 { return json!({"opened":false}); }
+                let Some(index) = self.wins.iter().position(|window| window.id().starts_with("linux#") && self.here(window) && !window.on("minimized")
+                    && window.data.get("args").is_some_and(|args| args["surface"].as_i64() == Some(surface))) else {
+                    return json!({"opened":false});
+                };
+                self.wins[index].set("minimized",json!(true));
+                return json!({"opened":true,"origin":self.wins[index].id()});
+            }
             AppCommand::SwipeDesktop { left, rtl } => {
                 if self.desktops.len() > 1 {
                     return self.app_command(AppCommand::StepDesktop(if left != rtl { 1 } else { -1 }), ids, facts);

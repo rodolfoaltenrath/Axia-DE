@@ -43,3 +43,43 @@ fn arrangement_and_bring_all_pick_live_windows_and_commit_once() {
         assert_eq!(reader.revision(), revision);
     }
 }
+
+#[test]
+fn switcher_preparation_resolves_current_surface_and_cancel_revalidates_the_origin() {
+    let mut session = Session::default();
+    session.call("setDesktops",&[json!({}),json!([1,2]),json!(1)]).unwrap();
+    session.call("open",&[json!({}),json!({"app":"notes"})]).unwrap();
+    session.call("open",&[json!({}),json!({"app":"linux","instance":7,"args":{"surface":99,"appId":"game"}})]).unwrap();
+    let mut control = Controller::new(session.clone());
+    let reader = session.reader();
+    let revision = reader.revision();
+    let normal = control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":99}));
+    assert_eq!(normal["result"],json!({"opened":true,"origin":""}));
+    assert_eq!(reader.revision(),revision);
+    for surface in [0,-1,7,100] {
+        assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":surface}))["result"]["opened"],false);
+        assert_eq!(reader.revision(),revision);
+    }
+    let reply = control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":99,"origin":"notes","windows":[],"facts":{"active":2}}));
+    assert_eq!(reply["result"],json!({"opened":true,"origin":"linux#7"}));
+    assert!(reader.read().window("linux#7").unwrap().minimized());
+    assert_eq!(reader.revision(),revision+1);
+    assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":99}))["result"]["opened"],false,"an already minimized origin is stale");
+    assert_eq!(reader.revision(),revision+1);
+    session.call("setActiveDesktop",&[json!({}),json!(2)]).unwrap();
+    let revision = reader.revision();
+    control.request(&json!({"cmd":"switcherCancel","origin":"linux#7"}));
+    assert_eq!(reader.revision(),revision+1);
+    assert_eq!(reader.read().focused_window(),Some("linux#7"));
+    assert_eq!(reader.read().active_desktop(),1);
+    assert!(!reader.read().window("linux#7").unwrap().minimized());
+    session.call("close",&[json!({}),json!("linux#7")]).unwrap();
+    let revision = reader.revision();
+    control.request(&json!({"cmd":"switcherCancel","origin":"linux#7"}));
+    assert_eq!(reader.revision(),revision,"closed origins cannot change focus or recreate a window");
+    for invalid in [json!({"cmd":"switcherPrepare","surface":99}),json!({"cmd":"switcherPrepare","fullscreen":true,"surface":"99"}),json!({"cmd":"switcherCancel"})] {
+        assert_eq!(control.request(&invalid)["error"],"app.invalidRequest");
+        assert_eq!(reader.revision(),revision);
+    }
+    assert_eq!(Controller::default().request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":0}))["error"],"app.invalidRequest");
+}

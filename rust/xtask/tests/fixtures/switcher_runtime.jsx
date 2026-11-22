@@ -46,7 +46,8 @@ const has=label=>!!lord.nativeViews.findText(handle,label);
 const raw=(op,...args)=>lord.windowList.call(op,JSON.stringify([{},...args]));
 const key=(key,shift=false)=>switcherKey({mods:8,down:true,key,shift});
 const release=()=>switcherKey({mods:0,down:false,key:'Meta'});
-let legacyFocusCalls=0;
+let legacyFocusCalls=0,legacyPreparationCalls=0;
+const open=(hold,back=false)=>{const minimize=wm.minimize;wm.minimize=()=>{legacyPreparationCalls++;};try{return openSwitcher(hold,back);}finally{wm.minimize=minimize;}};
 const finish=switcherBridge.perform;
 switcherBridge.perform=effect=>{const focus=wm.focus;wm.focus=()=>{legacyFocusCalls++;};try{return finish(effect);}finally{wm.focus=focus;}};
 enableShellLayers();resetShortcuts();
@@ -54,7 +55,7 @@ function Harness(){useShortcuts({grabs:'flow',onSuperTap:()=>{}});return h(Theme
 render(h(Harness));
 async function run(){
  const files=wm.open('files'),a=wm.open('notes',{instance:'a'}),b=wm.open('notes',{instance:'b'}),calc=wm.open('calculator');
- openSwitcher(8);await until(()=>has('Notes'));const initial=has('Notes');
+ open(8);await until(()=>has('Notes'));const initial=has('Notes');
  const focusBeforeStale=wm.focused();let staleRead=false;
  switcherBridge.perform({nonce:-1,get reply(){staleRead=true;throw Error('stale completion read its snapshot');}});
  const staleCompletionIgnored=!staleRead&&switcherOpen()&&wm.focused()===focusBeforeStale;
@@ -65,18 +66,18 @@ async function run(){
  const staleCatalogFacts=has('Native Notes')&&!has('Forged Notes');
  publishNotes('Notes');await until(()=>has('Notes'));
  raw('close',b);release();const freshCommit=await until(()=>!switcherOpen()&&wm.focused()===a);
- wm.focus(calc);openSwitcher(8);await until(()=>has('Notes'));key('Tab');await until(()=>has('Files'));const forward=has('Files');key('Tab',true);await until(()=>has('Notes'));
+ wm.focus(calc);open(8);await until(()=>has('Notes'));key('Tab');await until(()=>has('Files'));const forward=has('Files');key('Tab',true);await until(()=>has('Notes'));
  const cycling=forward&&has('Notes');key('Escape');const cancelled=await until(()=>!switcherOpen()&&wm.focused()===calc);
- openSwitcher(8);release();const fastRelease=await until(()=>!switcherOpen()&&wm.focused()===a);
+ open(8);release();const fastRelease=await until(()=>!switcherOpen()&&wm.focused()===a);
  wm.focus(calc);raw('open',{app:'files',instance:'native'});const stale=!wm.get('files#native');
- openSwitcher(8);await until(()=>handle&&lord.nativeViews.text(handle));
+ open(8);await until(()=>handle&&lord.nativeViews.text(handle));
  const rawTexts=[lord.nativeViews.text(handle)];
  for(let i=0;i<3&&!has('Files');i++){key('Tab');await sleep(40);rawTexts.push(lord.nativeViews.text(handle));}release();
  await until(()=>!switcherOpen());
  const rawFocus=JSON.parse(raw('state')).state.views.front;
  const rawTarget=stale&&rawFocus==='files#native';
  setDesktops([1,2],1);const away=wm.open('help',{desktop:2});setActiveDesktop(1);wm.focus(calc);
- openSwitcher(8);await sleep(60);
+ open(8);await sleep(60);
  for(let i=0;i<4&&!has('Help');i++){key('Tab');await sleep(30);}
  const desktopLabel=has('Help')&&has('Desktop 2');release();await until(()=>!switcherOpen());
  const desktopState=JSON.parse(raw('state')).state;
@@ -84,23 +85,30 @@ async function run(){
  wm.close(away);setDesktops([1],1);wm.focus('files#native');
  registerBuiltinApp({...app('linux','Linux'),builtin:true});
  const game=wm.open('linux',{instance:'777',args:{surface:777,appId:'fullscreen-test'}}),fullscreen=lord.wayland.fullscreen,fullscreenWindow=lord.wayland.fullscreenWindow;
- lord.wayland.fullscreen=()=>!!wm.get(game)&&!wm.get(game).minimized;lord.wayland.fullscreenWindow=()=>777;
- openSwitcher(8);await until(()=>switcherOpen()&&handle&&has('Files'));key('Escape');
+ raw('setArgs',game,{surface:888,appId:'fullscreen-test'});
+ lord.wayland.fullscreen=()=>!!wm.get(game)&&!wm.get(game).minimized;lord.wayland.fullscreenWindow=()=>888;
+ const cancelFocus=wm.focus;wm.focus=()=>{legacyPreparationCalls++;};
+ open(8);const notMounted=switcherBridge.handle.current===0;cancelSwitcher();wm.focus=cancelFocus;
+ const beforeMountCancel=notMounted&&!switcherOpen()&&wm.focused()===game&&!JSON.parse(raw('resync')).state.windows.find(w=>w.id===game).w.minimized;
+ lord.wayland.fullscreenWindow=()=>999;open(8);
+ const missingFullscreenRejected=!switcherOpen()&&!wm.get(game).minimized;
+ lord.wayland.fullscreenWindow=()=>888;
+ open(8);await until(()=>switcherOpen()&&handle&&has('Files'));key('Escape');
  const fullscreenCancel=await until(()=>!switcherOpen()&&wm.focused()===game&&!wm.get(game).minimized);
- openSwitcher(8);await until(()=>has('Files'));release();
+ open(8);await until(()=>has('Files'));release();
  const fullscreenCommit=await until(()=>!switcherOpen()&&wm.focused()==='files#native'&&wm.get(game).minimized);
  lord.wayland.fullscreen=fullscreen;lord.wayland.fullscreenWindow=fullscreenWindow;
- openSwitcher(8);await sleep(60);settings.set({shortcutProfile:'linux'});const profileCancel=await until(()=>!switcherOpen());
+ open(8);await sleep(60);settings.set({shortcutProfile:'linux'});const profileCancel=await until(()=>!switcherOpen());
  __lordKey(15,1,'Tab','','',16);const dispatched=await until(()=>switcherOpen()&&handle&&lord.nativeViews.text(handle));
  __lordKey(1,1,'Escape','','',16);__lordKey(1,0,'','','',16);__lordKey(15,0,'','','',16);__lordKey(125,0,'Meta','','',0);
  const dispatcher=dispatched&&await until(()=>!switcherOpen());
- wm.focus(calc);openSwitcher(8);await until(()=>has('Notes'));
+ wm.focus(calc);open(8);await until(()=>has('Notes'));
  publishNotes('Notes',true);const removedGroup=await until(()=>!has('Notes'));release();await until(()=>!switcherOpen());
  const nativeBuiltinPolicy=removedGroup&&JSON.parse(raw('state')).state.views.front!==a;
  publishNotes('Notes');
  for(const id of [files,a,calc,'files#native',game])raw('close',id);
  const apps=Array.from({length:18},(_,i)=>app('probe'+i,'Probe '+i));configureWindows({apps});
- const ids=apps.map(item=>wm.open(item.id));openSwitcher(8,true);await until(()=>has('Probe 0'));
+ const ids=apps.map(item=>wm.open(item.id));open(8,true);await until(()=>has('Probe 0'));
  // Backwards opening selects the tail of MRU: Probe 0. The row must scroll.
  await sleep(200);const appearanceUpdate=await changeAppearance();await sleep(60);
  const appearanceRetained=has('Probe 0');
@@ -113,8 +121,8 @@ async function run(){
  if(r){const x=c.width/2+((Math.min(18,Math.floor((c.width-96)/104))-1)*104/2),y=r[1]-62;
  for(const type of ['down','up']){const owner=lord.nativeViews.pointer(type,lord.nativeViews.hitTest(x,y),x,y,0);__lordEvent(type,owner||0,x,y,0);__lordNativeView();}}
  const pointerCommit=await until(()=>!switcherOpen()&&wm.focused()===ids[0]);
- cancelSwitcher();for(const id of ids)raw('close',id);openSwitcher(8);const empty=await until(()=>!switcherOpen());
+ cancelSwitcher();for(const id of ids)raw('close',id);open(8);const empty=await until(()=>!switcherOpen());
  await until(()=>mounts===unmounts);
- console.log(kind+'-observation '+JSON.stringify({noDisplayTransport,nativeDisplayGeometry,nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
+ console.log(kind+'-observation '+JSON.stringify({nativePreparation:legacyPreparationCalls===0,beforeMountCancel,missingFullscreenRejected,noDisplayTransport,nativeDisplayGeometry,nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
 }
 setTimeout(()=>run().catch(error=>console.error(kind+' driver: '+(error.stack||error))),200);

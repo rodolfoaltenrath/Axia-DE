@@ -262,8 +262,32 @@ apresentação. Controladores por Reader mantêm o efeito explícito anterior.
 Cada view vinculada recebe uma geração do Session. Uma montagem nova revoga a
 anterior; concluir consome a geração, e desmontar só libera a geração da própria
 view. Assim, uma entrada atrasada de uma view antiga não altera foco nem revisão,
-e seu descarte não invalida a view atual. A restauração antes de montar uma view
-e a minimização inicial de tela cheia ainda pertencem ao adaptador.
+e seu descarte não invalida a view atual.
+
+Preparar a abertura usa `switcherPrepare`: o adaptador informa a indicação de
+tela cheia e a superfície atual do compositor. Rust valida que a superfície
+pertence a uma janela Linux viva, visível no desktop atual e não minimizada,
+resolve a identidade atual pelo handle de superfície e minimiza numa transação.
+Sem tela cheia, permite abrir sem alterar janelas; origem ausente ou obsoleta
+recusa a abertura. A origem não é construída pelo JS nem depende do espelho.
+Cancelar antes do mount usa `switcherCancel`, que revalida e restaura foco,
+desktop e minimização no proprietário nativo. O SDK só aplica os snapshots.
+Leitura da indicação do compositor, nonce e montagem continuam no adaptador.
+
+Preparação e cancelamento antes do mount passaram em 691 testes da shell,
+oito contratos LPK, oito cenários ampliados do alternador e oito de regressão
+de comandos/menu Janela, além do encerramento instalado por timeout/SIGTERM.
+O novo teste cobre superfície alterada com ID estável, origem ausente/minimizada,
+revisão única, restauração de desktop, origem fechada e pedidos inválidos.
+A integração bloqueia os wrappers wm de minimizar/focar nesses fluxos e mantém
+o ID antigo enquanto a superfície muda; o contrato offline também passou.
+Oito capturas são idênticas às anteriores. Compositor GPU=1 passou na árvore
+principal; bundles, instalação e integrações foram validados numa worktree
+isolada de `1ee73160` com somente o patch desta entrega, preservando arquivos
+de DevTools em alteração paralela. Os sete arquivos de código foram comparados
+byte a byte entre as árvores. Três amostras de ociosidade respeitaram os limites:
+12,450 poll/s e 104,609 MiB de RSS. Evidências em
+`build/validation/native-switcher-prepare/`; medições físicas seguem no encerramento.
 
 A execução nativa do foco passou em 688 testes da shell, oito contratos LPK,
 oito cenários gráficos ampliados do alternador e oito de regressão de foco dos
