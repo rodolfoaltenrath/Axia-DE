@@ -1290,9 +1290,9 @@ antes da escrita. Dados alheios e edições posteriores à coleta são preservad
 
 As publicações `settingsState` atualizam somente consumidores de compatibilidade,
 sem reaplicar patches ou gravar novamente. O host isolado mantém sua inicialização
-e suas opções locais. Desktops e restauração são atendidos pelo loop residente;
-a memória de posições ainda usa seu observador. Retirar metadados do tema/espelhos
-e desvincular os demais serviços das views continua pendente.
+e suas opções locais. Desktops, restauração e memória de posições são atendidos
+pelo loop residente. Retirar metadados do tema/espelhos e desvincular os demais
+serviços das views continua pendente.
 
 Validação de 2026-11-22 em Fedora 44 privado: 627 testes da shell, oito contratos
 LPK, 24 cenários gráficos de desktops, animação, posições, restauração,
@@ -1347,8 +1347,8 @@ com validação do objeto opaco; modelos criados no host isolado não recebem o 
 Uma leitura quieta retorna null sem serializar JSON. O SDK drena a fila pelos
 adaptadores existentes, com guarda contra drenagem reentrante e sem exigir um
 handle visual. Abertura de apps, política de navegadores e espelhos de compatibilidade
-ainda usam JS. Relógio e notificações também são atendidos pelo loop, como detalhado abaixo;
-a memória de posições ainda precisa sair da view observadora.
+ainda usam JS. Relógio, notificações e memória de posições também são atendidos
+pelo loop, como detalhado abaixo.
 
 Validação de 2026-11-22 na árvore compartilhada, em Fedora 44 privado: 631 testes
 da shell e oito contratos LPK passaram. Quatro testes novos verificam prazos e
@@ -1396,7 +1396,7 @@ Snapshots completos de `notificationState` são agrupados pela espécie, conserv
 o mais recente; efeitos de fechamento e ações mantêm sua ordem. O adaptador usa
 as pontes existentes, inclusive callbacks legados, com guarda de reentrância e
 sem timer JS de serviço. Os hosts LPK continuam com seu agendamento local.
-Memória de posições, espelhos/callbacks e demais consumidores legados permanecem
+Espelhos/callbacks e demais consumidores legados permanecem
 no roadmap; esta etapa não elimina o JS da sessão.
 
 Validação em Fedora 44 privado em 2026-11-22: 634 testes da shell passaram, com
@@ -1415,3 +1415,57 @@ inspecionadas. Compositor/bundles compilados e instalação privada gerada;
 evidências em `build/validation/resident-clock-notifications/`.
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,754 MiB de RSS, abaixo de 15 poll/s e 120 MiB. A sessão física foi preservada.
+
+### Memória de posições e telas físicas no contexto
+
+`Memory` deixou de implementar `NativeApp`. O `SessionCore` possui uma única
+instância compartilhada pelos clones, com assinatura das janelas e do catálogo
+observável do controlador. A coleta empresta esse catálogo quando chega o prazo;
+não recebe registry/catalog em fatos da view. `WindowMemory`, a montagem
+`shell:window-memory` e a assinatura React de telas foram retirados do tema/SDK.
+O cache de deduplicação e o prazo de 800 ms sobrevivem à desmontagem e à troca de
+tema. Novas mudanças não empurram indefinidamente o prazo já agendado.
+
+A coleta usa somente coordenadas lógicas das telas físicas e sua identidade,
+sem área reservada por barras/Dock. Por isso não foi criado outro transporte JS
+de geometria. `js_set_displays` entrega o evento nativo à fonte observável
+`session_displays.rs` antes da atualização de `lord.screen`; o Rust analisa o
+JSON uma vez por evento, conserva até 16 telas e projeta somente os campos
+usados pelo consumidor. Revisões sem mudança física não invalidam. A API C
+rejeita ponteiro nulo, texto inválido e eventos acima do limite; descritores sem
+frame utilizável são descartados. Eventos malformados conservam a fonte anterior.
+Leitores emprestam a lista; nenhum contexto retém ponteiros C/JS.
+
+O loop considera revisões de janelas, catálogo e telas, além do prazo monotônico.
+Não há polling após consumo nem dependência de hosts visuais. Mudanças de
+identidade do app ou disposição física também disparam a coleta sem novo fato
+de janela. O resultado é mesclado no perfil atual com mapa/ordem em uma revisão;
+a fila do contexto publica somente o snapshot de compatibilidade necessário.
+Frames transitórios continuam excluídos e o limite de 200 apps foi preservado.
+
+O bootstrap do SDK ativa a coleta por comando validado `memoryStart`, sem
+janelas, catálogo, preferências ou telas. Mantém a guarda de sessão/live e a
+consulta de posição usada pela abertura. Hosts LPK não ativam esse serviço.
+Desativação cancela o prazo; reativação coleta o proprietário atual. A política
+inicial de sessão/live, as áreas/opções do tema usadas para restaurar o frame,
+metadados importados e consumidores dos espelhos continuam no escopo do roadmap.
+O produtor de eventos de tela ainda é o compositor C existente.
+
+Validação em Fedora 44 privado em 2026-11-22: 639 testes da shell passaram,
+com sete ignorados de integrações específicas, além de oito contratos LPK.
+Cinco testes novos cobrem prazo/cache e vida útil com clones, catálogo/telas por
+revisão sem mudança de janela, desativação/reativação e publicação/validação da
+fonte física pela ABI. Os seis testes existentes de memória foram adaptados
+para leitores e atendimento direto, sem implementar uma view de teste.
+
+Passaram 40 cenários gráficos de memória, animação de desktops, Arquivos,
+cabeçalhos, relógio, notificações, locale e restauração, além do encerramento
+instalado por timeout e SIGTERM. A integração exige coleta sem observador e com
+conteúdo desmontado; também altera a cópia JS do nome/origem da tela e exige
+que a posição gravada use os dados físicos originais. Preserva as verificações
+de filtros, ordem, instâncias, preferências atuais e ausência de gravação JS.
+Capturas da fixture foram geradas e a confirmação de restauração foi inspecionada.
+Compositor/bundles compilados e instalação privada gerada. Evidências em
+`build/validation/resident-window-memory/`; a sessão física foi preservada.
+
+Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.

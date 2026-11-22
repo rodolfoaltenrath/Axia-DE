@@ -200,3 +200,77 @@ fn resident_ring_uses_one_deadline_and_observes_native_policy_without_a_view() {
     assert!(timeout(now + Duration::from_secs(30)).is_none(), "native policy cancels ringing without a banner");
     assert_eq!(service.borrow().reader().read().shown.len(), 1);
 }
+
+fn memory_fixture(name: &str) -> (Profile, Session, Store<Value>) {
+    let (home, session, catalog) = fixture(name, "off", Value::Null);
+    displays::update(&json!({"displays":[{"id":0,"name":"Panel","connector":"DP-1",
+        "x":0,"y":0,"w":1000,"h":800}]})).unwrap();
+    let memory = session.memory_service();
+    memory.borrow_mut().bind_settings(&home.0);
+    memory.borrow_mut().bind_catalog(catalog.reader());
+    memory.borrow_mut().enable(true);
+    (home, session, catalog)
+}
+
+#[test]
+fn resident_memory_keeps_its_deadline_and_cache_across_context_clones_without_views() {
+    let (home, mut session, _) = memory_fixture("memory-clone");
+    session.call("open", &[json!({}),json!({"app":"notes","frame":{"x":40,"y":60,"w":300,"h":220}})]).unwrap();
+    let now = Instant::now();
+    tick(now); session.take_service_effects();
+    assert_eq!(timeout(now), Some(800.));
+    let weak = session.downgrade();
+    let mut copy = session.clone(); drop(session);
+    copy.call("setFrame", &[json!({}),json!("notes"),json!({"x":77,"y":60,"w":300,"h":220})]).unwrap();
+    tick(now + Duration::from_millis(600));
+    assert_eq!(timeout(now + Duration::from_millis(600)), Some(200.));
+    assert!(profile(&home)["windowPlaces"]["app:notes"].is_null());
+    tick(now + Duration::from_millis(800));
+    assert_eq!(profile(&home)["windowPlaces"]["app:notes"]["x"], 77.);
+    tick(now + Duration::from_millis(800)); copy.take_service_effects();
+    assert!(timeout(now + Duration::from_millis(800)).is_none());
+    copy.call("patch", &[json!({}),json!("notes"),json!({"title":"No geometry change"})]).unwrap();
+    tick(now + Duration::from_secs(1));
+    tick(now + Duration::from_millis(1800));
+    assert!(!pending(), "unchanged placement must not write another snapshot");
+    let service = copy.memory_service();
+    drop(copy);
+    assert!(weak.upgrade().is_none(), "a memory service reader must not retain its context");
+    assert!(service.borrow().wait_ms(now + Duration::from_secs(2)).is_none());
+}
+
+#[test]
+fn resident_memory_borrows_catalog_and_physical_display_revisions_without_window_changes() {
+    let (home, mut session, catalog) = memory_fixture("memory-sources");
+    session.call("open", &[json!({}),json!({"app":"notes","frame":{"x":140,"y":60,"w":300,"h":220}})]).unwrap();
+    let now = Instant::now(); tick(now); tick(now + Duration::from_millis(800));
+    tick(now + Duration::from_millis(800)); session.take_service_effects();
+    assert_eq!(profile(&home)["windowPlaces"]["app:notes"]["x"], 140.);
+    catalog.set(json!({"registry":[{"id":"notes","package":true}],"catalog":[]}));
+    assert_eq!(timeout(now + Duration::from_secs(1)), Some(0.));
+    tick(now + Duration::from_secs(1)); tick(now + Duration::from_millis(1800));
+    assert_eq!(profile(&home)["windowPlaces"]["lpk:notes"]["x"], 140.);
+    displays::update(&json!({"displays":[{"id":7,"name":"Moved","connector":"DP-2",
+        "x":100,"y":0,"w":1000,"h":800}]})).unwrap();
+    tick(now + Duration::from_secs(2)); tick(now + Duration::from_millis(2800));
+    let saved = profile(&home);
+    assert_eq!(saved["windowPlaces"]["lpk:notes"]["x"], 40.);
+    assert_eq!(saved["windowPlaces"]["lpk:notes"]["d"], "Moved|DP-2");
+    tick(now + Duration::from_millis(2800)); session.take_service_effects();
+    assert!(timeout(now + Duration::from_secs(3)).is_none());
+}
+
+#[test]
+fn disabled_memory_drops_its_deadline_and_enabling_collects_the_current_owner() {
+    let (home, mut session, _) = memory_fixture("memory-disable");
+    session.call("open", &[json!({}),json!({"app":"notes","frame":{"x":40,"y":60,"w":300,"h":220}})]).unwrap();
+    let now = Instant::now(); tick(now);
+    let memory = session.memory_service(); memory.borrow_mut().enable(false);
+    session.call("setFrame", &[json!({}),json!("notes"),json!({"x":99,"y":60,"w":300,"h":220})]).unwrap();
+    tick(now + Duration::from_secs(1));
+    assert!(memory.borrow().wait_ms(now + Duration::from_secs(1)).is_none());
+    assert!(profile(&home)["windowPlaces"]["app:notes"].is_null());
+    memory.borrow_mut().enable(true);
+    tick(now + Duration::from_secs(1)); tick(now + Duration::from_millis(1800));
+    assert_eq!(profile(&home)["windowPlaces"]["app:notes"]["x"], 99.);
+}

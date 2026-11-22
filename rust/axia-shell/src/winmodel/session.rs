@@ -889,6 +889,7 @@ struct SessionCore {
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
+    memory: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::window_memory::Memory>>>>,
     clock: std::cell::RefCell<Option<crate::native_view::services::clock::Scheduler>>,
     resident: std::cell::Cell<bool>,
     effects: std::cell::RefCell<Vec<Value>>,
@@ -926,6 +927,15 @@ impl Session {
                 self.queue_service_effects(effects);
             }
         }
+        if let Some(memory) = self.core.memory.borrow().as_ref() {
+            let mut memory = memory.borrow_mut();
+            if memory.wait_ms(now).is_some_and(|wait| wait <= 0.) {
+                let mut reply = memory.tick(now);
+                if let Some(Value::Array(effects)) = reply.get_mut("effects").map(Value::take) {
+                    self.queue_service_effects(effects);
+                }
+            }
+        }
         if let Some(clock) = self.core.clock.borrow_mut().as_mut() {
             if clock.wait_ms(now).is_some_and(|wait| wait <= 0.) {
                 self.queue_service_effects(clock.tick_at(axia_clock::now(), now));
@@ -948,13 +958,18 @@ impl Session {
         if self.core.desktops.borrow().as_ref().is_some_and(|service| service.borrow().invalidated()) { return Some(0.); }
         [self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now)),
          self.core.clock.borrow().as_ref().and_then(|clock| clock.wait_ms(now)),
-         self.core.notifications.borrow().background_wait(now)]
+         self.core.notifications.borrow().background_wait(now),
+         self.core.memory.borrow().as_ref().and_then(|memory| memory.borrow().wait_ms(now))]
             .into_iter().flatten().reduce(f64::min)
     }
     pub(crate) fn service_pending(&self) -> bool { !self.core.effects.borrow().is_empty() }
     pub(crate) fn take_service_effects(&self) -> Option<Value> {
         let mut effects = self.core.effects.borrow_mut();
         (!effects.is_empty()).then(|| Value::Array(std::mem::take(&mut *effects)))
+    }
+    pub(crate) fn memory_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::window_memory::Memory>> {
+        self.core.memory.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(
+            crate::window_memory::Memory::new(self.reader(), crate::native_view::services::displays::reader())))).clone()
     }
     pub(crate) fn notification_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::notifications::Service>> {
         self.core.notifications.clone()

@@ -251,8 +251,6 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         owner.as_ref().map(|_| Box::new(settings::Observer::new(home.as_deref().unwrap_or(""))) as Box<dyn NativeApp>)
     } else if id == "shell:clock-status" {
         owner.as_ref().map(|_| Box::new(clock::Status::default()) as Box<dyn NativeApp>)
-    } else if id == "shell:window-memory" {
-        windows.clone().map(|reader| Box::new(crate::window_memory::Memory::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:restore" {
         owner.map(|session| Box::new(crate::session_restore::View::new(session)) as Box<dyn NativeApp>)
     } else { app(id) };

@@ -1,9 +1,6 @@
 //! Remembered places read the authoritative owner; only saved preferences leave Rust.
 use crate::winmodel::{Rect, Window, WindowState};
-use axia_native::{
-    windows::{dock_identity, WindowRef},
-    NativeApp,
-};
+use axia_native::windows::{dock_identity, WindowRef};
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
 use std::{
@@ -153,11 +150,16 @@ pub struct Memory {
     due: Option<Instant>,
     last: BTreeMap<String, (String, Value)>,
     initialized: bool,
-    configuration_revision: Value,
+    catalog: Option<(Reader<Value>, Subscription)>,
+    displays: Reader<Vec<Value>>,
+    display_changes: Subscription,
+    enabled: bool,
+    configured: bool,
 }
 impl Memory {
-    pub fn new(windows: Reader<WindowState>) -> Self {
+    pub fn new(windows: Reader<WindowState>, displays: Reader<Vec<Value>>) -> Self {
         let changes = windows.subscribe();
+        let display_changes = displays.subscribe();
         Self {
             settings: None,
             windows,
@@ -165,20 +167,42 @@ impl Memory {
             due: None,
             last: BTreeMap::new(),
             initialized: false,
-            configuration_revision: Value::Null,
+            catalog: None,
+            displays,
+            display_changes,
+            enabled: false,
+            configured: false,
         }
     }
-    fn sync(&mut self, input: &Value, now: Instant) -> Value {
+    pub(crate) fn bind_settings(&mut self, home: &str) {
+        self.settings = Some(crate::settings::profile(home));
+    }
+    pub(crate) fn bind_catalog(&mut self, reader: Reader<Value>) {
+        let changes = reader.subscribe();
+        self.catalog = Some((reader, changes));
+    }
+    pub(crate) fn enable(&mut self, enabled: bool) {
+        if self.enabled != enabled { self.enabled = enabled; self.configured = true; }
+        if !enabled { self.due = None; }
+    }
+    pub(crate) fn invalidated(&self) -> bool {
+        self.enabled && (self.configured || !self.initialized || self.changes.pending() || self.display_changes.pending()
+            || self.catalog.as_ref().is_some_and(|(_, changes)| changes.pending()))
+    }
+    pub(crate) fn wait_ms(&self, now: Instant) -> Option<f64> {
+        if !self.enabled { return None; }
+        if self.invalidated() { return Some(0.); }
+        self.due.map(|due| due.saturating_duration_since(now).as_secs_f64() * 1000.)
+    }
+    pub(crate) fn tick(&mut self, now: Instant) -> Value {
         let changed = self.changes.take().is_some();
-        if input["args"]["enabled"] != true {
+        let metadata_changed = self.catalog.as_ref().is_some_and(|(_, changes)| changes.take().is_some());
+        let configured = std::mem::take(&mut self.configured) | self.display_changes.take().is_some();
+        if !self.enabled {
             self.due = None;
             return json!({});
         }
-        let configured = self.configuration_revision != input["context"]["renderEpoch"];
-        if configured {
-            self.configuration_revision = input["context"]["renderEpoch"].clone();
-        }
-        if changed || configured || !self.initialized {
+        if changed || configured || metadata_changed || !self.initialized {
             self.due.get_or_insert(now + SAVE_DELAY);
         }
         self.initialized = true;
@@ -187,8 +211,13 @@ impl Memory {
         }
         self.due = None;
         let state = self.windows.read();
+        let reader = self.catalog.as_ref().map(|(reader, _)| reader.clone());
+        let metadata = reader.as_ref().map(Reader::read);
+        let empty = Value::Null;
+        let input = metadata.as_deref().unwrap_or(&empty);
         let registry = rows(&input["registry"]);
-        let displays = rows(&input["args"]["displays"]);
+        let displays = self.displays.read();
+        let displays = displays.as_slice();
         if displays.is_empty() {
             return json!({});
         }
@@ -225,29 +254,10 @@ impl Memory {
         self.last.retain(|id, _| state.window(id).is_some());
         if !updates.is_empty() {
             if let Some(home) = &self.settings { return save_profile(home, &json!(updates)); }
-            json!({"effects":[{"kind":"windowPlaces","updates":updates}]})
-        } else {
-            json!({})
-        }
-    }
-}
-impl NativeApp for Memory {
-    fn resources(&mut self, _assets: &str, home: Option<&str>) {
-        self.settings = home.map(crate::settings::profile);
-    }
-    fn invalidated(&self) -> bool {
-        self.changes.pending()
-    }
-    fn refresh_ms(&self) -> Option<f64> {
-        self.due
-            .map(|due| due.saturating_duration_since(Instant::now()).as_secs_f64() * 1000. + 0.01)
-    }
-    fn background_refresh_ms(&self) -> Option<f64> {
-        self.refresh_ms()
-    }
-    fn request(&mut self, input: &Value) -> Value {
-        if input["cmd"] == "sync" {
-            self.sync(input, Instant::now())
+            #[cfg(test)]
+            { return json!({"effects":[{"kind":"windowPlaces","updates":updates}]}); }
+            #[cfg(not(test))]
+            { json!({}) }
         } else {
             json!({})
         }

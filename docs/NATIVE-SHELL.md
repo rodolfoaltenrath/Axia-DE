@@ -20,7 +20,10 @@ o observador invisível de desktops foi retirado. O adaptador ainda drena efeito
 de compatibilidade pelo controlador validado, mesmo sem nenhuma view montada.
 Relógio e notificações também são atendidos pelo loop Rust: não existe mais
 observador invisível do relógio, e o banner não agenda expiração nem toque.
-A memória de posições ainda precisa sair do observador visual.
+A memória de posições também pertence ao contexto e é atendida por esse loop.
+O observador do tema foi retirado; catálogo e telas físicas vêm de leitores
+Rust compartilhados. O compositor publica mudanças de telas antes de atualizar
+o JS. A restauração ainda recebe áreas e opções do tema pelo adaptador.
 
 Desktops e memória de posições também usam esse perfil: bootstrap, contagem,
 troca de tema e movimento reduzido são consultados/persistidos no Rust. Abertura

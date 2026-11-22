@@ -996,7 +996,11 @@ void js_broker_app_event(const char *kind, const char *json, size_t len) {
 /* The screen changed size: lord.screen is updated and the theme is notified (__lordScreen). */
 /* The displays (docs/DISPLAYS.md): main.c keeps the JSON; lord.screen.displays and .mirror. */
 static char displays_json[4096] = "{\"mirror\":false,\"displays\":[]}";
-void js_set_displays(const char *json) { snprintf(displays_json, sizeof displays_json, "%s", json); }
+extern int axia_session_displays_update(const char *json);
+void js_set_displays(const char *json) {
+    snprintf(displays_json, sizeof displays_json, "%s", json);
+    axia_session_displays_update(displays_json);
+}
 static void set_screen_displays(JSValue screen) {
     JSValue d = JS_ParseJSON(ctx, displays_json, strlen(displays_json), "<displays>");
     if (JS_IsException(d)) { JS_FreeValue(ctx, JS_GetException(ctx)); return; }

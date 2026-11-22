@@ -22,6 +22,7 @@ impl Controller {
         let app = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.reader())));
         windows.notification_service().borrow_mut().bind_catalog(app.metadata_reader());
         windows.restore_service().borrow_mut().bind_catalog(app.metadata_reader());
+        windows.memory_service().borrow_mut().bind_catalog(app.metadata_reader());
         Self {
             app,
             windows: Some(windows),
@@ -32,7 +33,10 @@ impl Controller {
     pub(crate) fn bind_settings(&mut self, home: &str) {
         let home = crate::settings::profile(home);
         self.preferences = Some(crate::settings::with(&home, |s| s.reader()));
-        if let Some(windows) = &self.windows { windows.desktop_service().borrow_mut().bind_settings(&home); }
+        if let Some(windows) = &self.windows {
+            windows.desktop_service().borrow_mut().bind_settings(&home);
+            windows.memory_service().borrow_mut().bind_settings(&home);
+        }
     }
     pub(crate) fn take_services(&self) -> Option<Value> {
         self.windows.as_ref().and_then(Session::take_service_effects)
@@ -56,6 +60,12 @@ impl Controller {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.restore_service();
             return service.borrow_mut().command(windows,&self.app.metadata(),input,std::time::Instant::now());
+        }
+        if input["cmd"] == "memoryStart" {
+            let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };
+            if !input["enabled"].is_boolean() { return json!({"error":"app.invalidRequest"}); }
+            windows.memory_service().borrow_mut().enable(input["enabled"] == true);
+            return json!({"ok":true});
         }
         if input["cmd"] == "memoryFrame" {
             return self

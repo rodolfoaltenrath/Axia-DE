@@ -1,5 +1,14 @@
 use super::*;
 use crate::winmodel::Session;
+use axia_state::Store;
+
+fn configured_memory(session: &Session, input: &Value) -> Memory {
+    let displays = Store::new(rows(&input["args"]["displays"]).to_vec());
+    let mut memory = Memory::new(session.reader(), displays.reader());
+    memory.bind_catalog(Store::new(input.clone()).reader());
+    memory.enable(input["args"]["enabled"] == true);
+    memory
+}
 
 fn facts() -> Value {
     json!({"registry":[{"id":"notes"},{"id":"panel","builtin":true},{"id":"pkg","package":true}],
@@ -22,10 +31,10 @@ fn memory_coalesces_native_changes_and_skips_dialogs_panels_and_transient_frames
     ] {
         session.call("open", &[json!({}), input]).unwrap();
     }
-    let mut memory = Memory::new(session.reader());
     let input = facts();
+    let mut memory = configured_memory(&session, &input);
     let now = Instant::now();
-    assert!(memory.sync(&input, now)["effects"].is_null());
+    assert!(memory.tick(now)["effects"].is_null());
     session
         .call(
             "setFrame",
@@ -37,9 +46,9 @@ fn memory_coalesces_native_changes_and_skips_dialogs_panels_and_transient_frames
         )
         .unwrap();
     assert!(memory.invalidated());
-    memory.sync(&input, now + Duration::from_millis(600));
+    memory.tick(now + Duration::from_millis(600));
     assert_eq!(memory.due, Some(now + SAVE_DELAY));
-    let effect = memory.sync(&input, now + SAVE_DELAY);
+    let effect = memory.tick(now + SAVE_DELAY);
     let merged = merge(&input["args"]["places"], &effect["effects"][0]["updates"]);
     let entries = rows(&merged["entries"]);
     let keys: Vec<_> = entries
@@ -52,7 +61,7 @@ fn memory_coalesces_native_changes_and_skips_dialogs_panels_and_transient_frames
     );
     assert_eq!(entries[1][1]["x"], 77);
     assert_eq!(entries[1][1]["d"], "Panel|DP-1");
-    assert!(memory.refresh_ms().is_none());
+    assert!(memory.wait_ms(Instant::now()).is_none());
     assert!(!memory.invalidated());
     session
         .call(
@@ -60,8 +69,8 @@ fn memory_coalesces_native_changes_and_skips_dialogs_panels_and_transient_frames
             &[json!({}), json!("notes"), json!({"title":"Only a title"})],
         )
         .unwrap();
-    memory.sync(&input, now + Duration::from_secs(1));
-    assert!(memory.sync(&input, now + Duration::from_secs(2))["effects"].is_null());
+    memory.tick(now + Duration::from_secs(1));
+    assert!(memory.tick(now + Duration::from_secs(2))["effects"].is_null());
     session
         .call(
             "setPip",
@@ -72,8 +81,8 @@ fn memory_coalesces_native_changes_and_skips_dialogs_panels_and_transient_frames
             ],
         )
         .unwrap();
-    memory.sync(&input, now + Duration::from_secs(3));
-    assert!(memory.sync(&input, now + Duration::from_secs(4))["effects"].is_null());
+    memory.tick(now + Duration::from_secs(3));
+    assert!(memory.tick(now + Duration::from_secs(4))["effects"].is_null());
 }
 
 #[test]
@@ -143,10 +152,10 @@ fn memory_keeps_normal_geometry_and_the_two_hundred_most_recent_keys() {
     input["args"]["places"] = json!((0..200)
         .map(|i| json!([format!("app:{i}"), {}]))
         .collect::<Vec<_>>());
-    let mut memory = Memory::new(session.reader());
+    let mut memory = configured_memory(&session, &input);
     let now = Instant::now();
-    memory.sync(&input, now);
-    let reply = memory.sync(&input, now + SAVE_DELAY);
+    memory.tick(now);
+    let reply = memory.tick(now + SAVE_DELAY);
     let merged = merge(&input["args"]["places"], &reply["effects"][0]["updates"]);
     let entries = rows(&merged["entries"]);
     assert_eq!(entries.len(), 200);
@@ -163,11 +172,11 @@ fn merging_rebases_on_current_preferences_and_disabled_service_has_no_deadline()
     session
         .call("open", &[json!({}), json!({"app":"notes"})])
         .unwrap();
-    let mut memory = Memory::new(session.reader());
     let mut input = facts();
     input["args"]["enabled"] = json!(false);
-    assert!(memory.sync(&input, Instant::now())["effects"].is_null());
-    assert!(memory.refresh_ms().is_none());
+    let mut memory = configured_memory(&session, &input);
+    assert!(memory.tick(Instant::now())["effects"].is_null());
+    assert!(memory.wait_ms(Instant::now()).is_none());
     assert!(!memory.invalidated());
     let merged = merge(
         &json!([["app:external",{"x":40}],["app:notes",{"x":1}]]),

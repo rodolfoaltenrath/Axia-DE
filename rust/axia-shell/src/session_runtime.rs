@@ -5,6 +5,9 @@ use std::{cell::RefCell, time::Instant};
 #[path = "session_clock.rs"]
 pub(crate) mod clock;
 
+#[path = "session_displays.rs"]
+pub(crate) mod displays;
+
 thread_local! { static CONTEXTS: RefCell<Vec<WeakSession>> = const { RefCell::new(Vec::new()) }; }
 
 pub(crate) fn register(owner: WeakSession) {
