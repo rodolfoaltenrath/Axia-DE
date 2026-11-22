@@ -22,11 +22,8 @@ switcherBridge.perform = effect => {
   else if (typeof effect.focus === 'string') wm.focus(effect.focus);
 };
 export function openSwitcher(hold, back = false) {
-  const fullscreen = !!lord.wayland?.fullscreen?.();
-  const surface = fullscreen ? lord.wayland?.fullscreenWindow?.() : 0;
-  if (fullscreen && !surface) return;
   if (switcherOpen()) cancelSwitcher();
-  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'switcherPrepare', fullscreen, surface });
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'switcherPrepare' });
   if (!reply.result?.opened) return;
   applyNativeWindowState(reply);
   const origin = reply.result.origin;

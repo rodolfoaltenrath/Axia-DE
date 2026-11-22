@@ -57,10 +57,12 @@ fn switcher_preparation_resolves_current_surface_and_cancel_revalidates_the_orig
     assert_eq!(normal["result"],json!({"opened":true,"origin":""}));
     assert_eq!(reader.revision(),revision);
     for surface in [0,-1,7,100] {
+        let _probe = super::switcher_source::set(true,surface);
         assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":surface}))["result"]["opened"],false);
         assert_eq!(reader.revision(),revision);
     }
-    let reply = control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":99,"origin":"notes","windows":[],"facts":{"active":2}}));
+    let _probe = super::switcher_source::set(true,99);
+    let reply = control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":100,"origin":"notes","windows":[],"facts":{"active":2}}));
     assert_eq!(reply["result"],json!({"opened":true,"origin":"linux#7"}));
     assert!(reader.read().window("linux#7").unwrap().minimized());
     assert_eq!(reader.revision(),revision+1);
@@ -77,9 +79,29 @@ fn switcher_preparation_resolves_current_surface_and_cancel_revalidates_the_orig
     let revision = reader.revision();
     control.request(&json!({"cmd":"switcherCancel","origin":"linux#7"}));
     assert_eq!(reader.revision(),revision,"closed origins cannot change focus or recreate a window");
-    for invalid in [json!({"cmd":"switcherPrepare","surface":99}),json!({"cmd":"switcherPrepare","fullscreen":true,"surface":"99"}),json!({"cmd":"switcherCancel"})] {
+    for invalid in [json!({"cmd":"switcherCancel"})] {
         assert_eq!(control.request(&invalid)["error"],"app.invalidRequest");
         assert_eq!(reader.revision(),revision);
     }
     assert_eq!(Controller::default().request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":0}))["error"],"app.invalidRequest");
+}
+
+#[test]
+fn switcher_preparation_uses_the_native_probe_even_when_caller_facts_disagree() {
+    let mut session = Session::default();
+    session.call("open",&[json!({}),json!({"app":"linux","instance":12,"args":{"surface":97}})]).unwrap();
+    let mut control = Controller::new(session.clone());
+    let revision = session.reader().revision();
+    assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":97}))["result"],json!({"opened":true,"origin":""}));
+    assert_eq!(session.reader().revision(),revision);
+    {
+        let _probe = super::switcher_source::set(true,0);
+        assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":97}))["result"]["opened"],false);
+        assert_eq!(session.reader().revision(),revision);
+    }
+    {
+        let _probe = super::switcher_source::set(true,97);
+        assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":0}))["result"]["origin"],"linux#12");
+        assert_eq!(session.reader().revision(),revision+1);
+    }
 }

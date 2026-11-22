@@ -1,7 +1,7 @@
 // Observation driver only. Rust verifies every reported behavior.
 import {createElement as h} from 'react';
 import {render,View,screen} from '@lordos/runtime';
-import {configureWindows,registerBuiltinApp,wm,setDesktops,setActiveDesktop} from '@ROOT@/sdk/windows.js';
+import {configureWindows,registerBuiltinApp,windows,wm,setDesktops,setActiveDesktop} from '@ROOT@/sdk/windows.js';
 import {openSwitcher,switcherKey,cancelSwitcher,switcherOpen,AppSwitcher} from '@ROOT@/sdk/appswitcher.jsx';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {settings} from '@ROOT@/sdk/settings.js';
@@ -13,6 +13,7 @@ import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {media} from '@ROOT@/sdk/media.js';
 import {nativeCatalogFacts} from '@ROOT@/sdk/nativecatalog.js';
 import {switcherBridge} from '@ROOT@/sdk/nativeswitcher.js';
+import '@ROOT@/sdk/wayland.js';
 const c=globalThis.__AXIA_UI_TEST__||{mode:'@MODE@',width:Number('@WIDTH@'),image:@IMAGE@};
 const kind=c.kind||'switcher_@APPEARANCE@';
 const appearance=kind.endsWith('adwaita')?'adwaita':'axia';
@@ -20,7 +21,9 @@ const opposite=c.mode==='light'?'dark':'light';
 settings.set({mode:opposite,accent:'azul',effects:true,nativeAppearance:'axia',nativeStyle:appearance,shortcutProfile:'macos'});locale.set({...locale.get(),lang:'en'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
-let noAppearanceFacts=true,appearanceFacts=0,lastAppearanceFacts;
+let noAppearanceFacts=true,noFullscreenFacts=true,appearanceFacts=0,lastAppearanceFacts;
+const nativeRequest=lord.nativeApps.request;
+lord.nativeApps.request=function(text){const input=JSON.parse(text);if(input.cmd==='switcherPrepare')noFullscreenFacts&&=!('fullscreen'in input)&&!('surface'in input);return nativeRequest.call(this,text);};
 function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}))&&!('surface'in(input.args||{}))&&!('radius'in(input.args||{}));}
 async function changeAppearance(){
  const perform=settingsBridge.perform;settingsBridge.perform=()=>{};const before=appearanceFacts;
@@ -84,20 +87,25 @@ async function run(){
  const desktop=desktopLabel&&desktopState.active===2&&desktopState.views.front===away;
  wm.close(away);setDesktops([1],1);wm.focus('files#native');
  registerBuiltinApp({...app('linux','Linux'),builtin:true});
- const game=wm.open('linux',{instance:'777',args:{surface:777,appId:'fullscreen-test'}}),fullscreen=lord.wayland.fullscreen,fullscreenWindow=lord.wayland.fullscreenWindow;
- raw('setArgs',game,{surface:888,appId:'fullscreen-test'});
- lord.wayland.fullscreen=()=>!!wm.get(game)&&!wm.get(game).minimized;lord.wayland.fullscreenWindow=()=>888;
+ console.log('switcher-client-start');
+ await until(()=>windows.get().some(w=>w.args?.appId==='axia.switcher-probe'));
+ const client=windows.get().find(w=>w.args?.appId==='axia.switcher-probe');
+ if(!client)throw Error('Rust Wayland fullscreen client did not map');
+ const game=client.id,surface=client.args.surface,realFullscreenClient=surface>0;
+ const fullscreen=lord.wayland.fullscreen,fullscreenWindow=lord.wayland.fullscreenWindow;
+ let jsFullscreenReads=0;lord.wayland.fullscreen=lord.wayland.fullscreenWindow=()=>{jsFullscreenReads++;throw Error('switcher read fullscreen through JS');};
  const cancelFocus=wm.focus;wm.focus=()=>{legacyPreparationCalls++;};
  open(8);const notMounted=switcherBridge.handle.current===0;cancelSwitcher();wm.focus=cancelFocus;
  const beforeMountCancel=notMounted&&!switcherOpen()&&wm.focused()===game&&!JSON.parse(raw('resync')).state.windows.find(w=>w.id===game).w.minimized;
- lord.wayland.fullscreenWindow=()=>999;open(8);
- const missingFullscreenRejected=!switcherOpen()&&!wm.get(game).minimized;
- lord.wayland.fullscreenWindow=()=>888;
+ raw('close',game);open(8);const missingFullscreenRejected=!switcherOpen();
+ wm.open('linux',{instance:String(surface),args:{surface,appId:'axia.switcher-probe'}});
  open(8);await until(()=>switcherOpen()&&handle&&has('Files'));key('Escape');
  const fullscreenCancel=await until(()=>!switcherOpen()&&wm.focused()===game&&!wm.get(game).minimized);
  open(8);await until(()=>has('Files'));release();
  const fullscreenCommit=await until(()=>!switcherOpen()&&wm.focused()==='files#native'&&wm.get(game).minimized);
+ const nativeFullscreenProbe=jsFullscreenReads===0;
  lord.wayland.fullscreen=fullscreen;lord.wayland.fullscreenWindow=fullscreenWindow;
+ lord.wayland.close(surface);const realClientClosed=await until(()=>!wm.get(game));
  open(8);await sleep(60);settings.set({shortcutProfile:'linux'});const profileCancel=await until(()=>!switcherOpen());
  __lordKey(15,1,'Tab','','',16);const dispatched=await until(()=>switcherOpen()&&handle&&lord.nativeViews.text(handle));
  __lordKey(1,1,'Escape','','',16);__lordKey(1,0,'','','',16);__lordKey(15,0,'','','',16);__lordKey(125,0,'Meta','','',0);
@@ -123,6 +131,6 @@ async function run(){
  const pointerCommit=await until(()=>!switcherOpen()&&wm.focused()===ids[0]);
  cancelSwitcher();for(const id of ids)raw('close',id);open(8);const empty=await until(()=>!switcherOpen());
  await until(()=>mounts===unmounts);
- console.log(kind+'-observation '+JSON.stringify({nativePreparation:legacyPreparationCalls===0,beforeMountCancel,missingFullscreenRejected,noDisplayTransport,nativeDisplayGeometry,nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
+ console.log(kind+'-observation '+JSON.stringify({noFullscreenFacts,realClientClosed,realFullscreenClient,nativeFullscreenProbe,nativePreparation:legacyPreparationCalls===0,beforeMountCancel,missingFullscreenRejected,noDisplayTransport,nativeDisplayGeometry,nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
 }
 setTimeout(()=>run().catch(error=>console.error(kind+' driver: '+(error.stack||error))),200);

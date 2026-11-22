@@ -264,15 +264,33 @@ anterior; concluir consome a geração, e desmontar só libera a geração da pr
 view. Assim, uma entrada atrasada de uma view antiga não altera foco nem revisão,
 e seu descarte não invalida a view atual.
 
-Preparar a abertura usa `switcherPrepare`: o adaptador informa a indicação de
-tela cheia e a superfície atual do compositor. Rust valida que a superfície
+Preparar a abertura usa `switcherPrepare`, sem fatos de tela cheia no pedido.
+Rust consulta diretamente `wl_fullscreen_active`/`wl_fullscreen_window` na thread
+do compositor e ignora os campos fullscreen/surface de pedidos antigos.
+Valida que a superfície
 pertence a uma janela Linux viva, visível no desktop atual e não minimizada,
 resolve a identidade atual pelo handle de superfície e minimiza numa transação.
 Sem tela cheia, permite abrir sem alterar janelas; origem ausente ou obsoleta
 recusa a abertura. A origem não é construída pelo JS nem depende do espelho.
 Cancelar antes do mount usa `switcherCancel`, que revalida e restaura foco,
 desktop e minimização no proprietário nativo. O SDK só aplica os snapshots.
-Leitura da indicação do compositor, nonce e montagem continuam no adaptador.
+Nonce e montagem continuam no adaptador.
+
+A leitura direta do compositor passou em 692 testes da shell, oito contratos
+LPK, oito cenários gráficos do alternador e quatro de regressão de foco,
+além do encerramento instalado por timeout/SIGTERM. O teste novo e o contrato
+anterior ampliado verificam a fonte nativa com fatos antigos discordantes.
+O fixture agora usa um cliente Wayland Rust real: registry/xdg-shell, buffer
+shm por memfd/SCM_RIGHTS, tela cheia, minimização, restauração e fechamento.
+O processo usa runtime privado e roda como usuário de teste, com queda para
+nobody quando o runner é root; não altera a sessão física.
+O runner e `switcher-check` iniciam o mesmo cliente, inclusive no contrato offline,
+sem Node adicional ou compilação do cliente no RPM. A integração bloqueia os
+getters JS de tela cheia e exige ausência de fullscreen/surface nos pedidos.
+Build GPU=1, bundles e instalação privada passaram na árvore principal; oito
+capturas são idênticas às anteriores, com claro/escuro mínimos inspecionados.
+Evidências em `build/validation/native-switcher-compositor/`; medições físicas
+continuam no encerramento do roadmap.
 
 Preparação e cancelamento antes do mount passaram em 691 testes da shell,
 oito contratos LPK, oito cenários ampliados do alternador e oito de regressão

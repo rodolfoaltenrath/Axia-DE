@@ -7,6 +7,7 @@ mod clock_tests;
 #[cfg(test)]
 mod desktop_tests;
 mod quit;
+mod switcher_source;
 #[cfg(test)]
 mod quit_tests;
 #[cfg(test)]
@@ -45,9 +46,10 @@ impl Controller {
     }
     pub fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "switcherPrepare" {
-            let (Some(windows),Some(fullscreen),Some(surface)) = (&mut self.windows,input["fullscreen"].as_bool(),input["surface"].as_i64()) else {
+            let Some(windows) = &mut self.windows else {
                 return json!({"error":"app.invalidRequest"});
             };
+            let (fullscreen,surface) = switcher_source::current();
             return windows.app_command(AppCommand::PrepareSwitcher { fullscreen, surface }, &[])
                 .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
         }

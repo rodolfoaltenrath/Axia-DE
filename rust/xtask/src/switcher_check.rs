@@ -2,11 +2,16 @@
 #[cfg(target_os = "linux")]
 #[path = "../tests/support/ui.rs"]
 mod ui;
+#[cfg(target_os = "linux")]
+#[path = "../tests/support/fullscreen_client.rs"]
+mod fullscreen_client;
 
 pub fn execute(repo: &std::path::Path, args: &[String]) -> crate::Result<()> {
-    let values = crate::options(args, &["installation", "bundle", "output"])?;
+    let values = crate::options(args, &["installation", "bundle", "output", "client-home"])?;
     #[cfg(target_os = "linux")]
     {
+        if let Some(home) = values.get("client-home") { return fullscreen_client::run(std::path::Path::new(home)); }
+        std::env::set_var("AXIA_UI_FULLSCREEN_CLIENT", std::env::current_exe().map_err(|e|e.to_string())?);
         if let Some(root) = values.get("installation") {
             let root = std::fs::canonicalize(root).map_err(|error| error.to_string())?;
             std::env::set_var("AXIA_UI_SERVER", root.join("bin/axia-server"));

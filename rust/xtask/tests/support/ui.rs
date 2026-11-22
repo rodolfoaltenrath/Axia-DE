@@ -255,6 +255,22 @@ fn run_ui_config(
             });
         }
     }
+    let client = if kind.starts_with("switcher_") {
+        std::env::var_os("AXIA_UI_FULLSCREEN_CLIENT").map(|executable| {
+            let mut client = Command::new(executable);
+            client.arg("switcher-check").arg("--client-home").arg(&home).process_group(0)
+                .stdout(Stdio::null()).stderr(fs::File::create(scratch.0.join("client.log")).unwrap());
+            if unsafe { libc::geteuid() } == 0 {
+                unsafe { client.pre_exec(|| {
+                    if libc::setgroups(0,std::ptr::null())!=0 || libc::setgid(65534)!=0 || libc::setuid(65534)!=0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                }); }
+            }
+            Session(client.spawn().unwrap())
+        })
+    } else { None };
     let mut session = Session(command.spawn().unwrap());
     let log_path = home.join(".cache/axia/session.log");
     let deadline = Instant::now() + Duration::from_secs(seconds + 2);
@@ -270,6 +286,7 @@ fn run_ui_config(
         std::thread::sleep(Duration::from_millis(30));
     }
     drop(session);
+    drop(client);
     let log = fs::read_to_string(&log_path).unwrap_or_default();
     if let Some(destination) =
         std::env::var_os(&format!("AXIA_{}_OUTPUT", kind.to_ascii_uppercase()))
@@ -278,6 +295,7 @@ fn run_ui_config(
         fs::create_dir_all(&destination).unwrap();
         fs::write(destination.join("session.log"), &log).unwrap();
         fs::copy(scratch.0.join("stderr.log"), destination.join("stderr.log")).unwrap();
+        if scratch.0.join("client.log").exists() { fs::copy(scratch.0.join("client.log"),destination.join("client.log")).unwrap(); }
         if image.is_file() {
             fs::copy(&image, destination.join(image_name)).unwrap();
         }

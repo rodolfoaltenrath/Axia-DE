@@ -8,6 +8,7 @@ mod ui;
 #[test]
 #[ignore = "requires built axia-server and npm ci; required by GPU=1 desktop CI"]
 fn switcher_reads_native_state_and_renders_both_styles() {
+    std::env::set_var("AXIA_UI_FULLSCREEN_CLIENT", env!("CARGO_BIN_EXE_xtask"));
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .nth(2)
