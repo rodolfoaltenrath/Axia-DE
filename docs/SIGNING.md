@@ -264,7 +264,7 @@ troubleshooting: `sudo /usr/lib/lordos/bin/axia-server --check-code`).
 
 ### System apps can't be removed
 
-Every app in `apps/` is a **system app** (`system: true`, set by `tools/build-theme.mjs`; a
+Every app in `apps/` is a **system app** (`system: true`, set by `cargo xtask build-theme`; a
 package can never claim it, `sdk/windows.js` `isSystemApp`). Store → Installed shows "System app —
 part of LordOS" where a Linux app has Remove, and About shows a "System app" badge. The `lordos`
 Debian package is marked `Protected: yes` (Debian's field for packages the system needs), so the

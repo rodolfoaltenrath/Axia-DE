@@ -413,10 +413,10 @@ catalog and every language against English.
 
 ```sh
 npm run build                         # every theme, the isolated-app host and the system apps
-node tools/build-theme.mjs <id>       # only themes/<id>
+cargo xtask build-theme <id>       # only themes/<id>
 ```
 
-`tools/build-theme.mjs` bundles `themes/<id>/index.jsx` with esbuild into
+`cargo xtask build-theme` bundles `themes/<id>/index.jsx` with esbuild into
 **`themes/<id>/theme.bundle.js`** (one minified IIFE, ES2020, JSX automatic). React, the reconciler,
 `@lordos/runtime` (`runtime/index.js`) and `@lordos/sdk` (`sdk/index.js`) are **bundled into it**, and
 so is every native app: the virtual module `@lordos/apps` imports `apps/<id>/index.jsx` and
@@ -486,7 +486,7 @@ holds the running theme's folder (`themes_root` in `js_sys.c`); there is no per-
 **Trying one in a development session** (a development build of `axia-server`, see the table
 above):
 
-1. Put the theme in `themes/<id>` of your LordOS tree and run `node tools/build-theme.mjs <id>` (or
+1. Put the theme in `themes/<id>` of your LordOS tree and run `cargo xtask build-theme <id>` (or
    `npm run build`).
 2. Copy the tree to the VM and build `axia-server` as in [VM-SETUP.md](VM-SETUP.md), step 6 (`themes/`
    and `assets/` with `server/`). Copy `code-manifest.json` too, or none at all: a stale manifest

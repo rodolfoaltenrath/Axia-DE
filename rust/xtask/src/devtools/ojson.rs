@@ -172,8 +172,13 @@ impl Parser<'_> {
 
 /// `JSON.stringify(value, null, 2)`
 pub fn pretty(value: &Json) -> String {
+    pretty_with(value, "  ")
+}
+
+/// `JSON.stringify(value, null, indent)` with the given indentation text.
+pub fn pretty_with(value: &Json, indent: &str) -> String {
     let mut out = String::new();
-    write(value, 0, &mut out);
+    write(value, 0, indent, &mut out);
     out
 }
 
@@ -195,8 +200,8 @@ fn quote(text: &str, out: &mut String) {
     out.push('"');
 }
 
-fn write(value: &Json, depth: usize, out: &mut String) {
-    let pad = |n: usize| "  ".repeat(n);
+fn write(value: &Json, depth: usize, unit: &str, out: &mut String) {
+    let pad = |n: usize| unit.repeat(n);
     match value {
         Json::Null => out.push_str("null"),
         Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -207,7 +212,7 @@ fn write(value: &Json, depth: usize, out: &mut String) {
             out.push_str("[\n");
             for (i, item) in items.iter().enumerate() {
                 out.push_str(&pad(depth + 1));
-                write(item, depth + 1, out);
+                write(item, depth + 1, unit, out);
                 out.push_str(if i + 1 < items.len() { ",\n" } else { "\n" });
             }
             out.push_str(&pad(depth));
@@ -220,13 +225,44 @@ fn write(value: &Json, depth: usize, out: &mut String) {
                 out.push_str(&pad(depth + 1));
                 quote(key, out);
                 out.push_str(": ");
-                write(item, depth + 1, out);
+                write(item, depth + 1, unit, out);
                 out.push_str(if i + 1 < fields.len() { ",\n" } else { "\n" });
             }
             out.push_str(&pad(depth));
             out.push('}');
         }
     }
+}
+
+/// `JSON.stringify(value)`: no spaces or line breaks.
+pub fn compact(value: &Json) -> String {
+    let mut out = String::new();
+    match value {
+        Json::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                out.push_str(&compact(item));
+            }
+            out.push(']');
+        }
+        Json::Object(fields) => {
+            out.push('{');
+            for (i, (key, item)) in fields.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                quote(key, &mut out);
+                out.push(':');
+                out.push_str(&compact(item));
+            }
+            out.push('}');
+        }
+        scalar => write(scalar, 0, "", &mut out),
+    }
+    out
 }
 
 impl Json {
@@ -297,6 +333,12 @@ mod tests {
             "{\n  \"z\": 1,\n  \"a\": {\n    \"one\": \"x\",\n    \"zero\": \"é\\n\"\n  },\n  \"list\": [],\n  \"o\": {},\n  \"t\": [\n    true,\n    null,\n    \"q\\\"\"\n  ]\n}"
         );
         assert_eq!(parse(&pretty(&value)).unwrap(), value);
+    }
+
+    #[test]
+    fn compact_text_has_no_spaces() {
+        let value = parse("{ \"a\" : [1, {\"b\": null}], \"c\": \"x y\", \"d\": {} }").unwrap();
+        assert_eq!(compact(&value), "{\"a\":[1,{\"b\":null}],\"c\":\"x y\",\"d\":{}}");
     }
 
     #[test]

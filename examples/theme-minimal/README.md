@@ -21,12 +21,12 @@ the guide, "Translations").
 
 ## Building it
 
-Themes are built from the `themes/` folder of a LordOS development tree; `tools/build-theme.mjs`
+Themes are built from the `themes/` folder of a LordOS development tree; `cargo xtask build-theme`
 has no option for a theme elsewhere. Copy this folder in and build only it:
 
 ```sh
 cp -R examples/theme-minimal themes/minimal
-node tools/build-theme.mjs minimal     # → themes/minimal/theme.bundle.js (about 1.8 MB)
+cargo xtask build-theme minimal     # → themes/minimal/theme.bundle.js (about 1.8 MB)
 ```
 
 The build also rewrites `code-manifest.json` with the new bundle in it (and removes a
@@ -38,7 +38,7 @@ LordOS did not sign").
 
 ## Status
 
-Built with the repository's own tooling (`node tools/build-theme.mjs minimal`, esbuild 0.24.2) on
+Built with the repository's own tooling (`cargo xtask build-theme minimal`, esbuild 0.24.2) on
 2026-10-26 in a copy of the tree, where `cargo xtask i18n-check` also passed with it in `themes/`.
 **Not yet run on a LordOS session**: there is no screenshot of it,
 so treat it as a starting point and check it with the guide's checklist.

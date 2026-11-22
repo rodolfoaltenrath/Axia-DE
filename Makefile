@@ -6,7 +6,7 @@ CARGO ?= cargo
 .PHONY: all themes server check test install clean
 all: themes server
 themes:
-	npm run build
+	$(CARGO) xtask build-theme
 server:
 	$(MAKE) -C server
 check test: all

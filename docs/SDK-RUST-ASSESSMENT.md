@@ -74,7 +74,7 @@ runtime/: reconciler React e eventos     objeto nativo lord.*
                           cena/layout, compositor e helpers
 ```
 
-`tools/build-theme.mjs` resolve `@lordos/sdk` para `sdk/index.js` e empacota temas
+`cargo xtask build-theme` resolve `@lordos/sdk` para `sdk/index.js` e empacota temas
 com esbuild. O aplicativo em execução usa QuickJS e o renderer próprio: não é
 um navegador nem uma webview. Node/npm são ferramentas de build.
 
@@ -298,7 +298,7 @@ Esta é a primeira etapa funcional, não a conclusão da migração dos 106 arqu
 - `sdk/index.js`, `sdk/store.js`, `sdk/windows.js`, `sdk/components.jsx`.
 - `sdk/nativeview.js`, `sdk/nativefiles.js`, `sdk/rustfiles.js`, `sdk/nativeapps.js`.
 - `sdk/alarms.js`, `sdk/network.jsx`, `sdk/updates.js`, `sdk/smart.js`.
-- `runtime/index.js`, `runtime/app-host.js`, `tools/build-theme.mjs`.
+- `runtime/index.js`, `runtime/app-host.js`, `cargo xtask build-theme`.
 - `rust/axia-shell/src/lib.rs`, `rust/axia-shell/src/native_view/host.rs`.
 - `server/tests/run_suites.sh`, `server/tests/windows_bridge_test.mjs`, `server/Makefile`.
 - `README.md`, `docs/RUST.md`, `docs/SERVER-RUST-MIGRATION.md`, `docs/STANDALONE.md`.

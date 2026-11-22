@@ -56,7 +56,7 @@ isolado do [inventário](SHELL-RUST-API-INVENTORY.md) registra essa diferença.
 ## Resultado do grafo atual
 
 O build em memória usou exatamente as opções de `buildAppHost` de
-[tools/build-theme.mjs](../tools/build-theme.mjs): esbuild 0.24.2, IIFE, es2020, minificação,
+[cargo xtask build-theme](../rust/xtask/src/devtools/theme.rs): esbuild 0.24.2, IIFE, es2020, minificação,
 JSX automático, produção e `__LORD_STANDALONE__=true`, com os aliases atuais.
 `write:false` impediu alterar o bundle instalado ou os arquivos gerados do repo.
 

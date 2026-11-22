@@ -9,8 +9,8 @@
     "imager": "0.8.6"
   },
   "scripts": {
-    "build": "node tools/build-theme.mjs",
-    "build:theme": "node tools/build-theme.mjs"
+    "build": "cargo xtask build-theme",
+    "build:theme": "cargo xtask build-theme"
   },
   "dependencies": {
     "react": "19.3.1",

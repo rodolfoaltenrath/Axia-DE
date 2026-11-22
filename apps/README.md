@@ -132,7 +132,7 @@ apps/quicknotes/
 ```
 
 `version` is required: the app's own version, in semver (`major.minor.patch`, optionally with a
-`-beta.1` or `~rc1` suffix). The build refuses an app without one (`tools/build-theme.mjs`), and the
+`-beta.1` or `~rc1` suffix). The build refuses an app without one (`cargo xtask build-theme`), and the
 Store shows it next to the app (Installed: "LordOS app · 0.8.5"). The native apps started at `0.8.5`,
 the LordOS version they first shipped in; from then on an app's version changes when the app changes,
 apart from LordOS's, so the apps can later live in repositories of their own. An app added later starts

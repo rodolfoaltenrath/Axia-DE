@@ -88,7 +88,7 @@ in that process and in `axia-vault`; `axia-server`'s QuickJS heap never sees the
 
 | Piece | How |
 |---|---|
-| System package | `tools/build-theme.mjs` builds every built-in app whose manifest says `"process": "isolated"` into `assets/sysapps/<id>/` (`app.js`, `manifest.json`, `locales/`). `app_package_dir()` (`src/app/appspawn.c`) prefers that folder (root- or user-owned, not world-writable) over a user `.lpk` with the same id, so a package cannot shadow it. |
+| System package | `cargo xtask build-theme` builds every built-in app whose manifest says `"process": "isolated"` into `assets/sysapps/<id>/` (`app.js`, `manifest.json`, `locales/`). `app_package_dir()` (`src/app/appspawn.c`) prefers that folder (root- or user-owned, not world-writable) over a user `.lpk` with the same id, so a package cannot shadow it. |
 | Vault channel | `app_spawn()` calls `vc_attach_app()` **only** for the system `passwords` package and hands the socket to the child as `LORD_VAULT_FD`. In the app, `js_vault_register_app()` exposes the same `lord.vault` API over that socket (non-blocking `vw_feed` polling, `lord.vault.appMode = true`). The relayed JSON is wiped after use. |
 | Files | The system's own open/save dialog (powerbox, drawn by `axia-server`) picks the file; the app gets only the fd and passes it on to `axia-vault` (`request(json, { fds })`). Key files, attachments, import, export, the breach list and QR images all go this way. |
 | FIDO2 | `BOP_VAULT_FIDO`: after the user allows `usb`, `axia-server` opens the hidraw device and gives it straight to `axia-vault` (`vc_fido_attach`); the app never holds the device. Only the app spawned with a vault channel may ask. |

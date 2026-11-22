@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PATHS: [&str; 35] = [
+const PATHS: [&str; 33] = [
     ".cargo",
     "server",
     "rust",
@@ -17,8 +17,6 @@ const PATHS: [&str; 35] = [
     "third_party",
     "tests",
     "tools/desktop",
-    "tools/build-theme.mjs",
-    "tools/code-manifest.mjs",
     "packaging/desktop",
     "packaging/rpm",
     "packaging/systemd",
@@ -118,7 +116,6 @@ mod tests {
             "tools/desktop/__pycache__/a.pyc",
             "tools/desktop/kept.txt",
             "tools/desktop/old.rpm",
-            "tools/build-theme.mjs",
         ] {
             fs::write(repo.join(file), "x").unwrap();
         }
@@ -144,7 +141,6 @@ mod tests {
             "axia-de-1.0/server/main.c",
             "axia-de-1.0/rust/axia-shell/lib.rs",
             "axia-de-1.0/tools/desktop/kept.txt",
-            "axia-de-1.0/tools/build-theme.mjs",
             "axia-de-1.0/server/link -> main.c",
         ] {
             assert!(list.contains(kept), "{kept} missing from:\n{list}");
