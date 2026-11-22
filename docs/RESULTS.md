@@ -18,7 +18,7 @@ results/<version>/<machine>/
     lordbench.json   from 0.8.6, LordBench: axia-sysreport bench --full --json (docs/BENCHMARK.md)
 ```
 
-`tools/results/collect.sh <machine> [--no-memory] [--no-lordbench] [--bench-seconds N] [--version V]` writes
+`cargo xtask collect-results <machine> [--no-memory] [--no-lordbench] [--bench-seconds N] [--version V]` writes
 such a folder; run it as the user inside a LordOS session, and with `sudo` to include root's processes in the PSS
 list. Fill in the conditions in its README before committing. Each release attaches its `results/<version>`
 folder to the GitHub release (`docs/RELEASING.md`).
@@ -57,7 +57,7 @@ LordOS measures every boot the same way, on any machine, with no tool to install
   "kernel: Linux version|Started plymouth-start"` gives both moments, and the difference.
 - **Comparing fairly.** The same machine, the same settings (automatic login on or off changes what the
   first frame is), several boots of each version (the first boot after an update or a new kernel is
-  slower: it builds caches); report the median. `tools/results/collect.sh` saves all of the above in
+  slower: it builds caches); report the median. `cargo xtask collect-results` saves all of the above in
   `boot.txt` and `boot-times.jsonl`.
 
 ## Memory: two magnitudes

@@ -14,6 +14,9 @@
 //!   cargo xtask copr-publish [--packages DIR] [--report FILE] [--build-id N]
 //!   cargo xtask desktop-check [--require-gpu] | clipboard-x11-check | dock-bench
 //!   cargo xtask gen-wallpapers SOURCE-DIR
+//!   cargo xtask keylag [SECONDS] | keylag-inject [COUNT [INTERVAL_MS]]
+//!   cargo xtask qmp-input VMID W H CMD... | vm-type VMID TEXT | vm-record VMID FOLDER [FPS]
+//!   cargo xtask collect-results MACHINE [--no-memory] [--no-lordbench] [--bench-seconds N] [--version V]
 //!   cargo xtask build-theme [THEME | app-host | sysapps ...]
 //!   cargo xtask lpk FOLDER | keygen | sign | verify | catalog
 //!   cargo xtask sign-code [ROOT [KEY]] | sign-release DIR [KEY]
@@ -28,14 +31,17 @@ mod desktop_check;
 mod emoji;
 mod errcheck;
 mod i18n;
+mod keylag;
 mod lbfonts;
 mod lpk;
 mod manifest;
 mod monitor_data;
 mod ojson;
 mod release;
+mod results;
 mod theme;
 mod unicode;
+mod vm;
 mod wallpapers;
 
 use std::path::Path;
@@ -60,6 +66,12 @@ pub fn dispatch(repo: &Path, command: &str, args: &[String]) -> Option<crate::Re
         "dock-bench" => desktop_check::dock_bench(repo, args),
         "clipboard-x11-check" => desktop_check::x11_check(repo, args),
         "gen-wallpapers" => wallpapers::execute(repo, args),
+        "keylag" => keylag::keylag(args),
+        "keylag-inject" => keylag::keylag_inject(args),
+        "qmp-input" => vm::qmp_input(args),
+        "vm-type" => vm::vm_type(args),
+        "vm-record" => vm::vm_record(args),
+        "collect-results" => results::execute(repo, args),
         "build-theme" => theme::execute(repo, args),
         "lpk" => lpk::execute(repo, args),
         "sign-code" => release::sign_code(repo, args),

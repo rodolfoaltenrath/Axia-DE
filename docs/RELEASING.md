@@ -124,7 +124,7 @@ The releases page is the project's public changelog: every release is documented
    versions that is not just new files (a unit to enable, a renamed setting, a config to convert)
    is a migration in `packaging/migrations/` or `sdk/settings.js` ([UPDATES.md](UPDATES.md),
    "Migrations"), never a manual step in the release notes.
-8. **Results.** Collect the evidence on each test machine with `tools/results/collect.sh <machine>` (the
+8. **Results.** Collect the evidence on each test machine with `cargo xtask collect-results <machine>` (the
    release test VMs, the Raspberry Pi 5 with a monitor), fill in each README's conditions, commit
    `results/<version>/`, and add `tar czf results-<version>.tar.gz results/<version>` to the release
    files ([RESULTS.md](RESULTS.md)).

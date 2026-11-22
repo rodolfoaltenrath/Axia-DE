@@ -107,10 +107,10 @@ From the Proxmox host:
 
 ```sh
 echo "screendump /tmp/lord.png -f png" | qm monitor 115          # real screenshot
-python3 /root/lord-qmp-input.py 115 1280 800 move 600 190 down move 380 320 up
+/root/xtask qmp-input 115 1280 800 move 600 190 down move 380 320 up
 ```
 
-`tools/lord-qmp-input.py` (copied to the host's `/root/`) sends an **absolute** mouse over QMP
+`cargo xtask qmp-input` (copied to the host's `/root/`) sends an **absolute** mouse over QMP
 (`input-send-event`), just like noVNC. The HMP monitor's `mouse_move` doesn't work: it sends
 relative motion, which QEMU's USB tablet ignores.
 
@@ -148,7 +148,7 @@ because they are inside each theme's bundle; do copy the whole `themes/`. `sudo 
 root and switches to `lord` (visible in the log: `running as lord (uid 1000)`). User settings:
 `~/.config/axia/settings.json`.
 
-QMP testing: `tools/lord-qmp-input.py` now accepts `rdown`/`rup` (right click) and
+QMP testing: `cargo xtask qmp-input` now accepts `rdown`/`rup` (right click) and
 `wheelup`/`wheeldown`. Keyboard: `echo "sendkey f4" | qm monitor 115` (HMP `sendkey`
 sends scancodes; with the latam layout, `semicolon` = ñ and `bracket_left` = dead acute accent).
 
@@ -167,12 +167,12 @@ make -C server test
 printf '123456789日本語\r\n' | server/build/vt-dump 10 3 7 3    # reflow with wide characters
 ```
 
-Typing into the VM from the Proxmox host (`tools/lord-type.py`, copied to `/root/`; it needs
+Typing into the VM from the Proxmox host (`cargo xtask vm-type`, copied to `/root/`; it needs
 the US layout in LordOS, the ES/US button in the menu bar):
 
 ```sh
-python3 /root/lord-type.py 115 'ls --color=always\n'
-python3 /root/lord-type.py 115 '{meta_l-d}'          # Super+D: split pane
+/root/xtask vm-type 115 'ls --color=always\n'
+/root/xtask vm-type 115 '{meta_l-d}'          # Super+D: split pane
 ```
 
 The monitor's `sendkey` drops keys in long bursts: the script sends them in batches of 40.
@@ -392,8 +392,8 @@ it didn't work, because the host has no GPU.
 ISOs in `local:iso`: `lordos-live-0.7.0-amd64.iso` is the current one. Earlier ones are kept with
 their date, for example `lordos-live-0.7.0-amd64-20261016-1529.iso`, the last one with `lordos-session`.
 
-Test scripts in the host's `/root`, besides `lord-qmp-input.py`:
-- `lordos-latam-type.py`: like `lord-type.py`, but for the latam layout, which is the ISO's.
+Test scripts in the host's `/root`, besides `xtask qmp-input`:
+- `lordos-latam-type.py`: like `xtask vm-type`, but for the latam layout, which is the ISO's.
   `/` is `shift-7` and `-` is `slash`.
 - `lordos-typecmd.sh <vm> <file>`: types one line taken from a file, to avoid fighting with
   quoting.
@@ -578,7 +578,7 @@ sudo install -m 755 tests/touchpad-sim/tpsim /usr/local/bin/tpsim
 - **Gestures:** `echo pinch-out > /run/tpsim.fifo`.
 - **Screenshots:** from the Proxmox host, `echo "screendump /tmp/x.png -f png" | qm monitor 123`.
 - **Pointer position:** the absolute mouse (QEMU's USB tablet), with
-  `tools/lord-qmp-input.py 123 1280 800 move X Y`.
+  `cargo xtask qmp-input 123 1280 800 move X Y`.
 - **Remote desktop without a browser:** `RP_PINCH`/`RP_SCROLL` straight to the session socket
   (`/run/user/1000/lordos/remote.sock`), with a Python script from the scratchpad.
 - **Network:** `eth0`'s network wasn't touched.
@@ -782,7 +782,7 @@ See `FIREWALL.md`, step 2. On VM 122 (172.17.0.56), which already had `lord-sess
   full `lordos.service` restart with autologin (`rm /run/lordos/autologin-done`), not by changing
   any password.
 - **Screenshots** with `qm monitor 122` (`screendump`) from the host. The mouse goes through
-  `/root/lord-qmp-input.py 122`.
+  `/root/xtask qmp-input 122`.
 - **Frame and colors of Linux apps** (`WAYLAND.md`):
   - packages **`gnome-calculator`** (GTK 4/libadwaita) and **`mousepad`** (GTK 3), tests only;
   - `/etc/chromium/master_preferences` with `"custom_chrome_frame": false` (the original was kept as
@@ -827,7 +827,7 @@ and `~/LordOS-m9` were not touched.
   invented items of every template (test-only master password `lordos`); `/tmp/sitio-pw/` is a
   local login page served on 127.0.0.1:8080 for the Chromium test.
 - **Screenshots** with `qm monitor 116` (`screendump`) from the Proxmox host; mouse via
-  `/root/lord-qmp-input.py 116`, keys via `sendkey` (`/root/lord-type.py`, and
+  `/root/xtask qmp-input 116`, keys via `sendkey` (`/root/xtask vm-type`, and
   `/root/lordos-latam-type.py` once the session uses the latam layout).
 - No network configuration was changed.
 
@@ -914,7 +914,7 @@ isolated app»). On VM 122 (172.17.0.56):
   those sources and `-include stddef.h` to the VM's copy only). From the development machine:
   `sync-aisla-122.sh`, kept outside the repo.
 - **Screenshots:** `qm monitor 122` (`screendump`) on the Proxmox host; the mouse through
-  `/root/lord-qmp-input.py 122`, typing through `/root/lord-type.py 122`.
+  `/root/xtask qmp-input 122`, typing through `/root/xtask vm-type 122`.
 - **Network:** untouched (no eth0 change, no nftables).
 
 ## Step 22 — Settings: displays, Bluetooth, energy, date and time (VM 118)
@@ -944,7 +944,7 @@ See `SETTINGS.md`. On VM 118 (172.17.0.53), which already had `lord-sessiond` wi
   `~/.config/mimeapps.list` (Firefox ESR as browser, Mousepad as text editor),
   `~/Escritorio/nota-ajustes.txt`. NTP was turned off and on again; the clock was set by hand once.
 - **Screenshots** with `qm monitor 118` (`screendump`, converted to PNG on the development machine) and the mouse
-  through `/root/lord-qmp-input.py 118`.
+  through `/root/xtask qmp-input 118`.
 
 ## Step 23 — M9 system apps and `lord-netd` (VM 119 `lordos-spot`)
 
@@ -991,7 +991,7 @@ To undo the network test: `sudo systemctl disable --now lordos-test-netns`, `sud
 /etc/systemd/system/lordos-test-netns.service`.
 
 **Screenshots** with `qm monitor 119` (`screendump … -f png`) and the mouse through
-`/root/lord-qmp-input.py 119`, holding `flock /tmp/sistema-119-screen.lock` on the host while
+`/root/xtask qmp-input 119`, holding `flock /tmp/sistema-119-screen.lock` on the host while
 driving the screen.
 
 **Polish pass 4 (system apps, `docs/polish/{disks,backup,logs,clock,help}-*.png`):** a scratch-only
@@ -1080,7 +1080,7 @@ screen. Results and screenshots: `docs/qa/` (`all-apps.png`, `settings-pages.png
   defaults.
 - **Tree and scripts:** the tree is synced to `~/LordOS-qa` by the development machine's scratch script
   `sync-qa-122.sh`; screenshots via `qm monitor 122` (`screendump`), mouse via
-  `/root/lord-qmp-input.py 122`, typing via `/root/lord-type.py 122`. Network untouched.
+  `/root/xtask qmp-input 122`, typing via `/root/xtask vm-type 122`. Network untouched.
 - **QA fixes (login screen, `make test` runner):** `unicode-data` installed with apt so
   `tests/run_suites.sh` finds `/usr/share/unicode/BidiCharacterTest.txt` (the bidi conformance suite).
   The fixes were built in a separate copy, `~/LordOS-qafix-122`. The new `lord-sessiond` and the
@@ -1141,7 +1141,7 @@ folder `~/LordOS-monred`, installed into `/usr/local/lib/lordos` as in step 15 (
   8.14 has HTTP/3) and `curl --limit-rate` downloads from Debian mirrors, each run inside an app
   scope made by hand (`app-lordos-<name>.scope`, as `tests/netperm_integration.sh` does).
 - **Screenshots** with `screendump` from the Proxmox host; the pointer with
-  `lord-qmp-input.py 118 2987 1067` (the VM has two heads, see "Several displays").
+  `xtask qmp-input 118 2987 1067` (the VM has two heads, see "Several displays").
 - The session language, theme and accent were changed for the screenshots and restored from
   `~/.config-lordos-backup-monred` afterwards.
 
@@ -1179,7 +1179,7 @@ Tree in `~/LordOS-wp`, built there (`make -C server -j4`, `make -C server test`:
 - **Login screen:** the session from before the deploy was ended and `/run/lordos/autologin-done`
   removed to show the greeter and then autologin again; `/etc/lordos/session.conf` wasn't changed.
 - **Screenshots** with `screendump` from the Proxmox host, the pointer with
-  `lord-qmp-input.py 123 1280 800`. eth0 and the VM's network weren't touched.
+  `xtask qmp-input 123 1280 800`. eth0 and the VM's network weren't touched.
 ## Step 31 — Disk temperatures and SMART with smartmontools (VM 119 `lordos-spot`, October 19)
 
 See `MONITOR.md` ("Disk temperature and health") and `SYSTEM.md` ("SMART with smartmontools").
@@ -1223,7 +1223,7 @@ the end.
   session (stopped at the end), and Firefox ESR (already on the VM) opening a few sites and one
   download (`~/Downloads/ls-lR.gz`, deleted).
 - **Screenshots** with `screendump` from the Proxmox host; pointer and keys with
-  `lord-qmp-input.py 119 1280 800` and `qm monitor 119` `sendkey`.
+  `xtask qmp-input 119 1280 800` and `qm monitor 119` `sendkey`.
 - Nothing in the network configuration was touched (`eth0` keeps 172.17.0.54).
 ## Step 33 — Mail, Calendar, Contacts and Reminders in their own process (VM 118 `lordos-notes`, October 19)
 
@@ -1288,7 +1288,7 @@ The installed tree was saved first in `/var/backups/lordos-classic-bak` and put 
 - **Screenshots and measurements:** a scratch-only harness (never in the repo) was built in front of
   both themes' bundles: it read `~/.cache/lordos-shot.json` and opened one app at a centered frame,
   switched theme, mode or language. Screenshots with `screendump` from the Proxmox host, the pointer
-  with `lord-qmp-input.py 119 1280 800`, keys with `qm monitor 119` `sendkey`, holding
+  with `xtask qmp-input 119 1280 800`, keys with `qm monitor 119` `sendkey`, holding
   `flock /tmp/sistema-119-screen.lock`. Window drags for the frame times with a QMP script in the
   host's `/tmp` (deleted afterwards); axia-server's own `drag:` lines in `~/.cache/axia/session.log`.
 - **Test notifications** with `notify-send` (they live in the session's memory only).
@@ -1363,7 +1363,7 @@ in `~/LordOS-csd`, built there (`make -C server`, `make -C server build/deco-cli
   (`WAYLAND_DISPLAY=wayland-0`, `XDG_SESSION_TYPE=wayland`, `GSETTINGS_BACKEND=keyfile`, the session
   bus). The user's own browser profiles were not touched. `master_preferences` was edited to test the
   new initial preferences on a new profile and put back.
-- **Input and screenshots:** `lord-qmp-input.py 119 1280 800` and `lord-type.py 119` from the host,
+- **Input and screenshots:** `xtask qmp-input 119 1280 800` and `xtask vm-type 119` from the host,
   `screendump` holding `flock /tmp/sistema-119-screen.lock`. The "before" screenshot ran the saved
   October 18 install for a few minutes, then the new build again.
 - **The migration** (`005-0.8.4-browser-frames.sh`) ran against copies under a scratch root
@@ -1404,7 +1404,7 @@ and installed over `/usr/lib/lordos` by `~/deploy-brs-119.sh` (it saved `/usr/li
     files were removed from both profiles (`user.js`, `user.js.lordos-backup`; Firefox never creates a `user.js`, and both
     backups held only LordOS's line) and the `inTitlebar` line removed from
     `prefs.js` with Firefox closed, so it follows the default again.
-- **Input and screenshots:** `lord-qmp-input.py 119 1280 800` from the host, `screendump` holding
+- **Input and screenshots:** `xtask qmp-input 119 1280 800` from the host, `screendump` holding
   `flock /tmp/sistema-119-screen.lock`.
 - **Undone at the end:** `/usr/lib/lordos` restored from the backup (the 90 paths the deploy added
   removed, `diff -r` against the backup empty), `settings.json` restored, `gsettings-desktop-schemas`
@@ -1431,7 +1431,7 @@ were built on the Mac (the VM has no Node).
   their homes at the end.
 - **The GPU path:** a drop-in `/etc/systemd/system/lordos.service.d/rtc-gpu-test.conf`
   (`Environment=LORD_GPU=1`, llvmpipe on this virtio card) and `rtest` signed in on the login screen
-  through the Proxmox host's `lord-qmp-input.py` and `lord-type.py`; screenshots with `qm monitor 122`
+  through the Proxmox host's `xtask qmp-input` and `xtask vm-type`; screenshots with `qm monitor 122`
   (`screendump`). The drop-in was removed.
 - **Browsers:** headless Chrome on the Mac with throwaway profiles in the scratchpad (deleted after
   each run), driven over the DevTools protocol; CPU and traffic sampled on the VM by
@@ -1508,7 +1508,7 @@ See `IMAGER.md`. Tree in `~/LordOS-imager`, built there (`make -C server`, `make
   ask); the app ran as a Wayland client with `WAYLAND_DISPLAY=wayland-0`. All of it was removed at
   the end (`apt-get purge` of those packages, then the rule).
 - **Screenshots** with `qm monitor 116` (`screendump`) from the Proxmox host, the pointer with
-  `/root/lord-qmp-input.py 116` and keys with `/root/lord-type.py 116`.
+  `/root/xtask qmp-input 116` and keys with `/root/xtask vm-type 116`.
 - **Undone at the end:** `/usr/local/lib/lordos` restored from the backup, `session.conf` removed and
   lord's `settings.json` restored, `lordos.service` restarted to the login screen; the gadget
   unloaded (`rmmod g_mass_storage dummy_hcd`), the bind mount and the scratch mount removed, and the
@@ -1646,7 +1646,7 @@ was not tested here). Nothing was installed with apt.
   into a private namespace `npb` (10.213.7.0/30), deleted after each run; eth0 and the network
   configuration were not touched. For the A/B runs the 0.8.3 `axia-netperm` and main's build
   (built in `~/LordOS-netmon-base`) were swapped in for a few minutes and the new build put back.
-- **Input and screenshots:** `lord-qmp-input.py 118 2987 1067` and `lord-type.py 118` from the
+- **Input and screenshots:** `xtask qmp-input 118 2987 1067` and `xtask vm-type 118` from the
   Proxmox host, `screendump` converted to PNG on the development machine.
 - **Undone at the end:** `/usr/local/lib/lordos` restored from the backup (`diff -r` empty), the
   drop-in removed and `axia-netperm` restarted with the old binary, `~/.config/axia` restored

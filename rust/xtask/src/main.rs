@@ -89,7 +89,7 @@ fn dispatch(args: &[String]) -> Result<ExitCode> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|switcher-check|build-memory|profile-check|gen-wallpaper|code-manifest|brand-check|err-check|i18n-check|i18n-pack|gen-controls-font|gen-lbfonts|gen-monitor-data|gen-unicode|gen-emoji|gen-brand|copr-publish|desktop-check|clipboard-x11-check|dock-bench|gen-wallpapers|build-theme|lpk|sign-code|sign-release>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|switcher-check|build-memory|profile-check|gen-wallpaper|code-manifest|brand-check|err-check|i18n-check|i18n-pack|gen-controls-font|gen-lbfonts|gen-monitor-data|gen-unicode|gen-emoji|gen-brand|copr-publish|desktop-check|clipboard-x11-check|dock-bench|gen-wallpapers|keylag|keylag-inject|qmp-input|vm-type|vm-record|collect-results|build-theme|lpk|sign-code|sign-release>")?;
     if let Some(done) = devtools::dispatch(&repo, command, rest) {
         return done;
     }

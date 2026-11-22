@@ -90,7 +90,7 @@ see `GPU.md`.
 
 **Typing lag in Chromium on VMware (0.8.0 and the first 0.8.1 ISOs):** it was a GPU-path
 presentation bug, not `open-vm-tools`, and it is fixed in 0.8.1. See
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md), "Typing feels slow"; `tools/diag/keylag.sh` checks a
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md), "Typing feels slow"; `cargo xtask keylag` checks a
 machine in two minutes.
 
 Tested with the rebuilt ISO on VM 123 (Proxmox, q35, 4 vCPUs, emulated HD Audio):
@@ -210,7 +210,7 @@ text in between.
 - **On Debian (install.sh):** optional and asked for; see `INSTALL-DEBIAN.md`.
 
 **Tested on VM 117** (OVMF, `vga: virtio`, 2026-10-18), recording the screen at 4 frames per second
-over QMP (`tools/demo/record.py`): the boot menu, ~2.5 s of black while the kernel loads virtio-gpu
+over QMP (`cargo xtask vm-record`): the boot menu, ~2.5 s of black while the kernel loads virtio-gpu
 and Plymouth starts, the splash from ~19 s, and at ~43 s the desktop (autologin) replaces the
 splash directly: no black or console frame between the last splash frame and the first LordOS one.
 The journal (of the first test boot, the same hand-off code) shows the chain: `lordos.service` started (21.2 s), lord-sessiond "first frame on the

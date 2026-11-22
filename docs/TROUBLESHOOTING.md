@@ -20,18 +20,15 @@ sudo apt install --reinstall lordos
 ## Typing feels slow
 
 If keys show up late in one app (for example Chromium) but not in LordOS's own apps (Notes, the
-Terminal), check where the time goes before changing anything. `tools/diag/keylag.sh` does it in
+Terminal), check where the time goes before changing anything. `cargo xtask keylag` does it in
 about two minutes.
 
 ### The 2-minute check
 
-1. Get the script onto the machine (it is not part of the package):
+1. Build the tool from a checkout (it is not part of the package): `cargo build -p xtask`, and copy
+   `rust/target/debug/xtask` onto the machine.
 
-   ```sh
-   curl -fsSLO https://raw.githubusercontent.com/lordbasex/LordOS/main/tools/diag/keylag.sh
-   ```
-
-2. Run it in the LordOS Terminal: `sh keylag.sh`. It prints:
+2. Run it in the LordOS Terminal: `xtask keylag`. It prints:
    - the version;
    - GPU or CPU composition;
    - the virtual machine and its guest tools;
@@ -44,7 +41,7 @@ about two minutes.
 3. On 0.8.1 or later, turn the trace on for one boot. In the boot menu, press `e`, add
    `lordos.inputdebug=1` at the end of the line that starts with `linux`, and press Ctrl+X. On an
    installed system with a hidden menu, hold Shift (BIOS) or press Esc (UEFI) while it starts.
-   Log in and run `sh keylag.sh` again. When it asks, click the slow app and type normally for
+   Log in and run `xtask keylag` again. When it asks, click the slow app and type normally for
    30 seconds.
 
 The script then prints p50, p95 and the maximum for each stage, in ms after the kernel's evdev
@@ -123,7 +120,7 @@ UI and damages it, so that path was never affected.
   them stalls.
 
 **Measured** on Proxmox (VM 123, 4 vCPUs, GPU composition with llvmpipe). The harness typed 80
-keys into a Chromium text area with `tools/diag/keylag-inject.py` and timed them with the trace.
+keys into a Chromium text area with `cargo xtask keylag-inject` and timed them with the trace.
 Times are in ms after the kernel event, p50 / p95:
 
 | Build | Chromium, static page: on screen | Chromium, page animating: on screen | Chromium "buggy presentation feedback" |
@@ -146,7 +143,7 @@ Other results:
 
 Everything is in `tools/diag/`:
 
-- **`keylag-inject.py`** (root) creates a uinput keyboard and types at known `CLOCK_MONOTONIC`
+- **`keylag-inject`** (root) creates a uinput keyboard and types at known `CLOCK_MONOTONIC`
   times. `lord-sessiond` lends the new device to the session through inotify.
 - **`keylag-client.c`** prints when `wl_keyboard.key` arrived and when its frame was presented.
   Build commands are at the top of the file.

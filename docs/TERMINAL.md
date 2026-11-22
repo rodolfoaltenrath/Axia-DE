@@ -298,5 +298,5 @@ printf 'e\xcc\x81\033[?2027h\xf0\x9f\x87\xa6\xf0\x9f\x87\xb7' | server/build/vt-
 server/build/shape-test /usr/share/fonts/truetype/firacode/FiraCode-Regular.ttf liga 'a -> b'
 ```
 
-In the VM, `tools/lord-type.py` types text with QEMU's virtual keyboard (see
+In the VM, `cargo xtask vm-type` types text with QEMU's virtual keyboard (see
 `docs/VM-SETUP.md`, step 8).
