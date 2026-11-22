@@ -17,7 +17,7 @@ import { MenuBar } from './components/MenuBar.jsx';
 import { Dock, LaunchpadIcon, dockThickness } from './components/Dock.jsx';
 import { Window } from './components/Window.jsx';
 import { ControlCenter } from './components/ControlCenter.jsx';
-import { Menu } from './components/Menu.jsx';
+import { Menu } from '../../sdk/menu.jsx';
 
 const MENU_H = 28;
 // Files is always first and the Trash always last (sdk/dockmodel.js); the app launcher follows Files.
@@ -163,7 +163,7 @@ function App() {
         <DesktopWidgets layer="above" />
         {/* Everything above the windows goes in its layer (sdk/layers.js, docs/LAYERS.md): the
             order is the layers', not this tree's, and clicks follow it. Menus go to «popover»
-            by themselves (Menu.jsx). */}
+            by themselves (sdk/menu.jsx). */}
         <Layer name="menubar">
           {bars.map((d) => (
             <MenuBar key={d.id + ':' + d.x} t={t} height={MENU_H} focused={focused} controlCenter={!!control} area={d}

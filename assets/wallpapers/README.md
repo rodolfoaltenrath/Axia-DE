@@ -5,7 +5,7 @@ LordOS brand elements: the crown and Lumo wallpapers were removed.
 
 The collection that Axia DE ships and shows in
 **Settings → Wallpaper**, grouped by category. The default theme also keeps its four gradients
-(Aurora, Ocean, Sunset, Graphite; `themes/default/assets/`, made by `tools/gen-wallpaper.py`) as the
+(Aurora, Ocean, Sunset, Graphite; `gradients/`, drawn by `cargo xtask gen-wallpaper`) as the
 "Gradients" category.
 
 | Category | File | Name (en / es / pt) |

@@ -257,7 +257,7 @@ The SDK gives menus as **item lists**; the theme draws them. An item is
 Where they go is the theme's choice: Lord Flow shows the app menus in its top menu bar
 (`themes/default/components/MenuBar.jsx`); a theme without a menu bar can show them in a strip under
 each window's title bar. A theme must give the app's menus a place, or the apps lose commands. Lord
-Flow has its own `components/Menu.jsx` that puts the menu in the `popover` layer.
+Flow uses the SDK menu (`sdk/menu.jsx`), which puts the menu in the `popover` layer.
 
 ### Layers
 

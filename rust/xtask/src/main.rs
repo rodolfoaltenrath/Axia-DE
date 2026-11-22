@@ -7,6 +7,7 @@
 //!   cargo xtask native-apps
 //!   cargo xtask switcher-check --installation DIR --output DIR
 //!   cargo xtask build-memory --output report.json -- make -j2 check
+//!   cargo xtask gen-wallpaper --palette aurora --output assets/wallpapers/gradients/aurora.png
 //!   cargo xtask profile-check --variant fedora --target-dir /var/tmp/axia-fedora --output fedora.json
 //!
 //! This crate runs on the development or build machine only.
@@ -23,6 +24,7 @@ mod sha256;
 mod srpm;
 mod switcher_check;
 mod switcher_contract;
+mod wallpaper;
 
 use std::collections::HashMap;
 use std::io;
@@ -85,7 +87,7 @@ fn dispatch(args: &[String]) -> Result<ExitCode> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|switcher-check|build-memory|profile-check>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|switcher-check|build-memory|profile-check|gen-wallpaper>")?;
     if command == "build-memory" {
         return build_memory::execute(rest).map(ExitCode::from);
     }
@@ -93,6 +95,7 @@ fn dispatch(args: &[String]) -> Result<ExitCode> {
         "profile-check" => profile_check::execute(&repo, rest),
         "switcher-check" => switcher_check::execute(&repo, rest),
         "idle-check" => idle::execute(rest),
+        "gen-wallpaper" => wallpaper::execute(rest),
         "native-apps" => {
             options(rest, &[])?;
             println!("{}", native_apps::manifests());

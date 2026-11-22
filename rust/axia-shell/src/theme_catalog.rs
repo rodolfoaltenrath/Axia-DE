@@ -21,7 +21,8 @@ pub(crate) fn wallpapers() -> &'static Value {
         }).collect();
         for (id, name) in [("aurora","Aurora"),("ocean","Ocean"),("sunset","Sunset"),("graphite","Graphite")] {
             out.push(json!({"id":id,"category":"gradients","nameKey":format!("shell.wallpaper.{id}"),"name":name,
-                "src":format!("assets/{id}.png"),"thumb":format!("assets/thumbs/{id}.jpg")}));
+                "src":format!("asset:wallpapers/gradients/{id}.png"),
+                "thumb":format!("asset:wallpapers/thumbs/gradients/{id}.jpg")}));
         }
         Value::Array(out)
     })
@@ -57,6 +58,15 @@ mod tests {
             }
         }
         assert_eq!(list[list.len()-4]["id"], "aurora");
-        assert_eq!(list.last().unwrap()["src"], "assets/graphite.png");
+        let last = list.last().unwrap();
+        assert_eq!(last["src"], "asset:wallpapers/gradients/graphite.png");
+        assert_eq!(last["thumb"], "asset:wallpapers/thumbs/gradients/graphite.jpg");
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        for entry in &list[list.len()-4..] {
+            for key in ["src", "thumb"] {
+                let file = assets.join(entry[key].as_str().unwrap().strip_prefix("asset:").unwrap());
+                assert!(file.is_file(), "{}", file.display());
+            }
+        }
     }
 }
