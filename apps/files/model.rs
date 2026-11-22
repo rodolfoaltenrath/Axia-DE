@@ -207,8 +207,9 @@ pub struct Session {
     pub context: Option<(f64, f64)>,
     pub width: f64,
     pub height: f64,
-    pub theme: Value,
+    pub theme: std::rc::Rc<Value>,
     source_theme: Value,
+    native_appearance: bool,
     pub locale: String,
     pub effects: Vec<Value>,
     pub dirty: bool,
@@ -452,7 +453,11 @@ impl Shared {
 }
 
 impl Session {
+    #[cfg(test)]
     pub fn new(id: u64, args: &Value, shared: &mut Shared) -> Result<Self> {
+        Self::new_with_appearance(id, args, shared, None)
+    }
+    pub(super) fn new_with_appearance(id: u64, args: &Value, shared: &mut Shared, appearance: Option<std::rc::Rc<Value>>) -> Result<Self> {
         let policy = policy::current();
         shared.load(&policy, &args["preferences"]);
         if let Some(apps) = args["apps"].as_array() {
@@ -526,8 +531,9 @@ impl Session {
             context: None,
             width: 960.,
             height: 600.,
-            theme: crate::native_style::files_theme(&args["theme"]),
-            source_theme: Value::Null,
+            theme: appearance.clone().unwrap_or_else(|| std::rc::Rc::new(crate::native_style::files_theme(&args["theme"]))),
+            source_theme: if appearance.is_some() { Value::Null } else { args["theme"].clone() },
+            native_appearance: appearance.is_some(),
             locale: String::new(),
             effects: Vec::new(),
             dirty: true,
@@ -1064,6 +1070,23 @@ impl Session {
             self.set_zoom(value, shared);
         }
     }
+    pub(super) fn poll_appearance(&mut self, context: &Value) {
+        if !self.native_appearance && context["theme"].is_object() && self.source_theme != context["theme"] {
+            self.source_theme = context["theme"].clone();
+            self.theme = std::rc::Rc::new(crate::native_style::files_theme(&self.source_theme));
+            self.dirty = true;
+        }
+    }
+    pub(super) fn bind_appearance(&mut self, appearance: Option<std::rc::Rc<Value>>) {
+        self.native_appearance = appearance.is_some();
+        if let Some(theme) = appearance {
+            if !std::rc::Rc::ptr_eq(&self.theme, &theme) {
+                self.theme = theme;
+                self.source_theme = Value::Null;
+                self.dirty = true;
+            }
+        }
+    }
     pub fn poll(&mut self, context: &Value, shared: &Shared) {
         if self.zoom_save.is_some_and(|due| Instant::now() >= due) {
             self.flush_zoom(shared);
@@ -1129,11 +1152,7 @@ impl Session {
                 self.dirty = true;
             }
         }
-        if context["theme"].is_object() && self.source_theme != context["theme"] {
-            self.source_theme = context["theme"].clone();
-            self.theme = crate::native_style::files_theme(&self.source_theme);
-            self.dirty = true;
-        }
+        self.poll_appearance(context);
         if let Some(l) = context["locale"].as_str() {
             if l != self.locale {
                 self.locale = l.into();

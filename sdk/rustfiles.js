@@ -21,6 +21,7 @@ import { media } from './media.js';
 import { startFileDrag, useFileDrop } from './filedrag.js';
 import { useDisks } from './disks.js';
 import { Menu } from './menu.jsx';
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 const modalHandles = new Set();
 const FilesRootContext = createContext(null);
 
@@ -190,16 +191,22 @@ const appMetadata = (apps) => apps.map(({ id, name, desktopId, kind, mimeTypes }
   desktopId: desktopId ? (desktopId.endsWith('.desktop') ? desktopId : `${desktopId}.desktop`) : `lordos-${id}.desktop`,
   mimeTypes: Array.isArray(mimeTypes) ? mimeTypes : String(mimeTypes || '').split(';').filter(Boolean) }));
 
-function FileDialogBody({ mode = 'open', args = {}, title = '', start = '', filter = null, multiple = false, name = '', onPick, onClose }) {
-  useLocale(); // Captions must update even when the native poll has no changes.
+function FileDialogBody(props) {
+  return appHost ? h(ThemedFileDialogBody, props) : h(FileDialogInputs, props);
+}
+function ThemedFileDialogBody(props) {
   const theme = useTheme();
+  return h(FileDialogInputs, { ...props, theme });
+}
+function FileDialogInputs({ mode = 'open', args = {}, title = '', start = '', filter = null, multiple = false, name = '', onPick, onClose, theme }) {
+  useLocale(); // Captions must update even when the native poll has no changes.
   const win = useAppWindow();
   const apps = useLauncherApps();
   const [volumes] = useDisks();
   const root = useRef(null), live = useRef(true), pending = useRef(new Set()), resources = useRef({ media: new Set(), images: new Set() }), capture = useRef(false), latest = useRef(null);
   const [snapshot, setSnapshot] = useState(() => filesRequest({ op: 'create', mode, args, title, start, name, multiple,
     filter: filter?.source || '', ignoreCase: !!filter?.ignoreCase, preferences: settings.get().files,
-    theme: appearanceContext(theme),
+    ...(appHost ? { theme: appearanceContext(theme) } : {}),
     apps: appMetadata(apps) }));
   const handle = useRef(snapshot.id).current;
   // React may batch several snapshots into one render. Preserve the effects of
@@ -248,7 +255,7 @@ function FileDialogBody({ mode = 'open', args = {}, title = '', start = '', filt
       if (!root.current) return;
       const [, , width, height] = lord.getLayout(root.current.id);
       accept(filesRequest({ op: 'poll', id: handle, width, height,
-        theme: appearanceContext(latest.current.theme), locale: locale.get() }));
+        ...(appHost ? { theme: appearanceContext(latest.current.theme) } : {}), locale: locale.get() }));
     };
     const move = addListener('pointermove', (e) => { if (capture.current) latest.current.send(['pointerMove'], e); });
     const up = addListener('pointerup', () => { if (capture.current) setTimeout(() => { if (live.current) latest.current.send(['dragEnd']); }, 0); });
@@ -320,13 +327,20 @@ export function RustFileDialog(props) {
 
 // The secondary window shares the originating Rust session. No second browser,
 // filesystem model, or copy worker is created. Its close button only hides it.
-export function RustTransfers({ owner }) {
-  const theme = useTheme(), win = useAppWindow();
+export function RustTransfers(props) {
+  return appHost ? h(ThemedTransfers, props) : h(TransfersInputs, props);
+}
+function ThemedTransfers(props) {
+  const theme = useTheme();
+  return h(TransfersInputs, { ...props, theme });
+}
+function TransfersInputs({ owner, theme }) {
+  const win = useAppWindow();
   const language = useLocale();
   const appearance = useRef(theme);
   appearance.current = theme;
   const live = useRef(true), root = useRef(null);
-  const [snapshot, setSnapshot] = useState(() => filesRequest({ op: 'transferAttach', id: owner, theme: appearanceContext(theme) }));
+  const [snapshot, setSnapshot] = useState(() => filesRequest({ op: 'transferAttach', id: owner, ...(appHost ? { theme: appearanceContext(theme) } : {}) }));
   const send = useRef((action) => {
     if (!live.current) return;
     const next = filesRequest({ op: 'transferEvent', id: owner, action });
@@ -337,7 +351,7 @@ export function RustTransfers({ owner }) {
     const timer = setInterval(() => {
       if (!live.current) return;
       try {
-        const next = filesRequest({ op: 'transferPoll', id: owner, theme: appearanceContext(appearance.current) });
+        const next = filesRequest({ op: 'transferPoll', id: owner, ...(appHost ? { theme: appearanceContext(appearance.current) } : {}) });
         if (next) setSnapshot(next);
       } catch (e) { console.error('Files transfers:', e); wm.close(win.id); }
     }, 200);

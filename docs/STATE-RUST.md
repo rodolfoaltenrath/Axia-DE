@@ -1813,3 +1813,60 @@ Instalação privada gerada, sem instalar ou reiniciar a sessão física. Três
 amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,906 MiB de RSS,
 abaixo de 15 poll/s e 120 MiB. Não demonstra ganho causal; as medições físicas
 continuam reservadas ao encerramento.
+
+
+### Arquivos compartilha a aparência entre navegador, seletores e transferências
+
+O navegador passa a declarar `appearanceSource: native` e a reter Rc do plano
+compartilhado. Seu conversor de widgets usa essa referência; pedidos internos
+ao serviço não montam uma paleta JSON. O serviço guarda Rc por sessão e a
+comparação das respostas retém a referência: respostas internas nativas não
+devolvem uma paleta separada, e a moldura só é calculada para cores diferentes.
+Essa moldura de compatibilidade ainda contém uma cópia das cores. A entrega
+legada ainda transmite aparência quando necessário para os widgets do adaptador.
+
+O publicador residente vincula um proprietário de aparência ao serviço de Arquivos
+antes da primeira publicação. A ligação do registro é fraca; o contexto retém o
+proprietário, atualiza sua referência no mesmo evento de preferências e o libera
+no encerramento. Substituir o contexto não ressuscita um proprietário anterior.
+Não há callback JS/C retido nem cópia do perfil, nova consulta de cor por frame
+ou timer de aparência. Sessões não mantêm o publicador do perfil vivo.
+
+Navegador, seletores de abrir/salvar/pasta e transferências da sessão compartilham
+o plano; entradas antigas de tema são ignoradas enquanto a ligação está ativa.
+As transferências podem continuar recebendo cores atuais depois de fechar o
+navegador, pelo proprietário do contexto. O SDK deixa de consultar o provider do
+tema ou enviar cores nesses caminhos da sessão. Os hosts isolados conservam os
+inputs locais e a conversão existente, sem vínculo ao perfil da sessão.
+
+Os dois testes novos verificam compartilhamento entre os quatro modos, rejeição
+de cores antigas, transferência órfã, volta ao contrato local e vida útil fraca
+sem restaurar contexto antigo. O teste de estado da navegação agora cobre também
+Rc nativo e preserva localização, seleção, zoom e geração da listagem. A integração
+anterior de Arquivos explicita `effects: false` no perfil privado, alinhando o
+proprietário real à paleta sem efeitos já usada no fixture. A montagem dos
+widgets dos seletores/transferências ainda é JS e segue pendente na Fase 3;
+Senhas, cenas da shell e subpainéis internos continuam no escopo.
+
+Validação em Fedora 44 privado: passaram 656 testes da shell, 121 de Arquivos
+(sete e três ignorados por integrações específicas, respectivamente) e oito
+contratos LPK. Compositor GPU=1 e bundles default/app-host gerados. A integração
+nova está no CI com capturas: vinte cenários de navegador, abrir, salvar, pasta
+e transferências em claro/escuro e 640/1000 px. Exige ausência de tema nos fatos
+e pedidos JS, perfil atual com espelho antigo, pixels da paleta nativa, rejeição
+de dados antigos e atualização de transferência após fechar o navegador.
+Capturas dos cinco tipos de janela inspecionadas.
+
+Passaram 88 cenários de regressão dos treze apps, Relógio, Configurações,
+preferências, Arquivos, cabeçalhos e publicação aos processos isolados reais;
+o encerramento instalado passou por timeout/SIGTERM. As quatro capturas Axia de
+Arquivos são idênticas byte a byte às de `native-settings-appearance`. Nas quatro
+Adwaita, os controles agora usam a paleta Adwaita resolvida, antes aplicada só ao
+corpo: a diferença fica na barra superior e nos botões do diálogo. A comparação
+pixel a pixel confirmou que a listagem e o PDF não mudaram; relatório em
+`comparison.json`. Evidências em `build/validation/native-files-appearance/`.
+
+Instalação privada gerada, sem instalar nem reiniciar a sessão física. Três
+amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,754 MiB de RSS,
+abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal; medições físicas
+continuam reservadas ao encerramento.

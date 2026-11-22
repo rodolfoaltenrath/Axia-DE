@@ -5,5 +5,5 @@ pub fn manifest() -> serde_json::Value {
         "description":"Axia file explorer with shared open and save dialogs, powered by Rust",
         "size":[960,600],"minSize":[640,400],"dock":true,
         "permissions":["fs:home:read","fs:home:write","fs:media","apps:open-with"],
-        "category":"System","nativeView":"files","mode":"browser"})
+        "category":"System","nativeView":"files","appearanceSource":"native","mode":"browser"})
 }

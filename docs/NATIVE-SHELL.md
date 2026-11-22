@@ -64,8 +64,17 @@ retêm Rc em vez de copiar a paleta. Os catálogos compilados de destaques e pap
 de parede são vinculados separadamente por referências estáticas, sem entrar no
 plano de cores nem nos fatos JS. A lista visual combina referências aos papéis
 pessoais e compilados. O host isolado preserva os catálogos locais do seu tema.
-Arquivos, Senhas e as cenas da shell ainda precisam migrar seus fatos de aparência;
+O navegador de Arquivos também recebe Rc desse plano. O serviço de Arquivos tem
+uma ligação fraca à paleta publicada pelo contexto residente; seletores e
+transferências da sessão consultam essa referência, sem transportar cores JS.
+Transferências órfãs continuam recebendo mudanças após o navegador fechar.
+O host isolado preserva o tema local. Respostas internas do navegador nativo
+deixam de devolver uma cópia separada da paleta; a moldura de compatibilidade
+ainda inclui cores e só é recalculada quando elas mudam.
+Senhas e as cenas da shell ainda precisam migrar seus fatos de aparência;
 os subpainéis internos de rede/privacidade conservam seus contratos existentes.
+Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
+Fase 3; o proprietário das cores já é Rust.
 
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena

@@ -27,14 +27,18 @@ impl Serialize for Tokens<'_> {
     }
 }
 
-pub(super) struct Service { source: Source, last: Option<Rc<Value>>, locale: Option<LocaleKey> }
+pub(super) struct Service { source: Source, last: Option<Rc<Value>>, locale: Option<LocaleKey>, files: crate::files::Appearance }
 #[derive(PartialEq, Eq)]
 pub(super) struct LocaleKey { lang: String, region: String, dir: &'static str }
 impl Service {
     pub(super) fn new(home: &str) -> Self { Self::from_source(Source::new(home)) }
-    fn from_source(source: Source) -> Self { Self { source, last: None, locale: None } }
+    fn from_source(mut source: Source) -> Self {
+        let files = crate::files::bind_native_appearance(source.current());
+        Self { source, last: None, locale: None, files }
+    }
     pub(super) fn sync(&mut self) {
         let colors = self.source.current();
+        self.files.set(colors.clone());
         if self.last.as_ref().is_some_and(|last| Rc::ptr_eq(last, &colors)) { return; }
         let encoded = serde_json::to_vec(&Tokens(&colors)).expect("serializable compiled theme");
         if publish(c"theme", &encoded) { self.last = Some(colors); }

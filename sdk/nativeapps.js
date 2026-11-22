@@ -10,7 +10,7 @@ import { standaloneDesktop } from './platform.js';
 
 // The manifest of a native Files window: its facts (the installed apps, the settings of Files), all the
 // theme tokens, the keyboard, and the browser mode.
-const NATIVE_FILES = { id: 'files', nativeView: 'rust', facts: 'apps', settings: true, keyboard: true, fullTheme: true, defaultArgs: { mode: 'browser' }, size: [960, 600] };
+const NATIVE_FILES = { id: 'files', appearanceSource: 'native', nativeView: 'rust', facts: 'apps', settings: true, keyboard: true, fullTheme: true, defaultArgs: { mode: 'browser' }, size: [960, 600] };
 
 export function nativeApp(manifest) {
   if (manifest.dockActionsModel) {

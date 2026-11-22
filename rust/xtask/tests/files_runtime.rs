@@ -144,7 +144,7 @@ wm.setMenus=(...args)=>{menuUpdates++;return setMenus(...args);};
 const disk=mounted=>[{name:'sdb',removable:true,transport:'usb',system:false,partitions:[{name:'sdb1',fstype:'exfat',label:'USB integration',mountpoint:mounted?devicePath:''}]}];
 const app=nativeApp(lord.nativeApps.request(JSON.stringify({cmd:'catalog'})).find(app=>app.id==='files'));
 configureWindows({apps:[app],workArea:{x:0,y:0,w:@WIDTH@,h:700}});
-settings.set({language:'en',mode:'@MODE@',nativeAppearance:'@APPEARANCE@',filesNativeView:false,reduceMotion:true});
+settings.set({language:'en',mode:'@MODE@',nativeAppearance:'@APPEARANCE@',effects:false,filesNativeView:false,reduceMotion:true});
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 const winId=wm.open('files',{args:{path:base}});
 const find=text=>handle?lord.nativeViews.findText(handle,text):0;

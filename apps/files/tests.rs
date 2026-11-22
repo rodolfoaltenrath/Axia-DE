@@ -41,6 +41,14 @@ fn appearance_changes_preserve_location_selection_zoom_and_listing_generation() 
             before
         );
     }
+    for mode in ["light", "dark"] {
+        let colors = std::rc::Rc::new(json!({"mode":mode,"text":"#13579b","nativeStyle":"adwaita"}));
+        s.bind_appearance(Some(colors.clone()));
+        s.poll(&json!({"theme":{"mode":"poison","text":"#ff0000"}}), &shared);
+        assert!(std::rc::Rc::ptr_eq(&s.theme, &colors));
+        assert_eq!((s.tab().location.clone(), s.tab().selected.clone(), s.zoom,
+            s.generation.load(std::sync::atomic::Ordering::Relaxed)), before);
+    }
 }
 pub(super) struct Home {
     root: PathBuf,

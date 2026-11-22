@@ -18,6 +18,7 @@ mod video_thumbnails;
 mod volumes;
 
 pub use native_app::FilesView;
+pub use ffi::{bind_native_appearance, Appearance};
 pub use model::natural_cmp;
 pub use native_resources::discard_result as discard_native_result;
 

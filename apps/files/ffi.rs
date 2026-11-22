@@ -5,18 +5,33 @@ use super::{
 };
 use serde_json::{json, Value};
 use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, CStr, CString};
 use std::path::Path;
+
+/// A context owns the appearance; the Files registry only keeps a weak binding.
+/// Dropping or replacing a context never keeps its profile or palette publisher alive.
+pub struct Appearance(Rc<RefCell<Rc<Value>>>);
+impl Appearance {
+    pub fn set(&self, colors: Rc<Value>) { *self.0.borrow_mut() = colors; }
+}
+pub fn bind_native_appearance(colors: Rc<Value>) -> Appearance {
+    let source = Rc::new(RefCell::new(colors));
+    APP.with(|app| app.borrow_mut().appearance = Rc::downgrade(&source));
+    Appearance(source)
+}
 
 // What a window's host already has, for delta() and for skipping empty replies.
 struct Sent {
     tree: Value,
     state: Value,
+    appearance: Rc<Value>,
 }
 #[derive(Default)]
 struct App {
     sessions: HashMap<u64, Session>,
+    appearance: Weak<RefCell<Rc<Value>>>,
     sent: HashMap<u64, Sent>,
     shared: Shared,
     sequence: u64,
@@ -28,6 +43,10 @@ struct App {
 thread_local! {static APP:RefCell<App>=RefCell::new(App::default());}
 impl App {
     fn request(&mut self, args: &Value) -> Value {
+        let appearance = self.appearance.upgrade().map(|source| source.borrow().clone());
+        self.request_with_appearance(args, appearance)
+    }
+    fn request_with_appearance(&mut self, args: &Value, appearance: Option<Rc<Value>>) -> Value {
         let op = args["op"].as_str().unwrap_or("");
         if op == "externalPrepare" || op == "externalUris" {
             return match if op == "externalPrepare" {
@@ -54,7 +73,7 @@ impl App {
             }
             self.sequence += 1;
             let id = self.sequence;
-            return match Session::new(id, args, &mut self.shared) {
+            return match Session::new_with_appearance(id, args, &mut self.shared, appearance.clone()) {
                 Ok(mut session) => {
                     session.poll(args, &self.shared);
                     let reply = self.snapshot(&mut session, args["native"] == true);
@@ -114,6 +133,7 @@ impl App {
         let Some(mut session) = self.sessions.remove(&id) else {
             return json!({"error":"sys.badArgument"});
         };
+        session.bind_appearance(appearance);
         if op == "transferClose" {
             session.transfer_open = false;
             self.transfer_sent.remove(&id);
@@ -124,9 +144,7 @@ impl App {
         }
         if op == "transferAttach" || op == "transferPoll" || op == "transferEvent" {
             session.transfer_open = true;
-            if args["theme"].is_object() {
-                session.theme = crate::native_style::files_theme(&args["theme"]);
-            }
+            session.poll_appearance(args);
             if op == "transferEvent" {
                 session.transfer_action(
                     args["action"][0].as_str().unwrap_or(""),
@@ -134,7 +152,7 @@ impl App {
                 );
             }
             session.poll_transfers(&self.shared);
-            let reply = json!({"tree":session.transfers_view(),"appearance":session.theme,
+            let reply = json!({"tree":session.transfers_view(),"appearance":session.theme.as_ref(),
                 "chrome":crate::native_style::frame(&session.theme),"title":{"key":"files.transfer.title"}});
             let changed = op == "transferAttach" || self.transfer_sent.get(&id) != Some(&reply);
             if changed {
@@ -185,11 +203,11 @@ impl App {
     /// `whole`: the tree as it is (a native view draws it), not as changes for the JS host.
     fn snapshot(&mut self, s: &mut Session, whole: bool) -> Value {
         let tree = s.render(&self.shared);
-        let state = json!({"menus":s.menus(&self.shared),"title":s.title_value(),"loading":s.visibly_loading(),"capture":s.drag.is_some(),"closed":s.closed,
-            "appearance":s.theme,"chrome":crate::native_style::frame(&s.theme)});
+        let state = json!({"menus":s.menus(&self.shared),"title":s.title_value(),"loading":s.visibly_loading(),"capture":s.drag.is_some(),"closed":s.closed});
         s.dirty = false;
         let sent = self.sent.get(&s.id);
-        if s.effects.is_empty() && sent.is_some_and(|p| p.tree == tree && p.state == state) {
+        let appearance_changed = sent.is_none_or(|p| !Rc::ptr_eq(&p.appearance, &s.theme) && p.appearance != s.theme);
+        if !appearance_changed && s.effects.is_empty() && sent.is_some_and(|p| p.tree == tree && p.state == state) {
             return Value::Null;
         }
         self.delivery += 1;
@@ -198,13 +216,18 @@ impl App {
         reply["serial"] = json!(self.delivery);
         reply["effects"] = json!(std::mem::take(&mut s.effects));
         reply["tree"] = if whole { tree.clone() } else { delta(sent.map(|p| &p.tree), &tree) };
+        if appearance_changed {
+            // The native browser already has this Rc; only legacy widget hosts need a JSON copy.
+            if !whole { reply["appearance"] = s.theme.as_ref().clone(); }
+            reply["chrome"] = crate::native_style::frame(&s.theme);
+        }
         // Absent means unchanged; the host keeps the array it already has.
-        for key in ["menus", "appearance", "chrome"] {
+        for key in ["menus"] {
             if sent.is_some_and(|p| p.state[key] == state[key]) {
                 reply.as_object_mut().unwrap().remove(key);
             }
         }
-        self.sent.insert(s.id, Sent { tree, state });
+        self.sent.insert(s.id, Sent { tree, state, appearance: s.theme.clone() });
         reply
     }
 }
@@ -285,6 +308,9 @@ fn fs_json(args: &Value) -> Value {
 pub(super) fn request(args: &Value) -> Value {
     APP.with(|app| app.borrow_mut().request(args))
 }
+pub(super) fn request_with_appearance(args: &Value, appearance: Rc<Value>) -> Value {
+    APP.with(|app| app.borrow_mut().request_with_appearance(args, Some(appearance)))
+}
 
 // SAFETY: input is a NUL-terminated UTF-8 JSON string owned by C for this call.
 // All responses use a dedicated free function; QuickJS never owns Rust allocations.
@@ -317,6 +343,59 @@ pub unsafe extern "C" fn axia_files_free(value: *mut c_char) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn native_palette_is_shared_by_browser_dialogs_and_orphaned_transfers() {
+        let _home = crate::files::tests::Home::new();
+        let colors = Rc::new(json!({"mode":"light","text":"#123456","windowBg":"#ffffff","accent":"#30d158","nativeStyle":"adwaita"}));
+        let lease = Appearance(Rc::new(RefCell::new(colors.clone())));
+        let mut app = App { appearance: Rc::downgrade(&lease.0), ..App::default() };
+        let mut ids = Vec::new();
+        for mode in ["browser","open","save","folder"] {
+            let native = mode == "browser";
+            let first = app.request(&json!({"op":"create","native":native,"mode":mode,"theme":{"mode":"dark","text":"#ff0000"}}));
+            let id = first["id"].as_u64().unwrap(); ids.push(id);
+            assert!(Rc::ptr_eq(&app.sessions[&id].theme, &colors));
+            if native { assert!(first.get("appearance").is_none()); }
+            else { assert_eq!(first["appearance"]["text"],"#123456"); }
+            app.request(&json!({"op":"poll","id":id,"theme":{"text":"#ff0000"}}));
+            assert!(Rc::ptr_eq(&app.sessions[&id].theme, &colors));
+        }
+        let dark = Rc::new(json!({"mode":"dark","text":"#eeeeec","windowBg":"#2d2d2d","accent":"#bf5af2","nativeStyle":"adwaita"}));
+        lease.set(dark.clone());
+        for id in &ids {
+            app.request(&json!({"op":"poll","id":id}));
+            assert!(Rc::ptr_eq(&app.sessions[id].theme, &dark));
+            assert!(Rc::ptr_eq(&app.sent[id].appearance, &dark));
+        }
+        let browser = ids[0];
+        app.request(&json!({"op":"transferAttach","id":browser}));
+        app.request(&json!({"op":"close","id":browser}));
+        assert!(app.orphaned.contains(&browser));
+        lease.set(colors.clone());
+        let transfers = app.request(&json!({"op":"transferPoll","id":browser,"theme":{"text":"#ff0000"}}));
+        assert_eq!(transfers["appearance"]["text"],"#123456");
+        assert!(Rc::ptr_eq(&app.sessions[&browser].theme, &colors));
+        app.request(&json!({"op":"transferClose","id":browser}));
+        assert!(!app.sessions.contains_key(&browser));
+        drop(lease);
+        assert!(app.appearance.upgrade().is_none());
+        let local = app.request(&json!({"op":"poll","id":ids[1],"theme":{"mode":"dark","nativeAppearance":"axia","windowBg":"#123abc"}}));
+        assert_eq!(local["appearance"]["windowBg"],"#123abc","an unbound host retains its local theme contract");
+        for id in ids.into_iter().skip(1) { app.request(&json!({"op":"close","id":id})); }
+    }
+
+    #[test]
+    fn appearance_binding_is_weak_and_does_not_restore_an_old_context() {
+        let first = bind_native_appearance(Rc::new(json!({"text":"#111111"})));
+        let weak = Rc::downgrade(&first.0);
+        let second = bind_native_appearance(Rc::new(json!({"text":"#222222"})));
+        drop(second);
+        APP.with(|app| assert!(app.borrow().appearance.upgrade().is_none()));
+        assert!(weak.upgrade().is_some());
+        drop(first);
+        assert!(weak.upgrade().is_none());
+    }
     use super::*;
     // The host's half of the protocol: sdk/rustfiles.js expand().
     fn expand(prev: Option<&Value>, node: &Value) -> Value {

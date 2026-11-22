@@ -20,6 +20,7 @@ use serde_json::{json, Map, Value};
 pub struct FilesView {
     /// The session's id; 0 before the first sync.
     id: u64,
+    appearance: Option<std::rc::Rc<Value>>,
     /// The last tree of the session as Files wrote it, to translate again when only the menu changed.
     raw: Value,
     /// A tree the host has not been given yet.
@@ -68,13 +69,20 @@ fn advance(items:&[Value],from:i64,direction:i64)->Option<i64> {
 }
 
 impl FilesView {
-    fn theme(input: &Value, preferences: &Value) -> Value {
+    fn request_files(&self, args: &Value) -> Value {
+        match &self.appearance {
+            Some(theme) => ffi::request_with_appearance(args, theme.clone()),
+            None => ffi::request(args),
+        }
+    }
+    fn theme(&self, input: &Value, preferences: &Value) -> std::rc::Rc<Value> {
+        if let Some(theme) = &self.appearance { return theme.clone(); }
         let mut theme = input["context"]["theme"].clone();
         if !theme.is_object() {
             theme = json!({});
         }
         theme["nativeAppearance"] = json!(preferences["nativeAppearance"].as_str().unwrap_or("adwaita"));
-        theme
+        std::rc::Rc::new(theme)
     }
     fn size(input: &Value) -> (f64, f64) {
         (input["context"]["width"].as_f64().unwrap_or(960.).max(1.), input["context"]["height"].as_f64().unwrap_or(600.).max(1.))
@@ -152,17 +160,18 @@ impl FilesView {
     }
     fn session(&mut self, input: &Value, theme: &Value, preferences: &Value) -> Value {
         let (width, height) = Self::size(input);
-        let request = if self.id == 0 {
+        let mut request = if self.id == 0 {
             let args = &input["args"];
             json!({"op":"create","native":true,"mode":args["mode"].as_str().unwrap_or("browser"),"args":args,
                 "title":"","start":"","name":"","multiple":false,"filter":"","ignoreCase":false,
-                "preferences":preferences["files"],"theme":theme,"apps":apps(input),"width":width,"height":height,
+                "preferences":preferences["files"],"apps":apps(input),"width":width,"height":height,
                 "locale":input["lang"].as_str().unwrap_or("en")})
         } else {
-            json!({"op":"poll","native":true,"id":self.id,"width":width,"height":height,"theme":theme,
+            json!({"op":"poll","native":true,"id":self.id,"width":width,"height":height,
                 "locale":input["lang"].as_str().unwrap_or("en")})
         };
-        let files = ffi::request(&request);
+        if self.appearance.is_none() { request["theme"] = theme.clone(); }
+        let files = self.request_files(&request);
         if self.id == 0 {
             self.id = files["id"].as_u64().unwrap_or(0);
         }
@@ -174,7 +183,7 @@ impl FilesView {
         for (k, v) in extra {
             request[k] = v.clone();
         }
-        ffi::request(&request)
+        self.request_files(&request)
     }
     /// The keyboard of the open context menu: arrows move the row, Right opens a submenu, Left closes
     /// it, Enter and Space choose. None when there is no menu, or the key isn't one of these.
@@ -227,6 +236,12 @@ impl FilesView {
 }
 
 impl NativeApp for FilesView {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        if self.appearance.as_ref().is_some_and(|old| std::rc::Rc::ptr_eq(old, &theme)) { return; }
+        self.appearance = Some(theme);
+        self.fresh |= self.raw.is_object();
+    }
     fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
         FilesView::key(self, key, chr, flags)
     }
@@ -244,7 +259,7 @@ impl NativeApp for FilesView {
 }
 impl FilesView {
     fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
-        let theme = Self::theme(input, preferences);
+        let theme = self.theme(input, preferences);
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
                 let mut pending=Vec::new();
@@ -273,7 +288,7 @@ impl FilesView {
                 reply
             }
             "close" => {
-                if self.id!=0 {ffi::request(&json!({"op":"close","id":self.id}));self.id=0;}
+                if self.id!=0 {self.request_files(&json!({"op":"close","id":self.id}));self.id=0;}
                 self.resources.clear(); json!({})
             }
             "icon" => crate::files::native_icon(input["size"].as_f64().unwrap_or(32.)),
@@ -349,7 +364,7 @@ impl FilesView {
 impl Drop for FilesView {
     fn drop(&mut self) {
         if self.id != 0 {
-            ffi::request(&json!({"op":"close","id":self.id}));
+            self.request_files(&json!({"op":"close","id":self.id}));
         }
     }
 }
