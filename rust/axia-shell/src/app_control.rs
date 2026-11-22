@@ -78,9 +78,11 @@ impl Controller {
                 .windows
                 .as_ref()
                 .map(|windows| {
+                    let catalog = self.app.metadata_reader();
+                    let metadata = catalog.read();
                     if let Some(reader) = &self.preferences {
-                        crate::window_memory::restore_profile(&windows.reader(), &self.app.metadata(), input, &reader.read())
-                    } else { crate::window_memory::restore(&windows.reader(), &self.app.metadata(), input) }
+                        crate::window_memory::restore_profile(&windows.reader(), &metadata, input, &reader.read())
+                    } else { crate::window_memory::restore(&windows.reader(), &metadata, input) }
                 })
                 .unwrap_or_else(|| json!({"error":"app.invalidRequest"}));
         }

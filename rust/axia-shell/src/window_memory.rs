@@ -71,18 +71,15 @@ pub fn restore_profile(windows: &Reader<WindowState>, metadata: &Value, input: &
     restore_place(windows, metadata, input, key, place)
 }
 fn restore_place(windows: &Reader<WindowState>, metadata: &Value, input: &Value, key: &str, place: &Value) -> Value {
-    let twins = windows
-        .read()
-        .windows()
-        .filter(|w| identity(w, metadata) == key)
-        .count();
-    let mut options = input["options"].clone();
-    if !options.is_object() {
-        options = json!({});
-    }
-    if options["shift"].is_null() {
-        options["shift"] = json!(twins * 30);
-    }
+    let options = if input["options"]["shift"].is_null() {
+        let twins = windows.read().windows().filter(|w| identity(w, metadata) == key).count();
+        let mut options = input["options"].as_object().cloned().unwrap_or_default();
+        options.insert("shift".into(), json!(twins * 30));
+        std::borrow::Cow::Owned(Value::Object(options))
+    } else {
+        // Explicit placement needs neither a native-window scan nor an options copy.
+        std::borrow::Cow::Borrowed(&input["options"])
+    };
     let areas: Vec<_> = rows(&input["displays"])
         .iter()
         .map(|d| d["work"].clone())

@@ -26,6 +26,8 @@ fn remembered_places_read_native_windows_without_a_js_subscription() {
                 "filters",
                 "ordered",
                 "twins",
+                "explicitPlacement",
+                "missingPlace",
                 "noWindowTransport",
                 "nativePreferences",
                 "noJsPersistence",
@@ -85,6 +87,10 @@ async function run(){
  const ordered=Object.keys(places).join(',')==='app:keep,app:notes,lpk:pkg';
  direct('open',{app:'notes',instance:'b'});
  const frame=rememberedFrame('app:notes'),twins=frame?.x===160&&frame?.y===180;
+ const explicit=rememberedFrame('app:notes',{shift:7,fixed:true,size:[210,160]});
+ const explicitPlacement=explicit?.x===77&&explicit?.y===97&&explicit?.w===210&&explicit?.h===160&&explicit?.maximized===false;
+ const missingPlace=rememberedFrame('app:missing')===null;
+
  hold=true;
  nativeSettings.call(lord.settings,{cmd:'patch',patch:{windowPlaces:{...profile().windowPlaces,'app:notes':{...profile().windowPlaces['app:notes'],x:101}}}});
  const current=rememberedFrame('app:notes');
@@ -103,7 +109,7 @@ async function run(){
  const noObserver=observerMounts===0;
  windows.get=read;
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
- console.log('window_memory-observation '+JSON.stringify({configured,savedNative,filters,ordered,twins,noWindowTransport,noObserver,continued,nativeDisplays,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok,writes,frame,places}));
+ console.log('window_memory-observation '+JSON.stringify({configured,savedNative,filters,ordered,twins,explicitPlacement,missingPlace,noWindowTransport,noObserver,continued,nativeDisplays,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok,writes,frame,places}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_memory driver: '+(error.stack||error))),150);
 "#;

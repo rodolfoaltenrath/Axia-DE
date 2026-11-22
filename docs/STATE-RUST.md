@@ -1491,6 +1491,35 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
 
+### Consulta de posição sem cópia do catálogo
+
+`memoryFrame` empresta o catálogo atual do controlador com `metadata_reader`,
+em vez de clonar todos os metadados a cada consulta de abertura. O empréstimo
+vale também quando a preferência não contém posição para o app. A restauração
+com deslocamento explícito empresta as opções e não percorre as janelas;
+a cascata automática conserva a contagem de instâncias e o passo de 30 px.
+Tamanho fixo, maximização, áreas úteis e seleção do monitor continuam usando
+as regras existentes. O SDK ainda fornece áreas úteis e opções do tema;
+a fonte física da coleta não contém essas áreas reservadas.
+
+A integração real de memória agora também exige deslocamento explícito,
+tamanho fixo e retorno nulo para app sem posição salva, além das verificações
+existentes de preferências nativas, espelho JS parado e coleta sem view.
+Evidências em `build/validation/native-memory-frame-borrow/`.
+
+Em Fedora 44 privado passaram 671 testes da shell, oito contratos LPK,
+quatro cenários de memória e 12 de restauração/cabeçalhos; encerramento
+instalado passou por timeout e SIGTERM. Bundles default/app-host e servidor
+GPU=1 gerados. A primeira build completa encontrou símbolos JSON duplicados
+na migração paralela C/Rust; após os ajustes dessa frente na árvore compartilhada,
+a build completa também passou, sem editar seus arquivos. As capturas da
+fixture de memória e do cabeçalho escuro foram
+inspecionadas. Três amostras de ociosidade com limites impostos passaram:
+12,350 poll/s e 104,668 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
+Isso verifica o orçamento atual, sem demonstrar ganho causal da otimização.
+Medições físicas continuam para o encerramento do roadmap; nenhuma caixa
+inteira é concluída nesta entrega.
+
 ### Publicação de preferências e idioma sem observador
 
 `session_preferences.rs` pertence ao `SessionCore` e é vinculado pelo construtor

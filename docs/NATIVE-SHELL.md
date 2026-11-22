@@ -116,6 +116,11 @@ cores antigos enviados à view não substituem as fontes nativas. Pergunta,
 marcadores e prazos são preservados. Modelos sem vínculo de catálogo/aparência
 conservam os fatos locais; geometria do tema e execução dos efeitos seguem no
 adaptador.
+A consulta `memoryFrame`, usada ao abrir apps, também empresta o catálogo do
+controlador, inclusive quando não há posição salva. Deslocamento explícito
+reutiliza as opções recebidas e dispensa a contagem de instâncias; a cascata
+automática conserva a contagem atual e o passo de 30 px. Áreas úteis dos
+monitores e opções de restauração continuam fornecidas pelo adaptador do tema.
 O indicador de alarmes/temporizador também usa a paleta compartilhada da shell:
 marca e legenda leem menuText diretamente, sem color/theme/scale nos fatos JS.
 O SDK envia somente a altura; o host isolado conserva sua cor local. Durante a
