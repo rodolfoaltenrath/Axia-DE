@@ -229,6 +229,28 @@ fatos da view. O SDK inicializa a importação compartilhada antes do mount;
 descoberta/importação inicial ainda pertencem a `nativecatalog.js`. Montagens
 locais por Reader preservam os fatos explícitos de metadados.
 
+Posição, tamanho e quantidade de colunas também vêm da fonte física de monitores,
+emprestada por Reader na sessão. O SDK monta uma âncora neutra de tamanho zero;
+a view posiciona a cena no retângulo do monitor principal, com fallback ao primeiro
+monitor. A montagem não consulta `mainDisplay()` nem envia geometria de telas.
+Troca do principal, desconexão, reconexão e redimensionamento invalidam a cena
+sem reiniciar seleção, origem ou geração. Sem monitor físico, a cena fica oculta
+e retoma a seleção na reconexão; não usa geometria antiga dos fatos ou do mount.
+Um alternador encerrado não acorda por essas revisões. Controladores locais por
+Reader continuam usando a geometria do contexto explícito.
+
+A geometria nativa passou em 690 testes da shell, oito contratos LPK, oito
+cenários gráficos ampliados do alternador e oito de regressão do indicador de
+desktops/menu Janela, além do encerramento instalado por timeout/SIGTERM.
+Dois testes novos cobrem principal, coordenadas negativas, larguras de 320/640/1000,
+desconexão/reconexão, fonte vazia, preservação da seleção e atualização do host
+sem fatos novos. A integração mantém o espelho JS em geometria falsa e exige
+mount neutro, posicionamento físico e cliques reais. O contrato offline também
+passou com o bundle pré-compilado na instalação privada. Oito capturas são
+idênticas às anteriores, com claro/escuro mínimos inspecionados e pixels de
+material/destaque verificados. Build GPU=1 e bundles passaram. Evidências em
+`build/validation/native-switcher-displays/`; medições físicas seguem no encerramento.
+
 O foco escolhido e a restauração da origem minimizada também executam no
 Session via `AppCommand::WindowAction(WindowMenuAction::Focus)`.
 A view libera o empréstimo antes da mutação;

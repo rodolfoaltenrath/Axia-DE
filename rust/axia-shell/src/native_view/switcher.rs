@@ -24,6 +24,7 @@ pub struct Switcher {
     surface: Value,
     windows: Reader<WindowState>,
     changes: Subscription,
+    displays: Option<(Reader<Vec<Value>>, Subscription)>,
     catalog: crate::forcequit::App,
     selector: AxiaSwitcher,
     entries: Vec<Entry>,
@@ -39,12 +40,17 @@ impl Switcher {
         Self::with_catalog(windows,catalog)
     }
     pub fn with_session(session: Session) -> Self {
+        Self::with_displays(session,super::services::displays::reader())
+    }
+    pub fn with_displays(session: Session, displays: Reader<Vec<Value>>) -> Self {
         let windows = session.reader();
         let catalog = crate::forcequit::App::with_window_metadata(Rc::new(WindowReader(windows.clone())),session.catalog_store());
         let generation = session.begin_switcher();
         let mut switcher = Self::with_catalog(windows,catalog);
         switcher.session = Some(session);
         switcher.generation = generation;
+        let changes = displays.subscribe();
+        switcher.displays = Some((displays,changes));
         switcher
     }
     fn with_catalog(windows: Reader<WindowState>, catalog: crate::forcequit::App) -> Self {
@@ -56,6 +62,7 @@ impl Switcher {
             surface: Value::Null,
             windows,
             changes,
+            displays: None,
             catalog,
             selector: AxiaSwitcher::default(),
             entries: Vec::new(),
@@ -68,6 +75,7 @@ impl Switcher {
     }
     fn refresh(&mut self, input: &Value) {
         self.changes.take();
+        if let Some((_, changes)) = &self.displays { changes.take(); }
         if self.done {
             return;
         }
@@ -206,7 +214,12 @@ impl Switcher {
         if self.done {
             return json!({"kind":"view","style":{"pointerEvents":"none"}});
         }
-        let width = input["context"]["width"].as_f64().unwrap_or(1000.);
+        let physical = self.displays.as_ref().map(|(source, _)| source.read());
+        let display = physical.as_ref().and_then(|displays| displays.iter().find(|display| display["main"] == true).or_else(|| displays.first()));
+        if physical.is_some() && display.is_none() {
+            return json!({"kind":"view","style":{"pointerEvents":"none"}});
+        }
+        let width = display.map_or_else(|| input["context"]["width"].as_f64().unwrap_or(1000.), |display| display["w"].as_f64().unwrap_or(0.));
         let per_row = (((width - 96.) / 104.).floor() as usize).max(1);
         let start = self
             .selector
@@ -233,7 +246,12 @@ impl Switcher {
                 label.push(json!({"kind":"text","label":{"key":"shell.desktops.name","params":{"n":desktop}},"style":style}));
             }
         }
-        json!({"kind":"view","style":{"flex":1,"alignItems":"center","justifyContent":"center","pointerEvents":"box-none"},"children":[
+        let mut style = json!({"flex":1,"alignItems":"center","justifyContent":"center","pointerEvents":"box-none"});
+        if let Some(display) = display {
+            style["position"] = json!("absolute");
+            for (property, key) in [("left","x"),("top","y"),("width","w"),("height","h")] { style[property] = display[key].clone(); }
+        }
+        json!({"kind":"view","style":style,"children":[
             {"kind":"view","style":[surface,{"alignItems":"center","padding":16,"borderRadius":radius,
                 "maxWidth":width-48.,"boxShadow":"0 18px 48px rgba(0,0,0,0.45)"}],"children":[
                 {"kind":"view","style":{"flexDirection":"row","direction":"ltr"},"children":cells},
@@ -254,7 +272,8 @@ impl NativeApp for Switcher {
         self.appearance = Some(theme);
     }
     fn invalidated(&self) -> bool {
-        !self.done && (self.changes.pending() || self.catalog.invalidated())
+        !self.done && (self.changes.pending() || self.catalog.invalidated()
+            || self.displays.as_ref().is_some_and(|(_, changes)| changes.pending()))
     }
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {

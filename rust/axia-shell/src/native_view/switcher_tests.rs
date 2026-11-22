@@ -7,6 +7,9 @@ fn call(state: &mut Session, op: &str, args: &[Value]) {
         .call(op, &[vec![json!({})], args.to_vec()].concat())
         .unwrap();
 }
+fn physical_display() -> axia_state::Reader<Vec<Value>> {
+    axia_state::Store::new(vec![json!({"x":0,"y":0,"w":640,"h":700,"main":true})]).reader()
+}
 fn host(state: &Session, args: Value) -> (Host, i32) {
     let node = scene::create(scene::VIEW);
     let mut host = Host::new(node, Box::new(Switcher::new(state.reader())), "", None);
@@ -104,7 +107,7 @@ fn bound_switcher_reads_catalog_revisions_and_revalidates_before_commit() {
         {"id":"files","name":"Files"},{"id":"notes","name":name,"builtin":builtin},{"id":"calculator","name":"Calculator"}]});
     control.request(&metadata("Notes",false));
     let node = scene::create(scene::VIEW);
-    let mut host = Host::new(node,Box::new(Switcher::with_session(session.clone())),"",None);
+    let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),physical_display())),"",None);
     let stale = json!({"width":640,"args":{"nonce":10},"registry":[{"id":"notes","name":"Forged","builtin":true}],"catalog":[]});
     host.facts(stale.clone());
     assert_ne!(host.find_text("Notes"),0);
@@ -141,7 +144,7 @@ fn native_catalog_emptying_closes_the_switcher_once_without_stale_fallback() {
     let mut control = crate::app_control::Controller::new(session.clone());
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Notes"}]}));
     let node = scene::create(scene::VIEW);
-    let mut host = Host::new(node,Box::new(Switcher::with_session(session)),"",None);
+    let mut host = Host::new(node,Box::new(Switcher::with_displays(session,physical_display())),"",None);
     host.facts(json!({"width":640,"args":{"nonce":11},"registry":[{"id":"notes","name":"Forged"}]}));
     assert_ne!(host.find_text("Notes"),0);
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","builtin":true}]}));
@@ -169,7 +172,7 @@ fn bound_switcher_focuses_in_one_native_revision_and_restores_fullscreen_origin(
         let mut control = crate::app_control::Controller::new(session.clone());
         control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Notes"},{"id":"linux","builtin":true}]}));
         let node = scene::create(scene::VIEW);
-        let mut host = Host::new(node,Box::new(Switcher::with_session(session.clone())),"",None);
+        let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),physical_display())),"",None);
         host.facts(json!({"width":640,"args":{"nonce":12,"origin":"linux#9"}}));
         assert_ne!(host.find_text("Notes"),0);
         let revision = session.reader().revision();
@@ -199,9 +202,9 @@ fn newer_switcher_generation_prevents_stale_focus_and_drop_keeps_the_current_own
     let mut control = crate::app_control::Controller::new(session.clone());
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}]}));
     let sync = |switcher: &mut Switcher, nonce| switcher.request(&json!({"cmd":"sync","args":{"nonce":nonce}}));
-    let mut stale = Switcher::with_session(session.clone());
+    let mut stale = Switcher::with_displays(session.clone(),physical_display());
     sync(&mut stale,20);
-    let mut current = Switcher::with_session(session.clone());
+    let mut current = Switcher::with_displays(session.clone(),physical_display());
     sync(&mut current,21);
     let revision = session.reader().revision();
     stale.request(&json!({"cmd":"commit"}));
@@ -212,10 +215,79 @@ fn newer_switcher_generation_prevents_stale_focus_and_drop_keeps_the_current_own
     assert_eq!(session.reader().read().focused_window(),Some("notes"));
     assert_eq!(session.reader().revision(),revision+1);
     assert!(sync(&mut current,21)["effects"][0]["reply"].is_object());
-    let abandoned = Switcher::with_session(session.clone());
+    let abandoned = Switcher::with_displays(session.clone(),physical_display());
     drop(abandoned);
-    let mut next = Switcher::with_session(session.clone());
+    let mut next = Switcher::with_displays(session.clone(),physical_display());
     sync(&mut next,22);
     next.request(&json!({"cmd":"commit"}));
     assert!(sync(&mut next,22)["effects"][0]["reply"].is_object());
+}
+
+#[test]
+fn physical_displays_reposition_and_resize_without_restarting_selection() {
+    use super::NativeApp;
+    let mut session = Session::default();
+    let registry: Vec<_> = (0..18).map(|n|json!({"id":format!("probe{n}"),"name":format!("Probe {n}")})).collect();
+    for app in &registry { call(&mut session,"open",&[json!({"app":app["id"]})]); }
+    let mut control = crate::app_control::Controller::new(session.clone());
+    control.request(&json!({"cmd":"metadata","registry":registry,"catalog":[]}));
+    let source = axia_state::Store::new(vec![json!({"x":-800,"y":0,"w":800,"h":600}),json!({"x":0,"y":20,"w":640,"h":700,"main":true})]);
+    let mut switcher = Switcher::with_displays(session,source.reader());
+    let input = json!({"cmd":"sync","args":{"nonce":30,"display":{"x":9999,"y":9999,"w":1,"h":1}},"context":{"width":9999,"height":9999}});
+    let label = |tree: &Value| tree["children"][0]["children"][1]["children"][0]["label"].clone();
+    let columns = |tree: &Value| tree["children"][0]["children"][0]["children"].as_array().unwrap().len();
+    let tree = switcher.request(&input)["tree"].clone();
+    let selected = label(&tree);
+    assert_eq!(tree["style"]["left"],0);
+    assert_eq!(tree["style"]["top"],20);
+    assert_eq!(tree["style"]["width"],640);
+    assert_eq!(columns(&tree),5);
+    assert!(!switcher.invalidated());
+    source.update(|displays| { displays[0]["main"]=json!(true);displays[0]["x"]=json!(-900);displays[0]["w"]=json!(1000);displays[1]["main"]=json!(false);((),true) });
+    assert!(switcher.invalidated());
+    let tree = switcher.request(&input)["tree"].clone();
+    assert_eq!(tree["style"]["left"],-900);
+    assert_eq!(tree["style"]["width"],1000);
+    assert_eq!(columns(&tree),8);
+    assert_eq!(label(&tree),selected);
+    source.update(|displays| { displays.clear();((),true) });
+    assert!(switcher.request(&input)["tree"]["children"].is_null(),"empty physical source cannot use forged geometry");
+    source.update(|displays| { displays.push(json!({"x":40,"y":60,"w":320,"h":480}));((),true) });
+    let tree = switcher.request(&input)["tree"].clone();
+    assert_eq!(tree["style"]["left"],40);
+    assert_eq!(tree["style"]["height"],480);
+    assert_eq!(columns(&tree),2);
+    assert_eq!(label(&tree),selected,"reconnection must preserve the selected group");
+    switcher.request(&json!({"cmd":"cancel"}));
+    source.update(|displays| { displays.clear();((),true) });
+    assert!(!switcher.invalidated(),"display changes cannot wake a finished switcher");
+}
+
+#[test]
+fn physical_display_changes_wake_the_host_without_facts_and_keep_the_focus_target() {
+    let mut session = Session::default();
+    for app in ["files","notes","calculator"] { call(&mut session,"open",&[json!({"app":app})]); }
+    let mut control = crate::app_control::Controller::new(session.clone());
+    control.request(&json!({"cmd":"metadata","registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}],"catalog":[]}));
+    let source = axia_state::Store::new(vec![json!({"x":0,"y":0,"w":640,"h":700})]);
+    let node = scene::create(scene::VIEW);
+    let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),source.reader())),"",None);
+    host.facts(json!({"width":9999,"args":{"nonce":31}}));
+    assert_ne!(host.find_text("Notes"),0);
+    source.update(|displays| { displays.clear();((),true) });
+    assert_eq!(host.deadline(),Some(0.));
+    host.tick(0.);
+    assert_eq!(host.find_text("Notes"),0);
+    assert!(host.take().is_none(),"temporary disconnection does not finish selection");
+    source.update(|displays| { displays.push(json!({"x":40,"y":0,"w":1000,"h":600}));((),true) });
+    host.tick(0.);
+    assert_ne!(host.find_text("Notes"),0);
+    assert!(host.deadline().is_none());
+    host.action(&json!({"action":["commit"]}));
+    assert_eq!(session.reader().read().focused_window(),Some("notes"));
+    assert!(host.take().is_some());
+    source.update(|displays| { displays.clear();((),true) });
+    assert!(host.deadline().is_none());
+    drop(host);
+    scene::destroy(node);
 }

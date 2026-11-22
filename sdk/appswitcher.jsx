@@ -1,7 +1,6 @@
 // App-switcher lifecycle and shortcut adapter. Rust owns MRU, membership,
 // selection, layout, icons and the scene; no window list crosses this adapter.
 import { createElement as h } from 'react';
-import { mainDisplay } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { Layer } from './layers.js';
 import { wm, applyNativeWindowState } from './windows.js';
@@ -55,11 +54,10 @@ export function switcherKey(e) {
 export function AppSwitcher() {
   const state = useStore(switcherState);
   if (!state) return null;
-  const display = mainDisplay();
   return h(Layer, { name: 'overlay' }, h(NativeView, {
     key: state.nonce, manifest: MANIFEST,
     stateSource: lord.windowList, handleRef: switcherBridge.handle,
     args: state,
-    style: { position: 'absolute', left: display.x, top: display.y, width: display.w, height: display.h, pointerEvents: 'box-none' },
+    style: { position: 'absolute', left: 0, top: 0, width: 0, height: 0, pointerEvents: 'box-none' },
   }));
 }
