@@ -20,7 +20,7 @@ impl App {
             let on=self.pref("mode")==*mode;let dark=*mode=="dark";click(view(json!({"alignItems":"center","gap":6}),vec![view(json!({"padding":2,"borderRadius":10,"border":format!("2px solid {}",if on{s(&u.color("accent")).to_owned()}else{"transparent".into()})}),vec![mode_thumb(dark,u.color("accent"))]),u.text(t(&format!("settings.{mode}")),12.,false)]),patch("mode",json!(mode)))
         }).collect())]));
         let mut rows = vec![];
-        let accents = self.theme["accents"].as_object();
+        let accents = self.appearance_catalogs.map(|(_, accents)| accents).unwrap_or(&self.theme["accents"]).as_object();
         rows.push(u.row(t("shell.cc.accent"),"",vec![view(json!({"flexDirection":"row","gap":8,"direction":"ltr"}),accents.into_iter().flat_map(|map|map.iter()).map(|(name,color)|click(view(json!({"width":20,"height":20,"borderRadius":10,"alignItems":"center","justifyContent":"center","background":format!("linear-gradient(180deg, {}, {})",shade(s(color),1.15),s(color)),"boxShadow":"0 1px 2px rgba(0,0,0,.25)"}),if self.pref("accent")==name{vec![view(json!({"width":8,"height":8,"borderRadius":4,"backgroundColor":"#fff"}),vec![])]}else{vec![]}),patch("accent",json!(name)))).collect())]));
         rows.push(self.bool_row("settings.effects", "settings.effectsHint", "effects"));
         rows.push(self.bool_row(

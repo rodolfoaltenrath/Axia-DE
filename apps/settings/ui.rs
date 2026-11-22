@@ -76,7 +76,7 @@ pub fn actions(children: Vec<Value>) -> Value {
     )
 }
 pub struct Ui {
-    pub theme: Value,
+    pub theme: std::rc::Rc<Value>,
 }
 impl Ui {
     pub fn color(&self, key: &str) -> Value {

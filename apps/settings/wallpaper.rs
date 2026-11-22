@@ -1,9 +1,8 @@
 use super::*;
 impl App {
-    fn wallpapers(&self) -> Vec<Value> {
-        let mut list = arr(self.pref("wallpaperUser")).to_vec();
-        list.extend_from_slice(arr(&self.theme["wallpapers"]));
-        list
+    pub(super) fn wallpapers(&self) -> Vec<&Value> {
+        let catalog = self.appearance_catalogs.map(|(wallpapers, _)| wallpapers).unwrap_or(&self.theme["wallpapers"]);
+        arr(self.pref("wallpaperUser")).iter().chain(arr(catalog)).collect()
     }
     fn wallpaper_name(&self, w: &Value) -> String {
         let key = s(&w["nameKey"]);

@@ -162,16 +162,23 @@ fn unbound_app_host_retains_local_locale_facts_and_null_session_is_rejected() {
 }
 
 struct AppearanceProbe {
+    catalogs_bound: bool,
     theme: Rc<Value>,
     log: Rc<RefCell<Vec<Rc<Value>>>>,
 }
 impl NativeApp for AppearanceProbe {
     fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance_catalogs(&mut self, wallpapers: &'static Value, accents: &'static Value) {
+        assert!(std::ptr::eq(wallpapers, crate::native_style::catalog::wallpapers()));
+        assert!(std::ptr::eq(accents, crate::native_style::catalog::accents()));
+        self.catalogs_bound = true;
+    }
     fn set_native_appearance(&mut self, theme: Rc<Value>) { self.theme = theme; }
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] != "sync" { return json!({}); }
         assert!(input["context"].get("theme").is_none());
         assert!(input["context"].get("scale").is_none());
+        assert!(self.catalogs_bound);
         self.log.borrow_mut().push(self.theme.clone());
         json!({"tree":{"kind":"text","label":self.theme["accent"]}})
     }
@@ -185,7 +192,7 @@ fn native_appearance_is_shared_ignores_stale_facts_and_only_repaints_for_changed
     let mut owner=crate::native_style::appearance::Source::new(home);
     let expected=owner.current();
     let mount=scene::create(scene::VIEW);let log=Rc::new(RefCell::new(Vec::new()));
-    let mut host=Host::new(mount,Box::new(AppearanceProbe{theme:Rc::new(Value::Null),log:log.clone()}),assets,Some(home));
+    let mut host=Host::new(mount,Box::new(AppearanceProbe{catalogs_bound:false,theme:Rc::new(Value::Null),log:log.clone()}),assets,Some(home));
     host.bind_locale(home,assets);
     let stale=json!({"context":{"theme":{"accent":"#ff0000"},"scale":{"body":999}}});
     host.facts(stale.clone());assert_eq!(log.borrow().len(),1);

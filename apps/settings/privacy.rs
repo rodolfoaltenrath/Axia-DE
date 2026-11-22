@@ -47,7 +47,7 @@ impl App {
                 services = json!({});
             }
             services["fw"] = json!({"status":self.d("fw.status"),"state":self.d("fw.state"),"poll":self.d("fw.poll"),"lists":self.d("fw.lists")});
-            let input = json!({"cmd":"sync","args":{"section":section},"context":{"theme":self.theme,"width":self.st("contentWidth"),"decimal":self.i18n.borrow().decimal,"group":self.i18n.borrow().group},"settings":self.settings,"services":services,"catalog":self.d("catalog"),"lang":self.i18n.borrow().lang});
+            let input = json!({"cmd":"sync","args":{"section":section},"context":{"theme":self.theme.as_ref(),"width":self.st("contentWidth"),"decimal":self.i18n.borrow().decimal,"group":self.i18n.borrow().group},"settings":self.settings,"services":services,"catalog":self.d("catalog"),"lang":self.i18n.borrow().lang});
             let reply = self.privacy[index].1.request(&input);
             if !reply["tree"].is_null() {
                 self.data[format!("privacyTree{index}")] = wrap(reply["tree"].clone(), index);

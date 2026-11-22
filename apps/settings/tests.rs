@@ -5,7 +5,7 @@ fn borrowed_preferences_keep_only_editor_roots_and_preserve_pending_rollback() {
     let preferences = json!({"dockSize":60,"clock":{"hour24":"12"},
         "windowPlaces":{"huge":"x".repeat(100_000)},"sessionSaved":[{"private":"session"}],
         "notes":{"documents":["unrelated app state"]}});
-    let facts = json!({"cmd":"sync","args":{},"context":{"theme":app.theme},"settings":{"dockSize":999}});
+    let facts = json!({"cmd":"sync","args":{},"context":{"theme":app.theme.as_ref()},"settings":{"dockSize":999}});
     app.sync_with_preferences(&facts, &preferences);
     assert_eq!(app.pref("dockSize"), 60);
     assert_eq!(app.pref("clock.hour24"), "12");
@@ -51,7 +51,7 @@ fn replaced_language_packs_reload_without_changing_language() {
     let mut app = fixture();
     app.resources(scratch.to_str().unwrap(), None);
     assert_eq!(app.tr("settings.nested.label"), "Flat");
-    let mut facts = json!({"cmd":"sync","args":{},"lang":"en","context":{"width":880,"localeRevision":0,"theme":app.theme}});
+    let mut facts = json!({"cmd":"sync","args":{},"lang":"en","context":{"width":880,"localeRevision":0,"theme":app.theme.as_ref()}});
     app.request_at(&facts, app.now);
     assert_eq!(app.tr("settings.section.general"), "Before");
     std::fs::write(
@@ -236,7 +236,7 @@ fn pending_preferences_survive_stale_facts_and_effects_are_serialized() {
         "a second effect must wait for the first result"
     );
     app.request_at(
-        &json!({"cmd":"sync","args":{},"settings":{"dockSize":60},"context":{"theme":app.theme}}),
+        &json!({"cmd":"sync","args":{},"settings":{"dockSize":60},"context":{"theme":app.theme.as_ref()}}),
         app.now,
     );
     assert_eq!(app.pref("dockSize"), 70);
@@ -421,4 +421,28 @@ fn silent_password_actions_require_current_validation() {
     assert_eq!(effect["args"][2][1][0], "user-passwd");
     assert_eq!(effect["args"][2][1][2], true);
     assert_eq!(effect["args"][2][1][1], "ana\nsecret\nold-secret");
+}
+
+#[test]
+fn native_catalogs_are_borrowed_and_sync_preserves_the_shared_palette() {
+    static WALLPAPERS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    static ACCENTS: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    let wallpapers = WALLPAPERS.get_or_init(|| json!([{"id":"compiled","name":"Compiled","category":"gradients","src":"asset:compiled.png"}]));
+    let accents = ACCENTS.get_or_init(|| json!({"verde":"#30d158"}));
+    let mut app = fixture();
+    let colors = std::rc::Rc::new(json!({"mode":"light","text":"#123456","accent":"#30d158"}));
+    app.set_native_appearance_catalogs(wallpapers, accents);
+    app.set_native_appearance(colors.clone());
+    app.sync_with_preferences(&json!({"cmd":"sync","args":{},"context":{"width":880}}),
+        &json!({"wallpaperUser":[{"id":"personal","name":"Personal"}]}));
+    assert!(std::rc::Rc::ptr_eq(&app.theme, &colors));
+    assert!(std::rc::Rc::ptr_eq(&app.ui().theme, &colors));
+    let list = app.wallpapers();
+    assert_eq!(list.iter().map(|w|s(&w["id"])).collect::<Vec<_>>(), ["personal","compiled"]);
+    assert!(std::ptr::eq(list[0], &app.pref("wallpaperUser")[0]));
+    assert!(std::ptr::eq(list[1], &wallpapers[0]));
+    assert!(app.appearance().to_string().contains("verde"));
+    assert!(app.wallpaper().to_string().contains("Compiled"));
+    assert!(colors.get("wallpapers").is_none());
+    assert!(colors.get("accents").is_none());
 }

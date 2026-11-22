@@ -27,12 +27,22 @@ pub(crate) fn wallpapers() -> &'static Value {
     })
 }
 
+/// The fixed accent metadata, shared without adding it to every color plan.
+pub(crate) fn accents() -> &'static Value {
+    static CATALOG: OnceLock<Value> = OnceLock::new();
+    CATALOG.get_or_init(|| Value::Object(super::shell_theme::ACCENTS.iter()
+        .map(|(name, color)| ((*name).into(), json!(color))).collect()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn catalog_keeps_names_paths_order_and_one_shared_allocation() {
         let catalog = wallpapers(); assert!(std::ptr::eq(catalog, wallpapers()));
+        let palette = accents(); assert!(std::ptr::eq(palette, accents()));
+        assert_eq!(palette.as_object().unwrap().len(), super::super::shell_theme::ACCENTS.len());
+        for (name, color) in super::super::shell_theme::ACCENTS { assert_eq!(palette[name], color); }
         let list = catalog.as_array().unwrap();
         let index: Value = serde_json::from_str(include_str!("../../../assets/wallpapers/index.json")).unwrap();
         assert_eq!(list.len(), index.as_array().unwrap().len()+4);

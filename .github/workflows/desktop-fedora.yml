@@ -141,6 +141,12 @@ jobs:
           AXIA_APPEARANCE_FONTS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/fonts
           AXIA_APPEARANCE_PHOTOS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/photos
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_appearance_apps_runtime -- --ignored --nocapture
+      - name: Native Settings colors and compiled catalogs
+        if: matrix.gpu == 1
+        env:
+          AXIA_SETTINGS_APPEARANCE_APPEARANCE_OUTPUT: ${{ runner.temp }}/axia-settings-appearance/appearance
+          AXIA_SETTINGS_APPEARANCE_WALLPAPER_OUTPUT: ${{ runner.temp }}/axia-settings-appearance/wallpaper
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_settings_appearance_runtime -- --ignored --nocapture
       - name: Native locale ownership
         if: matrix.gpu == 1
         env:
@@ -350,6 +356,12 @@ jobs:
         with:
           name: axia-native-appearance-apps
           path: ${{ runner.temp }}/axia-native-appearance-apps
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-settings-appearance
+          path: ${{ runner.temp }}/axia-settings-appearance
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

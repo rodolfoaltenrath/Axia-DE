@@ -152,7 +152,7 @@ impl App {
             return;
         };
         if let Ok(tree) = crate::network::request(
-            json!({"op":"action","id":self.st("networkPanel"),"theme":self.theme,"action":action,"value":v["value"]}),
+            json!({"op":"action","id":self.st("networkPanel"),"theme":self.theme.as_ref(),"action":action,"value":v["value"]}),
         ) {
             if tree.is_object() {
                 self.data["networkTree"] = adapt(tree);
@@ -166,7 +166,7 @@ impl App {
             }
         }
         if let Ok(tree) = crate::network::request(
-            json!({"op":"poll","id":self.st("networkPanel"),"theme":self.theme}),
+            json!({"op":"poll","id":self.st("networkPanel"),"theme":self.theme.as_ref()}),
         ) {
             if tree.is_object() {
                 self.data["networkTree"] = adapt(tree);

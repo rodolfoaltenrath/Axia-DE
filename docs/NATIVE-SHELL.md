@@ -59,8 +59,13 @@ Notas invalida regiões retidas; Fontes cancela rasters de modo antigo e rejeita
 conclusões de épocas anteriores. A Câmera preserva o estado da captura.
 Os hosts isolados continuam recebendo tokens pelo contrato local JSON/SDK; a
 ligação compartilhada vale para as views da sessão, inclusive os fallbacks dos
-apps empacotados. Configurações, Arquivos, Senhas e as cenas da shell ainda
-precisam migrar seus fatos de aparência.
+apps empacotados. Configurações também usa o plano compartilhado; seus controles
+retêm Rc em vez de copiar a paleta. Os catálogos compilados de destaques e papéis
+de parede são vinculados separadamente por referências estáticas, sem entrar no
+plano de cores nem nos fatos JS. A lista visual combina referências aos papéis
+pessoais e compilados. O host isolado preserva os catálogos locais do seu tema.
+Arquivos, Senhas e as cenas da shell ainda precisam migrar seus fatos de aparência;
+os subpainéis internos de rede/privacidade conservam seus contratos existentes.
 
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena

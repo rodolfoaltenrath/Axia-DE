@@ -1769,3 +1769,47 @@ As oito capturas de Arquivos são idênticas byte a byte às de
 física. Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,619 MiB de RSS,
 abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal nem medição física;
 o protocolo em hardware continua reservado ao encerramento.
+
+
+### Configurações lê aparência e catálogos nativos
+
+O corpo de Configurações passa a usar `appearanceSource: native`. O modelo e
+seu helper de controles retêm Rc do plano derivado do perfil; sync sem tema
+preserva essa referência. O mount validado da sessão entrega separadamente as
+referências estáticas dos catálogos compilados de papéis de parede e destaques.
+O contrato NativeApp tem um setter opcional para esses metadados; os demais
+modelos não precisam armazená-los. Não há catálogo copiado em cada plano de
+cores, consulta por frame ou novo observador JS.
+
+A tela de papel de parede combina referências às entradas pessoais e compiladas,
+preservando ordem, tradução, seleção e comandos. A paleta não contém esses
+metadados. Hosts isolados mantêm as cores e catálogos locais de seus fatos; o
+metadado do manifesto preserva fullTheme/themeCatalogs para esse contrato.
+Os contratos internos de rede/privacidade ainda recebem valores de aparência
+pelas interfaces existentes e continuam pendentes, assim como Arquivos, Senhas,
+cenas da shell e montagem de tema. Esta etapa não conclui a fase inteira.
+
+O teste novo verifica identidade da paleta no modelo e nos controles, referências
+às entradas pessoais/compiladas e renderização dos catálogos sem catálogo no tema.
+O teste do host exige os próprios catálogos estáticos antes do primeiro sync;
+o teste do catálogo também verifica identidade e valores dos seis destaques.
+
+Validação em Fedora 44 privado: 656 testes da shell (sete ignorados por integrações
+específicas), 20 testes de Configurações e oito contratos LPK passaram. Compositor
+GPU=1 e bundles default/app-host gerados. A integração nova está no CI com
+capturas: oito variantes de aparência/papel de parede, claro/escuro e 700/1000 px.
+Exige manifesto compilado, ausência de theme/scale, troca sem novos fatos JS,
+espelho congelado, rejeição de aparência antiga, pixels da paleta atual e presença
+do catálogo. Após capturar, clica no modo oposto ou em Eternal Dawn e exige a
+mudança na preferência nativa. Variantes das duas telas inspecionadas.
+
+Passaram 80 cenários de regressão: as treze views migradas anteriormente,
+Relógio, preferências, Arquivos, cabeçalhos e tokens para processos isolados
+reais. Oito capturas de Arquivos são idênticas byte a byte às da etapa
+`native-appearance-apps`. O encerramento instalado passou por timeout e SIGTERM.
+Evidências em `build/validation/native-settings-appearance/`.
+
+Instalação privada gerada, sem instalar ou reiniciar a sessão física. Três
+amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,906 MiB de RSS,
+abaixo de 15 poll/s e 120 MiB. Não demonstra ganho causal; as medições físicas
+continuam reservadas ao encerramento.

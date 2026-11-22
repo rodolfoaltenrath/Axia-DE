@@ -38,7 +38,8 @@ pub struct App {
     jobs: Jobs<Tag>,
     effects: VecDeque<Value>,
     i18n: RefCell<I18n>,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
+    appearance_catalogs: Option<(&'static Value, &'static Value)>,
     settings: Value,
     observed_settings: Value,
     data: Value,
@@ -74,7 +75,8 @@ impl Default for App {
             jobs: Jobs::default(),
             effects: VecDeque::new(),
             i18n: RefCell::new(I18n::default()),
-            theme: json!({}),
+            theme: std::rc::Rc::new(json!({})),
+            appearance_catalogs: None,
             settings: defaults(),
             observed_settings: Value::Null,
             data: json!({}),
@@ -107,6 +109,11 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
+    fn set_native_appearance_catalogs(&mut self, wallpapers: &'static Value, accents: &'static Value) {
+        self.appearance_catalogs = Some((wallpapers, accents));
+    }
     fn blur(&mut self) {
         self.popup = Value::Null;
         self.state["vpnAutofillOpen"] = json!(false);
@@ -223,7 +230,9 @@ impl App {
                 return json!({});
             }
             "sync" => {
-                self.theme = v["context"]["theme"].clone();
+                if v["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(v["context"]["theme"].clone());
+                }
                 if self.locale_revision != v["context"]["localeRevision"] {
                     self.locale_revision = v["context"]["localeRevision"].clone();
                     self.i18n.borrow_mut().invalidate();
@@ -1237,6 +1246,6 @@ pub fn host_test_fixture() -> (App, Value) {
     let mut app = host_fixture::fixture();
     app.section = "users".into();
     app.state["userPassword"] = json!({"old":"private-old-password","pass":"private-new-password","pass2":"private-new-password"});
-    let theme = app.theme.clone();
+    let theme = (*app.theme).clone();
     (app, theme)
 }

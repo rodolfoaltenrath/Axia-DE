@@ -20,6 +20,6 @@ pub(super) fn fixture() -> App {
         "net.interfaces":[{"name":"eth0","type":"ethernet","up":true,"carrier":true,"managed":"lordos","addresses":[{"family":4,"address":"192.168.1.2","prefix":24,"scope":"global"}]}],"net.routes":[],"net.dns":{"servers":[]},"net.vpnTypes":[{"type":"ipsec","available":true},{"type":"openvpn","available":true}],"net.vpnList":[],
         "print.hasCups":true,"printers":{"printers":[{"name":"printer","info":"Printer","state":3,"accepting":true}],"default":"printer"},"printJobs":{"jobs":[]},"found":{"printers":[],"scanners":[]},"catalog":[],"registry":[],"packages.list":[],"perms.list":[],"privacy.indicators":[],"clipboard.history":[],"firmware":{"state":"available","current":1,"latest":2,"release":"latest"},"pkg.available":true,"pkg.upgrades":[],"session.canPower":true
     }"#).unwrap();
-    app.theme = json!({"mode":"dark","text":"#fff","textDim":"#999","accent":"#0a84ff","control":"#333","separator":"#444","accents":{"blue":"#0a84ff","red":"#ff453a"},"wallpapers":[{"id":"wallpaper","name":"Wallpaper","category":"gradients","src":"asset:test.png"}]});
+    app.theme = json!({"mode":"dark","text":"#fff","textDim":"#999","accent":"#0a84ff","control":"#333","separator":"#444","accents":{"blue":"#0a84ff","red":"#ff453a"},"wallpapers":[{"id":"wallpaper","name":"Wallpaper","category":"gradients","src":"asset:test.png"}]}).into();
     app
 }
