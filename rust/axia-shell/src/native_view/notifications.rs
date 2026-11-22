@@ -89,10 +89,11 @@ impl Banners {
 }
 impl super::NativeApp for Banners {
     fn invalidated(&self) -> bool {
-        self.changes.pending() || self.service.borrow().settings_pending() || self.service.borrow().catalog_pending()
+        self.changes.pending() || { let service = self.service.borrow(); !service.resident && (service.settings_pending() || service.catalog_pending()) }
     }
     fn refresh_ms(&self) -> Option<f64> {
-        self.service.borrow().wait_ms(Instant::now())
+        let service = self.service.borrow();
+        if service.resident { None } else { service.wait_ms(Instant::now()) }
     }
     fn background_refresh_ms(&self) -> Option<f64> {
         self.refresh_ms()
@@ -101,7 +102,7 @@ impl super::NativeApp for Banners {
         match input["cmd"].as_str() {
             Some("sync") => {
                 let mut service = self.service.borrow_mut();
-                service.expire(Instant::now());
+                if !service.resident { service.expire(Instant::now()); }
                 let effects = service.effects();
                 drop(service);
                 self.changes.take();

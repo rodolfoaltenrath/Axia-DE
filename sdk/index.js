@@ -99,7 +99,7 @@ export { registerStatusItem, StatusItems, statusItems } from './statusitems.js';
 export { clockAlarms, clockTimer, timerStart, timerPause, timerResume, timerReset, timerLeft, stopwatch, swStart, swStop, swLap, swReset, swElapsed, nextAlarm, nextFire } from './alarms.js';
 export { help } from './help.js';
 import { NotificationBanner } from './nativebanner.js';
-import { startAlarms, ClockSession } from './alarms.js';
+import { startAlarms } from './alarms.js';
 import { SettingsSession } from './settingssession.js';
 import { startDiskWatch } from './diskwatch.js';
 import { maybeStartTour } from './help.js';
@@ -268,7 +268,6 @@ function LocaleRoot({ children }) {
     at('popover', ClipboardPanel, EmojiPanel),
     at('modal', PrintDialog),
     createElement(RestorePrompt, { key: 'restore' }),
-    createElement(ClockSession, { key: 'clock' }),
     createElement(SettingsSession, { key: 'settings' }),
     at('notification', NotificationBanner, ClipboardToast, DisplayIdentify),
     at('system', PermissionPrompt, Powerbox, KeyringPrompt, BluetoothPrompt, DisplayConfirm),

@@ -118,3 +118,85 @@ fn background_preferences_coalesce_and_native_drain_is_quiet_and_context_scoped(
         assert!(crate::native_apps_host::axia_native_app_take_services(&control).is_null());
     }
 }
+
+#[test]
+fn resident_notifications_expire_and_deliver_close_without_a_banner() {
+    axia_clock::with(|s| *s = Default::default());
+    let (_home, session, _) = fixture("notice-deadline", "off", Value::Null);
+    session.activate_clock_and_notifications();
+    let now = Instant::now();
+    tick(now);
+    session.take_service_effects();
+    let notices = session.notification_service();
+    let reply = notices.borrow_mut().command(&json!({"action":"push",
+        "notice":{"title":"No banner","sticky":false,"timeout":1500,"sound":false}}), now);
+    let id = reply["result"].as_u64().unwrap();
+    tick(now);
+    session.take_service_effects();
+    assert_eq!(timeout(now), Some(1500.));
+    tick(now + Duration::from_millis(1499));
+    assert_eq!(notices.borrow().reader().read().shown.len(), 1);
+    tick(now + Duration::from_millis(1500));
+    assert!(notices.borrow().reader().read().shown.is_empty());
+    let effects = session.take_service_effects().unwrap();
+    assert!(effects.as_array().unwrap().iter().any(|e| e["kind"]=="notificationClose" && e["id"]==id));
+    assert!(timeout(now + Duration::from_millis(1500)).is_none());
+    tick(now + Duration::from_secs(2));
+    assert!(!pending(), "closing is delivered only once without a presentation host");
+}
+
+#[test]
+fn resident_clock_completes_once_and_releases_its_context() {
+    axia_clock::with(|s| *s = Default::default());
+    let (_home, session, _) = fixture("clock-background", "off", Value::Null);
+    session.activate_clock_and_notifications();
+    let weak = session.downgrade();
+    let mut surviving_clone = session.clone();
+    drop(session);
+    let now = Instant::now();
+    tick(now); surviving_clone.take_service_effects();
+    // The wall deadline has elapsed before the next native tick, with no scene ever mounted.
+    axia_clock::with(|s| s.native(&json!({"cmd":"timerStart","seconds":1}), axia_clock::now()-1000));
+    assert_eq!(timeout(now), Some(0.));
+    tick(now);
+    let effects = surviving_clone.take_service_effects().unwrap();
+    assert_eq!(effects.as_array().unwrap().iter().filter(|e| e["kind"]=="clockReply").count(), 1);
+    assert_eq!(axia_clock::with(|s|s.timer["state"].clone()), "idle");
+    tick(now);
+    assert!(surviving_clone.take_service_effects().is_none());
+    let service = surviving_clone.notification_service();
+    assert_eq!(service.borrow().reader().read().history.iter().filter(|n| n["app"]=="clock").count(), 1);
+    let ids: Vec<_> = service.borrow().reader().read().shown.iter().map(|n|n.data["id"].clone()).collect();
+    for id in ids { service.borrow_mut().command(&json!({"action":"dismiss","id":id}),now); }
+    surviving_clone.service_tick(now);
+    assert!(timeout(now).is_none());
+    drop(surviving_clone);
+    assert!(weak.upgrade().is_none(), "clock and notification services must not retain the context");
+    assert!(timeout(now).is_none());
+}
+
+#[test]
+fn resident_ring_uses_one_deadline_and_observes_native_policy_without_a_view() {
+    axia_clock::with(|s| *s = Default::default());
+    let (home, session, _) = fixture("ring-background", "off", Value::Null);
+    session.activate_clock_and_notifications();
+    let service = session.notification_service();
+    service.borrow_mut().bind_settings(&home.0);
+    let now = Instant::now();
+    tick(now); session.take_service_effects();
+    let reply = service.borrow_mut().command(&json!({"action":"push",
+        "notice":{"app":"clock","title":"Alarm","ring":true,"sound":true,"sticky":true}}), now);
+    assert!(reply["result"].as_u64().is_some_and(|id| id>0));
+    tick(now); session.take_service_effects();
+    assert_eq!(timeout(now), Some(2500.));
+    let revision = service.borrow().reader().revision();
+    tick(now + Duration::from_secs(30));
+    assert_eq!(timeout(now + Duration::from_secs(30)), Some(2500.), "a late pulse schedules once from now");
+    assert_eq!(service.borrow().reader().revision(), revision, "audio pulses do not republish a list");
+    assert!(!pending());
+    crate::settings::with(&home.0, |s| { s.set("notifications", &json!({"dnd":true})); });
+    assert_eq!(timeout(now + Duration::from_secs(30)), Some(0.));
+    tick(now + Duration::from_secs(30));
+    assert!(timeout(now + Duration::from_secs(30)).is_none(), "native policy cancels ringing without a banner");
+    assert_eq!(service.borrow().reader().read().shown.len(), 1);
+}

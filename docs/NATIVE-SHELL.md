@@ -18,8 +18,9 @@ Desktops e restauração são atendidos diretamente pelo loop Rust, com referên
 fracas ao contexto e prazo nativo único. A confirmação não agenda o serviço;
 o observador invisível de desktops foi retirado. O adaptador ainda drena efeitos
 de compatibilidade pelo controlador validado, mesmo sem nenhuma view montada.
-Relógio, notificações e memória de posições continuam com atendimentos ligados
-a views; retirar essas dependências permanece no roadmap.
+Relógio e notificações também são atendidos pelo loop Rust: não existe mais
+observador invisível do relógio, e o banner não agenda expiração nem toque.
+A memória de posições ainda precisa sair do observador visual.
 
 Desktops e memória de posições também usam esse perfil: bootstrap, contagem,
 troca de tema e movimento reduzido são consultados/persistidos no Rust. Abertura

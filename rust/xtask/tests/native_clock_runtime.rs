@@ -28,6 +28,8 @@ fn clock_deadlines_and_status_read_the_resident_engine() {
                 "countedDown",
                 "remounted",
                 "completed",
+                "backgroundCompleted",
+                "noSchedulerView",
                 "opened",
                 "hidden",
                 "alarm",
@@ -49,7 +51,7 @@ fn clock_deadlines_and_status_read_the_resident_engine() {
 const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
 import {render,View} from '@lordos/runtime';
-import {ClockSession,startAlarms,clockTimer,clockRequest,clockAlarms,arm} from '@ROOT@/sdk/alarms.js';
+import {startAlarms,clockTimer,clockRequest,clockAlarms,arm} from '@ROOT@/sdk/alarms.js';
 import {StatusItems} from '@ROOT@/sdk/statusitems.js';
 import {clockBridge} from '@ROOT@/sdk/nativeclock.js';
 import {NotificationBanner} from '@ROOT@/sdk/nativebanner.js';
@@ -63,7 +65,7 @@ import {media} from '@ROOT@/sdk/media.js';
 const timeout=globalThis.setTimeout,interval=globalThis.setInterval;
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<200&&!fn();i++)await sleep(20);return!!fn();}
-let scheduler=0,status=0,bound=true,noPayload=true,remount,noJsTimers=true,completions=0;
+let status=0,bound=true,noPayload=true,remount,toggle,noSchedulerView=true,noJsTimers=true,completions=0;
 let noConfigTransport=true;
 const request=lord.nativeApps.request;
 lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='clockCommand')noConfigTransport&&=!('config'in input);const reply=request.call(lord.nativeApps,text);if(input.cmd==='clockCommand')noConfigTransport&&=!(reply.effects||[]).some(e=>e.kind==='settings');return reply;};
@@ -71,17 +73,19 @@ const completionIds=new Set();
 const mount=lord.nativeViews.mount,send=lord.nativeViews.facts;
 function inspect(text){const facts=JSON.parse(text);for(const key of ['clock','timer','stopwatch','nextAlarm','config'])noPayload&&=!(key in facts)&&!(key in(facts.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{
- if(id==='shell:clock'||id==='shell:clock-status'){inspect(text);bound&&=sources[0]===lord.windowList;const handle=mount(node,id,text,...sources);if(id==='shell:clock')scheduler=handle;else status=handle;return handle;}
+ if(id==='shell:clock')noSchedulerView=false;
+ if(id==='shell:clock-status'){inspect(text);bound&&=sources[0]===lord.windowList;const handle=mount(node,id,text,...sources);status=handle;return handle;}
  return mount(node,id,text,...sources);
 };
-lord.nativeViews.facts=(handle,text)=>{if(handle===scheduler||handle===status)inspect(text);return send(handle,text);};
+lord.nativeViews.facts=(handle,text)=>{if(handle===status)inspect(text);return send(handle,text);};
+const unmount=lord.nativeViews.unmount;lord.nativeViews.unmount=handle=>{if(handle===status)status=0;return unmount(handle);};
 locale.set({lang:'en',region:'',dir:'ltr'});
 settings.set({language:'en',clock:{},notifications:{dnd:false,apps:{clock:{sound:false}}},mode:'@MODE@'});
 configureWindows({apps:[{id:'clock',name:'Clock',Component:()=>null}]});
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
-function App(){const[rev,setRev]=useState(0);remount=()=>setRev(n=>n+1);return h(ThemeProvider,{tokens:theme},
- h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},h(ClockSession,{key:'clock-'+rev}),
- h(View,{style:{position:'absolute',left:30,top:30,height:24,flexDirection:'row'}},h(StatusItems,{key:'status-'+rev,color:theme.text,height:24})),h(NotificationBanner)));}
+function App(){const[rev,setRev]=useState(0),[on,setOn]=useState(true);remount=()=>setRev(n=>n+1);toggle=setOn;return h(ThemeProvider,{tokens:theme},
+ h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},
+ h(View,{style:{position:'absolute',left:30,top:30,height:24,flexDirection:'row'}},on?h(StatusItems,{key:'status-'+rev,color:theme.text,height:24}):null),on?h(NotificationBanner):null));}
 render(h(App));
 const text=()=>status?lord.nativeViews.text(status)||'':'';
 const direct=(cmd,extra={})=>lord.clock.request({cmd,now:Date.now(),...extra});
@@ -90,15 +94,18 @@ async function run(){
  globalThis.setTimeout=(fn,...args)=>{if(fn===arm){noJsTimers=false;throw Error('clock armed a JS timeout');}return timeout(fn,...args);};
  globalThis.setInterval=()=>{noJsTimers=false;throw Error('clock armed a JS interval');};
  try{
-  startAlarms();await until(()=>scheduler&&status);
+  startAlarms();await until(()=>status);
   const perform=clockBridge.perform;clockBridge.perform=()=>{};
   direct('timerStart',{seconds:3});
   const nativeStatus=await until(()=>text().includes('0:03'));
   const mirrorStale=clockTimer.get().state==='idle';
   const countedDown=await until(()=>text().includes('0:02'));
   clockBridge.perform=effect=>{for(const e of effect.reply?.notificationEffects||[])if(e.kind==='notificationState')for(const n of e.state.history)if(n.app==='clock'&&!completionIds.has(n.id)){completionIds.add(n.id);completions++;}perform(effect);};
-  const previous=scheduler;remount();const remounted=await until(()=>scheduler!==previous&&text().includes(':'));
+  const previous=status;remount();const remounted=await until(()=>status&&status!==previous&&text().includes(':'));
+  toggle(false);const unmounted=await until(()=>!status);
   const completed=await until(()=>notifyHistory.get().some(n=>n.app==='clock'))&&clockTimer.get().state==='idle';
+  const backgroundCompleted=unmounted&&completed&&!status;
+  toggle(true);await until(()=>status);
   const notice=notifyHistory.get().find(n=>n.app==='clock');
   const nativeTemplates=notice?.title==='Timer done'&&notice.body==='Time is up.'&&notice.actions[1].id==='again'&&typeof notice.actions[1].run!=='function';
   direct('timerStart',{seconds:9});direct('timerPause');
@@ -128,7 +135,7 @@ async function run(){
   const nativeWrite=resident.state.clock.cities[0]==='UTC'&&resident.state.clock.future==='keep'&&resident.state.clock.alarms[0].id==='probe'
     &&settings.get().clock===beforeClock&&resident.dirty;
   const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
-  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,nativeConfig,nativeWrite,noConfigTransport,completions,saved:!!saved?.ok}));
+  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,backgroundCompleted,noSchedulerView,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,nativeConfig,nativeWrite,noConfigTransport,completions,saved:!!saved?.ok}));
  }finally{globalThis.setTimeout=timeout;globalThis.setInterval=interval;}
 }
 timeout(()=>run().catch(error=>console.error('native_clock driver: '+(error.stack||error))),150);

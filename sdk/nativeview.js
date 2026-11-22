@@ -65,6 +65,8 @@ globalThis.__lordNativeView = () => {
         for (const effect of list) {
           if (effect.kind === 'settingsState') settingsBridge.perform?.(effect);
           else if (effect.kind === 'sessionRestore') restoreBridge.perform?.(effect);
+          else if (effect.kind === 'clockReply') clockBridge.perform?.(effect);
+          else notificationBridge.perform?.(effect);
         }
     } finally { drainingServices = false; }
   }
@@ -91,7 +93,6 @@ function runner(handle, manifest, winId, node = () => 0) {
     }
     if (manifest.id === 'shell:switcher' && !effect.host) { switcherBridge.perform?.(effect); return; }
     if (manifest.id === 'shell:notifications' && !effect.host) { notificationBridge.perform?.(effect); return; }
-    if (manifest.id === 'shell:clock' && !effect.host) { clockBridge.perform?.(effect); return; }
     if (manifest.id === 'shell:settings' && !effect.host) {
       if (effect.kind === 'localeState') localeBridge.perform?.(effect);
       else settingsBridge.perform?.(effect);

@@ -15,7 +15,6 @@ import { notificationBridge } from './nativenotifications.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { syncNativeCatalog } from './nativecatalog.js';
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
-const NATIVE_CLOCK = { id: 'shell:clock', shell: true };
 const NATIVE_CLOCK_STATUS = { id: 'shell:clock-status', shell: true };
 const MIN = 60000, SNOOZE = 9 * MIN, RING_MS = 60000;
 const conf = () => settings.get().clock || {};
@@ -53,11 +52,6 @@ function applyClockReply(reply) {
   return reply;
 }
 clockBridge.perform = effect => { if (effect.kind === 'clockReply') applyClockReply(effect.reply); };
-export function ClockSession() {
-  if (appHost || typeof lord === 'undefined' || typeof lord.appId === 'string' || typeof lord.greeter !== 'undefined') return null;
-  return h(NativeView, { manifest: NATIVE_CLOCK, stateSource: lord.windowList,
-    style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, pointerEvents: 'none' } });
-}
 export const nextFire = (alarm, now = Date.now()) => clockRequest('nextFire', { alarm, now })?.value ?? null;
 export const clockAlarms = {
   list: () => (appHost ? conf() : clockRequest('snapshot')?.config)?.alarms || [],

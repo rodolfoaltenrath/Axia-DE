@@ -889,6 +889,7 @@ struct SessionCore {
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
+    clock: std::cell::RefCell<Option<crate::native_view::services::clock::Scheduler>>,
     resident: std::cell::Cell<bool>,
     effects: std::cell::RefCell<Vec<Value>>,
 }
@@ -903,6 +904,11 @@ impl Session {
     pub(crate) fn activate_services(&self) {
         self.core.resident.set(true);
         crate::native_view::services::register(self.downgrade());
+    }
+    pub(crate) fn activate_clock_and_notifications(&self) {
+        self.core.notifications.borrow_mut().resident = true;
+        self.core.clock.borrow_mut().get_or_insert_with(||
+            crate::native_view::services::clock::Scheduler::new(self.notification_service()));
     }
     pub(crate) fn downgrade(&self) -> WeakSession { WeakSession(std::rc::Rc::downgrade(&self.core)) }
     pub(crate) fn resident(&self) -> bool { self.core.resident.get() }
@@ -920,18 +926,30 @@ impl Session {
                 self.queue_service_effects(effects);
             }
         }
+        if let Some(clock) = self.core.clock.borrow_mut().as_mut() {
+            if clock.wait_ms(now).is_some_and(|wait| wait <= 0.) {
+                self.queue_service_effects(clock.tick_at(axia_clock::now(), now));
+            }
+        }
+        let mut notifications = self.core.notifications.borrow_mut();
+        if notifications.background_wait(now).is_some_and(|wait| wait <= 0.) {
+            self.queue_service_effects(notifications.background_tick(now));
+        }
     }
     fn queue_service_effects(&self, effects: Vec<Value>) {
         let mut queued = self.core.effects.borrow_mut();
         for effect in effects {
             // Compatibility preferences are complete revisioned snapshots: keep the latest.
-            if effect["kind"] == "settingsState" { queued.retain(|old| old["kind"] != "settingsState"); }
+            if matches!(effect["kind"].as_str(), Some("settingsState" | "notificationState")) { queued.retain(|old| old["kind"] != effect["kind"]); }
             queued.push(effect);
         }
     }
     pub(crate) fn service_wait(&self, now: std::time::Instant) -> Option<f64> {
         if self.core.desktops.borrow().as_ref().is_some_and(|service| service.borrow().invalidated()) { return Some(0.); }
-        self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now))
+        [self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now)),
+         self.core.clock.borrow().as_ref().and_then(|clock| clock.wait_ms(now)),
+         self.core.notifications.borrow().background_wait(now)]
+            .into_iter().flatten().reduce(f64::min)
     }
     pub(crate) fn service_pending(&self) -> bool { !self.core.effects.borrow().is_empty() }
     pub(crate) fn take_service_effects(&self) -> Option<Value> {

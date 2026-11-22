@@ -79,6 +79,7 @@ pub unsafe extern "C" fn axia_native_app_new_windows(
     let mut control = crate::app_control::Controller::new((*windows).clone());
     control.bind_settings(home.as_deref().unwrap_or(""));
     (*windows).activate_services();
+    (*windows).activate_clock_and_notifications();
     Box::into_raw(Box::new(NativeApp::Control(control)))
 }
 #[no_mangle]

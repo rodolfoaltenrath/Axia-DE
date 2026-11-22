@@ -1347,8 +1347,8 @@ com validação do objeto opaco; modelos criados no host isolado não recebem o 
 Uma leitura quieta retorna null sem serializar JSON. O SDK drena a fila pelos
 adaptadores existentes, com guarda contra drenagem reentrante e sem exigir um
 handle visual. Abertura de apps, política de navegadores e espelhos de compatibilidade
-ainda usam JS. Relógio, notificações e memória de posições ainda precisam migrar
-seus atendimentos das views para esse loop.
+ainda usam JS. Relógio e notificações também são atendidos pelo loop, como detalhado abaixo;
+a memória de posições ainda precisa sair da view observadora.
 
 Validação de 2026-11-22 na árvore compartilhada, em Fedora 44 privado: 631 testes
 da shell e oito contratos LPK passaram. Quatro testes novos verificam prazos e
@@ -1366,3 +1366,52 @@ A confirmação foi revalidada nos quatro cenários e a captura com o nome
 corrigido foi inspecionada.
 
 Três amostras de ociosidade do binário final passaram com limites impostos: 12,450 poll/s e 105,016 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
+
+### Relógio e notificações sem hosts visuais
+
+O controlador validado ativa o agendador `session_clock.rs` e o atendimento das
+notificações no mesmo contexto residente. A referência do agendador para o
+serviço de notificações não retém o contexto: ambos pertencem ao `SessionCore`,
+e o registro global continua fraco. Clones da sessão preservam os serviços;
+a liberação do último proprietário permite a destruição, mesmo quando sobra
+um leitor ou uma referência ao serviço de notificações.
+
+O loop considera a revisão do engine, a assinatura das preferências e o prazo
+monotônico da próxima ocorrência. Só chama `arm` quando há invalidação ou prazo
+vencido. `ClockSession`, a montagem `shell:clock` e a árvore invisível foram
+retirados; remontar o indicador da barra não substitui nem agenda esse serviço.
+O indicador ainda atualiza sua apresentação da contagem por prazo próprio.
+Templates de conclusão continuam lendo preferências e idioma nativos na entrega.
+
+Expiração de banners, repetição e cancelamento de toque, revisões de catálogo e
+preferências também são atendidos antes das views. O banner residente lê estado
+e recebe ações; não agenda expiração nem executa esse atendimento ao sincronizar.
+Instâncias internas sem ativação residente mantêm a API direta para consumidores
+nativos e testes. Pulsos atrasados agendam uma vez a partir do instante atual;
+mudanças de política cancelam o toque sem exigir banner. Um prazo vencido retorna
+zero, sem epsilon positivo que impediria o loop de atendê-lo.
+
+A fila do contexto também recebe `clockReply` e os efeitos de notificações.
+Snapshots completos de `notificationState` são agrupados pela espécie, conservando
+o mais recente; efeitos de fechamento e ações mantêm sua ordem. O adaptador usa
+as pontes existentes, inclusive callbacks legados, com guarda de reentrância e
+sem timer JS de serviço. Os hosts LPK continuam com seu agendamento local.
+Memória de posições, espelhos/callbacks e demais consumidores legados permanecem
+no roadmap; esta etapa não elimina o JS da sessão.
+
+Validação em Fedora 44 privado em 2026-11-22: 634 testes da shell passaram, com
+sete testes ignorados que dependem de integração específica; oito contratos LPK
+foram executados e passaram. Os três testes novos exercitam expiração e callback
+sem banner, conclusão única e vida útil do contexto, além de toque atrasado e
+cancelamento por preferências nativas sem apresentação. Os dois testes do antigo
+agendador passaram a testar diretamente o serviço sem implementar `NativeApp`.
+
+Passaram 24 cenários gráficos de relógio, notificações, restauração, animação de
+desktops, locale e memória de posições. O relógio exige ausência de `shell:clock`
+e conclusão com indicador e banner desmontados; a integração de notificações
+exige expiração e callback antes de remontar o banner. Encerramento instalado por
+timeout e SIGTERM passou. Capturas do indicador claro e banner escuro foram
+inspecionadas. Compositor/bundles compilados e instalação privada gerada;
+evidências em `build/validation/resident-clock-notifications/`.
+
+Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,754 MiB de RSS, abaixo de 15 poll/s e 120 MiB. A sessão física foi preservada.

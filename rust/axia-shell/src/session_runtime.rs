@@ -2,6 +2,9 @@
 use crate::winmodel::{Session, WeakSession};
 use std::{cell::RefCell, time::Instant};
 
+#[path = "session_clock.rs"]
+pub(crate) mod clock;
+
 thread_local! { static CONTEXTS: RefCell<Vec<WeakSession>> = const { RefCell::new(Vec::new()) }; }
 
 pub(crate) fn register(owner: WeakSession) {

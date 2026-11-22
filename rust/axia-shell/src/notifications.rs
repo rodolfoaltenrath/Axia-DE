@@ -77,6 +77,7 @@ impl State {
 
 #[derive(Default)]
 pub struct Service {
+    pub(crate) resident: bool,
     state: Store<State>,
     next: u64,
     sent: Option<u64>,
@@ -185,7 +186,17 @@ impl Service {
                     .flatten()
             })
             .min()
-            .map(|until| until.saturating_duration_since(now).as_secs_f64() * 1000. + 0.01)
+            .map(|until| until.saturating_duration_since(now).as_secs_f64() * 1000.)
+    }
+    pub(crate) fn background_wait(&self, now: Instant) -> Option<f64> {
+        if !self.resident { return None; }
+        if self.settings_pending() || self.catalog_pending() || self.sent != Some(self.state.revision())
+            || !self.effects.is_empty() || !self.sounds.is_empty() { return Some(0.); }
+        self.wait_ms(now)
+    }
+    pub(crate) fn background_tick(&mut self, now: Instant) -> Vec<Value> {
+        self.expire(now);
+        self.effects()
     }
     pub fn configure(&self, ungrouped: bool) {
         self.state.update(|s| {

@@ -34,6 +34,7 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
                 "nativeDirect",
                 "mirrorStale",
                 "remounted",
+                "backgroundExpired",
                 "ringGuard",
                 "nativeRing",
                 "nativeSound",
@@ -200,6 +201,10 @@ async function run(){
  notify({title:'Survives remount',sticky:false,timeout:1500,sound:false});await until(()=>find('Survives remount'));
  toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>find('Survives remount'));
  const remounted=!!find('Survives remount')&&await until(()=>!find('Survives remount'));
+ toggle(false);await until(()=>!bannerHandle);
+ let backgroundReason;const backgroundId=notify({title:'Expires without a banner',sticky:false,timeout:1500,sound:false,onClose:r=>{backgroundReason=r;}});
+ const backgroundExpired=await until(()=>!notifications.get().some(n=>n.id===backgroundId))&&!bannerHandle&&backgroundReason==='closed';
+ toggle(true);await until(()=>bannerHandle);
  const getPermission=perms.get,getBlocked=lord.fw.blocks;let jsAccess=0,nativeAccess=false,accessDetails={},nativeWrite=false,writeDetails={};
  perms.get=()=>{jsAccess++;return'allow';};lord.fw.blocks=()=>{jsAccess++;return false;};
  try{
@@ -284,7 +289,7 @@ async function run(){
  push('Capture','Final banner',{actions:[{id:'open',label:'Open',primary:true}]});await until(()=>find('Final banner'));await sleep(200);
  const finalBounds=lord.getLayout(find('Final banner'));
  const handle=lord.media.screenshot('screenshots');const saved=await media.saveImage(handle,@IMAGE@);media.close(handle);
- console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,nativeLocaleSource,nativePackReload,nativeBootstrap,jsLocaleReads,noLocaleFacts,finalBounds,saved:!!saved?.ok}));
+ console.log('notifications-observation '+JSON.stringify({ran,reasons,grouped,oldRevealed,dndSuppressed,timerGone,bound,noPayload,noJsDeadline,nativeDirect,mirrorStale,remounted,backgroundExpired,ringGuard,nativeRing,nativeSound,nativePreferences,rawPolicy,nativeAccess,accessDetails,noAccessFacts,nativeWrite,writeDetails,revisionOrder,residentPreferences,nativeCatalog,nativePresentation,noPresentationFacts,nativeLocaleSource,nativePackReload,nativeBootstrap,jsLocaleReads,noLocaleFacts,finalBounds,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(e=>console.error('notifications driver: '+(e.stack||e))),200);
 "#;

@@ -226,10 +226,10 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     owner: Option<crate::winmodel::Session>, native_locale: bool) -> u32 {
     let windows=owner.as_ref().map(crate::winmodel::Session::reader);
     let (assets, home) = with(|r| (r.assets.clone(), r.home.clone()));
-    if matches!(id, "clock" | "shell:clock" | "shell:clock-status") && owner.is_some() {
+    if matches!(id, "clock" | "shell:clock-status") && owner.is_some() {
         crate::clock_settings::bind(home.as_deref().unwrap_or(""));
     }
-    if matches!(id, "shell:notifications" | "shell:clock") {
+    if id == "shell:notifications" {
         if let Some(session) = &owner {
             session.notification_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
         }
@@ -247,8 +247,6 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         windows.clone().map(|reader| Box::new(desktop_hud::DesktopHud::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:notifications" {
         owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
-    } else if id == "shell:clock" {
-        owner.as_ref().map(|session| Box::new(clock::Scheduler::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:settings" {
         owner.as_ref().map(|_| Box::new(settings::Observer::new(home.as_deref().unwrap_or(""))) as Box<dyn NativeApp>)
     } else if id == "shell:clock-status" {
