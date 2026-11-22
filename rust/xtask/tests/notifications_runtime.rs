@@ -14,13 +14,14 @@ fn native_notifications_preserve_actions_grouping_dnd_timeout_and_placement() {
         .unwrap();
     for mode in ["light", "dark"] {
         for width in [640u32, 1000] {
-            let report = ui::run_ui_with_capture(
+            let report = ui::run_ui_with_capture_timeout(
                 repo,
                 "notifications",
                 DRIVER,
                 mode,
                 width,
                 "notifications.png",
+                24,
                 |path| {
                     let pixels = image::open(path).unwrap().into_rgb8();
                     let ink = if mode == "light" { [29,29,31] } else { [245,245,247] };
@@ -288,20 +289,20 @@ async function run(){
  let ringGuard=false,nativeRing=false,ordinary=0;
  globalThis.setInterval=()=>{throw Error('alarm armed a JS ringing interval');};
  try{
-   const fire=()=>{clockRequest('timerStart',{seconds:1,now:Date.now()-2000});clockRequest('arm');};
-   settings.set(s=>({...s,notifications:{...s.notifications,dnd:true}}));fire();
+   const fire=async()=>{clockRequest('timerStart',{seconds:1});await until(()=>clockRequest('snapshot').timer.state==='idle');await sleep(60);};
+   settings.set(s=>({...s,notifications:{...s.notifications,dnd:true}}));await fire();
    const quietDnd=ringing.get().length===0&&jsSounds===0;
-   settings.set(s=>({...s,notifications:{...s.notifications,dnd:false,apps:{clock:{sound:false}}}}));fire();
+   settings.set(s=>({...s,notifications:{...s.notifications,dnd:false,apps:{clock:{sound:false}}}}));await fire();
    const quietMuted=ringing.get().length===0&&jsSounds===0;
    for(const n of notifications.get())dismissNotification(n.id);
-   settings.set(s=>({...s,notifications:{...s.notifications,apps:{}}}));fire();
+   settings.set(s=>({...s,notifications:{...s.notifications,apps:{}}}));await fire();
    const armed=ringing.get().length===1&&jsSounds===0;
    toggle(false);await until(()=>!bannerHandle);await sleep(700);toggle(true);await until(()=>bannerHandle);
    await sleep(2000);nativeRing=ringing.get().length===1&&jsSounds===0;
    for(let i=0;i<4;i++)notify({title:'Eviction '+i,sticky:true,sound:false});
    await sleep(2700);
    const evicted=ringing.get().length===0&&jsSounds===0;
-   fire();const restarted=ringing.get().length===1&&jsSounds===0;
+   await fire();const restarted=ringing.get().length===1&&jsSounds===0;
    settings.set(s=>({...s,notifications:{...s.notifications,apps:{clock:{sound:false}}}}));
    const mutedWhileRinging=await until(()=>ringing.get().length===0)&&jsSounds===0;
    ringGuard=quietDnd&&quietMuted&&armed&&evicted&&restarted&&mutedWhileRinging;

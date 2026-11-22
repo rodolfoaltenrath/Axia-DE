@@ -112,8 +112,9 @@ marca e legenda leem menuText diretamente, sem color/theme/scale nos fatos JS.
 O SDK envia somente a altura; o host isolado conserva sua cor local. Durante a
 contagem, a próxima atualização é alinhada à mudança de
 `ceil(tempo restante / 1000)`, em vez de um segundo após cada sync. Trocar cores/geometria entre ticks
-não adia o próximo segundo exibido. Pausado/oculto não cria timer; abertura do
-app e vencimento de alarmes continuam com os proprietários existentes.
+não adia o próximo segundo exibido. Fora da contagem ativa, apenas o limiar
+do alarme futuro pode agendar refresh; abertura do app e vencimento de alarmes
+continuam com os proprietários existentes.
 
 Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
 Fase 3; o proprietário das cores já é Rust.
@@ -212,17 +213,25 @@ do roadmap, por decisão do usuário; o orçamento existente continua no CI.
 
 ## Agendamento e indicador do relógio — 2026-11-20
 
-O root monta `shell:clock` independentemente da barra do tema. O engine Rust
-invalida seus assinantes após comandos e mudanças de efeitos; o observador
-agenda o próximo vencimento no host. A sessão não arma o timeout JS de
-`alarms.js` para esse trabalho. O engine e os vencimentos sobrevivem à
+O serviço residente do contexto (`session_clock.rs`) agenda ocorrências no loop
+nativo mesmo sem barra ou view montada; o observador invisível `shell:clock` foi
+retirado. O engine invalida assinantes após mudanças e o serviço entrega os
+efeitos, sem timeout JS de `alarms.js`. O engine e os vencimentos sobrevivem à
 remontagem das views.
 
 O engine usa o leitor de configurações do perfil privado. Alarmes e cidades
 são gravados diretamente no proprietário Rust, sem efeitos `settings` pelo JS.
 Uma assinatura nativa acorda o agendador quando a configuração muda; comandos
 da sessão não transportam `config`, e a lista pública de alarmes consulta o engine.
-O host isolado conserva o contrato anterior. Validação e limites em `STATE-RUST.md`.
+Comandos da sessão (`clockCommand`) usam o relógio civil nativo: `now` antigo ou
+injetado não pode deslocar início, pausa, retomada, cronômetro ou expiração.
+O SDK não calcula nem envia esse timestamp. Só as consultas `nextFire`,
+`timerLeft` e `swElapsed` aceitam uma referência explícita para cálculos;
+sem ela usam o horário Rust. As duas últimas também leem o estado atual do
+engine quando chamadas sem argumento, sem copiar os stores JS de compatibilidade.
+Estados explícitos continuam válidos para cálculos, sem alterar o engine.
+O host isolado conserva tempo/estado locais e os argumentos anteriores.
+Validação e limites em `STATE-RUST.md`.
 
 O item da barra monta `shell:clock-status`: texto, visibilidade e aba de destino
 são calculados no Rust, com símbolos vetoriais para evitar dependência de glifos
@@ -283,6 +292,8 @@ política/retirada e validação de pulsos enfileirados antes do som.
 fonte opaca, ausência de estado nos fatos, espelho JS parado, contagem,
 remontagem, vencimento único, clique na aba correta, indicador de alarme,
 templates, Repetir com espelho incorreto e firewall alterado durante a espera.
+Também exige comandos sem timestamp JS, rejeição de tempo injetado em mutações,
+consultas implícitas independentes de stores antigos e cálculos explícitos puros.
 O teste recusa o timeout de agendamento e intervalos JS durante a observação;
 timers independentes de persistência de preferências continuam permitidos.
 

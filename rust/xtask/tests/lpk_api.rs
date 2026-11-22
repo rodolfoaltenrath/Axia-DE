@@ -72,7 +72,8 @@ const probe={notifications,settings,sound,View:()=>null,Text:()=>null,t:key=>key
  dismissNotification:()=>{},ringingNotifications:store([]),registerStatusItem:()=>{},wm:{},NativeView:()=>null,clockBridge:{}};
 probe.syncNativeCatalog=()=>{throw Error('isolated clock reached session catalog');};
 globalThis.__clockProbe=probe;
-globalThis.lord={clock:{request:()=>{const effects=event?[event]:[];event=null;return{timer:{state:'idle',duration:1000,endsAt:0,left:0},stopwatch:{running:false,start:0,acc:0,laps:[]},nextAlarm:null,wait:null,effects};}}};
+const clockInputs=[];
+globalThis.lord={clock:{request:input=>{clockInputs.push(input);const effects=event?[event]:[];event=null;return{timer:{state:'idle',duration:1000,endsAt:0,left:0},stopwatch:{running:false,start:0,acc:0,laps:[]},nextAlarm:null,wait:null,effects};}}};
 const names={runtime:['View','Text'],'settings.js':['settings'],'i18n.js':['t','formatTime','locale'],
  'nativeappmodel.js':['nativeAppRequest'],'nativenotifications.js':['notificationBridge'],'nativecatalog.js':['syncNativeCatalog'],
  'notify.js':['notify','dismissNotification','notifications','appNotifyPrefs','dndActive','ringingNotifications'],
@@ -99,6 +100,15 @@ reset();fire();policy={sound:false};settings.set({clock:{}});tick(3500);
 report.mutedWhileRinging=intervals.size===0&&sdk.ringing.get().length===0&&sounds===1;
 reset();fire();tick(61000);
 report.deadline=intervals.size===0&&sdk.ringing.get().length===0&&sounds===1;
+reset();sdk.clockRequest('timerStart',{seconds:60});const localDefault=clockInputs.at(-1).now===1000;
+sdk.clockRequest('timerStart',{seconds:60,now:7500});const localExplicit=clockInputs.at(-1).now===7500;
+sdk.nextFire({});const defaultQuery=clockInputs.at(-1).now===1000;
+sdk.nextFire({},1500);report.localTimeContract=localDefault&&localExplicit&&defaultQuery&&clockInputs.at(-1).now===1500;
+sdk.timerLeft();const timerDefault=clockInputs.at(-1).state?.state==='idle'&&clockInputs.at(-1).state?.duration===1000;
+sdk.swElapsed();const stopwatchDefault=clockInputs.at(-1).state?.running===false&&clockInputs.at(-1).state?.acc===0;
+sdk.timerLeft({state:'paused',left:77});report.localStateContract=timerDefault&&stopwatchDefault&&clockInputs.at(-1).state?.left===77;
+
+
 console.log(JSON.stringify(report));
 "#;
     let output = Command::new("node")
@@ -123,6 +133,8 @@ console.log(JSON.stringify(report));
         "closed",
         "mutedWhileRinging",
         "deadline",
+        "localTimeContract",
+        "localStateContract",
     ] {
         assert_eq!(report[flag], true, "{flag}: {report}");
     }

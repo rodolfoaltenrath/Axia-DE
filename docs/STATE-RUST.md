@@ -451,27 +451,38 @@ oferece invalidações canceláveis por `axia-state`. Escritas e mudanças na fi
 de efeitos notificam depois de liberar o empréstimo; leituras e consultas sem
 mudança não invalidam. O sinal agrupa várias escritas antes da sincronização.
 
-O root monta `shell:clock` mesmo quando o tema não inclui StatusItems. Esse
-observador usa um único prazo nativo para processar ocorrências e entregar
-efeitos, preservando as fatias de um/dez minutos para mudanças do relógio e
-suspensão. Sem ocorrências pendentes, não há prazo. Remontagens não reinicializam
-o engine nem prorrogam o vencimento. Comandos nativos que alteram o engine
-invalidam o observador sem depender de atualizar o espelho JS primeiro.
+O serviço residente do contexto (`session_clock.rs`) usa um único prazo nativo
+para processar ocorrências e entregar efeitos, preservando as fatias de um/dez
+minutos para mudanças do relógio e suspensão. O observador invisível
+`shell:clock` foi retirado. Sem ocorrências pendentes, não há prazo. Remontagens
+não reinicializam o engine nem prorrogam o vencimento; invalidações nativas
+acordam o serviço sem depender do espelho JS.
 
 `shell:clock-status` calcula texto, visibilidade e aba de destino a partir do
-engine Rust. O mount fornece apenas cor/altura e uma fonte opaca validada; não
-fornece timer, cronômetro, próximo alarme ou config. A contagem usa um prazo
-nativo de um segundo apenas enquanto executa; pausada, não pede atualizações.
-O limiar de 24 horas do próximo alarme também é nativo. A formatação regional
-reutiliza `axia-native::date_format`. Um clique revalida a aba pelo estado atual.
+engine. O mount fornece altura e uma fonte opaca validada; cor vem da paleta
+nativa da shell, sem timer, cronômetro, próximo alarme, config ou aparência nos
+fatos JS. A contagem alinha seu próximo prazo à próxima mudança do texto pelo
+tempo restante; mudanças de apresentação entre segundos não adiam esse tick.
+A contagem pausada não pede atualizações. O limiar de 24 horas do próximo
+alarme também é agendado no host; a formatação regional reutiliza
+`axia-native::date_format`.
+Um clique revalida a aba pelo estado atual.
 
-`sdk/alarms.js` ainda sincroniza preferências e publica snapshots para APIs
-legadas. Os templates e as ações dos alarmes agora pertencem ao serviço Rust,
-como descrito abaixo. A repetição do toque
-agora usa o serviço nativo de notificações descrito abaixo, mantendo a correção
-de permissões/silêncio/retirada sem intervalo JS na sessão.
-O adaptador isolado preserva o caminho legado de agendamento e apresentação.
-Esses itens continuam pendentes para a sessão sem JS.
+A entrada `clockCommand` usa horário Rust para comandos e snapshots. O campo
+`now` do chamador é ignorado nesses casos. Apenas `nextFire`, `timerLeft` e
+`swElapsed`, consultas de cálculo sem mutação, aceitam uma referência explícita;
+sem referência usam o relógio nativo. No SDK da sessão, `timerLeft()` e
+`swElapsed()` também omitem o estado: o engine é a fonte atual, mesmo com os
+stores de compatibilidade antigos. Argumentos explícitos de estado/tempo
+continuam disponíveis para cálculos sem efeitos nem invalidações. O caminho
+isolado mantém o timestamp local e o estado local implícito anteriores.
+
+`sdk/alarms.js` publica snapshots para APIs legadas; configuração e gravações
+pertencem ao perfil Rust. Templates e ações de alarmes e a repetição do toque
+pertencem ao serviço nativo de notificações descrito abaixo, com revalidação de
+permissão/silêncio/retirada sem intervalo JS na sessão. O adaptador isolado
+preserva o caminho legado de agendamento e apresentação. Consumidores dos
+espelhos e callbacks genéricos continuam pendentes para a sessão sem JS.
 
 ## Serviço e banners de notificações
 

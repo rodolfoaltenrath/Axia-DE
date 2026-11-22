@@ -27,8 +27,11 @@ function publish(store, value) {
   if (JSON.stringify(store.get()) !== JSON.stringify(value)) store.set(() => value);
 }
 export function clockRequest(cmd, extra = {}) {
-  const input = { now: Date.now(), ...extra };
-  if (!appHost) delete input.config;
+  const input = appHost ? { now: Date.now(), ...extra } : { ...extra };
+  if (!appHost) {
+    delete input.config;
+    if (cmd !== 'nextFire' && cmd !== 'timerLeft' && cmd !== 'swElapsed') delete input.now;
+  }
   const reply = appHost ? lord.clock.request({ cmd, config: conf(), ...input })
     : nativeAppRequest(syncNativeCatalog(), { cmd: 'clockCommand', action: cmd, ...input });
   return applyClockReply(reply);
@@ -52,7 +55,7 @@ function applyClockReply(reply) {
   return reply;
 }
 clockBridge.perform = effect => { if (effect.kind === 'clockReply') applyClockReply(effect.reply); };
-export const nextFire = (alarm, now = Date.now()) => clockRequest('nextFire', { alarm, now })?.value ?? null;
+export const nextFire = (alarm, now) => clockRequest('nextFire', now === undefined ? { alarm } : { alarm, now })?.value ?? null;
 export const clockAlarms = {
   list: () => (appHost ? conf() : clockRequest('snapshot')?.config)?.alarms || [],
   add: alarm => clockRequest('alarmAdd', { alarm })?.value,
@@ -63,8 +66,9 @@ export const timerStart = seconds => clockRequest('timerStart', { seconds });
 export const timerPause = () => clockRequest('timerPause');
 export const timerResume = () => clockRequest('timerResume');
 export const timerReset = () => clockRequest('timerReset');
-export const timerLeft = (state = clockTimer.get()) => clockRequest('timerLeft', { state })?.value || 0;
-export const swElapsed = (state = stopwatch.get()) => clockRequest('swElapsed', { state })?.value || 0;
+const queryState = (state, local) => state === undefined ? (appHost ? { state: local.get() } : {}) : { state };
+export const timerLeft = state => clockRequest('timerLeft', queryState(state, clockTimer))?.value || 0;
+export const swElapsed = state => clockRequest('swElapsed', queryState(state, stopwatch))?.value || 0;
 export const swStart = () => clockRequest('swStart');
 export const swStop = () => clockRequest('swStop');
 export const swLap = () => clockRequest('swLap');

@@ -74,6 +74,14 @@ pub fn run_ui_with_capture(
 }
 
 #[allow(dead_code)]
+pub fn run_ui_with_capture_timeout(
+    repo: &Path, kind: &str, driver_source: &str, mode: &str, width: u32,
+    image_name: &str, seconds: u64, check_capture: impl FnOnce(&Path),
+) -> Value {
+    run_ui_config(repo, kind, driver_source, mode, width, image_name, seconds, check_capture, |_| {})
+}
+
+#[allow(dead_code)]
 pub fn run_ui_with_timeout(
     repo: &Path,
     kind: &str,

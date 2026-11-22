@@ -3,6 +3,8 @@ use crate::winmodel::{AppCommand, Session, WindowReader};
 use serde_json::{json, Value};
 use std::rc::Rc;
 #[cfg(test)]
+mod clock_tests;
+#[cfg(test)]
 mod desktop_tests;
 mod quit;
 #[cfg(test)]
@@ -44,7 +46,11 @@ impl Controller {
     pub fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "clockCommand" {
             let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };
-            let wall = input["now"].as_i64().unwrap_or_else(axia_clock::now);
+            // Historical/reference times belong to pure calculations only.
+            // Session mutations and scheduling always use the native clock.
+            let wall = if matches!(input["action"].as_str(), Some("nextFire" | "timerLeft" | "swElapsed")) {
+                input["now"].as_i64().unwrap_or_else(axia_clock::now)
+            } else { axia_clock::now() };
             return windows.notification_service().borrow_mut().clock_command(input, wall, std::time::Instant::now());
         }
         if input["cmd"] == "notifications" {
