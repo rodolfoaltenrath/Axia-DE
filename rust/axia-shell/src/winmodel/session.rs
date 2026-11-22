@@ -887,6 +887,8 @@ pub struct Session {
 struct SessionCore {
     state: Store<WindowState>,
     catalog: Store<Value>,
+    switcher_generation: std::cell::Cell<u64>,
+    active_switcher: std::cell::Cell<Option<u64>>,
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
@@ -904,6 +906,18 @@ impl WeakSession {
 }
 
 impl Session {
+    pub(crate) fn begin_switcher(&self) -> Option<u64> {
+        self.core.active_switcher.set(None);
+        let generation = self.core.switcher_generation.get().checked_add(1)?;
+        self.core.switcher_generation.set(generation);
+        self.core.active_switcher.set(Some(generation));
+        Some(generation)
+    }
+    pub(crate) fn end_switcher(&self, generation: Option<u64>) -> bool {
+        if generation.is_none() || self.core.active_switcher.get() != generation { return false; }
+        self.core.active_switcher.set(None);
+        true
+    }
     pub(crate) fn catalog_store(&self) -> Store<Value> { self.core.catalog.clone() }
     pub(crate) fn catalog_reader(&self) -> Reader<Value> { self.core.catalog.reader() }
     pub(crate) fn activate_services(&self) {

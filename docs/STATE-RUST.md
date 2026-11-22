@@ -220,7 +220,7 @@ Revisões invalidam a cena e são consumidas antes de confirmar uma ação; fech
 a janela escolhida substitui sua representante ou remove o grupo.
 
 Seleção, ícones e faixa por viewport são nativos. `appswitcher.jsx` conserva
-somente o ciclo de abertura, os atalhos e a aplicação do foco escolhido.
+o ciclo de abertura, os atalhos e o snapshot de compatibilidade.
 `nativeswitcher.js` enfileira comandos recebidos antes do mount e usa um nonce
 para que efeitos de uma abertura antiga não encerrem a seguinte. Aparência e
 metadados são lidos por referências nativas: a montagem validada da sessão usa
@@ -228,6 +228,32 @@ o Store compartilhado do catálogo e suas revisões, sem registry/catalog nos
 fatos da view. O SDK inicializa a importação compartilhada antes do mount;
 descoberta/importação inicial ainda pertencem a `nativecatalog.js`. Montagens
 locais por Reader preservam os fatos explícitos de metadados.
+
+O foco escolhido e a restauração da origem minimizada também executam no
+Session via `AppCommand::WindowAction(WindowMenuAction::Focus)`.
+A view libera o empréstimo antes da mutação;
+mostrar o desktop, reabrir a janela e trazê-la à frente publicam uma revisão.
+O efeito de conclusão contém somente a resposta do modelo, sem comando de foco
+JS. O adaptador confere o nonce antes de aplicar esse snapshot e encerrar a
+apresentação. Controladores por Reader mantêm o efeito explícito anterior.
+
+Cada view vinculada recebe uma geração do Session. Uma montagem nova revoga a
+anterior; concluir consome a geração, e desmontar só libera a geração da própria
+view. Assim, uma entrada atrasada de uma view antiga não altera foco nem revisão,
+e seu descarte não invalida a view atual. A restauração antes de montar uma view
+e a minimização inicial de tela cheia ainda pertencem ao adaptador.
+
+A execução nativa do foco passou em 688 testes da shell, oito contratos LPK,
+oito cenários gráficos ampliados do alternador e oito de regressão de foco dos
+apps/menu Janela, além do encerramento instalado por timeout/SIGTERM. Dois
+testes novos verificam revisão única, troca de desktop, restauração da origem,
+confirmação repetida, gerações antigas e descarte de views. A integração bloqueia
+o wrapper JS de foco durante as conclusões e testa um snapshot de nonce antigo.
+O contrato offline compartilhado com RPM também passou na instalação privada.
+As oito capturas são idênticas às anteriores, com claro/escuro mínimos
+inspecionados e pixels de material/destaque verificados. Build GPU=1 e bundles
+passaram. Evidências em `build/validation/native-switcher-focus/`; medições
+físicas continuam no encerramento.
 
 Renomear um grupo preserva sua seleção e a origem de abertura. Se o catálogo
 remove um grupo antes de confirmar, o host consome a revisão e revalida o alvo;

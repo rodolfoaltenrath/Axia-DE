@@ -1,7 +1,7 @@
 //! App selection and scene read the context's window model directly.
 use super::NativeApp;
 use crate::{
-    winmodel::{Session, WindowReader, WindowState},
+    winmodel::{AppCommand, Session, WindowMenuAction, WindowReader, WindowState},
     AxiaSwitcher,
 };
 use axia_state::{Reader, Subscription};
@@ -18,6 +18,8 @@ struct Entry {
 }
 
 pub struct Switcher {
+    session: Option<Session>,
+    generation: Option<u64>,
     appearance: Option<std::rc::Rc<Value>>,
     surface: Value,
     windows: Reader<WindowState>,
@@ -39,11 +41,17 @@ impl Switcher {
     pub fn with_session(session: Session) -> Self {
         let windows = session.reader();
         let catalog = crate::forcequit::App::with_window_metadata(Rc::new(WindowReader(windows.clone())),session.catalog_store());
-        Self::with_catalog(windows,catalog)
+        let generation = session.begin_switcher();
+        let mut switcher = Self::with_catalog(windows,catalog);
+        switcher.session = Some(session);
+        switcher.generation = generation;
+        switcher
     }
     fn with_catalog(windows: Reader<WindowState>, catalog: crate::forcequit::App) -> Self {
         let changes = windows.subscribe();
         Self {
+            session: None,
+            generation: None,
             appearance: None,
             surface: Value::Null,
             windows,
@@ -185,8 +193,14 @@ impl Switcher {
                     .map(|window| window.id().to_owned())
             });
         self.done = true;
-        self.effects
-            .push(json!({"kind":"switcher","nonce":self.nonce,"focus":target}));
+        drop(state);
+        if let Some(session) = &mut self.session {
+            let reply = session.end_switcher(self.generation).then(|| target.as_deref()
+                .and_then(|id| session.app_command(AppCommand::WindowAction(WindowMenuAction::Focus), &[id]).ok())).flatten();
+            self.effects.push(json!({"kind":"switcher","nonce":self.nonce,"reply":reply}));
+        } else {
+            self.effects.push(json!({"kind":"switcher","nonce":self.nonce,"focus":target}));
+        }
     }
     fn tree(&self, input: &Value) -> Value {
         if self.done {
@@ -224,6 +238,11 @@ impl Switcher {
                 "maxWidth":width-48.,"boxShadow":"0 18px 48px rgba(0,0,0,0.45)"}],"children":[
                 {"kind":"view","style":{"flexDirection":"row","direction":"ltr"},"children":cells},
                 {"kind":"view","style":{"flexDirection":"row","marginTop":10,"justifyContent":"center"},"children":label}]}]})
+    }
+}
+impl Drop for Switcher {
+    fn drop(&mut self) {
+        if let Some(session) = &self.session { session.end_switcher(self.generation); }
     }
 }
 impl NativeApp for Switcher {

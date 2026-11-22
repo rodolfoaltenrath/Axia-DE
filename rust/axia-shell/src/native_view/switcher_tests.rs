@@ -122,7 +122,9 @@ fn bound_switcher_reads_catalog_revisions_and_revalidates_before_commit() {
     let effects = host.take().unwrap();
     assert_eq!(effects[0]["kind"],"switcher");
     assert_eq!(effects[0]["nonce"],10);
-    assert_ne!(effects[0]["focus"],"notes","a removed group cannot remain the target");
+    assert!(effects[0]["focus"].is_null(),"native focus must not return as a JS command");
+    assert_ne!(session.reader().read().focused_window(),Some("notes"),"a removed group cannot remain the target");
+    assert!(effects[0]["reply"].is_object());
     assert!(session.reader().read().window("notes").is_some(),"only catalog membership changed");
     control.request(&metadata("Notes",false));
     assert!(host.deadline().is_none(),"finished switchers do not spin on catalog changes");
@@ -144,7 +146,7 @@ fn native_catalog_emptying_closes_the_switcher_once_without_stale_fallback() {
     assert_ne!(host.find_text("Notes"),0);
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","builtin":true}]}));
     host.tick(0.);
-    assert_eq!(host.take(),Some(json!([{"kind":"switcher","nonce":11,"focus":null}])));
+    assert_eq!(host.take(),Some(json!([{"kind":"switcher","nonce":11,"reply":null}])));
     assert_eq!(host.find_text("Forged"),0);
     assert!(host.deadline().is_none());
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[]}));
@@ -153,4 +155,67 @@ fn native_catalog_emptying_closes_the_switcher_once_without_stale_fallback() {
     assert!(host.take().is_none());
     drop(host);
     scene::destroy(node);
+}
+
+#[test]
+fn bound_switcher_focuses_in_one_native_revision_and_restores_fullscreen_origin() {
+    for cancel in [false,true] {
+        let mut session = Session::default();
+        call(&mut session,"setDesktops",&[json!([1,2]),json!(1)]);
+        call(&mut session,"open",&[json!({"app":"notes","desktop":2})]);
+        call(&mut session,"open",&[json!({"app":"linux","instance":9,"args":{"appId":"game","surface":9}})]);
+        call(&mut session,"minimize",&[json!("linux#9")]);
+        call(&mut session,"setActiveDesktop",&[json!(1)]);
+        let mut control = crate::app_control::Controller::new(session.clone());
+        control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Notes"},{"id":"linux","builtin":true}]}));
+        let node = scene::create(scene::VIEW);
+        let mut host = Host::new(node,Box::new(Switcher::with_session(session.clone())),"",None);
+        host.facts(json!({"width":640,"args":{"nonce":12,"origin":"linux#9"}}));
+        assert_ne!(host.find_text("Notes"),0);
+        let revision = session.reader().revision();
+        host.action(&json!({"action":[if cancel { "cancel" } else { "commit" }]}));
+        let target = if cancel { "linux#9" } else { "notes" };
+        assert_eq!(session.reader().read().focused_window(),Some(target));
+        assert_eq!(session.reader().read().active_desktop(),if cancel {1} else {2});
+        assert!(!session.reader().read().window(target).unwrap().minimized());
+        assert_eq!(session.reader().revision(),revision+1);
+        let effects = host.take().unwrap();
+        assert_eq!(effects[0]["kind"],"switcher");
+        assert_eq!(effects[0]["reply"]["state"]["views"]["front"],target);
+        assert!(effects[0].get("focus").is_none());
+        host.action(&json!({"action":["commit"]}));
+        assert!(host.take().is_none());
+        assert_eq!(session.reader().revision(),revision+1);
+        drop(host);
+        scene::destroy(node);
+    }
+}
+
+#[test]
+fn newer_switcher_generation_prevents_stale_focus_and_drop_keeps_the_current_owner() {
+    use super::NativeApp;
+    let mut session = Session::default();
+    for app in ["files","notes","calculator"] { call(&mut session,"open",&[json!({"app":app})]); }
+    let mut control = crate::app_control::Controller::new(session.clone());
+    control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}]}));
+    let sync = |switcher: &mut Switcher, nonce| switcher.request(&json!({"cmd":"sync","args":{"nonce":nonce}}));
+    let mut stale = Switcher::with_session(session.clone());
+    sync(&mut stale,20);
+    let mut current = Switcher::with_session(session.clone());
+    sync(&mut current,21);
+    let revision = session.reader().revision();
+    stale.request(&json!({"cmd":"commit"}));
+    assert_eq!(session.reader().revision(),revision);
+    assert!(sync(&mut stale,20)["effects"][0]["reply"].is_null());
+    drop(stale);
+    current.request(&json!({"cmd":"commit"}));
+    assert_eq!(session.reader().read().focused_window(),Some("notes"));
+    assert_eq!(session.reader().revision(),revision+1);
+    assert!(sync(&mut current,21)["effects"][0]["reply"].is_object());
+    let abandoned = Switcher::with_session(session.clone());
+    drop(abandoned);
+    let mut next = Switcher::with_session(session.clone());
+    sync(&mut next,22);
+    next.request(&json!({"cmd":"commit"}));
+    assert!(sync(&mut next,22)["effects"][0]["reply"].is_object());
 }

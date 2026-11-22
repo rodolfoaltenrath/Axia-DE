@@ -12,6 +12,7 @@ import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {media} from '@ROOT@/sdk/media.js';
 import {nativeCatalogFacts} from '@ROOT@/sdk/nativecatalog.js';
+import {switcherBridge} from '@ROOT@/sdk/nativeswitcher.js';
 const c=globalThis.__AXIA_UI_TEST__||{mode:'@MODE@',width:Number('@WIDTH@'),image:@IMAGE@};
 const kind=c.kind||'switcher_@APPEARANCE@';
 const appearance=kind.endsWith('adwaita')?'adwaita':'axia';
@@ -42,12 +43,18 @@ const has=label=>!!lord.nativeViews.findText(handle,label);
 const raw=(op,...args)=>lord.windowList.call(op,JSON.stringify([{},...args]));
 const key=(key,shift=false)=>switcherKey({mods:8,down:true,key,shift});
 const release=()=>switcherKey({mods:0,down:false,key:'Meta'});
+let legacyFocusCalls=0;
+const finish=switcherBridge.perform;
+switcherBridge.perform=effect=>{const focus=wm.focus;wm.focus=()=>{legacyFocusCalls++;};try{return finish(effect);}finally{wm.focus=focus;}};
 enableShellLayers();resetShortcuts();
 function Harness(){useShortcuts({grabs:'flow',onSuperTap:()=>{}});return h(ThemeProvider,{tokens:makeTheme({mode:c.mode,accent:'#3489bd',effects:{}})},h(View,{style:{width:c.width,height:700,backgroundColor:c.mode==='dark'?'#222':'#eee'}},h(AppSwitcher)));}
 render(h(Harness));
 async function run(){
  const files=wm.open('files'),a=wm.open('notes',{instance:'a'}),b=wm.open('notes',{instance:'b'}),calc=wm.open('calculator');
  openSwitcher(8);await until(()=>has('Notes'));const initial=has('Notes');
+ const focusBeforeStale=wm.focused();let staleRead=false;
+ switcherBridge.perform({nonce:-1,get reply(){staleRead=true;throw Error('stale completion read its snapshot');}});
+ const staleCompletionIgnored=!staleRead&&switcherOpen()&&wm.focused()===focusBeforeStale;
  const publishNotes=(name,builtin=false)=>{const metadata=nativeCatalogFacts(true).get();return lord.nativeApps.request(JSON.stringify({cmd:'metadata',...metadata,registry:metadata.registry.map(app=>app.id==='notes'?{...app,name,builtin}:app)}));};
  const beforeCatalogFacts=appearanceFacts;publishNotes('Native Notes');
  const nativeCatalogRevision=await until(()=>has('Native Notes'))&&appearanceFacts===beforeCatalogFacts&&nativeCatalogFacts(true).get().registry.find(app=>app.id==='notes').name==='Notes';
@@ -104,6 +111,6 @@ async function run(){
  const pointerCommit=await until(()=>!switcherOpen()&&wm.focused()===ids[0]);
  cancelSwitcher();for(const id of ids)raw('close',id);openSwitcher(8);const empty=await until(()=>!switcherOpen());
  await until(()=>mounts===unmounts);
- console.log(kind+'-observation '+JSON.stringify({noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
+ console.log(kind+'-observation '+JSON.stringify({nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
 }
 setTimeout(()=>run().catch(error=>console.error(kind+' driver: '+(error.stack||error))),200);

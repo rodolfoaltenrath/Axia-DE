@@ -4,7 +4,7 @@ import { createElement as h } from 'react';
 import { mainDisplay } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { Layer } from './layers.js';
-import { wm } from './windows.js';
+import { wm, applyNativeWindowState } from './windows.js';
 export { cycleAppWindows } from './appcontrol.js';
 import { NativeView } from './nativeview.js';
 import { switcherBridge } from './nativeswitcher.js';
@@ -18,7 +18,8 @@ switcherBridge.perform = effect => {
   if (effect.nonce !== switcherState.get()?.nonce) return;
   switcherState.set(null);
   switcherBridge.reset();
-  if (typeof effect.focus === 'string') wm.focus(effect.focus);
+  if (effect.reply) applyNativeWindowState(effect.reply);
+  else if (typeof effect.focus === 'string') wm.focus(effect.focus);
 };
 export function openSwitcher(hold, back = false) {
   const fullscreen = !!lord.wayland?.fullscreen?.();
