@@ -12,6 +12,9 @@ regex = "1"
 flate2 = "1"
 axia-crypto = { path = "../axia-crypto" }
 
+[dev-dependencies]
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png"] }

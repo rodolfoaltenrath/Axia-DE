@@ -90,7 +90,7 @@ se falhou por memória, são urgentes.
 - Como: em `packaging/rpm/axia-de.spec`, no `%check`, não chamar o alvo que executa `test-rust`.
   Hoje `test-platform` depende de `test-rust` (`server/Makefile`, linha do `test-platform`). Opções:
   criar `test-platform-rpm` sem `test-rust`, ou definir uma variável (`SKIP_RUST_TESTS=1`) que o
-  Makefile respeite. Manter `tp-test` e `check.py --require-gpu`.
+  Makefile respeite. Manter `tp-test` e `cargo xtask desktop-check --require-gpu`.
 - Custo: builds avulsas (Copr, Fedora) não rodam os testes Rust. Aceitável enquanto o CI `desktop` rodar.
 - Pronto quando: o RPM passa no GitHub e o `%check` não compila mais o `axia-shell` em perfil de teste.
 

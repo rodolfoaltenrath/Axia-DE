@@ -2,7 +2,7 @@
 //! collector as System Information, plus a few live facts (uptime, memory and disk in use, packages,
 //! shell). The user and host names appear only on screen and only without --share, so a screenshot
 //! made for sharing carries neither. The mark is pixel art drawn two pixels per character cell with half
-//! blocks (▀ ▄), in the violet of the app icon (tools/gen-brand.py); without color it is plain ASCII.
+//! blocks (▀ ▄), in the violet of the app icon (cargo xtask gen-brand); without color it is plain ASCII.
 use crate::collect::Report;
 use crate::fsutil::{atoi, fit, read_text};
 

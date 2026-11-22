@@ -62,7 +62,7 @@ in Fedora RPMs (`GPU=0`) or claim to implement a GPU blur pass.
 checks, 128 frozen legacy-C pixel comparisons (serial/parallel, cold/cached),
 wallpaper image lifetime and existing input/cursor regressions.
 `build/engine-test` (run from `server/`) checks compositor partial repaints and
-existing CPU/GPU model pixel goldens. `tools/desktop/check.py` starts both native
+existing CPU/GPU model pixel goldens. `cargo xtask desktop-check` starts both native
 themes and imports real PNG fixtures through Rust → C → QuickJS, validates invalid
 inputs, managed thumbnails, persistence, theme-independent selection and the app
 switcher. It also exercises the asynchronous Rust motion store with an offline

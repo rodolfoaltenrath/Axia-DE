@@ -23,7 +23,7 @@ uma falha deixa o job vermelho. Sem as variáveis de integração, a CI produz o
 artefatos e pula a publicação. Não configure um webhook paralelo se usar esse
 fluxo: ele produziria builds duplicadas sem o mesmo bloqueio pelos testes.
 
-O envio e o acompanhamento são separados em `tools/desktop/copr_publish.py`.
+O envio e o acompanhamento são separados em `cargo xtask copr-publish`.
 O upload acontece uma vez; depois, somente as consultas de status são repetidas
 em caso de conexão interrompida, timeout, HTTP 429 ou erro HTTP 5xx. A espera
 entre tentativas cresce de 15 até 120 segundos. O acompanhamento termina após
@@ -35,7 +35,7 @@ artefato `copr-build` (`build.json`), inclusive se o acompanhamento falhar depoi
 Para consultar um build já enviado, sem credenciais e sem enviar outro pacote:
 
 ```sh
-python3 tools/desktop/copr_publish.py --build-id 11350158
+cargo xtask copr-publish --build-id 11350158
 ```
 
 Uma falha de conexão no Actions não cancela o build no Copr. Confira esse ID

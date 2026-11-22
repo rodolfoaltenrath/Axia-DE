@@ -1,4 +1,4 @@
-// logo.js — the Axia DE logo (tools/gen-brand.py).
+// logo.js — the Axia DE logo (cargo xtask gen-brand).
 //
 //   <AxiaLogo size={64} />            the app icon: the mark on the violet rounded square (About,
 //                                     Settings → General, Monitor, the theme menu in other themes)

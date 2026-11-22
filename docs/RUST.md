@@ -692,7 +692,7 @@ Os nomes respeitam o idioma da interface e os pacotes de idioma do usuário.
 
 `assets/emoji.json` é a única lista de categorias e bases que aceitam tons de
 pele; o Rust a compila e `sdk/emojidata.js` a exporta para o seletor rápido do
-shell. `tools/gen-emoji.mjs` atualiza esse arquivo compartilhado. O seletor
+shell. `cargo xtask gen-emoji` atualiza esse arquivo compartilhado. O seletor
 rápido continua no shell; o conteúdo do app não passa pelo React.
 Recentes e tom continuam nas preferências `emojiRecent` e `emojiTone` existentes.
 A cópia é um efeito do host para a área de transferência do sistema.

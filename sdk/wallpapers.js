@@ -1,4 +1,4 @@
-// The LordOS wallpaper collection (assets/wallpapers/, built by tools/gen-wallpapers.mjs; see its
+// The LordOS wallpaper collection (assets/wallpapers/, built by cargo xtask gen-wallpapers; see its
 // README.md). Themes add it to their own wallpapers (tokens `wallpapers`), and Settings → Wallpaper
 // groups them by `category`. Each entry: { id, category, nameKey, name, src, thumb, variants }.
 //   src       the base image (the original size), `asset:` path

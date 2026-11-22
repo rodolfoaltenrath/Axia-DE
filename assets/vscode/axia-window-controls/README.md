@@ -9,7 +9,7 @@ editor colors and file icons remain under the user's control.
 The COLR/CPAL TrueType font is committed so normal builds need no font tooling.
 Monochrome outline fallbacks keep controls visible without color-font support.
 To regenerate it, install fonttools in an isolated Python environment and run
-tools/desktop/build_controls_font.py. The generated font has a stable timestamp.
+cargo xtask gen-controls-font. The generated font has a stable timestamp.
 
 Axia installs these inert resources per user and supplies theme defaults for
 the current light/dark mode. Disabling the integration removes those defaults

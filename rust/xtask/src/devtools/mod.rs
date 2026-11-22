@@ -5,6 +5,14 @@
 //!   cargo xtask brand-check
 //!   cargo xtask err-check
 //!   cargo xtask i18n-check [LANG | lordos-lang-xx.json]
+//!   cargo xtask gen-controls-font
+//!   cargo xtask gen-lbfonts [--fonts DIR] [--ucd DIR]
+//!   cargo xtask gen-monitor-data GEOJSON CSV
+//!   cargo xtask gen-unicode UCD-FOLDER
+//!   cargo xtask gen-emoji FOLDER
+//!   cargo xtask gen-brand [--svg-only]
+//!   cargo xtask copr-publish [--packages DIR] [--report FILE] [--build-id N]
+//!   cargo xtask desktop-check [--require-gpu] | clipboard-x11-check | dock-bench
 //!   cargo xtask gen-wallpapers SOURCE-DIR
 //!   cargo xtask build-theme [THEME | app-host | sysapps ...]
 //!   cargo xtask lpk FOLDER | keygen | sign | verify | catalog
@@ -13,13 +21,21 @@
 
 mod b64;
 mod brand;
+mod brand_gen;
+mod controls_font;
+mod copr;
+mod desktop_check;
+mod emoji;
 mod errcheck;
 mod i18n;
+mod lbfonts;
 mod lpk;
 mod manifest;
+mod monitor_data;
 mod ojson;
 mod release;
 mod theme;
+mod unicode;
 mod wallpapers;
 
 use std::path::Path;
@@ -33,6 +49,16 @@ pub fn dispatch(repo: &Path, command: &str, args: &[String]) -> Option<crate::Re
         "err-check" => errcheck::execute(repo, args),
         "i18n-check" => i18n::check(repo, args),
         "i18n-pack" => i18n::pack(repo, args),
+        "gen-controls-font" => controls_font::execute(repo, args),
+        "gen-lbfonts" => lbfonts::execute(repo, args),
+        "gen-monitor-data" => monitor_data::execute(repo, args),
+        "gen-unicode" => unicode::execute(repo, args),
+        "gen-emoji" => emoji::execute(repo, args),
+        "gen-brand" => brand_gen::execute(repo, args),
+        "copr-publish" => copr::execute(repo, args),
+        "desktop-check" => desktop_check::execute(repo, args),
+        "dock-bench" => desktop_check::dock_bench(repo, args),
+        "clipboard-x11-check" => desktop_check::x11_check(repo, args),
         "gen-wallpapers" => wallpapers::execute(repo, args),
         "build-theme" => theme::execute(repo, args),
         "lpk" => lpk::execute(repo, args),

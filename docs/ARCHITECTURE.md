@@ -106,7 +106,7 @@ Besides the kernel and libc, only these are allowed:
 | `axia-crypto` (RustCrypto) | allocation-free XChaCha20-Poly1305, Argon2d/i/id, BLAKE2b and IETF ChaCha20 for the vault, importer and encrypted backups. Rust compatibility vectors and legacy-file tests run in `make test` (`RUST-CRYPTO.md`) | vendored Rust crates |
 | EFF word list, 10k common passwords | passphrase generator and the offline "breached" check (CC BY 3.0 US / MIT), embedded in `axia-vault` | `third_party/wordlists` |
 | Inter, Plus Jakarta Sans, JetBrains Mono | interface, display and terminal fonts (OFL) | `assets/fonts` |
-| Noto Sans Arabic, Devanagari, Thai and CJK SC, subset | LordBench's shaping workload (0.8.6): Debian 13's fonts subset to its fixed paragraphs by `tools/gen-lbfonts.py` (fontTools, on the maintainer's machine only, not a build dependency) and built into `axia-bench` with Inter Regular, which opens no files (OFL; `BENCHMARK.md`) | `server/src/bench/fonts` |
+| Noto Sans Arabic, Devanagari, Thai and CJK SC, subset | LordBench's shaping workload (0.8.6): Debian 13's fonts subset to its fixed paragraphs by `cargo xtask gen-lbfonts` (fontTools, on the maintainer's machine only, not a build dependency) and built into `axia-bench` with Inter Regular, which opens no files (OFL; `BENCHMARK.md`) | `server/src/bench/fonts` |
 
 **Xwayland** (Debian's `xwayland` package, 0.8.3) is not linked by anything: it is a separate
 program that `axia-server` starts on demand for X11 apps (`WAYLAND.md`, "X11 apps (Xwayland)").

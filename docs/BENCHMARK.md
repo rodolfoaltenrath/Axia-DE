@@ -295,7 +295,7 @@ development package.
       LordOS's Inter Regular (the scene draws every weight with it and
       uses only characters it covers, so the engine never looks for a fallback font), and Debian 13's Noto Sans Arabic,
       Devanagari, Thai and CJK SC subset to exactly the characters of those paragraphs and their decompositions,
-      with every layout feature and lookup they reach (`tools/gen-lbfonts.py`, run by hand when a paragraph
+      with every layout feature and lookup they reach (`cargo xtask gen-lbfonts`, run by hand when a paragraph
       changes; the results are committed in `server/src/bench/fonts` with their OFL licence, so every build shapes
       with the same bytes; the Rust tests pin Inter's SHA-256, and a new Inter requires updating the pin
       and measuring the references again). With each subset `build/shape-test` gives the

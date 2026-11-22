@@ -9,7 +9,6 @@ BuildRequires:  gcc
 BuildRequires:  cargo
 BuildRequires:  rust
 BuildRequires:  make
-BuildRequires:  python3
 BuildRequires:  xz
 BuildRequires:  binutils
 BuildRequires:  pkgconfig(wayland-server)
@@ -90,7 +89,7 @@ install -Dpm 644 packaging/systemd/axia-update.timer %{buildroot}%{_unitdir}/axi
 CARGO_BUILD_JOBS=1 %make_build -C server GPU=1 test-platform SKIP_RUST_TESTS=1
 %make_build -C server GPU=1 build/tp-test
 server/build/tp-test
-python3 tools/desktop/check.py --require-gpu
+cargo xtask desktop-check --require-gpu
 cargo xtask switcher-check --installation %{buildroot}%{_libexecdir}/axia
 
 # Automatic updates are opt-in; do not run presets which could enable this timer.

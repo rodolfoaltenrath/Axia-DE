@@ -226,7 +226,7 @@ HarfBuzz.
 
 The Unicode tables (bidi class, mirrors, brackets, joining type, script, combining class,
 invisibles, line break, marks, Indic, Khmer, Myanmar and USE categories) are generated with
-`node tools/gen-unicode.mjs <UCD>` into `server/src/ui/unidata.h` and compiled only in
+`cargo xtask gen-unicode <UCD>` into `server/src/ui/unidata.h` and compiled only in
 `unicode.c`. The USE categories follow HarfBuzz's `gen-use-table.py`: besides the UCD they need
 `ArabicShaping.txt` and the two Universal Shaping Engine data files shipped with HarfBuzz
 (`src/ms-use/IndicSyllabicCategory-Additional.txt` and

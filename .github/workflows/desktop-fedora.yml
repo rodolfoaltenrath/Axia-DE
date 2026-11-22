@@ -428,7 +428,7 @@ jobs:
         if: matrix.gpu == 1
         run: |
           dnf install -y --setopt=install_weak_deps=False xorg-x11-server-Xwayland libX11-devel
-          python3 tools/desktop/clipboard_x11_check.py
+          cargo xtask clipboard-x11-check
       - name: Rust network, brightness and background-app contracts
         if: matrix.gpu == 1
         run: |
@@ -440,8 +440,6 @@ jobs:
           server/build/tp-test
       - name: Rust build partition tests
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test build_partition -- --include-ignored
-      - name: Remaining Python packaging tests
-        run: python3 -m unittest discover -s tools/desktop/tests -v
       - name: Rust session root startup guard
         run: cargo test --manifest-path rust/Cargo.toml -p axia-session --locked --offline --test session both_entrypoints_reject_root_before_starting_a_compositor -- --ignored
       - name: Stage installation
@@ -520,10 +518,8 @@ jobs:
       group: copr-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - run: dnf install -y git copr-cli
+      - run: dnf install -y git copr-cli cargo rust
       - uses: actions/checkout@v4
-      - name: Copr submission and polling regression tests
-        run: python3 -m unittest discover -s tools/desktop/tests -p test_copr_publish.py -v
       - uses: actions/download-artifact@v4
         with:
           name: axia-de-fedora-44
@@ -532,7 +528,7 @@ jobs:
         env:
           COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
           COPR_PROJECT: ${{ vars.COPR_PROJECT }}
-        run: python3 tools/desktop/copr_publish.py
+        run: cargo xtask copr-publish
       - uses: actions/upload-artifact@v4
         if: always()
         with:

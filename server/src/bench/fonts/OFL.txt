@@ -4,7 +4,7 @@ Noto Sans Thai: Copyright 2016 Google Inc. All Rights Reserved.
 Noto Sans CJK SC: Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
 
 The files in this folder are subsets of those fonts (Debian 13: fonts-noto-core 20201225, fonts-noto-cjk
-20240730), made by tools/gen-lbfonts.py for LordBench's shaping workload (docs/BENCHMARK.md). They keep the
+20240730), made by cargo xtask gen-lbfonts for LordBench's shaping workload (docs/BENCHMARK.md). They keep the
 original names, which use no Reserved Font Name.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

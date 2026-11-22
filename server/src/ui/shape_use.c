@@ -3,7 +3,7 @@
  * Sinhala, Balinese, Javanese, Sundanese, Buginese, Tai Tham, Chakma, Brahmi, Limbu, Lepcha…) and of
  * some joining ones (Mongolian, N'Ko, Adlam):
  *
- *   1. normalization; USE categories (tools/gen-unicode.mjs); syllables with the
+ *   1. normalization; USE categories (cargo xtask gen-unicode); syllables with the
  *      USE grammar (without seeing CGJ or the ZWNJ that goes before a mark);
  *   2. masks: rphf at the start of each syllable; joining forms per syllable (or the
  *      Arabic ones in the joining scripts);

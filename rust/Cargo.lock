@@ -989,6 +989,7 @@ dependencies = [
  "libc",
  "regex",
  "serde_json",
+ "ttf-parser",
 ]
 
 [[package]]

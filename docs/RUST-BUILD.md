@@ -42,7 +42,7 @@ profile requirements differ (for example, panic unwinding).
 
 The RPM's `test-platform SKIP_RUST_TESTS=1` keeps C and ABI tests. Rust tests,
 including the ignored image runtime test, run in desktop CI before the RPM job.
-The RPM additionally runs `tp-test` and `check.py --require-gpu`. Standalone Copr
+The RPM additionally runs `tp-test` and `cargo xtask desktop-check --require-gpu`. Standalone Copr
 builds therefore rely on the desktop CI for Rust test coverage. Rust compilation
 uses two jobs in the RPM and desktop CI. Fedora's optimization, debug information
 and hardening flags are preserved; lowering debug information requires measured
@@ -101,7 +101,7 @@ swap. The release builds retained Fedora's `opt-level=3`, `debuginfo=2`,
 | Complete `rpmbuild --rebuild` | 2.63 GiB | 5.42 GiB |
 
 The complete RPM rebuild passed, including installation, C/ABI checks, touchpad
-and `check.py --require-gpu`; the main, debuginfo and debugsource RPMs were
+and `cargo xtask desktop-check --require-gpu`; the main, debuginfo and debugsource RPMs were
 generated. No `cargo test` ran inside the RPM. The 33 C exports moved into
 dependent crates remained in `libaxia_shell.a`.
 

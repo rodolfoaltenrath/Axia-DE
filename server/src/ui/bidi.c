@@ -3,7 +3,7 @@
  * isolating run sequences, rules W1–W7, bracket pairs (N0), N1–N2, I1–I2 and,
  * per line, L1–L2. Verified with BidiCharacterTest.txt (server/tests/bidi_test.c).
  *
- * The tables come from unicode.c (tools/gen-unicode.mjs). No fribidi or ICU. */
+ * The tables come from unicode.c (cargo xtask gen-unicode). No fribidi or ICU. */
 #include "bidi.h"
 
 #include <stdlib.h>

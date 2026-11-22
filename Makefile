@@ -1,6 +1,5 @@
 PREFIX ?= /usr/local
 LIBEXECDIR ?= $(PREFIX)/libexec
-PYTHON ?= python3
 CARGO ?= cargo
 
 .PHONY: all themes server check test install clean
@@ -13,7 +12,7 @@ check test: all
 	$(MAKE) -C server test-platform
 	$(CARGO) test --manifest-path rust/Cargo.toml --package xtask --locked --offline
 	$(CARGO) test --manifest-path rust/Cargo.toml --package xtask --locked --offline --test shell_surfaces_runtime -- --ignored --nocapture
-	$(PYTHON) tools/desktop/check.py
+	$(CARGO) xtask desktop-check
 install:
 	$(CARGO) xtask install --prefix '$(PREFIX)' --libexecdir '$(LIBEXECDIR)' --destdir '$(DESTDIR)'
 clean:

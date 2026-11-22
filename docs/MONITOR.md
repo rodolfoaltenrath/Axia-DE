@@ -163,7 +163,7 @@ recorded data.
 `assets/monitor/geoip-country.mmdb` contains DB-IP Lite Country data (CC BY 4.0;
 [IP geolocation by DB-IP](https://db-ip.com)). The uncompressed database is
 embedded directly, avoiding decompression when opening a window.
-`tools/gen-monitor-data.py` generates these assets, country positions in
+`cargo xtask gen-monitor-data` generates these assets, country positions in
 `countries.rs`, and localized country names. See `THIRD_PARTY.md`.
 
 ## Validation

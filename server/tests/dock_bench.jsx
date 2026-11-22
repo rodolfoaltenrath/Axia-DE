@@ -1,7 +1,7 @@
 // Cost of moving the mouse over the real Dock (Rust layout, magnification, 24 icons), in a private
 // headless session: each move goes through the compositor's event path (__lordEvent) and React renders
 // what it causes. Prints the extra time per move over an idle loop of the same yields.
-// Not part of `make check`: tools/dock-bench.sh runs it.
+// Not part of `make check`: cargo xtask dock-bench runs it.
 import { createElement as h, useEffect, useState } from 'react';
 import { render, View } from '@lordos/runtime';
 import { configureWindows } from '../../sdk/windows.js';

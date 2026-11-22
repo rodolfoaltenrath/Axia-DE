@@ -129,14 +129,14 @@ PNG descriptor lifetime, image cleanup and saving/logout policies.
 Rust transfer store, C bridge, history worker and eventfd. It loads a legacy text/PNG index in a private HOME,
 re-copies an image through the real compositor, excludes passwords and ignored
 apps, verifies the next normal copy, limits/pins, actual panel keyboard input
-and compatible writes. `tools/desktop/clipboard_native_check.py` also starts a
+and compatible writes. `cargo xtask desktop-check` also starts a
 private full desktop and an independent Wayland peer: 1 MiB text, rich MIME
 forwarding, owner exit, stale offers, PRIMARY, password hints and PNG transfer.
 These fixtures do not modify the live user's clipboard, history or installed package.
 Physical Ctrl+C/Ctrl+V between actual applications remains a session validation.
 
 
-`python3 tools/desktop/clipboard_x11_check.py` uses an independent Xlib peer in
+`cargo xtask clipboard-x11-check` uses an independent Xlib peer in
 another private full desktop. It checks 1 MiB INCR in both directions, clipboard
 retention after source release, UTF-8/Latin-1 conversion and PRIMARY. It requires
 Xwayland and the X11 development library; Fedora CI runs it in the GPU build

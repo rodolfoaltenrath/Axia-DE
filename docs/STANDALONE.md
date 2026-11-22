@@ -59,7 +59,7 @@ O fork se chama **Axia DE**. A política de marca do LordOS pede que um fork ten
 | Programas | `/usr/libexec/lord-de/bin/lord-*`, `lordos-*` | `/usr/libexec/axia/bin/axia-*` (o auxiliar de listas de bloqueio é `axia-dl`; `axia-fetch` é o resumo no terminal) |
 | Pacote | `lord-de` | `axia-de` (substitui `lord-de` e ajusta a sessão escolhida no GDM e no AccountsService) |
 | Pastas do usuário | `~/.config/lordos`, `~/.cache/lordos`, `~/.local/share/lordos`, `~/.local/state/lordos` | as mesmas com `axia`; o primeiro início move as antigas |
-| Logo | coroa | logo provisório gerado por `tools/gen-brand.py` |
+| Logo | coroa | logo provisório gerado por `cargo xtask gen-brand` |
 | Mascote | Lumo | removido |
 | Papéis de parede | raposa Lumo (padrão), coroa | removidos; padrão "Galáxia infinita" |
 
