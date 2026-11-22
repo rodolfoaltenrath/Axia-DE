@@ -36,7 +36,7 @@ pub struct App {
     booted: bool,
     home: String,
     i18n: I18n,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     region: String,
     hour: String,
     rtl: bool,
@@ -81,7 +81,7 @@ impl Default for App {
             booted: false,
             home: String::new(),
             i18n: I18n::default(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             region: String::new(),
             hour: "auto".into(),
             rtl: false,
@@ -122,6 +122,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.home = home.unwrap_or("").trim_end_matches('/').into();
@@ -551,7 +553,9 @@ impl App {
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
                 self.i18n.decimal = input["context"]["decimal"].as_str().unwrap_or(".").into();
                 self.i18n.group = input["context"]["group"].as_str().unwrap_or(",").into();
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"]
                     .as_f64()
                     .filter(|n| n.is_finite())

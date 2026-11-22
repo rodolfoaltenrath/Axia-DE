@@ -19,7 +19,7 @@ pub struct App {
     step: usize,
     query: String,
     hover: String,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     registry: Vec<Value>,
     lang: String,
     width: f64,
@@ -39,7 +39,7 @@ impl Default for App {
             step: 0,
             query: String::new(),
             hover: String::new(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             registry: vec![],
             lang: "en".into(),
             width: 860.,
@@ -52,6 +52,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.content = Content::new(assets);
         self.i18n = I18n::new(assets, home);
@@ -110,7 +112,9 @@ impl App {
         match input["cmd"].as_str().unwrap_or("") {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"]
                     .as_f64()
                     .filter(|w| w.is_finite())

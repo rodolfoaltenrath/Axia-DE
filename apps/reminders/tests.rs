@@ -153,7 +153,7 @@ fn original_scene_preserves_layout_and_native_icon() {
     a.lists = lists();
     a.items = sample();
     a.items_loaded = true;
-    a.theme = json!({"mode":"light","text":"#111111","textDim":"#777777","windowBg":"#ffffff","sidebarBg":"#eeeeee","separator":"#cccccc","accent":"#007aff","control":"#dddddd"});
+    a.theme = json!({"mode":"light","text":"#111111","textDim":"#777777","windowBg":"#ffffff","sidebarBg":"#eeeeee","separator":"#cccccc","accent":"#007aff","control":"#dddddd"}).into();
     let tree = ui::tree(&mut a, date("2026-11-17"));
     assert_eq!(tree["children"][0]["style"]["width"], 236);
     assert_eq!(tree["children"][1]["children"][0]["style"]["height"], 44);

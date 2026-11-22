@@ -62,7 +62,7 @@ pub struct App {
     i18n: I18n,
     region: String,
     hour: String,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     rtl: bool,
     width: f64,
     entries: Vec<Entry>,
@@ -113,7 +113,7 @@ impl Default for App {
             i18n: I18n::default(),
             region: String::new(),
             hour: "auto".into(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             rtl: false,
             width: 800.,
             entries: vec![],
@@ -156,6 +156,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.home = home.unwrap_or("").trim_end_matches('/').into();
@@ -767,7 +769,9 @@ impl App {
                     .as_str()
                     .unwrap_or("auto")
                     .into();
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"]
                     .as_f64()
                     .filter(|n| n.is_finite())

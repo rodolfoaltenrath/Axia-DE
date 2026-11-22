@@ -52,8 +52,15 @@ perfil (`appearance_source.rs`). Seu modelo e o publicador LPK mantêm referênc
 ao mesmo plano imutável; o corpo da view não consulta o contexto React de tema
 nem recebe theme/scale no JSON. O host ignora esses campos antigos e acorda por
 assinatura. Ícones não vinculam fontes de locale/preferências/aparência.
-Os demais apps e as interfaces da shell ainda precisam migrar seus fatos de
-aparência; a capacidade nativa está ligada somente no Relógio nesta etapa.
+A mesma capacidade está ligada em Notas, Caracteres, Ajuda, Backup, Contatos,
+Calendário, Lembretes, Gravador, Câmera, Scanner, Logs, Fontes e Fotos. Esses
+modelos retêm a referência imutável, sem cópia da paleta em cada sync da sessão.
+Notas invalida regiões retidas; Fontes cancela rasters de modo antigo e rejeita
+conclusões de épocas anteriores. A Câmera preserva o estado da captura.
+Os hosts isolados continuam recebendo tokens pelo contrato local JSON/SDK; a
+ligação compartilhada vale para as views da sessão, inclusive os fallbacks dos
+apps empacotados. Configurações, Arquivos, Senhas e as cenas da shell ainda
+precisam migrar seus fatos de aparência.
 
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena

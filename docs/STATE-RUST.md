@@ -1721,3 +1721,51 @@ privada gerados. Evidências em `build/validation/native-appearance-source/`;
 sem instalação ou reinício da sessão física.
 
 Três amostras de ociosidade passaram com limites impostos: 12,550 poll/s e 104,992 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal nem medição física; o protocolo em hardware continua para o encerramento.
+
+
+### Aparência compartilhada em mais treze apps
+
+Notas, Caracteres, Ajuda, Backup, Contatos, Calendário, Lembretes, Gravador,
+Câmera, Scanner, Logs, Fontes e Fotos passam a declarar `appearanceSource:
+native` e a receber o plano imutável por `Rc<Value>` nas views da sessão.
+O adaptador desses corpos não consulta `useTheme` nem serializa theme/scale;
+a fonte do perfil e a capacidade do modelo Rust controlam a atualização.
+O host continua rejeitando fatos de aparência antigos no caminho vinculado.
+Ícones não adquirem assinaturas de janela.
+
+Notas invalida as regiões retidas quando muda a referência, sem invalidar
+novamente para a mesma referência. Fontes cancela os rasters de modo anterior,
+agenda a amostra atual e rejeita conclusões antigas; mudar apenas o destaque
+não regenera a tinta. A Câmera muda as cores da seleção sem alterar dispositivo
+ou captura. Backup usa somente as duas cores de contraste da linha selecionada,
+em vez de clonar a paleta para cada entrada do navegador.
+
+O contrato JSON/SDK dos hosts isolados foi preservado. Contatos, Calendário e
+Lembretes são empacotados: a ligação compartilhada cobre suas views da sessão
+usadas como fallback, não o processo isolado. O teste gráfico força explicitamente
+essa modalidade; a publicação a processos isolados reais é verificada pelo teste
+separado `theme_tokens_runtime`. Configurações, Arquivos, Senhas, cenas da shell,
+montagem de tema e demais fatos JS continuam no escopo. Nenhuma caixa da fase
+inteira é concluída por esta entrega.
+
+Validação em Fedora 44 privado: 656 testes da shell e 184 dos treze apps passaram;
+sete testes da shell e dois de Fotos permanecem ignorados por suas integrações
+específicas. Os três testes novos cobrem cache retido, rasters atrasados e estado
+da câmera. Oito contratos LPK passaram. Compositor GPU=1 e bundles default/app-host
+gerados. A integração nova, incluída no CI com capturas por app, passou em 52
+cenários (treze apps, claro/escuro, 640/1000 px): exige manifesto compilado,
+montagem real, ausência de theme/scale, troca sem novos fatos JS, espelho antigo
+e persistência após injeção de aparência antiga. Para doze apps exige pixels da
+paleta nativa; a Câmera mantém fundo e texto próprios, e sua seleção de dispositivo
+é coberta pelo teste unitário sem depender de hardware. Capturas de Notas e Fontes
+em claro/escuro, Fotos e Câmera inspecionadas.
+
+Passaram também 36 cenários de regressão de Relógio, locale, foco, Dock, Arquivos,
+cabeçalhos e tokens para apps isolados reais, além do encerramento instalado por
+timeout/SIGTERM. Evidências em `build/validation/native-appearance-apps/`.
+
+As oito capturas de Arquivos são idênticas byte a byte às de
+`native-appearance-source`. Instalação privada gerada, sem reiniciar a sessão
+física. Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,619 MiB de RSS,
+abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal nem medição física;
+o protocolo em hardware continua reservado ao encerramento.

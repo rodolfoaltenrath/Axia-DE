@@ -683,13 +683,10 @@ fn browser(app: &mut App, now: i64) -> Value {
         ),
     );
     let mut items = vec![];
+    let selected_colors = json!({"text":"#fff","textDim":"rgba(255,255,255,0.85)"});
     for (i, item) in app.items.clone().into_iter().enumerate() {
         let selected = app.pick.as_deref() == Some(string(&item["name"]));
-        let mut colors = t.clone();
-        if selected {
-            colors["text"] = json!("#fff");
-            colors["textDim"] = json!("rgba(255,255,255,0.85)");
-        }
+        let colors = if selected { &selected_colors } else { t.as_ref() };
         let mut name = text(item["name"].clone(), &colors);
         name["style"]["whiteSpace"] = json!("nowrap");
         name["style"]["overflow"] = json!("hidden");

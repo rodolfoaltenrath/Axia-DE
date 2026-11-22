@@ -502,3 +502,26 @@ fn retained_notes_regions_track_content_selection_query_and_presentation() {
     assert_ne!(app.note().unwrap().slug,slug);
     assert!(!app.reader_tree.tree("notes-reader").unwrap().to_string().contains("Replacement"));
 }
+
+#[test]
+fn native_appearance_invalidates_retained_sidebar_without_copying_the_plan() {
+    let home=Home::new();let mut app=app_at(&home);
+    app.command("new",&json!({}),1000);
+    let slug=app.note().unwrap().slug;
+    store::with(home.path(),|s|s.update(&slug,&json!({"body":"# Same note\nBody"}),true,1001));
+    app.mode="read".into();
+    let mut colors=(*app.theme).clone();colors["sidebarBg"]=json!("#13579b");
+    let first=std::rc::Rc::new(colors.clone());
+    app.set_native_appearance(first.clone());full_tree(&mut app,1002);
+    let before=app.sidebar_tree.tree("sidebar").unwrap().clone();
+    assert!(before.to_string().contains("#13579b"));
+    let revision=app.ui_revision;
+    app.set_native_appearance(first);full_tree(&mut app,1003);
+    assert_eq!(app.ui_revision,revision);assert_eq!(app.sidebar_tree.tree("sidebar"),Some(&before));
+    colors["sidebarBg"]=json!("#abcdef");let second=std::rc::Rc::new(colors);
+    app.set_native_appearance(second.clone());let tree=full_tree(&mut app,1004);
+    assert!(std::rc::Rc::ptr_eq(&app.theme,&second));
+    assert_ne!(app.sidebar_tree.tree("sidebar").unwrap()["revision"],before["revision"]);
+    assert!(tree.to_string().contains("#abcdef"));
+    assert!(!app.sidebar_tree.tree("sidebar").unwrap().to_string().contains("#13579b"));
+}

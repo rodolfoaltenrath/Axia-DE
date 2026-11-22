@@ -136,3 +136,17 @@ fn recording_blocks_mode_change_and_stop_waits_for_video_event() {
     assert!(a.rec_start.is_none());
     assert!(!a.stopping);
 }
+
+#[test]
+fn native_appearance_updates_selected_device_without_touching_capture_state() {
+    let mut a=app();let device=a.device.clone();let source=a.id;
+    let green=std::rc::Rc::new(json!({"mode":"light","accent":"#30d158"}));
+    a.set_native_appearance(green.clone());
+    let first=ui::tree(&a,1000).to_string();assert!(first.contains("#30d158"));
+    let purple=std::rc::Rc::new(json!({"mode":"dark","accent":"#bf5af2"}));
+    a.set_native_appearance(purple.clone());let next=ui::tree(&a,1001).to_string();
+    assert!(next.contains("#bf5af2"));assert!(!next.contains("#30d158"));
+    assert!(std::rc::Rc::ptr_eq(&a.theme,&purple));
+    assert_eq!(a.device,device);assert_eq!(a.id,source);
+    assert_eq!(green["accent"],"#30d158");
+}

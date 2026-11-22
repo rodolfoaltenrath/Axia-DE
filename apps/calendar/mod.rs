@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 pub struct App {
     state: state::State,
     i18n: I18n,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     region: String,
     hour: String,
     rtl: bool,
@@ -29,7 +29,7 @@ impl Default for App {
         Self {
             state: state::State::default(),
             i18n: I18n::default(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             region: String::new(),
             hour: String::new(),
             rtl: false,
@@ -46,6 +46,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
     }
@@ -196,7 +198,9 @@ impl App {
                 self.locale_revision = revision;
             }
             self.i18n.lang = v["lang"].as_str().unwrap_or("en").into();
-            self.theme = v["context"]["theme"].clone();
+            if v["context"]["theme"].is_object() {
+                self.theme = std::rc::Rc::new(v["context"]["theme"].clone());
+            }
             self.region = v["context"]["region"]
                 .as_str()
                 .unwrap_or(s(&preferences["region"]))

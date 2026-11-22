@@ -124,6 +124,23 @@ jobs:
         env:
           AXIA_NATIVE_APPEARANCE_OUTPUT: ${{ runner.temp }}/axia-native-appearance
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_appearance_runtime -- --ignored --nocapture
+      - name: Native appearance in migrated app views
+        if: matrix.gpu == 1
+        env:
+          AXIA_APPEARANCE_NOTES_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/notes
+          AXIA_APPEARANCE_CHARACTERS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/characters
+          AXIA_APPEARANCE_HELP_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/help
+          AXIA_APPEARANCE_BACKUP_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/backup
+          AXIA_APPEARANCE_CONTACTS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/contacts
+          AXIA_APPEARANCE_CALENDAR_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/calendar
+          AXIA_APPEARANCE_REMINDERS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/reminders
+          AXIA_APPEARANCE_RECORDER_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/recorder
+          AXIA_APPEARANCE_CAMERA_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/camera
+          AXIA_APPEARANCE_SCANNER_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/scanner
+          AXIA_APPEARANCE_LOGS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/logs
+          AXIA_APPEARANCE_FONTS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/fonts
+          AXIA_APPEARANCE_PHOTOS_OUTPUT: ${{ runner.temp }}/axia-native-appearance-apps/photos
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_appearance_apps_runtime -- --ignored --nocapture
       - name: Native locale ownership
         if: matrix.gpu == 1
         env:
@@ -327,6 +344,12 @@ jobs:
         with:
           name: axia-native-appearance
           path: ${{ runner.temp }}/axia-native-appearance
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-native-appearance-apps
+          path: ${{ runner.temp }}/axia-native-appearance-apps
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

@@ -41,7 +41,7 @@ pub struct App {
     booted: bool,
     epoch: u64,
     i18n: I18n,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     region: String,
     hour: String,
     rtl: bool,
@@ -80,7 +80,7 @@ impl Default for App {
             booted: false,
             epoch: 0,
             i18n: I18n::default(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             region: String::new(),
             hour: String::new(),
             rtl: false,
@@ -115,6 +115,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
     }
@@ -511,7 +513,9 @@ impl App {
                     self.last_tree = Value::Null;
                 }
                 self.i18n.lang = lang.into();
-                self.theme = v["context"]["theme"].clone();
+                if v["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(v["context"]["theme"].clone());
+                }
                 self.region = v["context"]["region"]
                     .as_str()
                     .unwrap_or(string(&preferences["region"]))

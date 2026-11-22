@@ -118,7 +118,7 @@ fn all_six_tour_steps_back_dots_skip_and_finish_are_rust_owned() {
 fn selection_theme_reading_width_and_empty_catalog_are_preserved() {
     let mut a = app();
     a.width = 640.;
-    a.theme["selection"] = json!("indicator");
+    std::rc::Rc::make_mut(&mut a.theme)["selection"] = json!("indicator");
     let tree = ui::tree(&mut a);
     let mut indicator = false;
     let mut column = false;

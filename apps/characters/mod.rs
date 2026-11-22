@@ -15,7 +15,7 @@ pub struct App {
     pub pick: String,
     pub recent: Vec<String>,
     pub hover: String,
-    pub theme: Value,
+    pub theme: std::rc::Rc<Value>,
     lang: String,
     initialized: bool,
     recent_facts: Value,
@@ -33,7 +33,7 @@ impl Default for App {
             pick: String::new(),
             recent: Vec::new(),
             hover: String::new(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             lang: "en".into(),
             initialized: false,
             recent_facts: Value::Null,
@@ -43,6 +43,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.index = None;
@@ -156,7 +158,9 @@ impl App {
         match cmd {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.lang = input["lang"].as_str().unwrap_or("en").into();
                 let recent = &preferences["emojiRecent"];
                 if recent.is_array() && *recent != self.recent_facts {

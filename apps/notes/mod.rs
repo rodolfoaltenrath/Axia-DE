@@ -42,7 +42,7 @@ struct Drag {
 pub struct App {
     home: String,
     i18n: I18n,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     width: f64,
     height: f64,
     screen: (f64, f64),
@@ -89,7 +89,7 @@ impl Default for App {
         Self {
             home: String::new(),
             i18n: I18n::default(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             width: 860.,
             height: 560.,
             screen: (1920., 1080.),
@@ -134,6 +134,13 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        if !std::rc::Rc::ptr_eq(&self.theme, &theme) {
+            self.theme = theme;
+            self.ui_revision = self.ui_revision.wrapping_add(1);
+        }
+    }
     fn retained_tree(&self, key: &str) -> Option<&Value> {
         self.sidebar_tree.tree(key).or_else(|| self.reader_tree.tree(key))
     }
@@ -791,7 +798,9 @@ impl App {
                     self.ui_revision = self.ui_revision.wrapping_add(1);
                 }
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.foreground = input["context"]["focused"].as_bool().unwrap_or(true);
                 self.region = preferences["region"].as_str().unwrap_or("").into();
                 self.width = input["context"]["width"].as_f64().unwrap_or(860.);

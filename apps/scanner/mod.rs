@@ -122,7 +122,7 @@ pub struct App {
     rtl: bool,
     width: f64,
     height: f64,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     last_tree: Value,
 }
 impl Default for App {
@@ -154,12 +154,14 @@ impl Default for App {
             rtl: false,
             width: 860.,
             height: 620.,
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             last_tree: Value::Null,
         }
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.home = home.unwrap_or("").trim_end_matches('/').into();
@@ -634,7 +636,9 @@ impl App {
         match cmd {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"]
                     .as_f64()
                     .filter(|n| n.is_finite())

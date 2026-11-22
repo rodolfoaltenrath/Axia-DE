@@ -189,7 +189,7 @@ pub struct App {
     notice_until: i64,
     i18n: I18n,
     home: String,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     width: f64,
     height: f64,
     drag_size: bool,
@@ -234,7 +234,7 @@ impl Default for App {
             notice_until: 0,
             i18n: I18n::default(),
             home: String::new(),
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             width: 960.,
             height: 620.,
             drag_size: false,
@@ -243,6 +243,15 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        let mode_changed = self.theme["mode"] != theme["mode"];
+        self.theme = theme;
+        if mode_changed {
+            self.sample_changed(crate::clock::now());
+            self.grid_changed();
+        }
+    }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.home = home.unwrap_or("").trim_end_matches('/').into();
@@ -812,7 +821,9 @@ impl App {
                 let old_cell = self.cell();
                 let mode = self.theme["mode"].clone();
                 let lang = self.i18n.lang.clone();
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"]
                     .as_f64()
                     .filter(|n| n.is_finite())

@@ -303,3 +303,28 @@ fn slider_clamps_and_grid_is_usable_at_minimum_window_width() {
         false
     );
 }
+
+#[test]
+fn native_mode_changes_retire_rasters_and_reject_old_completions() {
+    let mut a=app();
+    let light=std::rc::Rc::new(json!({"mode":"light","accent":"#0a84ff"}));
+    a.set_native_appearance(light.clone());
+    a.tab="sample".into();a.font=Some(json!({"path":"/home/test/a.ttf","index":0}));
+    a.samples[0]=Some(Image{id:43,w:200.,h:60.,present:vec![]});
+    a.grid=Some(Image{id:44,w:640.,h:640.,present:vec![true]});
+    let old_sample=a.render_epoch;let old_grid=a.grid_epoch;
+    let dark=std::rc::Rc::new(json!({"mode":"dark","accent":"#0a84ff"}));
+    a.set_native_appearance(dark.clone());
+    assert!(std::rc::Rc::ptr_eq(&a.theme,&dark));
+    assert!(a.samples.iter().all(Option::is_none));assert!(a.grid.is_none());
+    assert!(a.render_epoch>old_sample);assert!(a.grid_epoch>old_grid);assert!(a.sample_at.is_some());
+    complete(&mut a,Tag::Sample(old_sample,0),json!({"image":45,"w":200,"h":60}),100);
+    assert!(a.samples[0].is_none(),"a late light-mode image cannot replace the dark-mode sample");
+    let epochs=(a.render_epoch,a.grid_epoch);
+    a.set_native_appearance(dark);
+    let accent=std::rc::Rc::new(json!({"mode":"dark","accent":"#ff0000"}));
+    a.set_native_appearance(accent.clone());
+    assert_eq!((a.render_epoch,a.grid_epoch),epochs,"an accent change does not invalidate glyph ink");
+    assert!(std::rc::Rc::ptr_eq(&a.theme,&accent));
+    assert_eq!(light["mode"],"light");
+}

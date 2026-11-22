@@ -156,7 +156,7 @@ pub struct App {
     live_at: Option<i64>,
     width: f64,
     height: f64,
-    theme: Value,
+    theme: std::rc::Rc<Value>,
     i18n: I18n,
     home: PathBuf,
     region: String,
@@ -195,7 +195,7 @@ impl Default for App {
             live_at: None,
             width: 1040.,
             height: 640.,
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             i18n: I18n::default(),
             home: PathBuf::new(),
             region: String::new(),
@@ -204,6 +204,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
         self.home = PathBuf::from(home.unwrap_or(""));
@@ -674,7 +676,9 @@ impl App {
         match cmd {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"]
                     .as_f64()
                     .filter(|v| v.is_finite())
