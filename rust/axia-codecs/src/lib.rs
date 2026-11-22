@@ -19,13 +19,11 @@ mod thbrk;
 #[cfg(not(feature = "secure-memory"))]
 mod lanparse;
 #[cfg(not(feature = "secure-memory"))]
-mod mdns;
+pub mod mdns;
 #[cfg(not(feature = "secure-memory"))]
 mod lanaddr;
 #[cfg(not(feature = "secure-memory"))]
 mod rconnect;
-#[cfg(not(feature = "secure-memory"))]
-mod ipp;
 // Disks' SMART, System Information's SMBIOS and hwdata ids, and the Night Light math.
 #[cfg(not(feature = "secure-memory"))]
 mod smart;

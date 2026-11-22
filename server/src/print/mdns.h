@@ -2,7 +2,9 @@
  * Everywhere (driverless printing) printers (_ipp._tcp, _ipps._tcp) and eSCL scanners (_uscan._tcp, _uscans._tcp) on the
  * local network. It asks from an arbitrary port («legacy unicast»): it doesn't need 5353 nor
  * avahi, and it changes nothing on the network. Replies are validated as untrusted data.
- * The packet side (mdns_parse, mdns_collect, mdns_query, mdns_txt) is rust/axia-codecs/src/mdns.rs. */
+ * The packet side (mdns_parse, mdns_collect, mdns_query, mdns_txt) is rust/axia-codecs/src/mdns.rs; the
+ * printers' own lookup on the socket is rust/axia-print/src/browse.rs. This header is what the LAN
+ * helper (src/lan) reads the packets with. */
 #ifndef LORD_PRINT_MDNS_H
 #define LORD_PRINT_MDNS_H
 
@@ -18,10 +20,7 @@ typedef struct {
     char txt[1536];         /* "key=value\n…" */
 } MdnsSvc;
 
-/* Asks for the given types for ms milliseconds. Returns how many services it found. */
-int mdns_browse(const char *const *types, int ntypes, int ms, MdnsSvc *out, int max);
-
-/* --- pieces for the tests --- */
+/* --- the packet side --- */
 #define MDNS_MAX 256                /* records of each kind kept */
 enum { MDNS_T_A = 1, MDNS_T_PTR = 12, MDNS_T_TXT = 16, MDNS_T_SRV = 33 };
 typedef struct {

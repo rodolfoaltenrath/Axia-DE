@@ -36,6 +36,7 @@ members = [
     "axia-mail",
     "axia-native",
     "axia-netperm",
+    "axia-print",
     "axia-session",
     "axia-shell",
     "axia-state",

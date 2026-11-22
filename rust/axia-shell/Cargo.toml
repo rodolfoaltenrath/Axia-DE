@@ -8,6 +8,7 @@ description = "Axia desktop policies, embedded in the C compositor"
 [dependencies]
 axia-state = { path = "../axia-state" }
 axia-backup = { path = "../axia-backup" }
+axia-print = { path = "../axia-print" }
 axia-app-pdf = { path = "../axia-app-pdf" }
 axia-app-sysprobe = { path = "../axia-app-sysprobe" }
 axia-app-passwords = { path = "../axia-app-passwords" }

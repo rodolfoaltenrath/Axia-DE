@@ -728,3 +728,41 @@ Behavior that is deliberately not identical:
 - The service waits with the wall clock exactly as before (`pthread_cond_timedwait` on
   `CLOCK_REALTIME`, wrapped in `monitor.rs`), so a suspend does not delay the next backup.
 - Paths are not limited to `PATH_MAX`; the kernel still refuses names that are too long.
+
+## Printing and scanning (2026-11-22)
+
+`server/src/print/{print,cups,escl,phttp,mdns}.c` and the headers `cups.h`, `escl.h`, `phttp.h` and
+`ipp.h` are gone. The new crate `rust/axia-print` holds the IPP client for CUPS (`cups.rs`, with the
+IPP encoder and decoder moved from `axia-codecs/src/ipp.rs` into a safe `ipp.rs`), the minimal
+HTTP/1.1 client (`http.rs`), the eSCL scanner client (`escl.rs`), the mDNS lookup on the socket
+(`browse.rs`, over the packet side that stays in `axia-codecs/src/mdns.rs` because the LAN helper
+uses it) and the request threads (`tasks.rs`). `print.h` keeps the C ABI that `js_print.c` uses:
+`print_task`, `print_poll`, `print_pending`, `print_has_cups`, `print_set_connector` and the
+validators (`cups_valid_*`, `phttp_lan_ipv4`, `escl_valid_rs`). `mdns.h` stays for the LAN code.
+
+The printers' sockets still come from their own connector process: `js_print_register` hands
+`netconn_socket` to `print_set_connector`, so the crate has no link dependency on the server and its
+tests make the sockets directly.
+
+Validation:
+
+- `cargo test -p axia-print`: the IPP round trip, truncation at every byte and 20,000 mutations;
+  the HTTP client against a fake server (Content-Length, chunked, until close, `100 Continue`, the
+  size cap, a non-HTTP reply, the deadline); the CUPS client against a fake CUPS on a unix socket
+  (printer and job lists, a 3 MB print with every option, the administration operations, the PeerCred
+  retry and every refusal); the eSCL client against a fake scanner (capabilities, a whole scan that
+  waits while busy, defaults for invalid settings, failures); the tasks through the C ABI.
+- The C tests that covered this module (`build/ipp-test`) were ported; nothing of them is left in C.
+- A temporary differential harness linked the original C (`cups.c`, `escl.c`, `phttp.c`, symbols
+  renamed) beside the crate. It was not committed. 200,000 random strings agree for page ranges,
+  names, URIs, texts, resource paths and LAN addresses; 4,000 random XML documents give the same
+  `ScannerCapabilities` JSON or error; 3,000 random scan settings give the same error and, when the
+  request is sent, the same POST body.
+
+Behavior that is deliberately not identical:
+
+- Object keys in the JSON that JS receives are in another order (JS does not depend on it).
+- A request's JSON arguments with duplicate keys are accepted (the last one wins); the C parser
+  rejected them. Arguments come from `js_print.c`, which builds them itself.
+- Reading `HOME` for the scan folder and the thread's signal mask are as before; the worker stack is
+  1 MiB instead of 512 KiB.

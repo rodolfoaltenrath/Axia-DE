@@ -380,6 +380,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-print"
+version = "0.1.0"
+dependencies = [
+ "axia-codecs",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-session"
 version = "0.1.0"
 dependencies = [
@@ -422,6 +431,7 @@ dependencies = [
  "axia-clock",
  "axia-codecs",
  "axia-native",
+ "axia-print",
  "axia-state",
  "image",
  "libc",

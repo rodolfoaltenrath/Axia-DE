@@ -141,7 +141,6 @@ EOF
     run "sign-test" build/sign-test
     run "canvas-test" build/canvas-test
     run "arcpath-test" build/arcpath-test
-    run "ipp-test" build/ipp-test
     run "tp-test" build/tp-test
     run "fan-test" build/fan-test
     # the Dock's pinned-list model (sdk/dockmodel.js)

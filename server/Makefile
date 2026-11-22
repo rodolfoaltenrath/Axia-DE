@@ -95,10 +95,9 @@ SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c 
        src/net/nl.c src/net/state.c \
        src/pkg/crypto.c src/ui/js_sec.c \
        $(SEC_SRC) $(APP_SRC) $(MON_SRC) $(MEDIA_SRC)
-# Documents and printing (M9): axia-doc helper sessions and our own IPP/mDNS/eSCL client
-# (src/doc, src/print; see docs/DOCUMENTS.md and docs/PRINTING.md). No Poppler or libarchive here.
-DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/print/phttp.c src/print/mdns.c src/print/cups.c \
-           src/print/escl.c src/print/print.c src/ui/js_print.c
+# Documents and printing (M9): axia-doc helper sessions (src/doc) and lord.print (src/ui/js_print.c over
+# rust/axia-print: our own IPP/mDNS/eSCL client; see docs/DOCUMENTS.md and docs/PRINTING.md). No Poppler or libarchive here.
+DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/ui/js_print.c
 SRC += $(DOC_SRC)
 # Per-app firewall (src/fw, docs/FIREWALL.md): rules, decision and names learned from DNS
 FW_SRC := src/fw/rules_json.c src/fw/fwmap.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
@@ -125,6 +124,7 @@ SRC += $(LOGS_SRC)
 HDR += $(wildcard src/logs/*.h)
 # Backups (docs/SYSTEM.md): hard-linked snapshots in a low-priority thread
 # The engine, the encryption and the service thread are Rust (rust/axia-backup); backup.h is its C ABI.
+# Printing (IPP to CUPS, eSCL, mDNS lookup and the request threads) is Rust too (rust/axia-print); print.h is its C ABI.
 BACKUP_SRC := src/ui/js_backup.c
 SRC += $(BACKUP_SRC)
 HDR += $(wildcard src/backup/*.h)
@@ -350,7 +350,7 @@ all: $(ALL)
 # every prerequisite of `test` is done, tests/run_suites.sh runs them (a few seconds) and fails if any
 # fails; a suite whose tool or data isn't installed says "skipped: needs X". `make test-full` adds the
 # helpers (axia-media, axia-doc), the sandbox (Landlock kernel) and the HarfBuzz comparison.
-test: build/vt-dump build/shape-test build/bidi-test build/ime-test build/thbrk-test build/sound-test build/wasm-test build/wasm-js-test build/fsops-test build/sign-test build/canvas-test build/arcpath-test build/ipp-test build/tp-test build/media-test
+test: build/vt-dump build/shape-test build/bidi-test build/ime-test build/thbrk-test build/sound-test build/wasm-test build/wasm-js-test build/fsops-test build/sign-test build/canvas-test build/arcpath-test build/tp-test build/media-test
 	@sh tests/run_suites.sh
 test-full: test build/sandbox-test build/doc-test $(filter build/axia-media build/axia-doc,$(ALL))
 	@sh tests/run_suites.sh full
@@ -500,6 +500,7 @@ build/dnsmap-test: tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/se
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # Backup engine, encryption and service: tests are in rust/axia-backup/tests/.
+# Printing and scanning (IPP, HTTP, CUPS, eSCL, tasks): tests are in rust/axia-print/ (src and tests/).
 # Monitor collection, rendering and regression tests are in apps/monitor/*.rs.
 # Keep the migrated regression suite in the standard test entry point.
 test: test-rust
@@ -722,7 +723,6 @@ build/axia-doc: $(LD_SRC) $(CODEC_LIB) $(wildcard src/doc/*.h) src/sec/sandbox.h
 build/arcpath-test: tests/arcpath_test.c src/doc/arcpath.c src/doc/arcpath.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/arcpath_test.c src/doc/arcpath.c
-# IPP encoder/decoder, mDNS and page ranges (tests/ipp_test.c)
 # (0.8.5) the components' network connectors (src/sec/netconn.c) and what they need, for the tests
 NETCONN_SRC := src/sec/netconn.c src/sec/cgroup.c src/fw/rules_json.c src/fw/fwmap.c
 # the connectors: requests, sockets, the real connector process and its fail-closed start
@@ -731,9 +731,6 @@ build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c src/sec/n
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c -lpthread $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/ipp-test: tests/ipp_test.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(wildcard src/print/*.h) $(CODEC_LIB)
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/ipp_test.c src/print/mdns.c src/print/cups.c src/print/phttp.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # axia-doc end to end: malicious archives, PDF and the lockdown (needs build/axia-doc)
 build/doc-test: tests/doc_test.c src/doc/wire.c src/sec/json.c $(wildcard src/doc/*.h)
 	@mkdir -p build

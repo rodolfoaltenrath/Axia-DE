@@ -328,7 +328,7 @@ The measurements show up in the session log:
 ## Tests
 
 ```sh
-make -C server test        # includes build/arcpath-test, build/ipp-test and build/doc-test
+make -C server test        # includes build/arcpath-test and build/doc-test (`cargo test -p axia-print` covers printing)
 server/build/arcpath-test  # 37/37: names and link targets
 sh tests/doc_evil.sh       # 31/31 (in server/): malicious archives, formats, confinement and annotated copy
 server/build/doc-test server/build/axia-doc pdf file.pdf 900   # open, draw and measure

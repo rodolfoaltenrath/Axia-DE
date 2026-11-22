@@ -15,9 +15,7 @@
 #include "js_print.h"
 #include "js_err.h"
 #include "../print/print.h"
-#include "../print/cups.h"
-#include "../print/escl.h"
-#include "../print/phttp.h"
+#include "../sec/netconn.h"
 #include "../doc/doc.h"
 #include "../doc/wire.h"
 #include "../sec/json.h"
@@ -191,7 +189,7 @@ static JSValue f_pending(JSContext *c, JSValueConst t, int argc, JSValueConst *a
 
 static JSValue f_cups(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     (void)t; (void)argc; (void)argv;
-    return JS_NewBool(c, access(cups_socket, F_OK) == 0);
+    return JS_NewBool(c, print_has_cups());
 }
 
 static const JSCFunctionListEntry print_funcs[] = {
@@ -211,6 +209,7 @@ static const JSCFunctionListEntry print_funcs[] = {
 };
 
 void js_print_register(JSContext *c, JSValue lord) {
+    print_set_connector(netconn_socket);   /* the printers' sockets come from their own connector */
     JSValue o = JS_NewObject(c);
     JS_SetPropertyFunctionList(c, o, print_funcs, sizeof print_funcs / sizeof print_funcs[0]);
     JS_SetPropertyStr(c, lord, "print", o);

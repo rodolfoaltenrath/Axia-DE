@@ -1,7 +1,8 @@
 //! DNS-SD over mDNS (RFC 6762/6763), the packet side: reading replies into the
 //! cache, building queries, turning the cache into services and reading TXT keys.
-//! Replies are untrusted. C ABI of server/src/print/mdns.h; the socket loop
-//! (mdns_browse) stays in server/src/print/mdns.c.
+//! Replies are untrusted. C ABI of server/src/print/mdns.h (used by the LAN helper); the
+//! socket loop of the printers' discovery (mdns_browse) is Rust too: rust/axia-print/src/browse.rs,
+//! which reads the cache through the safe accessors below.
 use std::ffi::{c_char, c_int, CStr};
 use std::slice;
 
@@ -324,6 +325,83 @@ pub fn txt<'a>(txt: &'a [u8], key: &[u8]) -> &'a [u8] {
         }
     }
     &[]
+}
+
+impl MdnsSvc {
+    /// An empty service (all bytes zero).
+    pub fn zeroed() -> Self {
+        // SAFETY: only integers and byte arrays, zero is valid.
+        unsafe { std::mem::zeroed() }
+    }
+    /// "_ipp._tcp" …
+    pub fn kind(&self) -> &[u8] {
+        cs(&self.ty)
+    }
+    /// The instance name ("Office (HP)").
+    pub fn name(&self) -> &[u8] {
+        cs(&self.name)
+    }
+    /// "printer.local".
+    pub fn host(&self) -> &[u8] {
+        cs(&self.host)
+    }
+    /// The IPv4 address as text, empty if none was announced.
+    pub fn addr(&self) -> &[u8] {
+        cs(&self.addr)
+    }
+    pub fn port(&self) -> i32 {
+        self.port
+    }
+    /// The value of a TXT key (empty if it's not there).
+    pub fn txt_value(&self, key: &[u8]) -> &[u8] {
+        txt(&self.txt, key)
+    }
+}
+
+impl MdnsCache {
+    /// An empty cache, on the heap (it is large).
+    pub fn empty() -> Box<MdnsCache> {
+        // SAFETY: only integers and byte arrays, zero is valid.
+        unsafe { Box::new_zeroed().assume_init() }
+    }
+
+    /// Halfway through a browse, what is still missing is asked one by one: the SRV and TXT of each
+    /// announced instance that has none, and the address of each host with no A record
+    /// (at most 14 questions: one packet).
+    pub fn followups(&self) -> Vec<(Vec<u8>, i32)> {
+        const MAX: usize = 14;
+        let (nptr, nsrv, ntxt, na) = (
+            (self.nptr.max(0) as usize).min(MDNS_MAX),
+            (self.nsrv.max(0) as usize).min(MDNS_MAX),
+            (self.ntxt.max(0) as usize).min(MDNS_MAX),
+            (self.na.max(0) as usize).min(MDNS_MAX),
+        );
+        let mut q: Vec<(Vec<u8>, i32)> = Vec::new();
+        for p in &self.ptr[..nptr] {
+            if q.len() >= MAX {
+                break;
+            }
+            let target = cs(&p.target);
+            let mut has = false;
+            for r in &self.srv[..nsrv] {
+                if caseeq(cs(&r.name), target) {
+                    has = true;
+                    let host = cs(&r.host);
+                    if !self.a[..na].iter().any(|a| caseeq(cs(&a.host), host)) && q.len() < MAX {
+                        q.push((host.to_vec(), T_A as i32));
+                    }
+                }
+            }
+            let has_txt = self.txt[..ntxt].iter().any(|t| caseeq(cs(&t.name), target));
+            if !has && q.len() < MAX {
+                q.push((target.to_vec(), T_SRV as i32));
+            }
+            if !has_txt && q.len() < MAX {
+                q.push((target.to_vec(), T_TXT as i32));
+            }
+        }
+        q
+    }
 }
 
 unsafe fn cstr<'a>(p: *const c_char) -> &'a [u8] {

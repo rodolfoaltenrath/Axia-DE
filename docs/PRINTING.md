@@ -23,12 +23,14 @@ apps (PDF Viewer, Editor, Notes, Photos…)
   └── print.open(...)        sdk/print.js + sdk/printdialog.jsx  (system dialog)
         ├── preview          axia-doc (built PDF or the app's PDF), see DOCUMENTS.md
         └── lord.print.submit(printer, blob | path, options)
-              └── server/src/print  (axia-server threads, never the compositor)
-                    ├── ipp.h     our own IPP/1.1 encoder/decoder (rust/axia-codecs/src/ipp.rs)
-                    ├── phttp.c   minimal HTTP/1.1 (CUPS unix socket, TCP to the LAN)
-                    ├── cups.c    operations: printers, queue, print, cancel, add…
-                    ├── mdns.c    DNS-SD over mDNS (legacy unicast; packets: rust/axia-codecs/src/mdns.rs)
-                    └── escl.c    eSCL scanners
+              └── rust/axia-print  (axia-server threads, never the compositor; C ABI: server/src/print/print.h)
+                    ├── ipp.rs      our own IPP/1.1 encoder/decoder
+                    ├── http.rs     minimal HTTP/1.1 (CUPS unix socket, TCP to the LAN)
+                    ├── cups.rs     operations: printers, queue, print, cancel, add…
+                    ├── browse.rs   DNS-SD over mDNS (legacy unicast; packets: rust/axia-codecs/src/mdns.rs)
+                    ├── discover.rs what the lookup found, as the JSON JS reads
+                    ├── escl.rs     eSCL scanners
+                    └── tasks.rs    one thread per request, results read with poll()
 CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
 ```
 
@@ -52,9 +54,9 @@ CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
   CUPS-Delete-Printer and CUPS-Set-Default). libcups would also bring its DNS-SD (avahi-client),
   GnuTLS and PPD management, which aren't used.
 - **What it reads is tested:** the decoder validates every length, nests collections up to 8
-  levels and has caps on attributes and values. `build/ipp-test` tests it with messages truncated
+  levels and has caps on attributes and values. `cargo test -p axia-print` tests it with messages truncated
   at every byte and 20,000 random mutations.
-- **The cost is small:** ~920 lines of our own (`ipp.rs`, `phttp.c` and `cups.c`).
+- **The cost is small:** a few hundred lines of our own (`ipp.rs`, `http.rs` and `cups.rs`).
 
 ### Managing printers: CUPS policy, without admin.c
 
@@ -87,7 +89,7 @@ CUPS (/run/cups/cups.sock) → Debian filters and drivers → the printer
 
 ### Finding printers and scanners (mDNS)
 
-`server/src/print/mdns.c` (the socket loop) and `rust/axia-codecs/src/mdns.rs` (reading the
+`rust/axia-print/src/browse.rs` (the socket loop) and `rust/axia-codecs/src/mdns.rs` (reading the
 replies, building the queries), our own:
 
 - **It asks** for `_ipp._tcp`, `_ipps._tcp`, `_uscan._tcp` and `_uscans._tcp` at 224.0.0.251:5353
@@ -98,8 +100,8 @@ replies, building the queries), our own:
 - **To add** it uses `ipp://<IPv4>:<port>/<rp>`. If the same printer is announced over ipp and
   ipps, it's shown once.
 - **What arrives** is read as untrusted data: compression pointers with a jump cap, verified
-  lengths and no control characters. There are tests in `ipp-test`: a hand-built packet, truncated
-  at every byte and with a pointer loop.
+  lengths and no control characters. There are tests in `axia-codecs` (`mdns.rs`) and `axia-print`: hand-built
+  packets, truncated at every byte and with a pointer loop.
 
 **Their own firewall app** (0.8.5): the IPP and eSCL connections to network printers and scanners,
 and the mDNS discovery socket, are made by the printers' connector (`axia-server --net-connector
@@ -109,7 +111,7 @@ CUPS socket is a Unix socket and isn't affected.
 
 ### Scanner (eSCL, `apps/scanner`)
 
-`server/src/print/escl.c` + the **Scanner** app (opened from Settings or from the app launcher):
+`rust/axia-print/src/escl.rs` + the **Scanner** app (opened from Settings or from the app launcher):
 
 - **Capabilities** (`GET /eSCL/ScannerCapabilities`): model, flatbed or feeder, maximum size,
   resolutions, color modes and formats. The XML is read with our own bounded tag finder, without
@@ -211,12 +213,20 @@ Results:
 - a 123×93 mm area saved as a 349×265 pt **PDF**, the real size;
 - the same area at 150 dpi as a 728×551 **JPEG** (converted in axia-doc).
 
-**Headless tests:** `build/ipp-test`, 40/40:
-- the IPP encoder and decoder, round trip;
-- a response with two printers, multiple values, a collection and `textWithLanguage`;
-- truncated and mutated messages, impossible lengths and over-nested collections;
-- mDNS with compression and loops;
-- page ranges, names and URIs.
+**Headless tests:** `cargo test -p axia-print` (`make -C server test-rust` runs it with the rest):
+- the IPP encoder and decoder, round trip; a response with two printers, multiple values, a
+  collection and `textWithLanguage`; messages truncated at every byte, 20,000 random mutations,
+  impossible lengths and over-nested collections;
+- the HTTP client against a fake server: Content-Length, chunked, until the connection closes,
+  `100 Continue`, a reply over the cap, one that is not HTTP and one that never answers;
+- the CUPS client against a fake CUPS on a unix socket: the attributes it asks for, both printer
+  lists, jobs, printing a 3 MB PDF with every option, the administration operations, the PeerCred
+  retry and every way CUPS can refuse;
+- the eSCL client against a fake scanner on 127.0.0.1: capabilities, a whole scan that waits while
+  the scanner is busy, the defaults for invalid settings and the replies it must not trust;
+- the tasks through the same C ABI js_print.c uses: eight at once, polling, bad arguments, the
+  PDF descriptor that the task closes;
+- mDNS answers turned into the JSON of `discover()`; page ranges, names and URIs.
 
 ## Pending
 

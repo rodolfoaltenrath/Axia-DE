@@ -4,6 +4,7 @@ mod anim;
 #[cfg(test)]
 use axia_clock as clock;
 use axia_backup as _; // the C ABI of server/src/backup/backup.h lives in its crate
+use axia_print as _; // the C ABI of server/src/print/print.h lives in its crate
 use axia_app_help as help;
 use axia_app_clock as clock_app;
 use axia_app_characters as characters;
