@@ -1,5 +1,6 @@
 //! Native consumer compatibility. All test code is Rust; the shared library
-//! contains the actual vault/backup consumers, not a copied format implementation.
+//! contains the actual vault consumers, not a copied format implementation. The backup format
+//! is Rust now: `axia-backup` reads the same recorded `legacy.lbk` in its own tests.
 use std::{
     ffi::{c_char, c_void, CStr, CString},
     fs::File,
@@ -74,13 +75,6 @@ struct AttOut {
     off: u64,
     len: u64,
 }
-type Stream = unsafe extern "C" fn(
-    i32,
-    i32,
-    *const u8,
-    Option<unsafe extern "C" fn(*mut c_void, usize) -> i32>,
-    *mut c_void,
-) -> i32;
 struct Api {
     handle: *mut c_void,
     new: unsafe extern "C" fn(*mut Header),
@@ -135,9 +129,6 @@ struct Api {
         *const u8,
         *mut u8,
     ) -> i32,
-    derive: unsafe extern "C" fn(*const c_char, *const u8, *mut u8) -> i32,
-    encrypt: Stream,
-    decrypt: Stream,
 }
 impl Drop for Api {
     fn drop(&mut self) {
@@ -241,12 +232,6 @@ impl Api {
                     *mut u8,
                 ) -> i32
             ),
-            derive: sym!(
-                "bkc_derive",
-                unsafe extern "C" fn(*const c_char, *const u8, *mut u8) -> i32
-            ),
-            encrypt: sym!("bkc_encrypt_fd", Stream),
-            decrypt: sym!("bkc_decrypt_fd", Stream),
         }
     }
 }
@@ -255,7 +240,6 @@ const BODY: &[u8] =
     br#"{"entries":[{"name":"compatibility fixture","password":"public test only"}]}"#;
 const ATTACHMENT: &[u8] = b"legacy attachment with known test content";
 const KEY: [u8; 32] = [0x42; 32];
-const SALT: [u8; 16] = [0x33; 16];
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
@@ -266,9 +250,6 @@ fn library() -> Api {
                 .expect("build the native format library with make test-crypto-native"),
         ))
     }
-}
-fn backup_content() -> Vec<u8> {
-    (0..65537).map(|i| (i % 251) as u8).collect()
 }
 unsafe fn write_vault(api: &Api, path: &Path) {
     let mut h: Header = std::mem::zeroed();
@@ -408,47 +389,6 @@ unsafe fn read_vault(api: &Api, path: &Path) {
     assert_eq!(plain, ATTACHMENT);
     (api.free_header)(&mut h);
 }
-unsafe fn write_backup(api: &Api, path: &Path, plain_path: &Path) {
-    let content = backup_content();
-    std::fs::write(plain_path, &content).unwrap();
-    let input = File::open(plain_path).unwrap();
-    let out = File::create(path).unwrap();
-    let mut key = [0; 32];
-    assert_eq!(
-        (api.derive)(PASSWORD.as_ptr(), SALT.as_ptr(), key.as_mut_ptr()),
-        0
-    );
-    assert_eq!(
-        (api.encrypt)(
-            input.as_raw_fd(),
-            out.as_raw_fd(),
-            key.as_ptr(),
-            None,
-            ptr::null_mut()
-        ),
-        0
-    );
-}
-unsafe fn read_backup(api: &Api, path: &Path, out_path: &Path) {
-    let mut key = [0; 32];
-    assert_eq!(
-        (api.derive)(PASSWORD.as_ptr(), SALT.as_ptr(), key.as_mut_ptr()),
-        0
-    );
-    let input = File::open(path).unwrap();
-    let out = File::create(out_path).unwrap();
-    assert_eq!(
-        (api.decrypt)(
-            input.as_raw_fd(),
-            out.as_raw_fd(),
-            key.as_ptr(),
-            None,
-            ptr::null_mut()
-        ),
-        0
-    );
-    assert_eq!(std::fs::read(out_path).unwrap(), backup_content());
-}
 #[test]
 #[ignore = "explicit generation using the old backend only"]
 fn record_legacy_files() {
@@ -458,24 +398,15 @@ fn record_legacy_files() {
     unsafe {
         write_vault(&api, &folder.join("legacy.lvault"));
         read_vault(&api, &folder.join("legacy.lvault"));
-        write_backup(
-            &api,
-            &folder.join("legacy.lbk"),
-            &folder.join("temporary-plain.bin"),
-        );
     }
-    std::fs::remove_file(folder.join("temporary-plain.bin")).unwrap();
 }
 #[test]
 #[ignore = "requires actual native format consumers: make test-crypto-native"]
-fn existing_vault_backup_slots_and_attachment() {
+fn existing_vault_slots_and_attachment() {
     let api = library();
-    let temp = std::env::temp_dir().join(format!("axia-crypto-existing-{}", std::process::id()));
     unsafe {
         read_vault(&api, &fixtures().join("legacy.lvault"));
-        read_backup(&api, &fixtures().join("legacy.lbk"), &temp);
     }
-    std::fs::remove_file(temp).unwrap();
 }
 #[test]
 #[ignore = "requires both native backends for a bidirectional migration check"]
@@ -489,8 +420,6 @@ fn old_backend_reads_new_files() {
     unsafe {
         write_vault(&api, &temp.join("new.lvault"));
         read_vault(&old, &temp.join("new.lvault"));
-        write_backup(&api, &temp.join("new.lbk"), &temp.join("plain"));
-        read_backup(&old, &temp.join("new.lbk"), &temp.join("decoded"));
     }
     std::fs::remove_dir_all(temp).unwrap();
 }

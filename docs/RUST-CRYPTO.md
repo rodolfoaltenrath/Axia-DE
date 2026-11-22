@@ -46,7 +46,8 @@ allocator with a second standalone Rust archive.
 
 ```sh
 make -C server test-crypto test-crypto-native
-make -C server build/vault-test build/import-test build/backup-test build/softfido
+make -C server build/vault-test build/import-test build/softfido
+cargo test -p axia-backup   # the backup format, including the recorded legacy.lbk
 ```
 
 The Rust suite retains data-only vectors from Monocypher 4.0.2 (official and

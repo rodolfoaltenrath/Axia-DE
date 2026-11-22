@@ -1,4 +1,4 @@
-/* js_backup.c — lord.backup: Backups (see backup/backup.c and docs/SYSTEM.md).
+/* js_backup.c — lord.backup: Backups (see backup/backup.h, rust/axia-backup and docs/SYSTEM.md).
  *
  *   status()                         status (also pushed by itself: __lordBackup(status))
  *   config() / configure(obj)        { dest, interval: 'hourly'|'daily'|'weekly'|'manual',

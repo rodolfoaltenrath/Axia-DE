@@ -2260,7 +2260,7 @@ int main(int argc, char **argv) {
     else if (ok && !s.greeter && session_user) xwl_init();
     publish_displays(&s);                   /* one wl_output per display */
     if (ok && net_open()) fprintf(stderr, "axia-server: no network notifications (rtnetlink)\n");
-    /* Backups: a thread running as the user, nice 19 and idle I/O (backup/backup.c) */
+    /* Backups: a thread running as the user, nice 19 and idle I/O (rust/axia-backup) */
     if (ok && !s.greeter && getenv("HOME") && session_user) backup_start(getenv("HOME"), session_user);
     if (ok && snd_start()) fprintf(stderr, "axia-server: no PipeWire for now (sound); it retries on its own\n");
     if (ok && !s.greeter) portal_start();   /* dark mode, accent and buttons for GTK/GNOME/Qt (ui/portal.c) */

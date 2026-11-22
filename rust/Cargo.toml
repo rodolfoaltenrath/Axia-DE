@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "axia-app-about",
+    "axia-backup",
     "axia-app-appabout",
     "axia-app-backup",
     "axia-app-calculator",

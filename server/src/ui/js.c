@@ -889,7 +889,7 @@ void js_sound_event(const char *type, const char *json) {
     drain_jobs();
 }
 
-/* Backups (backup/backup.c): the status changed → __lordBackup(status). */
+/* Backups (rust/axia-backup): the status changed → __lordBackup(status). */
 void js_backup_event(const char *json) {
     if (!ctx) return;
     JSValueConst arg = JS_ParseJSON(ctx, json, strlen(json), "<backup>");

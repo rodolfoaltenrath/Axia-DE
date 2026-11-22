@@ -1,0 +1,12 @@
+[package]
+name = "axia-backup"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Hard-linked backup snapshots, optional encryption and the session's backup service"
+
+[dependencies]
+axia-crypto = { path = "../axia-crypto" }
+axia-fs = { path = "../axia-fs" }
+libc = "0.2"
+serde_json = "1"

@@ -687,3 +687,44 @@ No push or GitHub Actions build has been requested or run.
 **User-requested checkpoint:** finish this XWayland lifecycle batch and pause
 further migration. No next module was started. The complete migration remains
 unfinished; any later resumption continues from this worktree.
+
+## Backups (2026-11-22)
+
+| Removed implementation | Rust replacement | C ABI kept |
+| --- | --- | --- |
+| `server/src/backup/engine.c` (snapshots, hard links, retention, pruning, restore) | `rust/axia-backup/src/engine.rs` | none: only the service used it |
+| `server/src/backup/crypt.c` (LBK1 encryption, Argon2id key, key check) | `rust/axia-backup/src/crypt.rs` | none: the format test now reads the recorded fixture in Rust |
+| `server/src/backup/backup.c` (scheduler thread, states, JSON) | `rust/axia-backup/src/service.rs` and `ffi.rs` | `server/src/backup/backup.h` (`backup_*`, used by `main.c` and `js_backup.c`) |
+| `server/tests/backup_test.c` (220 checks) | `rust/axia-backup/tests/engine.rs` and `service.rs` | |
+
+It is a new crate, not part of `axia-shell`: it uses `axia-crypto` and `axia-fs` (the folder
+policy) directly and `axia-shell` links it so its symbols reach `libaxia_shell.a`.
+
+Validation:
+
+- The ported C test cases and new ones pass (`cargo test -p axia-backup`): retention, names,
+  encryption (sizes, round trips, a tampered byte, missing chunks, the wrong key, the recorded
+  `legacy.lbk` written by the C code), an encrypted snapshot with hard links, an interrupted
+  run that resumes, restore and every refusal, and the service end to end (configuration,
+  a manual backup, listing, restore, deletion, the locked/unlocked destination, status JSON).
+- A temporary differential harness linked the original C engine and encryption (symbols
+  renamed) beside the Rust crate. It was not committed. Retention (20,000 random lists with
+  random time zones), snapshot names, relative-path validation, encrypted sizes (100,000
+  values) and key derivation agree with the C; files encrypted by either side decrypt on the
+  other, and 8 random corruptions and 6 truncations per size are rejected with the same result.
+  241 random trees (symlinks, fifos, `.bkpart~` names, odd modes and times, exclusions, files
+  that changed, an interrupted run that is resumed, plain and encrypted) produced the same
+  result code, counters, snapshot tree (mode, size, nanosecond times, link targets, content)
+  and hard-link groups in both implementations.
+
+Behavior that is deliberately not identical:
+
+- The old restore job released the mutex and then, with a locked encrypted destination, changed
+  the state and returned without taking it again, which left the thread loop running unlocked.
+  The check now happens before the mutex is released.
+- When two `.resume-*` folders are left over and no run was in progress, the newest name is
+  kept (the C kept whichever `readdir` returned first).
+- JSON with duplicate keys: the last one wins (the C parser used the first).
+- The service waits with the wall clock exactly as before (`pthread_cond_timedwait` on
+  `CLOCK_REALTIME`, wrapped in `monitor.rs`), so a suspend does not delay the next backup.
+- Paths are not limited to `PATH_MAX`; the kernel still refuses names that are too long.

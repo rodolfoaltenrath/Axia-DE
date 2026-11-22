@@ -364,7 +364,7 @@ home folder needs no root, so no new action was added to `admin.c`.
 └── encryption.json           only if the destination is encrypted: salt and key check
 ```
 
-- **Hard-linked snapshots** (`server/src/backup/engine.c`): a file with the same size,
+- **Hard-linked snapshots** (`rust/axia-backup/src/engine.rs`): a file with the same size,
   modification time and mode as in the previous snapshot is hard-linked (`link`); otherwise it is
   copied (`copy_file_range`, or `read`/`write` across filesystems). Every snapshot looks complete
   (it can be opened in Files) but only takes the space of what changed. On FAT/exFAT (no hard
@@ -412,13 +412,13 @@ In the **Backups** tab: snapshots by day, the tree of each one (with real sizes)
   `settings.json`, `permisos.json`, `backup.json`, and also `firewall.json`, the blocklists, the
   Mail accounts and cache and the Passwords vaults, the whole list in `rust/axia-fs/src/policy.rs`). A `.desktop` file planted in a backup is not
   restored, not even through a link in the home folder that points to a protected folder.
-- **No escapes through the backup:** the requested path is validated (`bk_rel_valid`) and its
+- **No escapes through the backup:** the requested path is validated (`engine::rel_valid`) and its
   resolved folder must stay inside the snapshot.
 - **Restore All** brings the home folder back as it was that day; whatever changed since then is
   kept alongside (or replaced). Newer files are not deleted.
 - "Open in Files" shows the snapshot in Files (it is a regular folder).
 
-### Scheduling, priority and battery (`server/src/backup/backup.c`)
+### Scheduling, priority and battery (`rust/axia-backup/src/service.rs`)
 
 - **A `axia-server` thread**, not a separate process, so no new way to run programs is added. The
   thread sets **nice 19** (`setpriority` on its own tid) and **idle I/O** (`ioprio_set`, class 3)
@@ -448,7 +448,7 @@ In the **Backups** tab: snapshots by day, the tree of each one (with real sizes)
 ### Encryption (optional)
 
 With RustCrypto primitives in `rust/axia-crypto`, shared with Passwords through
-`server/src/backup/crypt.c` (compatibility details in `RUST-CRYPTO.md`):
+`rust/axia-backup/src/crypt.rs` (compatibility details in `RUST-CRYPTO.md`):
 
 - **Per file:** `LBK1` + a 24-byte nonce + 64 KiB chunks of XChaCha20-Poly1305. Each chunk's nonce
   carries its number and the associated data says whether it is the last one: chunks cannot be
@@ -483,8 +483,8 @@ With RustCrypto primitives in `rust/axia-crypto`, shared with Passwords through
 
 ### Tests and measurements
 
-`make -C server test` → `build/backup-test` (`server/tests/backup_test.c`), **220 checks**:
-snapshot, exclusions, fifo, symlinks stored as links, the destination inside the home folder, hard
+`cargo test -p axia-backup` (`rust/axia-backup/tests/`: the engine and the encryption in `engine.rs`,
+the service thread in `service.rs`) covers: snapshot, exclusions, fifo, symlinks stored as links, the destination inside the home folder, hard
 links (same inode), a run interrupted in the middle of a 40 MB file and resumed (already copied
 files are linked, no leftovers), restore (keep both, numbering, replace, creating folders, a
 planted `.desktop`, `settings.json`, escapes through a link in the backup and in the home folder,

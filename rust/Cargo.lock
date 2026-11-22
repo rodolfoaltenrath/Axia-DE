@@ -288,6 +288,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-backup"
+version = "0.1.0"
+dependencies = [
+ "axia-crypto",
+ "axia-fs",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-bench"
 version = "0.1.0"
 dependencies = [
@@ -408,6 +418,7 @@ dependencies = [
  "axia-app-sysinfo",
  "axia-app-sysprobe",
  "axia-app-terminal",
+ "axia-backup",
  "axia-clock",
  "axia-codecs",
  "axia-native",

@@ -124,7 +124,8 @@ LOGS_SRC := src/ui/js_logs.c
 SRC += $(LOGS_SRC)
 HDR += $(wildcard src/logs/*.h)
 # Backups (docs/SYSTEM.md): hard-linked snapshots in a low-priority thread
-BACKUP_SRC := src/backup/engine.c src/backup/crypt.c src/backup/backup.c src/ui/js_backup.c
+# The engine, the encryption and the service thread are Rust (rust/axia-backup); backup.h is its C ABI.
+BACKUP_SRC := src/ui/js_backup.c
 SRC += $(BACKUP_SRC)
 HDR += $(wildcard src/backup/*.h)
 # Backup encryption uses allocation-free Rust primitives through axia-shell.
@@ -498,12 +499,7 @@ build/dnsmap-test: tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/se
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-# backup engine: snapshots, hard links, restore, retention, interruptions, exclusions, encryption
-test: build/backup-test
-build/backup-test: tests/backup_test.c src/backup/engine.c src/backup/crypt.c src/backup/engine.h src/backup/crypt.h src/fsops.h
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/backup_test.c src/backup/engine.c src/backup/crypt.c -lpthread $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
-	./$@ || { rm -f $@; exit 1; }
+# Backup engine, encryption and service: tests are in rust/axia-backup/tests/.
 # Monitor collection, rendering and regression tests are in apps/monitor/*.rs.
 # Keep the migrated regression suite in the standard test entry point.
 test: test-rust
@@ -794,7 +790,7 @@ build/hwdec-test: tests/hwdec_test.c src/media/hwdec.c src/media/hwdec.h src/med
 
 
 # Shared filesystem algorithms are Rust, including helper/test consumers.
-build/fsops-test build/launch-cli build/apps-actions-test build/defaults-test build/backup-test: $(RUST_LIB)
+build/fsops-test build/launch-cli build/apps-actions-test build/defaults-test: $(RUST_LIB)
 
 # Separate target directories prevent secure-memory feature unification with
 # the compositor's ordinary allocator, including during parallel builds.
@@ -828,12 +824,12 @@ test: test-mail-rust
 
 # Rust compatibility tests call the actual C format consumers against immutable
 # files produced by the previous crypto backend. Crypto itself is Rust only.
-CRYPTO_FORMAT_SRC := src/vault/vfile.c src/pkg/crypto.c src/vault/smem.c src/backup/crypt.c
-build/crypto-format-test.so: $(CRYPTO_FORMAT_SRC) src/crypto_ffi.h $(wildcard src/vault/*.h) src/backup/crypt.h $(CODEC_LIB)
+CRYPTO_FORMAT_SRC := src/vault/vfile.c src/pkg/crypto.c src/vault/smem.c
+build/crypto-format-test.so: $(CRYPTO_FORMAT_SRC) src/crypto_ffi.h $(wildcard src/vault/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	printf '%s\n' '{ global: vf_*; bkc_*; sm_free; local: *; };' > build/crypto-format-test.map
+	printf '%s\n' '{ global: vf_*; sm_free; local: *; };' > build/crypto-format-test.map
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -shared -fPIC -o $@ $(CRYPTO_FORMAT_SRC) $(CODEC_LIB) -Wl,--version-script=build/crypto-format-test.map $(CODEC_NATIVE_LIBS)
 .PHONY: test-crypto-native
 test-crypto-native: build/crypto-format-test.so
-	AXIA_CRYPTO_FORMAT_LIBRARY=$(abspath $<) $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-crypto --target-dir $(abspath build/crypto-tests) --locked --offline --test formats existing_vault_backup_slots_and_attachment -- --ignored
+	AXIA_CRYPTO_FORMAT_LIBRARY=$(abspath $<) $(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-crypto --target-dir $(abspath build/crypto-tests) --locked --offline --test formats existing_vault_slots_and_attachment -- --ignored
 test: test-crypto-native
