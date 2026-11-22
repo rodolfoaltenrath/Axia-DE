@@ -65,6 +65,15 @@ pub fn restore(windows: &Reader<WindowState>, metadata: &Value, input: &Value) -
     else {
         return json!({"frame":null});
     };
+    restore_place(windows, metadata, input, key, place)
+}
+
+pub fn restore_profile(windows: &Reader<WindowState>, metadata: &Value, input: &Value, preferences: &Value) -> Value {
+    let Some(key) = input["key"].as_str() else { return json!({"frame":null}); };
+    let Some(place) = preferences["windowPlaces"].get(key) else { return json!({"frame":null}); };
+    restore_place(windows, metadata, input, key, place)
+}
+fn restore_place(windows: &Reader<WindowState>, metadata: &Value, input: &Value, key: &str, place: &Value) -> Value {
     let twins = windows
         .read()
         .windows()
@@ -85,6 +94,7 @@ pub fn restore(windows: &Reader<WindowState>, metadata: &Value, input: &Value) -
 }
 
 /// Merge into the latest preferences at the point of persistence, preserving order.
+#[cfg(test)]
 pub fn merge(places: &Value, updates: &Value) -> Value {
     let mut all = rows(places).to_vec();
     for update in rows(updates) {
@@ -100,7 +110,44 @@ pub fn merge(places: &Value, updates: &Value) -> Value {
     json!({"entries":all})
 }
 
+/// The profile's JSON object is sorted by serde_json. Keep its recency order
+/// separately so rebasing/persistence does not turn eviction into key sorting.
+fn save_profile(home: &str, updates: &Value) -> Value {
+    crate::settings::with(home, |settings| {
+        let reader = settings.reader();
+        let (places, order) = {
+            let profile = reader.read();
+            let mut entries = Vec::new();
+            let mut seen = std::collections::BTreeSet::new();
+            let places = profile["windowPlaces"].as_object();
+            for key in rows(&profile["windowPlacesOrder"]).iter().filter_map(Value::as_str) {
+                if let Some(value) = places.and_then(|map| map.get(key)).filter(|_| seen.insert(key)) {
+                    entries.push((key, value));
+                }
+            }
+            if let Some(places) = places {
+                for (key, value) in places {
+                    if seen.insert(key.as_str()) { entries.push((key.as_str(), value)); }
+                }
+            }
+            for update in rows(updates) {
+                let Some(key) = update[0].as_str() else { continue; };
+                entries.retain(|(old, _)| *old != key);
+                entries.push((key, &update[1]));
+            }
+            entries.drain(..entries.len().saturating_sub(crate::winmodel::MAX_PLACES));
+            let order = json!(entries.iter().map(|(key, _)| *key).collect::<Vec<_>>());
+            let places = Value::Object(entries.into_iter().map(|(key, value)| (key.into(), value.clone())).collect());
+            (places, order)
+        };
+        if settings.set_many(&[("windowPlaces", &places), ("windowPlacesOrder", &order)]) {
+            json!({"effects":[{"kind":"settingsState","reply":settings.snapshot()}]})
+        } else { json!({}) }
+    })
+}
+
 pub struct Memory {
+    settings: Option<String>,
     windows: Reader<WindowState>,
     changes: Subscription,
     due: Option<Instant>,
@@ -112,6 +159,7 @@ impl Memory {
     pub fn new(windows: Reader<WindowState>) -> Self {
         let changes = windows.subscribe();
         Self {
+            settings: None,
             windows,
             changes,
             due: None,
@@ -176,6 +224,7 @@ impl Memory {
         }
         self.last.retain(|id, _| state.window(id).is_some());
         if !updates.is_empty() {
+            if let Some(home) = &self.settings { return save_profile(home, &json!(updates)); }
             json!({"effects":[{"kind":"windowPlaces","updates":updates}]})
         } else {
             json!({})
@@ -183,6 +232,9 @@ impl Memory {
     }
 }
 impl NativeApp for Memory {
+    fn resources(&mut self, _assets: &str, home: Option<&str>) {
+        self.settings = home.map(crate::settings::profile);
+    }
     fn invalidated(&self) -> bool {
         self.changes.pending()
     }

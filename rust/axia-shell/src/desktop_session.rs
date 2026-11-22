@@ -6,10 +6,12 @@ use std::collections::BTreeMap;
 
 pub struct Service {
     pub(crate) animation: crate::desktop_animation::Animation,
+    settings: Option<(String, Reader<Value>, Subscription)>,
     windows: Reader<WindowState>,
     changes: Subscription,
     started: bool,
     saved_count: Option<usize>,
+    rtl: bool,
     surfaces: BTreeMap<i64, usize>,
 }
 
@@ -25,14 +27,31 @@ impl Service {
         Self {
             animation: crate::desktop_animation::Animation::new(windows.clone()),
             changes: windows.subscribe(),
+            settings: None,
             windows,
             started: false,
             saved_count: None,
+            rtl: false,
             surfaces: BTreeMap::new(),
         }
     }
+    pub(crate) fn bind_settings(&mut self, home: &str) {
+        let home = crate::settings::profile(home);
+        if self.settings.as_ref().is_some_and(|(current, _, _)| current == &home) { return; }
+        let reader = crate::settings::with(&home, |s| s.reader());
+        let changes = reader.subscribe();
+        self.settings = Some((home, reader, changes));
+    }
+    fn persist(&self, key: &str, value: &Value) -> Vec<Value> {
+        if let Some((home, _, _)) = &self.settings {
+            crate::settings::with(home, |s| {
+                if s.set(key, value) { vec![json!({"kind":"settingsState","reply":s.snapshot()})] }
+                else { Vec::new() }
+            })
+        } else { vec![json!({"kind":"settings","patch":{key:value}})] }
+    }
     pub fn invalidated(&self) -> bool {
-        self.changes.pending()
+        self.changes.pending() || self.settings.as_ref().is_some_and(|(_, _, changes)| changes.pending())
     }
     fn index(&self, id: Option<i64>) -> usize {
         let state = self.windows.read();
@@ -44,6 +63,10 @@ impl Service {
     }
     pub fn effects(&mut self) -> Vec<Value> {
         self.changes.take();
+        if let Some((_, reader, changes)) = &self.settings {
+            changes.take();
+            self.animation.configure(reader.read()["reduceMotion"]==true, self.rtl);
+        }
         self.animation.sync(crate::native_view::now_ms());
         if !self.started {
             return Vec::new();
@@ -53,7 +76,7 @@ impl Service {
             return Vec::new();
         }
         self.saved_count = Some(count);
-        vec![json!({"kind":"settings","patch":{"desktopCount":count}})]
+        self.persist("desktopCount", &json!(count))
     }
     fn at(&self, session: &mut Session, index: usize) -> Value {
         if let Some(id) = self.windows.read().desktops().get(index) {
@@ -68,7 +91,9 @@ impl Service {
     pub fn command(&mut self, session: &mut Session, input: &Value) -> Value {
         let mut reply = match input["action"].as_str() {
             Some("start") if !self.started => {
-                let settings = &input["settings"];
+                let reader = self.settings.as_ref().map(|(_, reader, _)| reader.clone());
+                let borrowed = reader.as_ref().map(Reader::read);
+                let settings = borrowed.as_deref().unwrap_or(&input["settings"]);
                 let count =
                     crate::winmodel::desktops::clean_count(&settings["desktopCount"]) as usize;
                 let was = &settings["themeDesktops"];
@@ -99,9 +124,9 @@ impl Service {
                     .app_command(AppCommand::InitializeDesktops(count, active), &[])
                     .unwrap_or_else(|e| json!({"error":e}));
                 self.animation.initialize();
-                if !was.is_null() {
-                    reply["effects"] = json!([{"kind":"settings","patch":{"themeDesktops":null}}]);
-                }
+                let consume_handoff = !was.is_null();
+                drop(borrowed);
+                if consume_handoff { reply["effects"] = json!(self.persist("themeDesktops", &Value::Null)); }
                 reply
             }
             Some("start") => json!({"result":null}),
@@ -132,7 +157,10 @@ impl Service {
                         surfaces.insert(sid.to_string(), index);
                     }
                 }
-                json!({"result":{"active":self.index(None),"surfaces":surfaces}})
+                let value = json!({"active":self.index(None),"surfaces":surfaces});
+                drop(state);
+                let effects = if self.settings.is_some() { self.persist("themeDesktops", &value) } else { Vec::new() };
+                json!({"result":value,"effects":effects})
             }
             _ => return json!({"error":"app.invalidRequest"}),
         };
@@ -165,6 +193,9 @@ impl Observer {
     }
 }
 impl axia_native::NativeApp for Observer {
+    fn resources(&mut self, _assets: &str, home: Option<&str>) {
+        if let Some(home) = home { self.service.borrow_mut().bind_settings(home); }
+    }
     fn invalidated(&self) -> bool {
         self.service.borrow().invalidated()
     }
@@ -173,7 +204,11 @@ impl axia_native::NativeApp for Observer {
             return json!({});
         }
         let mut service = self.service.borrow_mut();
-        service.animation.configure(input["args"]["reduceMotion"]==true,input["context"]["direction"]=="rtl");
+        let reduced = service.settings.as_ref().map_or(input["args"]["reduceMotion"]==true,
+            |(_, reader, _)| reader.read()["reduceMotion"]==true);
+        service.rtl = input["context"]["direction"]=="rtl";
+        let rtl = service.rtl;
+        service.animation.configure(reduced,rtl);
         let effects = service.effects();
         if std::mem::replace(&mut self.mounted, true) {
             return json!({"same":true,"effects":effects});

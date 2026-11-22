@@ -98,6 +98,22 @@ impl Model {
         }
         changed
     }
+    /// Commit related native fields atomically, without a compatibility snapshot.
+    pub(crate) fn set_many(&mut self, fields: &[(&str, &Value)]) -> bool {
+        if !self.initialized { return false; }
+        let changed = self.state.update(|state| {
+            let changed = fields.iter().any(|(key, value)| state.get(*key) != Some(*value));
+            if changed {
+                for (key, value) in fields { state[*key] = (*value).clone(); }
+            }
+            (changed, changed)
+        });
+        if changed {
+            self.dirty = true;
+            self.until = Some(Instant::now() + SAVE_AFTER);
+        }
+        changed
+    }
     pub fn reader(&self) -> Reader<Value> {
         self.state.reader()
     }

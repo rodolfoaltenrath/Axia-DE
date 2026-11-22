@@ -76,7 +76,9 @@ pub unsafe extern "C" fn axia_native_app_new_windows(
     crate::clock_settings::bind(home.as_deref().unwrap_or(""));
     (*windows).notification_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
     (*windows).restore_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
-    Box::into_raw(Box::new(NativeApp::Control(crate::app_control::Controller::new((*windows).clone()))))
+    let mut control = crate::app_control::Controller::new((*windows).clone());
+    control.bind_settings(home.as_deref().unwrap_or(""));
+    Box::into_raw(Box::new(NativeApp::Control(control)))
 }
 #[no_mangle]
 pub unsafe extern "C" fn axia_native_app_free(app: *mut NativeApp) {

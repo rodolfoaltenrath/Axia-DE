@@ -416,8 +416,9 @@ Consultas a posições existentes não produzem um delta de janelas.
 Na troca de tema, a associação superfície Linux → posição é coletada por
 empréstimo do proprietário nativo. O novo contexto valida a contagem, o índice
 ativo e cada associação antes de aplicá-los. O formato persistido continua
-`desktopCount`/`themeDesktops`; apenas patches de preferências e o snapshot
-necessário à troca de contexto saem do serviço.
+`desktopCount`/`themeDesktops`. A persistência desses campos usa o proprietário
+de preferências Rust; o snapshot de compatibilidade continua para a interface
+legada. O SDK não reenvia os campos no bootstrap nem os grava novamente.
 
 O observador sem interface `shell:desktops` é montado pelo root do SDK,
 independentemente do indicador visual do tema. Revisões agrupam alterações
@@ -984,13 +985,13 @@ assina o espelho JS. Oculto e sem revisão pendente, não agenda polling.
 `rememberedFrame` também resolve a quantidade de janelas já abertas no Rust,
 preservando deslocamento por instância, tamanho fixo e escolha do monitor.
 
-O efeito contém somente alterações das preferências. Antes de persistir, o
-adaptador fornece os pares ordenados atuais a `memoryMerge`, que aplica as
-alterações no Rust e limita a 200 chaves. Isso preserva a ordem de uso e uma
-edição de preferências feita depois da coleta. O formato `windowPlaces` no
-disco permanece o mesmo. Configurações e sua gravação continuam no adaptador
-JS até a migração desse serviço. Live, greeter e processos de apps isolados
-não ativam a coleta.
+A persistência também ocorre no proprietário de preferências Rust, mesclando
+as alterações com os dados atuais e limitando a 200 chaves. Não há efeito JS
+`windowPlaces`, pedido `memoryMerge` ou lista de posições no pedido de abertura.
+`windowPlaces` mantém o formato de objeto; `windowPlacesOrder` registra a ordem
+de uso para a expulsão sobreviver aos snapshots JSON de objetos ordenados por
+chave. Os dois campos são publicados numa única revisão nativa. Live, greeter
+e processos de apps isolados não ativam a coleta. Detalhes da atualização abaixo.
 
 Validação: 531 testes unitários da shell aprovados (sete especiais ignorados),
 13 do Forçar encerramento e 15 do núcleo nativo. Os quatro cenários de
@@ -1252,3 +1253,60 @@ Três amostras da instalação privada passaram com limites impostos: mediana
 de 109.596.672 bytes (104,520 MiB) de RSS e 12,500 chamadas de espera/s, abaixo
 de 120 MiB e 15/s. Relatório em `build/validation/restore-preferences/idle/report.json`.
 Essa coleta headless não substitui as medições físicas do encerramento.
+
+### Preferências nativas de desktops e posições de janela
+
+O controlador da sessão vincula um leitor ao perfil validado do host. O serviço
+`desktop_session` compartilha essa fonte com o observador; montagem/recriação
+não reinicializa os desktops. Bootstrap lê contagem e associação de superfícies
+por empréstimo, consumindo o hand-off no proprietário. Mudanças de contagem e
+a coleta da troca de tema gravam diretamente os campos existentes. O SDK não
+envia `settings` no start nem reaplica efeitos `settings` desses serviços.
+A troca de tema continua usando o adaptador para tema e apps a reabrir.
+
+Movimento reduzido também vem do perfil, com assinatura nativa. Não há
+`reduceMotion` nos fatos JS nem assinatura React dessa preferência em
+`DesktopSession`. Tanto comandos quanto sync aplicam a política antes de
+consumir a invalidação, inclusive para cancelar uma animação em andamento.
+A direção chega pelo contexto interno de locale nativo; a animação mantém sua
+seleção e conclusão no Rust.
+
+`Memory` continua agrupando geometria por 800 ms. Ao persistir, consulta as
+preferências atuais, mescla somente as posições alteradas e escreve diretamente
+no proprietário. A gravação de arquivo segue o prazo nativo de configurações.
+A ida por efeitos `windowPlaces`, a mesclagem `memoryMerge` e a gravação JS
+foram removidas. Na abertura, o controlador empresta a posição do app solicitado;
+não copia nem recebe uma lista de todas as posições. Metadados de apps/telas,
+áreas úteis e opções explícitas continuam no adaptador transitório.
+
+O objeto `windowPlaces` continua compatível. `windowPlacesOrder`, com até 200
+chaves, preserva a recência quando o objeto JSON passa por mapas ordenados por
+chave. O gravador usa a ordem persistida, inclui entradas externas ainda presentes,
+move atualizações ao fim e elimina as mais antigas. Perfis sem esse metadado
+começam pela ordem de chaves disponível; as atualizações seguintes registram a
+recência. Uma mutação nativa `set_many` publica mapa e ordem juntos, em uma única
+revisão; alterações sem efeito não invalidam. O empréstimo de leitura termina
+antes da escrita. Dados alheios e edições posteriores à coleta são preservados.
+
+As publicações `settingsState` atualizam somente consumidores de compatibilidade,
+sem reaplicar patches ou gravar novamente. O host isolado mantém sua inicialização
+e suas opções locais. A persistência ainda é atendida pelos observadores montados
+no root; desvincular os serviços desse host e retirar metadados do tema/espelhos
+continua pendente.
+
+Validação de 2026-11-22 em Fedora 44 privado: 627 testes da shell, oito contratos
+LPK, 24 cenários gráficos de desktops, animação, posições, restauração,
+configurações e locale passaram. Encerramento instalado passou por timeout e
+SIGTERM. As integrações usam preferências nativas com espelhos antigos, proíbem
+transporte dos campos removidos e escrita JS dos serviços. Movimento reduzido
+exige o pixel final imediatamente, sem novos fatos; os testes unitários verificam
+cancelamento por comando, ordem após nova gravação, expulsão por recência,
+mesclagem com alterações externas e publicação atômica de mapa/ordem.
+Compositor e bundles recompilados, instalação privada gerada. Evidências em
+`build/validation/native-desktop-memory-preferences/`. Sessão física preservada.
+
+A captura da animação foi inspecionada. Três amostras da instalação privada
+passaram com limites impostos: mediana de 109.785.088 bytes (104,699 MiB) de RSS
+e 12,350 chamadas de espera/s, abaixo de 120 MiB e 15/s. Relatório em
+`build/validation/native-desktop-memory-preferences/idle/report.json`. Medições
+físicas continuam reservadas ao encerramento do roadmap.

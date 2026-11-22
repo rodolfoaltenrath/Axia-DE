@@ -178,7 +178,9 @@ export const themes = {
           frame: { x: w.x, y: w.y, w: w.w, h: w.h }, maximized: !!w.maximized, desk: indexOfDesktop(w.desktop) }));
     } catch (e) { reopen = []; }
     markThemeSwitch();
-    settings.set({ theme: id, themeReopen: reopen.length ? reopen : null, themeDesktops: desktopsForThemeSwitch() });
+    const desktopState = desktopsForThemeSwitch(); // The session service persists its own hand-off.
+    settings.set({ theme: id, themeReopen: reopen.length ? reopen : null,
+      ...(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__ ? { themeDesktops: desktopState } : {}) });
     saveSettingsNow();
     return lord.themes.use(id);
   },

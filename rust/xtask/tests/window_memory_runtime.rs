@@ -27,6 +27,8 @@ fn remembered_places_read_native_windows_without_a_js_subscription() {
                 "ordered",
                 "twins",
                 "noWindowTransport",
+                "nativePreferences",
+                "noJsPersistence",
                 "nonvisual",
                 "stopped",
                 "saved",
@@ -42,6 +44,7 @@ import {render,View} from '@lordos/runtime';
 import {configureWindows,wm,windows,registerBuiltinApp} from '@ROOT@/sdk/windows.js';
 import {WindowMemory,rememberedFrame} from '@ROOT@/sdk/windowmemory.js';
 import {settings} from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {media} from '@ROOT@/sdk/media.js';
@@ -52,9 +55,15 @@ configureWindows({apps:[{id:'notes',name:'Notes',Component:()=>null,Icon},{id:'p
 registerBuiltinApp({id:'panel',name:'Panel',builtin:true,Component:()=>null,Icon});
 settings.set({windowPlaces:{'app:keep':{d:'Keep|DP-2',x:1,y:2,w:300,h:200,max:false}}});
 wm.open('notes',{instance:'a',frame:{x:30,y:50,w:300,h:220}});
-const source=lord.windowList,mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
+const nativeSettings=lord.settings.state;
+const profile=()=>nativeSettings.call(lord.settings,{cmd:'snapshot'}).state;
+const source=lord.windowList,mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount,request=lord.nativeApps.request;
 let handle=0,bound=false,noWindowTransport=true,writes=0,stop,unmounted=false;
-const persist=settings.set;settings.set=patch=>{if(patch?.windowPlaces)writes++;return persist(patch);};
+const perform=settingsBridge.perform;let hold=false;
+settingsBridge.perform=effect=>{if(effect.reply?.state?.windowPlaces)writes++;if(!hold)perform(effect);};
+let jsPersistence=0;
+lord.settings.state=input=>{if(input.cmd==='patch'&&('windowPlaces'in(input.patch||{}))){jsPersistence++;throw Error('window memory wrote preferences through JS');}return nativeSettings.call(lord.settings,input);};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='memoryMerge')throw Error('window places reentered JS');if(input.cmd==='memoryFrame')noWindowTransport&&=!('places'in input)&&!('settings'in input);return request.call(lord.nativeApps,text);};
 const inspect=text=>{const facts=JSON.parse(text);noWindowTransport&&=!('windows'in facts)&&!('windows'in(facts.args||{}));};
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:window-memory'){inspect(text);bound=sources[0]===source;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
 const send=lord.nativeViews.facts;lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return send(id,text);};
@@ -77,13 +86,19 @@ async function run(){
  const ordered=Object.keys(places).join(',')==='app:keep,app:notes,lpk:pkg';
  direct('open',{app:'notes',instance:'b'});
  const frame=rememberedFrame('app:notes'),twins=frame?.x===160&&frame?.y===180;
+ hold=true;
+ nativeSettings.call(lord.settings,{cmd:'patch',patch:{windowPlaces:{...profile().windowPlaces,'app:notes':{...profile().windowPlaces['app:notes'],x:101}}}});
+ const current=rememberedFrame('app:notes');
+ const nativePreferences=current?.x===191&&settings.get().windowPlaces['app:notes'].x===70;
+ nativeSettings.call(lord.settings,{cmd:'patch',patch:{windowPlaces:{...profile().windowPlaces,'app:notes':{...profile().windowPlaces['app:notes'],x:70}}}});
+ hold=false;
  const nonvisual=(lord.nativeViews.text(handle)||'')==='';
  stop();await until(()=>unmounted);const count=writes;
  direct('setFrame','notes#a',{x:199,y:90,w:340,h:250});await sleep(1000);
- const stopped=unmounted&&writes===count&&settings.get().windowPlaces['app:notes'].x===70;
+ const stopped=unmounted&&writes===count&&profile().windowPlaces['app:notes'].x===70;
  windows.get=read;
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
- console.log('window_memory-observation '+JSON.stringify({bound,savedNative,filters,ordered,twins,noWindowTransport,nonvisual,stopped,saved:!!saved?.ok,writes,frame,places}));
+ console.log('window_memory-observation '+JSON.stringify({bound,savedNative,filters,ordered,twins,noWindowTransport,nonvisual,stopped,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok,writes,frame,places}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_memory driver: '+(error.stack||error))),150);
 "#;

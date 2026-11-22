@@ -14,6 +14,12 @@ gravação durável antes de devolver os efeitos. Snapshots de compatibilidade
 atualizam o espelho público, sem executar outro save JS. A abertura de apps,
 política de navegador e metadados de geometria do tema continuam no adaptador.
 
+Desktops e memória de posições também usam esse perfil: bootstrap, contagem,
+troca de tema e movimento reduzido são consultados/persistidos no Rust. Abertura
+de janelas empresta somente a posição solicitada, sem transportar a lista de
+posições pelo JS. Mapa e ordem de uso são gravados numa única revisão, com limite
+de 200 apps. Metadados de telas/área útil e o espelho público ainda usam adaptadores.
+
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena
 Rust já existente, até não restarem consumidores do motor.

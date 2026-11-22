@@ -25,6 +25,9 @@ fn desktop_slides_use_native_bindings_and_finish_without_js_callbacks() {
                         [46, 129, 198, 255],
                         "the arriving frame must restore its original opacity and position"
                     );
+                    let reduced = image::open(format!("{}.reduced.png", path.display())).unwrap().to_rgba8();
+                    assert_eq!(reduced.get_pixel(400, 180).0, [46,129,198,255],
+                        "native reduced motion must render the final frame immediately");
                     let edited = image::open(format!("{}.edited.png", path.display()))
                         .unwrap()
                         .to_rgba8();
@@ -76,13 +79,13 @@ const a=wm.open('notes',{instance:'a',desktop:1,frame:{x:60,y:120,w:220,h:160}})
 setActiveDesktop(1);
 const source=lord.windowList,bind=source.bindFx,bindings=new Map();let bindingCalls=0,unbindings=0;
 source.bindFx=(id,node)=>{bindingCalls++;if(node)bindings.set(id,node);else{bindings.delete(id);unbindings++;}return bind.call(source,id,node);};
-let jsAnimations=0,callbacks=0,renders=0,remount,handle=0,reducedSeen=false;
+let jsAnimations=0,callbacks=0,renders=0,remount,handle=0,serviceFacts=0,noPreferencePayload=true;
 lord.anim.slide=()=>{jsAnimations++;throw Error('desktop slide ran through JS');};
 lord.anim.clear=()=>{jsAnimations++;throw Error('desktop clear ran through JS');};
 globalThis.__lordAnimDone=()=>{callbacks++;};
 const mount=lord.nativeViews.mount,send=lord.nativeViews.facts;
-lord.nativeViews.mount=(node,id,text,...sources)=>{const h=mount(node,id,text,...sources);if(id==='shell:desktops')handle=h;return h;};
-lord.nativeViews.facts=(id,text)=>{if(id===handle)reducedSeen||=JSON.parse(text).args?.reduceMotion===true;return send(id,text);};
+lord.nativeViews.mount=(node,id,text,...sources)=>{const h=mount(node,id,text,...sources);if(id==='shell:desktops'){handle=h;noPreferencePayload&&=!('reduceMotion'in(JSON.parse(text).args||{}));}return h;};
+lord.nativeViews.facts=(id,text)=>{if(id===handle){serviceFacts++;noPreferencePayload&&=!('reduceMotion'in(JSON.parse(text).args||{}));}return send(id,text);};
 function Windows(){const{mounted}=useWindows();renders++;return mounted.map(win=>h(WindowShell,{key:win.id,win,style:{backgroundColor:win.id===b?'#2e81c6':'#d04a4a'}},null));}
 function App(){const[rev,setRev]=useState(0);remount=()=>setRev(n=>n+1);return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'#3489bd',effects:{}})},
  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},h(Windows),h(DesktopSession,{key:rev})));}
@@ -92,7 +95,13 @@ async function run(){
  const bound=bindingCalls>=2;setActiveDesktop(2);await sleep(60);const before=renders;await sleep(230);const noFrameRenders=renders===before;
  setActiveDesktop(1);await sleep(25);setActiveDesktop(2);await sleep(25);setActiveDesktop(1);await sleep(250);
  const old=handle;remount();const remounted=await until(()=>handle!==old);
- settings.set({reduceMotion:true});const reduced=await until(()=>reducedSeen);setActiveDesktop(2);await sleep(60);setActiveDesktop(1);await sleep(60);
+ const beforePreferences=serviceFacts;
+ lord.settings.state({cmd:'patch',patch:{reduceMotion:true}});await sleep(40);
+ const stale=settings.get().reduceMotion===false;
+ setActiveDesktop(2);await sleep(20);
+ const reducedImage=lord.media.screenshot('screenshots'),reducedSaved=await media.saveImage(reducedImage,@IMAGE@+'.reduced.png');media.close(reducedImage);
+ const reduced=stale&&noPreferencePayload&&serviceFacts===beforePreferences&&!!reducedSaved?.ok;
+ setActiveDesktop(1);await sleep(60);
  settings.set({reduceMotion:false});await sleep(80);setActiveDesktop(2);await sleep(300);
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
  setActiveDesktop(1);await sleep(25);setActiveDesktop(2);await sleep(30);

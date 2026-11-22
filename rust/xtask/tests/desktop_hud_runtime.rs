@@ -32,6 +32,8 @@ fn desktop_indicator_uses_native_state_and_expiry() {
                 "overviewHidden",
                 "singleHidden",
                 "noWindowTransport",
+                "nativePreferences",
+                "noJsPersistence",
                 "unmounted",
                 "saved",
             ] {
@@ -53,7 +55,14 @@ import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {locale} from '@ROOT@/sdk/i18n.js';
 import {media} from '@ROOT@/sdk/media.js';
 locale.set({...locale.get(),lang:'en'});enableShellLayers();
-settings.set({desktopCount:3,themeDesktops:{active:0,surfaces:{71:1,72:2}}});startDesktops();
+settings.set({desktopCount:1,themeDesktops:null});
+const nativeSettings=lord.settings.state;
+const profile=()=>nativeSettings.call(lord.settings,{cmd:'snapshot'}).state;
+nativeSettings.call(lord.settings,{cmd:'patch',patch:{desktopCount:3,themeDesktops:{active:0,surfaces:{71:1,72:2}}}});
+const nativePreferences=settings.get().desktopCount===1&&profile().desktopCount===3;
+let jsPersistence=0;
+lord.settings.state=input=>{if(input.cmd==='patch'&&['desktopCount','themeDesktops'].some(key=>key in(input.patch||{}))){jsPersistence++;throw Error('desktops wrote preferences through JS');}return nativeSettings.call(lord.settings,input);};
+startDesktops();
 const started=settings.get().themeDesktops===null&&desktopList.get().length===3&&activeDesktop.get()===1;
 setDesktops([10,20,30],10);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -61,7 +70,7 @@ async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn(
 const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
 let handle=0,bound=false,serviceBound=false,noWindowTransport=true,unmounted=false,hide,remount,mounts=0;
 const request=lord.nativeApps.request;
-lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='desktopCommand')noWindowTransport&&=!('active'in input)&&!('desktops'in input)&&!('id'in input);if(input.cmd==='desktopSession')noWindowTransport&&=!('windows'in input)&&!('desktops'in input)&&!('active'in input);return request.call(lord.nativeApps,text);};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='desktopCommand')noWindowTransport&&=!('active'in input)&&!('desktops'in input)&&!('id'in input);if(input.cmd==='desktopSession')noWindowTransport&&=!('settings'in input)&&!('windows'in input)&&!('desktops'in input)&&!('active'in input);return request.call(lord.nativeApps,text);};
 function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('desktops'in(input.args||{}))&&!('active'in(input.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:desktops'){inspect(text);serviceBound=sources[0]===source;}if(id==='shell:desktop-hud'){inspect(text);bound=sources[0]===source;mounts++;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return send(id,text);};
@@ -79,7 +88,7 @@ async function run(){
  const get=windows.get;windows.get=()=>{throw Error('desktop persistence read the JS window mirror');};
  let handoff=false,positions=false;
  try{
-   const kept=desktopsForThemeSwitch();handoff=kept.active===1&&kept.surfaces['71']===2;
+   const kept=desktopsForThemeSwitch();handoff=kept.active===1&&kept.surfaces['71']===2&&profile().themeDesktops.active===1&&profile().themeDesktops.surfaces['71']===2;
    positions=activeIndex()===1&&indexOfDesktop(30)===2&&indexOfDesktop(999)===0&&desktopOfSurface(71)===20&&desktopOfSurface(72)===30&&desktopOfSurface(999)===undefined;
  }finally{windows.get=get;}
  positions&&=desktopAt(5)===42;
@@ -121,7 +130,7 @@ async function run(){
  }finally{desktopList.get=listGet;}
  direct('setDesktops',[10],10);
  direct('createDesktop');const withoutHud=serviceBound&&await until(()=>settings.get().desktopCount===2);
- console.log('desktop_hud-observation '+JSON.stringify({bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,saved:!!saved?.ok}));
+ console.log('desktop_hud-observation '+JSON.stringify({bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('desktop_hud driver: '+(error.stack||error))),150);
 "#;

@@ -178,3 +178,53 @@ fn merging_rebases_on_current_preferences_and_disabled_service_has_no_deadline()
         json!([["app:external",{"x":40}],["app:notes",{"x":70}]])
     );
 }
+
+#[test]
+fn profile_rebases_atomically_and_preserves_recency_across_sorted_json_and_restart() {
+    let root = std::env::temp_dir().join(format!("axia-memory-order-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let home = root.to_str().unwrap();
+    let keys: Vec<_> = (1..=200).rev().map(|i|format!("app:{i:03}")).collect();
+    let reader = crate::settings::with(home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("windowPlaces", &Value::Object(keys.iter().map(|k|(k.clone(),json!({"x":1,"w":300,"h":200}))).collect()));
+        s.set("windowPlacesOrder", &json!(keys));
+        s.set("unrelated", &json!({"keep":7}));
+        s.reader()
+    });
+    let revision = reader.revision();
+    let reply = save_profile(home, &json!([["app:100",{"x":70,"w":300,"h":200}]]));
+    assert_eq!(reply["effects"][0]["kind"], "settingsState");
+    assert_eq!(reader.revision(), revision+1, "map and order are one mutation");
+    assert_eq!(reader.read()["windowPlacesOrder"][199], "app:100");
+    assert_eq!(reader.read()["windowPlacesOrder"][0], "app:200");
+    // No Memory instance carries the order; a fresh writer must read it from the profile.
+    save_profile(home, &json!([["app:new",{"x":80}]]));
+    assert!(reader.read()["windowPlaces"].get("app:200").is_none());
+    assert!(reader.read()["windowPlaces"].get("app:001").is_some());
+    assert_eq!(reader.read()["windowPlacesOrder"][199], "app:new");
+    let mut external = reader.read()["windowPlaces"].clone();
+    external["app:external"] = json!({"x":44});
+    crate::settings::with(home, |s| { s.set("windowPlaces", &external); });
+    save_profile(home, &json!([["app:notes",{"x":99}]]));
+    assert_eq!(reader.read()["windowPlaces"]["app:external"]["x"], 44);
+    assert_eq!(reader.read()["windowPlacesOrder"][199], "app:notes");
+    assert_eq!(reader.read()["windowPlaces"].as_object().unwrap().len(), 200);
+    assert_eq!(reader.read()["unrelated"]["keep"], 7);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn native_restore_borrows_one_place_and_ignores_stale_transport() {
+    let mut session = Session::default();
+    session.call("open", &[json!({}),json!({"app":"notes"})]).unwrap();
+    let metadata = facts();
+    let input = json!({"key":"app:notes","places":[["app:notes",{"x":999}]],
+        "displays":metadata["args"]["displays"],"options":{"main":0}});
+    let profile = json!({"windowPlaces":{"app:notes":{"d":"Panel|DP-1","x":30,"y":50,"w":300,"h":220}},
+        "unrelated":{"large":"x".repeat(100_000)}});
+    let reply = restore_profile(&session.reader(), &metadata, &input, &profile);
+    assert_eq!(reply["frame"]["x"], 60.);
+    assert_eq!(reply["frame"]["y"], 80.);
+    assert_eq!(reply["frame"]["w"], 300.);
+}

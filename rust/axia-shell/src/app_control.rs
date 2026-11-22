@@ -15,6 +15,7 @@ pub struct Controller {
     app: crate::forcequit::App,
     windows: Option<Session>,
     quit: quit::GracefulQuit,
+    preferences: Option<axia_state::Reader<Value>>,
 }
 impl Controller {
     pub fn new(windows: Session) -> Self {
@@ -24,7 +25,13 @@ impl Controller {
             app,
             windows: Some(windows),
             quit: Default::default(),
+            preferences: None,
         }
+    }
+    pub(crate) fn bind_settings(&mut self, home: &str) {
+        let home = crate::settings::profile(home);
+        self.preferences = Some(crate::settings::with(&home, |s| s.reader()));
+        if let Some(windows) = &self.windows { windows.desktop_service().borrow_mut().bind_settings(&home); }
     }
     pub fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "clockCommand" {
@@ -46,19 +53,14 @@ impl Controller {
             let service=windows.restore_service();
             return service.borrow_mut().command(windows,&self.app.metadata(),input,std::time::Instant::now());
         }
-        if input["cmd"] == "memoryMerge" {
-            return if self.windows.is_some() {
-                crate::window_memory::merge(&input["places"], &input["updates"])
-            } else {
-                json!({"error":"app.invalidRequest"})
-            };
-        }
         if input["cmd"] == "memoryFrame" {
             return self
                 .windows
                 .as_ref()
                 .map(|windows| {
-                    crate::window_memory::restore(&windows.reader(), &self.app.metadata(), input)
+                    if let Some(reader) = &self.preferences {
+                        crate::window_memory::restore_profile(&windows.reader(), &self.app.metadata(), input, &reader.read())
+                    } else { crate::window_memory::restore(&windows.reader(), &self.app.metadata(), input) }
                 })
                 .unwrap_or_else(|| json!({"error":"app.invalidRequest"}));
         }

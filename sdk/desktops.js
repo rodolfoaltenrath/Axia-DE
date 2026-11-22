@@ -13,7 +13,7 @@ import { createElement as h, useSyncExternalStore } from 'react';
 import { mainDisplay, onScreenChange } from '@lordos/runtime';
 import { t, direction } from './i18n.js';
 import { settings } from './settings.js';
-import { useStore } from './store.js';
+import { settingsBridge } from './nativesettings.js';
 import { NativeView } from './nativeview.js';
 import { Layer } from './layers.js';
 import { wm, activeDesktop, desktopList, setActiveDesktop, setDesktops, createDesktop, closeDesktop, fxNodes, overviewShowing, visibleWindows, applyNativeWindowState } from './windows.js';
@@ -32,7 +32,7 @@ function sessionCommand(action, extra = {}) {
   const reply = nativeAppRequest(lord.nativeApps, { cmd: 'desktopSession', action, ...extra });
   if (reply.error) throw new Error(reply.error);
   applyNativeWindowState(reply);
-  for (const effect of reply.effects || []) if (effect.kind === 'settings') settings.set(effect.patch);
+  for (const effect of reply.effects || []) if (effect.kind === 'settingsState') settingsBridge.perform?.(effect);
   return reply.result;
 }
 
@@ -147,7 +147,7 @@ let started = false;
 // startShell, once, before anything opens a window.
 export function startDesktops() {
   if (!appHost) {
-    sessionCommand('start', { settings: { desktopCount: settings.get().desktopCount, themeDesktops: settings.get().themeDesktops } });
+    sessionCommand('start');
     return;
   }
   const s = settings.get();
@@ -205,8 +205,6 @@ export function DesktopHud() {
 // Mounted by the SDK root, independently of the theme's optional indicator.
 export function DesktopSession() {
   if (appHost || typeof lord === 'undefined' || typeof lord.appId === 'string' || typeof lord.greeter !== 'undefined') return null;
-  const reduceMotion = useStore(settings, s => !!s.reduceMotion);
   return h(NativeView, { manifest: NATIVE_DESKTOP_SESSION, stateSource: lord.windowList,
-    args: { reduceMotion },
     style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, pointerEvents: 'none' } });
 }

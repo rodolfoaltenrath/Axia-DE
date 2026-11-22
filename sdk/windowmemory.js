@@ -9,6 +9,7 @@ import { workAreaOf, getApp, setWindowMemory, assignedDisplayOf, isLiveSystem } 
 import { dockIdOfWindow } from './dock.js';
 import { rememberWindowFrame } from './appcontrol.js';
 
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 const MANIFEST = { id: 'shell:window-memory', shell: true, facts: 'appcontrol' };
 const allowed = () => typeof lord !== 'undefined' && typeof lord.appId !== 'string'
   && typeof lord.greeter === 'undefined' && !isLiveSystem();
@@ -26,8 +27,8 @@ export function WindowMemory() {
 }
 
 export function rememberedFrame(key, opts = {}) {
-  const places = Object.entries(settings.get().windowPlaces || {});
-  if (!places.some(([id]) => id === key)) return null;
+  const places = appHost ? Object.entries(settings.get().windowPlaces || {}) : null;
+  if (appHost && !places.some(([id]) => id === key)) return null;
   const displays = [...screen.displays];
   const index = display => {
     if (!display) return null;
@@ -36,7 +37,7 @@ export function rememberedFrame(key, opts = {}) {
   };
   const { main = mainDisplay(), assigned = assignedDisplayOf(key), ...rest } = opts;
   const options = { ...rest, main: index(main), assigned: index(assigned) };
-  return rememberWindowFrame({ key, places, displays: displays.map(displayFacts), options });
+  return rememberWindowFrame({ key, ...(appHost ? { places } : {}), displays: displays.map(displayFacts), options });
 }
 
 export function startWindowMemory() {

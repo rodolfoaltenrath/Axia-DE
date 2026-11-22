@@ -256,3 +256,71 @@ fn controller_requires_the_bound_context_and_rejects_unknown_actions() {
     );
     assert!(!session.desktop_service().borrow().started);
 }
+
+#[test]
+fn native_profile_initializes_desktops_consumes_handoff_and_persists_count_once() {
+    let root = std::env::temp_dir().join(format!("axia-desktop-profile-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let home = root.to_str().unwrap();
+    let preferences = crate::settings::with(home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("desktopCount", &json!(3));
+        s.set("themeDesktops", &json!({"active":1,"surfaces":{"71":2}}));
+        s.set("unrelated", &json!({"keep":7}));
+        s.reader()
+    });
+    let mut session = Session::default();
+    let shared = session.desktop_service();
+    shared.borrow_mut().bind_settings(home);
+    let reply = command(&mut session, json!({"action":"start","settings":{"desktopCount":1}}));
+    assert_eq!(session.reader().read().desktops(), &[1,2,3]);
+    assert_eq!(session.reader().read().active_desktop(), 2);
+    assert!(preferences.read()["themeDesktops"].is_null());
+    assert!(reply["effects"].as_array().unwrap().iter().all(|e|e["kind"]!="settings"));
+    call(&mut session, "createDesktop", &[]);
+    let mut observer = Observer::new(shared.clone());
+    let reply = observer.request(&json!({"cmd":"sync"}));
+    assert_eq!(preferences.read()["desktopCount"], 4);
+    assert_eq!(reply["effects"][0]["kind"], "settingsState");
+    observer.request(&json!({"cmd":"sync"}));
+    let revision = preferences.revision();
+    observer.request(&json!({"cmd":"sync"}));
+    assert_eq!(preferences.revision(), revision);
+    assert!(!observer.invalidated());
+    let reply = command(&mut session, json!({"action":"theme"}));
+    assert_eq!(preferences.read()["themeDesktops"], reply["result"]);
+    assert_eq!(preferences.read()["unrelated"]["keep"], 7);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn native_reduced_motion_overrides_facts_and_restores_animation_immediately() {
+    use crate::runtime::native as scene;
+    let root = std::env::temp_dir().join(format!("axia-desktop-reduced-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let home = root.to_str().unwrap();
+    crate::settings::with(home, |s| { s.command(&json!({"cmd":"initialize"})); s.set("reduceMotion", &json!(false)); });
+    let mut session = Session::default();
+    command(&mut session, json!({"action":"start","settings":{"desktopCount":2}}));
+    call(&mut session, "open", &[json!({"app":"notes","instance":"a","desktop":1})]);
+    call(&mut session, "open", &[json!({"app":"notes","instance":"b","desktop":2})]);
+    let shared = session.desktop_service();
+    shared.borrow_mut().bind_settings(home);
+    let node = scene::create(scene::VIEW);
+    shared.borrow_mut().animation.bind("notes#b", node, crate::native_view::now_ms());
+    let mut observer = Observer::new(shared.clone());
+    let facts = json!({"cmd":"sync","args":{"reduceMotion":false}});
+    observer.request(&facts);
+    call(&mut session, "setActiveDesktop", &[json!(2)]);
+    observer.request(&facts);
+    assert_ne!(scene::animation_props(node).unwrap().translate_x, 0.);
+    crate::settings::with(home, |s| { s.set("reduceMotion", &json!(true)); });
+    assert!(observer.invalidated());
+    command(&mut session, json!({"action":"active"}));
+    assert_eq!(scene::animation_props(node).unwrap().translate_x, 0., "commands must consume native motion changes too");
+    observer.request(&facts);
+    assert_eq!(scene::animation_props(node).unwrap().translate_x, 0.);
+    assert!(!observer.invalidated());
+    scene::destroy(node);
+    std::fs::remove_dir_all(root).unwrap();
+}
