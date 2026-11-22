@@ -3,6 +3,7 @@ use axia_native::NativeApp;
 use std::{cell::RefCell, rc::Rc};
 
 pub struct View {
+    appearance: Option<Rc<Value>>,
     session: Session,
     service: Rc<RefCell<Service>>,
     seen: u64,
@@ -12,17 +13,19 @@ impl View {
     pub fn new(session: Session) -> Self {
         let service = session.restore_service();
         Self {
+            appearance: None,
             session,
             service,
             seen: 0,
             last: Value::Null,
         }
     }
-    fn tree(service: &Service, input: &Value) -> Value {
+    fn tree(service: &Service, input: &Value, appearance: Option<&Value>) -> Value {
         let Some(question) = &service.question else {
             return json!({"kind":"view","key":"restore","style":{"pointerEvents":"none"}});
         };
-        let theme = &input["context"]["theme"];
+        let theme = appearance.unwrap_or(&input["context"]["theme"]);
+        let metadata = service.metadata();
         let display = &input["args"]["display"];
         let mut names = Vec::new();
         for entry in &question.list {
@@ -30,11 +33,11 @@ impl View {
                 continue;
             };
             let app = if kind == "desktop" {
-                rows(&service.metadata["catalog"])
+                rows(&metadata["catalog"])
                     .iter()
                     .find(|a| a["desktopId"] == key)
             } else {
-                rows(&service.metadata["registry"])
+                rows(&metadata["registry"])
                     .iter()
                     .find(|a| a["id"] == key)
             };
@@ -78,9 +81,12 @@ impl View {
     }
 }
 impl NativeApp for View {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: Rc<Value>) { self.appearance = Some(theme); }
     fn invalidated(&self) -> bool {
         let state = self.service.borrow();
-        (!self.session.resident() && (state.changes.pending() || state.settings_pending())) || self.seen != state.revision || !state.effects.is_empty()
+        (!self.session.resident() && (state.changes.pending() || state.settings_pending() || state.catalog_pending())) || self.seen != state.revision || !state.effects.is_empty()
     }
     fn refresh_ms(&self) -> Option<f64> {
         if self.session.resident() { return None; }
@@ -111,7 +117,7 @@ impl NativeApp for View {
             Some("sync") => {
                 state.configure(input, input, now);
                 if !self.session.resident() { state.tick(&mut self.session, now); }
-                let tree = Self::tree(&state, input);
+                let tree = Self::tree(&state, input, self.appearance.as_deref());
                 let effects = std::mem::take(&mut state.effects);
                 self.seen = state.revision;
                 if self.last == tree {

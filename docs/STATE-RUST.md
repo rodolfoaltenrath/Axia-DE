@@ -1034,7 +1034,17 @@ marcadores de saída, o congelamento antes de fechar apps e a retomada após
 cancelar uma saída. A revisão das preferências impede que fatos atrasados
 da view reativem uma opção recém-desligada no controlador.
 
-`session_restore_view.rs` desenha a confirmação e trata Enter/Escape. O
+O serviço vinculado lê o catálogo diretamente do `Reader<Value>` do controlador.
+Não retém uma cópia de registry/catalog; nomes, identidades, snapshots e flags
+para abertura usam o proprietário atual. As revisões invalidam o serviço e a
+view; metadados antigos nos fatos não substituem o catálogo vinculado. Modelos
+sem vínculo mantêm o protocolo local. O controlador da sessão também deixa de
+clonar os metadados ao encaminhar cada comando de restauração.
+
+`session_restore_view.rs` desenha a confirmação e trata Enter/Escape. Paleta da
+shell é compartilhada por Rc; o SDK não transporta cores nem catálogo para a
+view. Fonte atual é usada mesmo com espelho JS antigo, sem reiniciar pergunta,
+prazos ou marcadores. O
 adaptador `sdk/sessionrestore.jsx` abre apps, aplica
 efeitos ao espelho legado e executa a ação fechada de política de navegador.
 Mantém apenas um booleano de apresentação para a camada modal; a interface

@@ -107,6 +107,15 @@ Trocar aparência conserva seleção e origem do alternador, IDs e prazos das
 notificações e o vencimento do indicador, sem reabrir indicadores ocultos.
 Serviços, seleção, relógios de expiração e roteamento de ações mantêm seus
 proprietários existentes; posição/montagem e callbacks continuam nos adaptadores.
+A confirmação de restauração também retém a paleta da shell e lê o catálogo
+nativo por empréstimo. O serviço deixa de guardar outra cópia dos metadados;
+o controlador não cria uma cópia por comando, e a view não recebe registry,
+catalog, theme ou scale do SDK. Revisões do catálogo atualizam nomes sem fatos
+JS e a execução revalida os flags atuais antes de abrir cada app. Catálogo e
+cores antigos enviados à view não substituem as fontes nativas. Pergunta,
+marcadores e prazos são preservados. Modelos sem vínculo de catálogo/aparência
+conservam os fatos locais; geometria do tema e execução dos efeitos seguem no
+adaptador.
 O indicador de alarmes/temporizador também usa a paleta compartilhada da shell:
 marca e legenda leem menuText diretamente, sem color/theme/scale nos fatos JS.
 O SDK envia somente a altura; o host isolado conserva sua cor local. Durante a

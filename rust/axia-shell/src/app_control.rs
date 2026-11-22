@@ -65,7 +65,7 @@ impl Controller {
         if input["cmd"] == "sessionRestore" {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.restore_service();
-            return service.borrow_mut().command(windows,&self.app.metadata(),input,std::time::Instant::now());
+            return service.borrow_mut().command(windows,&Value::Null,input,std::time::Instant::now());
         }
         if input["cmd"] == "memoryStart" {
             let Some(windows) = &self.windows else { return json!({"error":"app.invalidRequest"}); };

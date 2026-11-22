@@ -21,7 +21,7 @@ export const restoreBrowsers = (s = appHost ? settings.get() : null) => s ? s.se
 const allowed = () => typeof lord !== 'undefined' && typeof lord.appId !== 'string'
   && typeof lord.greeter === 'undefined' && !isLiveSystem();
 const visible = createStore(false); // Presentation gate for the shell's keyboard layer only.
-const MANIFEST = { id: 'shell:restore', shell: true, keyboard: true, facts: 'appcontrol', fullTheme: true };
+const MANIFEST = { id: 'shell:restore', shell: true, appearanceSource: 'native', keyboard: true, fullTheme: true };
 
 function command(action, extra = {}) {
   if (!allowed() && !['preferences', 'setMode', 'setBrowsers'].includes(action)) return { result: null };

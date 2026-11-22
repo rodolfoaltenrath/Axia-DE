@@ -107,6 +107,15 @@ pub struct Service {
     last: Option<(Vec<Value>, usize)>,
     revision: u64,
 }
+struct Metadata<'a> {
+    native: Option<std::cell::Ref<'a, Value>>,
+    local: &'a Value,
+}
+impl std::ops::Deref for Metadata<'_> {
+    type Target = Value;
+    fn deref(&self) -> &Value { self.native.as_deref().unwrap_or(self.local) }
+}
+
 impl Service {
     pub fn new(windows: Reader<WindowState>) -> Self {
         let changes = windows.subscribe();
@@ -161,6 +170,14 @@ impl Service {
     pub(crate) fn bind_catalog(&mut self, reader: Reader<Value>) {
         let changes = reader.subscribe();
         self.catalog = Some((reader, changes));
+        self.metadata = Value::Null;
+        self.revision = self.revision.wrapping_add(1);
+    }
+    fn metadata(&self) -> Metadata<'_> {
+        Metadata { native: self.catalog.as_ref().map(|(reader, _)| reader.read()), local: &self.metadata }
+    }
+    fn catalog_pending(&self) -> bool {
+        self.catalog.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
     pub(crate) fn background_wait(&self, now: Instant) -> Option<f64> {
         if self.changes.pending() || self.settings_pending()
@@ -168,9 +185,7 @@ impl Service {
         self.deadline().map(|until| until.saturating_duration_since(now).as_secs_f64()*1000.)
     }
     pub(crate) fn background_tick(&mut self, session: &mut Session, now: Instant) -> Vec<Value> {
-        if let Some(reader) = self.catalog.as_ref().and_then(|(reader, changes)| changes.take().map(|_| reader.clone())) {
-            self.configure(&reader.read(), &Value::Null, now);
-        }
+        if self.catalog_pending() { self.configure(&Value::Null, &Value::Null, now); }
         self.tick(session, now);
         std::mem::take(&mut self.effects)
     }
@@ -216,6 +231,7 @@ impl Service {
             .unwrap_or(0)
     }
     fn key(&self, w: &crate::winmodel::Window<'_>) -> String {
+        let metadata = self.metadata();
         dock_identity(
             &WindowRef {
                 id: w.id(),
@@ -223,13 +239,14 @@ impl Service {
                 title: w.title(),
                 args: w.args(),
             },
-            rows(&self.metadata["registry"]),
-            rows(&self.metadata["catalog"]),
+            rows(&metadata["registry"]),
+            rows(&metadata["catalog"]),
         )
     }
     fn snapshot(&self) -> Vec<Value> {
         let state = self.windows.read();
-        let registry = rows(&self.metadata["registry"]);
+        let metadata = self.metadata();
+        let registry = rows(&metadata["registry"]);
         let mut list = Vec::new();
         for w in state.windows() {
             if w.pip()
@@ -301,6 +318,9 @@ impl Service {
         self.revision = self.revision.wrapping_add(1);
     }
     fn configure(&mut self, metadata: &Value, input: &Value, now: Instant) {
+        if self.catalog.as_ref().is_some_and(|(_, changes)| changes.take().is_some()) {
+            self.revision = self.revision.wrapping_add(1);
+        }
         if let Some(reader) = self.preferences_reader() {
             if let Some((_, _, changes)) = &self.settings { changes.take(); }
             self.configure_preferences(metadata, input, &reader.read(), now);
@@ -314,7 +334,7 @@ impl Service {
         if configured {
             self.configuration_revision = input["context"]["renderEpoch"].clone();
         }
-        if metadata["registry"].is_array() {
+        if self.catalog.is_none() && metadata["registry"].is_array() {
             for key in ["registry", "catalog"] {
                 if self.metadata[key] != metadata[key] {
                     if !self.metadata.is_object() {
@@ -456,13 +476,14 @@ impl Service {
         )
     }
     fn once(&self, id: &str) -> bool {
+        let metadata = self.metadata();
         let value = json!(id);
         let Some((kind, key)) = crate::launcher::dock_model::parse_id(&value) else {
             return false;
         };
         kind == "lpk"
             || (kind == "app"
-                && rows(&self.metadata["registry"])
+                && rows(&metadata["registry"])
                     .iter()
                     .any(|a| a["id"] == key && a["isolated"] == true))
             || (self.browsers
@@ -539,16 +560,14 @@ impl Service {
         self.restored.insert(id.to_owned());
         let parsed = crate::launcher::dock_model::parse_id(&entry["id"]);
         if let Some((kind, key)) = parsed {
-            let app = if kind == "desktop" {
-                None
-            } else {
-                rows(&self.metadata["registry"])
-                    .iter()
-                    .find(|a| a["id"] == key)
-                    .cloned()
+            let (exists, ordinary, allowed) = {
+                let metadata = self.metadata();
+                let app = (kind != "desktop").then(|| rows(&metadata["registry"]).iter().find(|a| a["id"] == key)).flatten();
+                (app.is_some(), app.is_some_and(|a| a["isolated"] != true && a["package"] != true),
+                    app.is_some_and(|a| a["builtin"] != true && a["hidden"] != true && a["live"] != true))
             };
-            if let Some(app) = app.filter(|a| a["isolated"] != true && a["package"] != true) {
-                if app["builtin"] != true && app["hidden"] != true && app["live"] != true {
+            if ordinary {
+                if allowed {
                     let new = self.windows.read().windows().any(|w| w.app() == key);
                     let desktop = self.desktop(session, index(&entry["desk"]));
                     let frame = self.fit(&entry["f"]);
@@ -557,11 +576,7 @@ impl Service {
                         self.pending.insert(ticket, step.clone());
                     }
                 }
-            } else if kind == "desktop"
-                || rows(&self.metadata["registry"])
-                    .iter()
-                    .any(|a| a["id"] == key)
-            {
+            } else if kind == "desktop" || exists {
                 self.claims.push_back(Claim {
                     step: step.clone(),
                     at: now,

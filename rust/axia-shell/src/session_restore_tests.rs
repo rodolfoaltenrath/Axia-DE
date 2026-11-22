@@ -405,3 +405,73 @@ fn invalid_saved_data_is_cleaned_and_snapshot_limit_and_pending_login_membership
         true
     );
 }
+
+#[test]
+fn bound_catalog_is_borrowed_and_stale_view_metadata_cannot_restore_hidden_apps() {
+    let mut session = Session::default();
+    let catalog = axia_state::Store::new(metadata());
+    let owner = session.restore_service();
+    owner.borrow_mut().bind_catalog(catalog.reader());
+    {
+        let service = owner.borrow();
+        assert!(service.metadata.is_null(), "binding must not retain a catalog copy");
+        assert!(std::ptr::eq(&*service.metadata(), &*catalog.read()));
+    }
+    let now = Instant::now();
+    let start = input("start","ask",json!({"clean":false,"windows":[entry("app:notes")]}));
+    owner.borrow_mut().command(&mut session, &json!({"registry":[]}), &start, now);
+    owner.borrow_mut().tick(&mut session, now + START);
+    assert!(owner.borrow().question.is_some());
+    let facts = json!({"cmd":"sync","settings":{"sessionRestore":"ask"},
+        "registry":[{"id":"notes","name":"Stale Notes","hidden":false}],"catalog":[],
+        "args":{"model":start["model"],"display":{"x":0,"y":0,"w":640,"h":700}}});
+    let mut view = View::new(session.clone());
+    view.request(&facts);
+    let mut updated = metadata();
+    updated["registry"][0]["name"] = json!("Live Notes");
+    updated["registry"][0]["hidden"] = json!(true);
+    catalog.set(updated);
+    assert!(view.invalidated(), "a catalog-only revision must wake the view");
+    let tree = view.request(&facts)["tree"].clone();
+    let labels = tree["children"][0]["children"].as_array().unwrap();
+    let apps = labels.iter().find(|node| node["label"]["key"] == "shell.restore.apps").unwrap();
+    assert_eq!(apps["label"]["params"]["list"], "Live Notes");
+    assert!(owner.borrow().metadata.is_null());
+    assert!(!owner.borrow().catalog_pending());
+    let accepted = view.key("Enter","",0).unwrap();
+    assert!(ops(&accepted, "open").is_empty());
+    owner.borrow_mut().tick(&mut session, Instant::now() + STAGGER);
+    assert!(ops(&json!({"effects":owner.borrow_mut().effects.drain(..).collect::<Vec<_>>()}), "open").is_empty());
+    assert_eq!(session.reader().read().windows().count(), 0);
+}
+
+#[test]
+fn prompt_palette_changes_preserve_question_deadlines_and_decline() {
+    let mut session = Session::default();
+    let owner = session.restore_service();
+    let now = Instant::now();
+    let start = input("start","ask",json!({"clean":false,"windows":[entry("app:notes")]}));
+    owner.borrow_mut().command(&mut session, &metadata(), &start, now);
+    owner.borrow_mut().tick(&mut session, now + START);
+    let facts = json!({"cmd":"sync","settings":{"sessionRestore":"ask"},
+        "args":{"model":start["model"],"display":{"x":0,"y":0,"w":640,"h":700}},
+        "context":{"theme":{"text":"#ff0000","accent":"#ff0000"}}});
+    let mut view = View::new(session);
+    let saved = owner.borrow().question.as_ref().unwrap().list.clone();
+    let revision = owner.borrow().revision;
+    let deadline = owner.borrow().deadline();
+    for mode in ["light","dark"] {
+        let theme = std::rc::Rc::new(crate::native_style::shell_theme::tokens(&json!({"mode":mode,"accent":"verde","effects":false})));
+        view.set_native_appearance(theme.clone());
+        let tree = view.request(&facts)["tree"].clone();
+        let question = &tree["children"][0];
+        assert_eq!(question["style"]["backgroundColor"], theme["windowBg"]);
+        assert_eq!(question["children"][0]["style"]["color"], theme["text"]);
+        assert_eq!(owner.borrow().revision, revision);
+        assert_eq!(owner.borrow().deadline(), deadline);
+        assert_eq!(owner.borrow().question.as_ref().unwrap().list, saved);
+        assert_eq!(view.request(&facts)["same"], true);
+    }
+    assert_eq!(ops(&view.key("Escape","",0).unwrap(),"visible"), vec![json!(false)]);
+    assert!(owner.borrow().question.is_none());
+}

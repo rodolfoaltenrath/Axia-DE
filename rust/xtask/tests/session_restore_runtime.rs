@@ -12,7 +12,7 @@ fn native_session_restore_survives_remount_and_preserves_clean_exit_and_claims()
         .unwrap();
     for mode in ["light", "dark"] {
         for width in [640, 1000] {
-            let report = ui::run_ui_with_timeout(
+            let report = ui::run_ui_with_capture_timeout(
                 repo,
                 "session_restore",
                 DRIVER,
@@ -20,8 +20,20 @@ fn native_session_restore_survives_remount_and_preserves_clean_exit_and_claims()
                 width,
                 "session-restore.png",
                 35,
+                |path| {
+                    let pixels = image::open(path).unwrap().into_rgb8();
+                    let ink = if mode == "light" { [29,29,31] } else { [245,245,247] };
+                    assert!(pixels.pixels().filter(|p| p.0 == ink).count() > 20, "native restore ink: {mode}/{width}");
+                    assert!(pixels.pixels().filter(|p| p.0 == [48,209,88]).count() > 80, "native restore accent: {mode}/{width}");
+                },
             );
             for flag in [
+                "noAppearanceFacts",
+                "noCatalogFacts",
+                "withoutFacts",
+                "staleAppearanceMirror",
+                "nativeCatalog",
+                "retainedAfterPoison",
                 "bound",
                 "initialMarker",
                 "prompt",
@@ -68,7 +80,8 @@ async function until(fn,attempts=150){for(let i=0;i<attempts&&!fn();i++)await sl
 const Icon=()=>null;
 configureWindows({apps:[{id:'files',name:'Files',Component:()=>null,Icon},{id:'notes',name:'Notes',Component:()=>null,Icon},{id:'pkg',name:'Package',package:true,Component:()=>null,Icon}]});
 const frame={x:40,y:60,w:300,h:220};
-settings.set({sessionRestore:'off',sessionBrowsers:false,sessionSaved:null});
+const opposite='@MODE@'==='light'?'dark':'light';
+settings.set({mode:opposite,accent:'azul',effects:false,nativeAppearance:'axia',sessionRestore:'off',sessionBrowsers:false,sessionSaved:null});
 const nativeSettings=lord.settings.state;
 const preferences=()=>nativeSettings.call(lord.settings,{cmd:'snapshot'}).state;
 nativeSettings.call(lord.settings,{cmd:'patch',patch:{sessionRestore:'ask',sessionBrowsers:false,sessionSaved:{clean:false,active:1,windows:[
@@ -80,10 +93,11 @@ for(const name of ['load','save'])lord.settings[name]=()=>{jsPersistence++;throw
 lord.settings.state=input=>{if(input.cmd==='patch'&&['sessionSaved','sessionRestore','sessionBrowsers'].some(key=>Object.hasOwn(input.patch||{},key))){jsPersistence++;throw Error('restore wrote preferences through JS');}return nativeSettings.call(lord.settings,input);};
 wm.open('files',{instance:'existing',frame});
 const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,request=lord.nativeApps.request,unmount=lord.nativeViews.unmount;
+let noAppearanceFacts=true,noCatalogFacts=true,factCount=0,lastFacts;
 let handle=0,mounts=0,bound=true,noWindowTransport=true,remount,togglePrompt,restoreUnmounted=false,backgroundPrompt=false,opens=[],launches=[],claimOK=false;
-const inspect=text=>{const f=JSON.parse(text);noWindowTransport&&=!('settings'in f)&&!('windows'in f)&&!('windows'in(f.args||{}));};
+const inspect=text=>{const f=JSON.parse(text);lastFacts=f;noAppearanceFacts&&=!('theme'in(f.context||{}))&&!('scale'in(f.context||{}));noCatalogFacts&&=!('registry'in f)&&!('catalog'in f);noWindowTransport&&=!('settings'in f)&&!('windows'in f)&&!('windows'in(f.args||{}));};
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:restore'){inspect(text);bound&&=sources[0]===source;handle=mount(node,id,text,...sources);mounts++;return handle;}return mount(node,id,text,...sources);};
-lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return send(id,text);};
+lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);factCount++;}return send(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)restoreUnmounted=true;return unmount(id);};
 lord.nativeApps.request=text=>{const f=JSON.parse(text);if(f.cmd==='sessionRestore')noWindowTransport&&=!('settings'in f)&&!('settingsRevision'in f)&&!('windows'in f)&&!('active'in f);return request.call(lord.nativeApps,text);};
 const direct=(op,...args)=>JSON.parse(source.call(op,JSON.stringify([{},...args])));
@@ -113,6 +127,16 @@ async function run(){
  const keyboardGate=await until(()=>shellHasKeyboard()&&!textFieldActive());
  const old=mounts;remount();await until(()=>mounts>old&&text().includes('Reopen your windows?'));
  const remounted=await until(()=>text().includes('Reopen your windows?')&&!textFieldActive()&&shellHasKeyboard())&&settings.get().sessionSaved.clean===false;
+ await sleep(200);const adoptAppearance=settingsBridge.perform;settingsBridge.perform=()=>{};
+ const beforeFacts=factCount;
+ nativeSettings.call(lord.settings,{cmd:'patch',patch:{mode:'@MODE@',accent:'verde',nativeAppearance:'adwaita'}});
+ const metadataReply=request.call(lord.nativeApps,JSON.stringify({cmd:'metadata',registry:[
+   {id:'files',name:'Native Files'},{id:'notes',name:'Native Notes'},{id:'pkg',name:'Native Package',package:true}],catalog:[]}));
+ const nativeCatalog=metadataReply.ok===true&&await until(()=>text().includes('Native Notes')&&text().includes('Native Package'));
+ await sleep(100);const withoutFacts=factCount===beforeFacts,staleAppearanceMirror=settings.get().mode===opposite;
+ send(handle,JSON.stringify({...lastFacts,registry:[{id:'notes',name:'Poisoned Notes'}],catalog:[],context:{...lastFacts.context,theme:{mode:opposite,text:'#ff0000',accent:'#ff0000'},scale:{body:200}}}));
+ await sleep(80);const retainedAfterPoison=text().includes('Native Notes')&&!text().includes('Poisoned Notes')&&text().includes('Reopen your windows?')&&shellHasKeyboard();
+ settingsBridge.perform=adoptAppearance;
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
  let acceptedOrDeclined=false,claims=false,nativeAutosave=false;
  if('@MODE@'==='light'){
@@ -142,7 +166,7 @@ async function run(){
  const nativePreferences=restoreMode()==='off'&&restoreBrowsers()===true&&settings.get().sessionRestore==='ask'&&settings.get().sessionBrowsers===false;
  settingsBridge.perform=adopt;
  const noJsPersistence=jsPersistence===0;
- console.log('session_restore-observation '+JSON.stringify({bound,initialMarker,prompt,keyboardGate,remounted,acceptedOrDeclined,claims,nativeAutosave,cleanExit,resumed,off,noWindowTransport,staleBootstrap,nativePreferences,noJsPersistence,backgroundPrompt,backgroundAutosave,saved:!!saved?.ok,mounts,opens:opens.length,launches:launches.length}));
+ console.log('session_restore-observation '+JSON.stringify({noAppearanceFacts,noCatalogFacts,withoutFacts,staleAppearanceMirror,nativeCatalog,retainedAfterPoison,bound,initialMarker,prompt,keyboardGate,remounted,acceptedOrDeclined,claims,nativeAutosave,cleanExit,resumed,off,noWindowTransport,staleBootstrap,nativePreferences,noJsPersistence,backgroundPrompt,backgroundAutosave,saved:!!saved?.ok,mounts,opens:opens.length,launches:launches.length}));
 }
 setTimeout(()=>run().catch(error=>console.error('session_restore driver: '+(error.stack||error))),50);
 "#;
