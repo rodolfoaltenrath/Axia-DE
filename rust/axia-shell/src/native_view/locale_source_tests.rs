@@ -162,11 +162,13 @@ fn unbound_app_host_retains_local_locale_facts_and_null_session_is_rejected() {
 }
 
 struct AppearanceProbe {
+    shell: bool,
     catalogs_bound: bool,
     theme: Rc<Value>,
     log: Rc<RefCell<Vec<Rc<Value>>>>,
 }
 impl NativeApp for AppearanceProbe {
+    fn uses_shell_appearance(&self) -> bool { self.shell }
     fn uses_native_appearance(&self) -> bool { true }
     fn set_native_appearance_catalogs(&mut self, wallpapers: &'static Value, accents: &'static Value) {
         assert!(std::ptr::eq(wallpapers, crate::native_style::catalog::wallpapers()));
@@ -192,7 +194,7 @@ fn native_appearance_is_shared_ignores_stale_facts_and_only_repaints_for_changed
     let mut owner=crate::native_style::appearance::Source::new(home);
     let expected=owner.current();
     let mount=scene::create(scene::VIEW);let log=Rc::new(RefCell::new(Vec::new()));
-    let mut host=Host::new(mount,Box::new(AppearanceProbe{catalogs_bound:false,theme:Rc::new(Value::Null),log:log.clone()}),assets,Some(home));
+    let mut host=Host::new(mount,Box::new(AppearanceProbe{shell:false,catalogs_bound:false,theme:Rc::new(Value::Null),log:log.clone()}),assets,Some(home));
     host.bind_locale(home,assets);
     let stale=json!({"context":{"theme":{"accent":"#ff0000"},"scale":{"body":999}}});
     host.facts(stale.clone());assert_eq!(log.borrow().len(),1);
@@ -207,5 +209,40 @@ fn native_appearance_is_shared_ignores_stale_facts_and_only_repaints_for_changed
     assert!(Rc::ptr_eq(&owner.current(),&log.borrow()[1]));
     host.facts(stale);host.tick(3000.);assert_eq!(log.borrow().len(),2);
     assert!(host.deadline().is_none());drop(host);scene::destroy(mount);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn shell_host_uses_its_palette_and_ignores_native_app_style_changes() {
+    let root = std::env::temp_dir().join(format!("axia-shell-appearance-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let home = root.to_str().unwrap();
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    crate::settings::with(home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("nativeAppearance", &json!("adwaita"));
+    });
+    let mut owner = crate::native_style::appearance::Source::new_shell(home);
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(AppearanceProbe {
+        shell:true, catalogs_bound:false, theme:Rc::new(Value::Null), log:log.clone(),
+    }), assets, Some(home));
+    host.bind_locale(home, assets);
+    host.facts(json!({"context":{"theme":{"text":"#ff0000"},"scale":{"body":999}}}));
+    assert!(Rc::ptr_eq(&owner.current(), &log.borrow()[0]));
+    assert_eq!(log.borrow()[0]["controlRadius"], 7);
+    crate::settings::with(home, |s| { s.set("nativeAppearance", &json!("axia")); });
+    host.tick(1000.);
+    assert_eq!(log.borrow().len(), 1, "app styling alone must not rebuild a shell scene");
+    assert!(host.deadline().is_none());
+    crate::settings::with(home, |s| { s.set("accent", &json!("verde")); });
+    assert_eq!(host.deadline(), Some(0.));
+    host.tick(2000.);
+    assert_eq!(log.borrow().len(), 2);
+    assert!(Rc::ptr_eq(&owner.current(), &log.borrow()[1]));
+    assert_eq!(log.borrow()[1]["accent"], "#30d158");
+    assert!(host.deadline().is_none());
+    drop(host); scene::destroy(mount);
     std::fs::remove_dir_all(root).unwrap();
 }

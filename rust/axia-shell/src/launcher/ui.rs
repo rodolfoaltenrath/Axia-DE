@@ -84,7 +84,7 @@ pub(super) fn scroll(m: &mut Menu, model: &mut AxiaLauncher, region: &str) -> Va
 }
 
 pub(super) fn render(m: &mut Menu, model: &mut AxiaLauncher) -> Value {
-    let t = m.context["theme"].clone();
+    let t = m.appearance.clone().unwrap_or_else(|| std::rc::Rc::new(m.context["theme"].clone()));
     let area = m.context["area"].clone();
     let q = unicode::query(&m.query);
     m.plan = model.view(&json!({"query":q.as_str(),"category":m.category.as_str(),"height":1})).unwrap();

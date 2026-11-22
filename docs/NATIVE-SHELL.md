@@ -79,8 +79,17 @@ a troca efetiva invalida o cache visual e repetir a referência não o invalida.
 Sandbox Probe continua executando as verificações no processo isolado; o novo
 caminho vale para sua view de fallback da sessão. Senhas mantém o adaptador do
 processo isolado e os fatos locais da API; sua UI já é Rust. Esse transporte e
-as cenas da shell continuam no escopo da migração;
+as demais cenas da shell continuam no escopo da migração;
 os subpainéis internos de rede/privacidade conservam seus contratos existentes.
+Barra de menus e launcher também recebem aparência diretamente do perfil.
+O host escolhe a variante da fonte pela capacidade do modelo Rust; fatos JSON
+não podem escolher essa ligação. As duas cenas compartilham a paleta da shell,
+independente de Adwaita nos apps. O registro fraco separa os planos por perfil e
+variante, sem reter proprietários através de referências às cores. O launcher
+passa Rc diretamente para seu modelo de menu, sem serializar a paleta no contexto.
+Mudar cores preserva menu aberto, seleção pelo teclado, busca e viewport medido;
+o host isolado mantém seu contrato local. Callbacks, catálogo e efeitos ainda
+passam pelos adaptadores JS. Esta etapa não migra a barra de título por janela.
 Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
 Fase 3; o proprietário das cores já é Rust.
 

@@ -5,6 +5,8 @@ pub trait NativeApp {
     /// Migrated session models share an immutable native appearance plan.
     /// Legacy/isolated requests still accept their own context facts.
     fn uses_native_appearance(&self) -> bool { false }
+    /// Shell scenes keep their palette independent of the native-app styling preference.
+    fn uses_shell_appearance(&self) -> bool { false }
     fn set_native_appearance(&mut self, _theme: std::rc::Rc<Value>) {}
     /// Compiled metadata for session views; isolated hosts retain their local catalogs.
     fn set_native_appearance_catalogs(&mut self, _wallpapers: &'static Value, _accents: &'static Value) {}

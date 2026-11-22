@@ -13,13 +13,15 @@ use super::NativeApp;
 use serde_json::{json, Value};
 use super::menubar::{advance, selectable};
 
-type Call = Box<dyn FnMut(&Value) -> Result<Value, &'static str>>;
+type Call = Box<dyn FnMut(&Value, Option<std::rc::Rc<Value>>) -> Result<Value, &'static str>>;
 
 pub struct LauncherView {
     call: Call,
     /// The launcher's handle for this menu (0 while it is not open).
     id: u64,
     context: Value,
+    appearance: Option<std::rc::Rc<Value>>,
+    sent_appearance: Option<std::rc::Rc<Value>>,
     /// The launcher's last widget tree and what the host was given for it.
     raw: Value,
     last: Value,
@@ -36,7 +38,7 @@ pub struct LauncherView {
 
 impl Default for LauncherView {
     fn default() -> Self {
-        Self::with(Box::new(crate::launcher::shell_request))
+        Self::with(Box::new(crate::launcher::shell_menu_request))
     }
 }
 
@@ -46,19 +48,24 @@ fn rtl(lang: &str) -> bool {
 
 impl LauncherView {
     pub fn with(call: Call) -> Self {
-        Self { call, id: 0, context: Value::Null, raw: Value::Null, last: Value::Null, pending: Vec::new(), dock: Value::Null,
+        Self { call, id: 0, appearance: None, sent_appearance: None, context: Value::Null, raw: Value::Null, last: Value::Null, pending: Vec::new(), dock: Value::Null,
             catalog: Value::Null, scroll_key: Value::Null, scroll_offset: 0., scroll_height: 0.,
             menu_items: Vec::new(), menu_row: -1 }
     }
-    fn context(input: &Value) -> Value {
+    fn backend(&mut self, args: &Value) -> Result<Value, &'static str> {
+        (self.call)(args, self.appearance.clone())
+    }
+    fn context(&self, input: &Value) -> Value {
+        let mut context = json!({"area":{"x":0,"y":0,"w":input["context"]["width"],"h":input["context"]["height"]},
+            "rtl":rtl(input["lang"].as_str().unwrap_or(""))});
+        if self.appearance.is_some() { return context; }
         let mut theme = input["context"]["theme"].clone();
         if let Some(t) = theme.as_object_mut() {
             t.remove("wallpapers");
             t.remove("accents");
         }
-        json!({"theme":theme,
-            "area":{"x":0,"y":0,"w":input["context"]["width"],"h":input["context"]["height"]},
-            "rtl":rtl(input["lang"].as_str().unwrap_or(""))})
+        context["theme"] = theme;
+        context
     }
     fn take(&mut self, reply: Result<Value, &'static str>) {
         let Ok(reply) = reply else { return };
@@ -114,7 +121,7 @@ impl LauncherView {
             self.scroll_height = 0.;
         }
         let height = if self.scroll_height > 0. { self.scroll_height } else { node["style"]["height"].as_f64().unwrap_or(510.).max(1.) };
-        let reply = (self.call)(&json!({"op":"scroll","id":self.id,"key":node["region"],"offset":self.scroll_offset,"height":height})).ok();
+        let reply = self.backend(&json!({"op":"scroll","id":self.id,"key":node["region"],"offset":self.scroll_offset,"height":height})).ok();
         if let Some(offset) = reply.as_ref().and_then(|reply| reply["offset"].as_f64()) {
             self.scroll_offset = offset;
         }
@@ -143,7 +150,7 @@ impl LauncherView {
         if let Some(app) = args["action"][1].as_str() {
             args["dock"] = self.dock_of(app);
         }
-        let reply = (self.call)(&args);
+        let reply = self.backend(&args);
         self.take(reply);
     }
     fn answer(&mut self) -> Value {
@@ -158,25 +165,32 @@ impl LauncherView {
 }
 
 impl NativeApp for LauncherView {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
-                let context = Self::context(input);
+                let context = self.context(input);
+                let appearance_changed = match (&self.appearance, &self.sent_appearance) {
+                    (Some(a),Some(b)) => !std::rc::Rc::ptr_eq(a,b), (None,None) => false, _ => true,
+                };
                 let catalog = input["catalog"].clone();
                 self.dock = input["args"]["dock"].clone();
                 if self.id == 0 {
-                    let reply = (self.call)(&json!({"op":"open","mode":"flow","context":context}));
+                    let reply = self.backend(&json!({"op":"open","mode":"flow","context":context}));
                     if let Ok(r) = &reply {
                         self.id = r["id"].as_u64().unwrap_or(0);
                     }
                     self.take(reply);
                     self.context = context;
-                } else if context != self.context || catalog != self.catalog {
-                    self.scroll_height = 0.;
-                    let reply = (self.call)(&json!({"op":"context","id":self.id,"context":context}));
+                } else if context != self.context || catalog != self.catalog || appearance_changed {
+                    if context != self.context || catalog != self.catalog { self.scroll_height = 0.; }
+                    let reply = self.backend(&json!({"op":"context","id":self.id,"context":context}));
                     self.take(reply);
                     self.context = context;
                 }
+                self.sent_appearance = self.appearance.clone();
                 self.catalog = catalog;
                 self.answer()
             }
@@ -189,7 +203,7 @@ impl NativeApp for LauncherView {
             }
             "close" => {
                 if self.id != 0 {
-                    let _ = (self.call)(&json!({"op":"close","id":self.id}));
+                    let _ = self.backend(&json!({"op":"close","id":self.id}));
                     self.id = 0;
                 }
                 json!({})
@@ -246,7 +260,7 @@ mod tests {
             .collect();
         launcher.borrow_mut().replace(&json!(apps)).unwrap();
         let shared = launcher.clone();
-        (LauncherView::with(Box::new(move |args| shared.borrow_mut().request(args))), launcher)
+        (LauncherView::with(Box::new(move |args, appearance| shared.borrow_mut().menu_request(args, appearance))), launcher)
     }
     fn sync(width: f64) -> Value {
         json!({"cmd":"sync","lang":"en","settings":{},
@@ -277,6 +291,32 @@ mod tests {
         assert_eq!(input["submit"], json!(["submit"]));
         assert_eq!(input["cancel"][0], "cancel");
         assert_eq!(v.request(&sync(1000.))["same"], true, "an unchanged context sends no tree");
+    }
+    #[test]
+    fn native_colors_preserve_query_popup_and_measured_scroll_viewport() {
+        let (mut v, _) = view();
+        let first = Rc::new(json!({"mode":"dark","accent":"#123456","effects":false}));
+        v.set_native_appearance(first);
+        let input = sync(1000.);
+        v.request(&input);
+        assert!(v.context.get("theme").is_none(), "native colors never enter the JSON context");
+        v.request(&json!({"cmd":"query","key":"Notes"}));
+        v.request(&json!({"cmd":"context","key":"notes","x":200.,"y":200.}));
+        let before = v.request(&input)["tree"].clone();
+        v.request(&json!({"cmd":"scroll","key":v.scroll_key,"offset":0.,"height":321.}));
+        let key = v.scroll_key.clone();
+        let next = Rc::new(json!({"mode":"light","accent":"#654321","effects":true}));
+        v.set_native_appearance(next.clone());
+        let tree = v.request(&input)["tree"].clone();
+        assert_eq!(v.scroll_height, 321., "a color change must keep the measured viewport");
+        assert_eq!(v.scroll_key, key, "a color change must not reset the query generation");
+        assert_eq!(find(&tree, &|n| n["kind"] == "input").unwrap()["value"], "Notes");
+        assert!(find(&before, &|n| n["kind"] == "menu").is_some());
+        assert!(find(&tree, &|n| n["kind"] == "menu").is_some());
+        assert!(Rc::ptr_eq(v.sent_appearance.as_ref().unwrap(), &next));
+        assert!(v.context.get("theme").is_none());
+        let reply = v.request(&json!({"cmd":"submit"}));
+        assert!(reply["effects"].as_array().unwrap().iter().any(|e| e["effect"]["id"] == "notes"));
     }
     #[test]
     fn a_new_area_is_a_new_context() {

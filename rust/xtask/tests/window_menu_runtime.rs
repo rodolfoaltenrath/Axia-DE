@@ -12,8 +12,17 @@ fn native_window_menu_reads_current_titles_and_executes_live_actions() {
         .unwrap();
     for mode in ["light", "dark"] {
         for width in [640, 1000] {
-            let report = ui::run_ui(repo, "window_menu", DRIVER, mode, width, "window-menu.png");
+            let report = ui::run_ui_with_capture(repo, "window_menu", DRIVER, mode, width, "window-menu.png", |path| {
+                let pixels = image::open(path).unwrap().into_rgb8();
+                let ink = if mode == "light" { [29,29,31] } else { [245,245,247] };
+                assert!(pixels.pixels().filter(|p| p.0 == ink).count() > 20,
+                    "current shell ink was not painted: {mode}/{width}");
+            });
             for flag in [
+                "noAppearanceFacts",
+                "withoutAppearanceFacts",
+                "staleAppearanceMirror",
+                "appearanceRetained",
                 "bound",
                 "initial",
                 "directTitle",
@@ -44,11 +53,27 @@ import {NativeView} from '@ROOT@/sdk/nativeview.js';
 import {NATIVE_MENUBAR,barBridge} from '@ROOT@/sdk/nativemenubar.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
+import {settings} from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {locale,t} from '@ROOT@/sdk/i18n.js';
 import {media} from '@ROOT@/sdk/media.js';
 locale.set({...locale.get(),lang:'en'});enableShellLayers();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const opposite='@MODE@'==='light'?'dark':'light';
+settings.set({language:'en',mode:opposite,accent:'azul',effects:true,nativeAppearance:'axia'});
+let noAppearanceFacts=true,appearanceFacts=0,lastAppearanceFacts;
+const appearanceSend=lord.nativeViews.facts;
+function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}));}
+async function changeAppearance(){
+ await sleep(250);const perform=settingsBridge.perform;settingsBridge.perform=()=>{};
+ const before=appearanceFacts;
+ lord.settings.state({cmd:'patch',patch:{mode:'@MODE@',accent:'verde',effects:false,nativeAppearance:'adwaita'}});await sleep(200);
+ const withoutAppearanceFacts=appearanceFacts===before,staleAppearanceMirror=settings.get().mode===opposite;
+ appearanceSend(handle,JSON.stringify({...lastAppearanceFacts,context:{...lastAppearanceFacts.context,theme:{mode:opposite,menuText:'#ff0000',effects:true},scale:{body:200}}}));
+ await sleep(100);settingsBridge.perform=perform;
+ return {withoutAppearanceFacts,staleAppearanceMirror};
+}
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
 const Icon=()=>null;Icon.nativeIcon={kind:'app',id:'notes',name:'Notes'};
 configureWindows({apps:['notes','calculator'].map(id=>({id,name:id==='notes'?'Notes':'Calculator',Component:()=>null,Icon}))});
@@ -56,8 +81,8 @@ registerBuiltinApp({id:'panel',name:'Hidden panel',builtin:true,Component:()=>nu
 let handle=0,bound=false,noWindowTransport=true,unmounted=false,hideBar;
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
 function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('windowRows'in input.args);}
-lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:menubar'){handle=value;bound=source[0]===lord.windowList;inspect(text);}return value;};
-lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return facts(id,text);};
+lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:menubar'){handle=value;bound=source[0]===lord.windowList;inspect(text);inspectAppearance(text);}return value;};
+lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);inspectAppearance(text);appearanceFacts++;}return facts(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounted=true;return unmount(id);};
 let jsRows=0,help=0,prepared=0;
 barBridge.menus={get window(){jsRows++;throw Error('Window rows reached JS');},help:{items:[{label:'Legacy help',onClick:()=>help++}]}};
@@ -79,6 +104,8 @@ async function run(){
  wm.setTitle(a,'Alpha');wm.setTitle(calc,'Beta');wm.setTitle(away,'Away');wm.focus(calc);
  raw('open',{app:'notes',instance:'native'});raw('patch','notes#native',{title:'Native title'});const rawOnly=!wm.get('notes#native');
  await until(()=>handle&&has('Window'));await open();
+ const appearance=await changeAppearance();
+ const appearanceRetained=has('Alpha')&&has('Native title');
  const initial=rawOnly&&has('Native title')&&has('Alpha')&&!has('Hidden panel');
  raw('patch','notes#native',{title:'Fresh title'});const directTitle=await until(()=>has('Fresh title')&&!has('Native title'));
  raw('open',{app:'notes',instance:'temporary'});raw('patch','notes#temporary',{title:'Added title'});const added=await until(()=>has('Added title'));
@@ -99,7 +126,7 @@ async function run(){
  const staleAction=closes===0&&!!win(a);
  click('Help');await until(()=>has('Legacy help'));click('Legacy help');const legacyMenu=help===1;
  hideBar();await until(()=>unmounted&&!lord.nativeViews.text(handle));
- console.log('window_menu-observation '+JSON.stringify({bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
+ console.log('window_menu-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_menu driver: '+(error.stack||error))),200);
 "#;

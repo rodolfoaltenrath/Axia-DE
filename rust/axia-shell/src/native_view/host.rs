@@ -398,7 +398,9 @@ impl Host {
         self.locale = Some(locale_source::Source::new(home, assets));
         if self.app.uses_native_appearance() {
             self.app.set_native_appearance_catalogs(crate::native_style::catalog::wallpapers(), crate::native_style::catalog::accents());
-            self.appearance = Some(crate::native_style::appearance::Source::new(home));
+            self.appearance = Some(if self.app.uses_shell_appearance() {
+                crate::native_style::appearance::Source::new_shell(home)
+            } else { crate::native_style::appearance::Source::new(home) });
         }
         if self.app.uses_preferences() {
             let reader = crate::settings::with(home, |settings| settings.reader());

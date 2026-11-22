@@ -23,6 +23,7 @@ struct Open {
 }
 #[derive(Default)]
 pub struct MenuBar {
+    appearance: Option<std::rc::Rc<Value>>,
     open: Option<Open>,
     /// The name asked of the shell whose items have not come back.
     asked: Option<(String, f64)>,
@@ -114,7 +115,7 @@ impl MenuBar {
             .collect()
     }
     fn tree(&self, input: &Value) -> Value {
-        let theme = &input["context"]["theme"];
+        let theme = self.appearance.as_deref().unwrap_or(&input["context"]["theme"]);
         let ink = theme["menuText"].as_str().unwrap_or("#ffffff");
         let hover = theme["menuHover"].clone();
         let bar = &input["args"]["bar"];
@@ -178,6 +179,9 @@ impl MenuBar {
 }
 
 impl NativeApp for MenuBar {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn invalidated(&self) -> bool {
         self.open.as_ref().is_some_and(|open| open.name == "window")
             && self.window_menu.as_ref().is_some_and(|menu| menu.pending())
@@ -525,6 +529,26 @@ mod tests {
         assert_eq!(app.sub_row, 0);
         app.request(&input("menuHover", json!(1), "en"));
         assert_eq!((app.row, app.sub), (-1, -1), "a separator lights nothing");
+    }
+    #[test]
+    fn changing_native_colors_keeps_the_open_menu_and_keyboard_selection() {
+        let mut app = MenuBar::default();
+        app.set_native_appearance(std::rc::Rc::new(json!({"menuText":"#112233","menuHover":"#223344"})));
+        opened(&mut app);
+        app.key("ArrowDown", "", 0);
+        app.key("ArrowDown", "", 0);
+        app.key("ArrowRight", "", 0);
+        let before = app.request(&input("sync", Value::Null, "en"))["tree"].clone();
+        app.set_native_appearance(std::rc::Rc::new(json!({"menuText":"#445566","menuHover":"#556677"})));
+        let reply = app.request(&input("sync", Value::Null, "en"));
+        assert!(app.open.is_some());
+        assert_eq!((app.row, app.sub, app.sub_row), (2, 2, 0));
+        assert_eq!(reply["tree"]["children"][1]["style"]["backgroundColor"], "#556677");
+        assert_ne!(before, reply["tree"]);
+        assert_eq!(app.request(&input("sync", Value::Null, "en"))["same"], true);
+        app.key("ArrowLeft", "", 0);
+        app.key("ArrowDown", "", 0);
+        assert_eq!(app.key("Enter", "", 0).unwrap()["effects"][0]["id"], 4);
     }
     #[test]
     fn the_glyph_follows_the_ink() {

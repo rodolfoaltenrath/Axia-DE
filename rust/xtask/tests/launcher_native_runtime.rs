@@ -13,8 +13,22 @@ fn launcher_is_native_and_reaches_the_end_of_large_catalogs() {
         .unwrap();
     for mode in ["light", "dark"] {
         for width in [640u32, 1000, 1920] {
-            let report = ui::run_ui(repo, "launcher", DRIVER, mode, width, "launcher.png");
+            let report = ui::run_ui_with_capture(repo, "launcher", DRIVER, mode, width, "launcher.png", |path| {
+                let pixels = image::open(path).unwrap().into_rgb8();
+                let bg = if mode == "light" { [255.,255.,255.] } else { [31.,31.,35.] };
+                let actual = pixels.get_pixel(5,5).0;
+                for channel in 0..3 {
+                    let foreground = [18.,18.,24.][channel];
+                    let expected = foreground * 0.94 + bg[channel] * 0.06;
+                    assert!((actual[channel] as f64 - expected).abs() <= 2.,
+                        "native opaque launcher backdrop not painted: {mode}/{width}: {actual:?}");
+                }
+            });
             for flag in [
+                "noAppearanceFacts",
+                "withoutAppearanceFacts",
+                "staleAppearanceMirror",
+                "appearanceRetained",
                 "tailVisible",
                 "tailHit",
                 "openedTail",
@@ -79,13 +93,28 @@ import {dock,dockDrag} from '@ROOT@/sdk/dock.js';
 import {TextInput} from '@ROOT@/sdk/components.jsx';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {media} from '@ROOT@/sdk/media.js';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const opposite='@MODE@'==='light'?'dark':'light';
+let noAppearanceFacts=true,appearanceFacts=0,lastAppearanceFacts;
+const appearanceSend=lord.nativeViews.facts;
+function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}));}
+async function changeAppearance(){
+ await sleep(250);const perform=settingsBridge.perform;settingsBridge.perform=()=>{};
+ const before=appearanceFacts;
+ lord.settings.state({cmd:'patch',patch:{mode:'@MODE@',accent:'verde',effects:false,nativeAppearance:'adwaita'}});await sleep(200);
+ const withoutAppearanceFacts=appearanceFacts===before,staleAppearanceMirror=settings.get().mode===opposite;
+ appearanceSend(handle,JSON.stringify({...lastAppearanceFacts,context:{...lastAppearanceFacts.context,theme:{mode:opposite,menuText:'#ff0000',effects:true},scale:{body:200}}}));
+ await sleep(100);settingsBridge.perform=perform;
+ return {withoutAppearanceFacts,staleAppearanceMirror};
+}
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 let handle=0,show,underlay='';const opened=[];
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
-lord.nativeViews.mount=(node,app,text,...source)=>{const id=mount(node,app,text,...source);if(app==='shell:launcher')handle=id;return id;};
+lord.nativeViews.mount=(node,app,text,...source)=>{const id=mount(node,app,text,...source);if(app==='shell:launcher'){handle=id;inspectAppearance(text);}return id;};
+lord.nativeViews.facts=(id,text)=>{if(id===handle){inspectAppearance(text);appearanceFacts++;}return appearanceSend(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)handle=0;return unmount(id);};
 const find=text=>handle?lord.nativeViews.findText(handle,text):0;
 const count=()=>new Set((lord.nativeViews.text(handle)||'').match(/App \d{4}/g)||[]).size;
@@ -97,7 +126,7 @@ async function type(text){for(const char of text){key(char,char);await sleep(12)
 const Icon=({size})=>h(View,{style:{width:size,height:size,backgroundColor:'#3489bd'}});
 const apps=Array.from({length:2048},(_,i)=>({id:'test-'+String(i).padStart(4,'0'),name:'App '+String(i).padStart(4,'0'),category:i%2?'Game':'Utility',Icon}));
 configureWindows({apps,workArea:{x:0,y:0,w:@WIDTH@,h:700}});
-settings.set({language:'en',mode:'@MODE@',launcherNativeView:false,reduceMotion:true});
+settings.set({language:'en',mode:opposite,accent:'azul',effects:true,nativeAppearance:'axia',launcherNativeView:false,reduceMotion:true});
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 function App(){const[shown,setShown]=useState(false),[value,setValue]=useState('');show=setShown;return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},
  h(View,{style:{position:'absolute',left:-300,top:0,width:200,height:40}},h(TextInput,{autoFocus:true,value,onChange:text=>{underlay=text;setValue(text);}})),
@@ -108,6 +137,8 @@ async function run(){
  const firstY=lord.getLayout(find('App 0000'))[1];
  const firstRow=apps.slice(0,32).map(app=>find(app.name)).filter(Boolean).map(node=>lord.getLayout(node)).filter(rect=>rect[1]===firstY);
  pointer('wheel',lord.nativeViews.hitTest(@WIDTH@/2,300),@WIDTH@/2,300,-100000);await until(()=>{const node=find('App 2047');return node&&lord.getLayout(node)[2]>0;});
+ const appearance=await changeAppearance();
+ const appearanceRetained=!!find('App 2047')&&!find('App 0000');
  const tailVisible=!!find('App 2047'),tailRect=lord.getLayout(find('App 2047')),tailCount=count();
  const tailHit=lord.nativeViews.hitTest(tailRect[0]+tailRect[2]/2,tailRect[1]+tailRect[3]/2)===find('App 2047');
  const image=lord.media.screenshot('screenshots');const saved=await media.saveImage(image,@IMAGE@);media.close(image);
@@ -125,7 +156,7 @@ async function run(){
  pointer('up',0,@WIDTH@/2,500);await sleep(50);const dragDidNotLaunch=opened.length===before;
  await fresh();click('Games');key('Escape');await until(()=>!handle);const escaped=!handle;
  await fresh();const outsideNode=lord.nativeViews.hitTest(2,698);for(const event of ['down','up'])pointer(event,outsideNode,2,698);await until(()=>!handle);const outsideClosed=!handle;
- console.log('launcher-observation '+JSON.stringify({initialCount,initialTail,firstRow,tailCount,tailRect,tailVisible,tailHit,openedTail,searched,categoryFiltered,menuEscaped,pinned,unpinned,installed,removed,dragClosed,dragDidNotLaunch,escaped,outsideClosed,inputIsolated:underlay==='',saved:!!saved?.ok}));
+ console.log('launcher-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,initialCount,initialTail,firstRow,tailCount,tailRect,tailVisible,tailHit,openedTail,searched,categoryFiltered,menuEscaped,pinned,unpinned,installed,removed,dragClosed,dragDidNotLaunch,escaped,outsideClosed,inputIsolated:underlay==='',saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('launcher driver: '+(error.stack||error))),200);
 "#;

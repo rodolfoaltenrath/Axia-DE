@@ -1,4 +1,4 @@
-//! Shared, revisioned native app appearance derived from the authoritative profile.
+//! Shared, revisioned app and shell appearance derived from the authoritative profile.
 use axia_state::{Reader, Store, Subscription};
 use serde_json::{json, Value};
 use std::{cell::RefCell, collections::BTreeMap, rc::{Rc, Weak}};
@@ -40,28 +40,31 @@ impl Key {
 
 
 struct Model {
+    shell: bool,
     profile: Reader<Value>,
     changes: Subscription,
     key: Key,
     colors: Store<Rc<Value>>,
 }
 impl Model {
-    fn new(profile: Reader<Value>) -> Self {
+    fn new(profile: Reader<Value>, shell: bool) -> Self {
         let changes = profile.subscribe();
-        let key = Key::from_profile(&profile.read());
+        let mut key = Key::from_profile(&profile.read());
+        if shell { key.native = false; }
         let colors = Store::new(Rc::new(key.colors()));
-        Self { profile, changes, key, colors }
+        Self { shell, profile, changes, key, colors }
     }
     fn sync(&mut self) {
         if self.changes.take().is_none() { return; }
-        let key = Key::from_profile(&self.profile.read());
+        let mut key = Key::from_profile(&self.profile.read());
+        if self.shell { key.native = false; }
         if self.key != key {
             self.colors.set(Rc::new(key.colors()));
             self.key = key;
         }
     }
 }
-thread_local! { static PROFILES: RefCell<BTreeMap<String,Weak<RefCell<Model>>>> = const { RefCell::new(BTreeMap::new()) }; }
+thread_local! { static PROFILES: RefCell<BTreeMap<(String,bool),Weak<RefCell<Model>>>> = const { RefCell::new(BTreeMap::new()) }; }
 
 pub(crate) struct Source {
     model: Rc<RefCell<Model>>,
@@ -69,15 +72,18 @@ pub(crate) struct Source {
     changes: Subscription,
 }
 impl Source {
-    pub(crate) fn new(home: &str) -> Self {
+    pub(crate) fn new(home: &str) -> Self { Self::new_kind(home, false) }
+    pub(crate) fn new_shell(home: &str) -> Self { Self::new_kind(home, true) }
+    fn new_kind(home: &str, shell: bool) -> Self {
         let home = crate::settings::profile(home);
+        let registry_key = (home.clone(), shell);
         let model = PROFILES.with(|profiles| {
             let mut profiles = profiles.borrow_mut();
             profiles.retain(|_, owner| owner.strong_count() != 0);
-            if let Some(model) = profiles.get(&home).and_then(Weak::upgrade) { return model; }
+            if let Some(model) = profiles.get(&registry_key).and_then(Weak::upgrade) { return model; }
             let profile = crate::settings::with(&home, |profile| profile.reader());
-            let model = Rc::new(RefCell::new(Model::new(profile)));
-            profiles.insert(home, Rc::downgrade(&model));
+            let model = Rc::new(RefCell::new(Model::new(profile, shell)));
+            profiles.insert(registry_key, Rc::downgrade(&model));
             model
         });
         Self::bind(model)
@@ -90,7 +96,7 @@ impl Source {
     }
     #[cfg(test)]
     pub(crate) fn from_preferences(profile: Reader<Value>) -> Self {
-        Self::bind(Rc::new(RefCell::new(Model::new(profile))))
+        Self::bind(Rc::new(RefCell::new(Model::new(profile, false))))
     }
     pub(crate) fn pending(&self) -> bool {
         self.changes.pending() || self.model.borrow().changes.pending()
@@ -119,6 +125,30 @@ mod tests {
         assert_eq!(next["accent"], "#bf5af2"); assert_eq!(next["mode"], "light");
     }
     #[test]
+    fn shell_consumers_share_colors_without_inheriting_native_app_style() {
+        let profile = Store::new(json!({"mode":"dark","accent":"azul","effects":false,"nativeAppearance":"adwaita"}));
+        let mut app = Source::from_preferences(profile.reader());
+        let mut shell = Source::bind(Rc::new(RefCell::new(Model::new(profile.reader(), true))));
+        let mut second = Source::bind(shell.model.clone());
+        let first = shell.current();
+        assert!(Rc::ptr_eq(&first, &second.current()));
+        assert_eq!(first["controlRadius"], 7);
+        assert_eq!(app.current()["controlRadius"], 4);
+        let old_app = app.current();
+        profile.set(json!({"mode":"dark","accent":"azul","effects":false,"nativeAppearance":"axia"}));
+        assert!(Rc::ptr_eq(&first, &shell.current()), "an app style change must not rebuild the shell palette");
+        assert!(!second.pending());
+        assert!(!Rc::ptr_eq(&old_app, &app.current()));
+        profile.set(json!({"mode":"light","accent":"verde","effects":true,"nativeAppearance":"adwaita"}));
+        let next = second.current();
+        assert!(!Rc::ptr_eq(&first, &next));
+        assert!(Rc::ptr_eq(&next, &shell.current()));
+        assert_eq!(next["mode"], "light");
+        assert_eq!(next["accent"], "#30d158");
+        assert_eq!(next["controlRadius"], 7);
+        assert_eq!(app.current()["controlRadius"], 4);
+    }
+    #[test]
     fn profile_registry_is_weak_and_keeps_profiles_isolated() {
         let a_home = format!("/tmp/axia-appearance-a-{}",std::process::id());
         let b_home = format!("/tmp/axia-appearance-b-{}",std::process::id());
@@ -127,9 +157,15 @@ mod tests {
         let mut again = Source::new(&a_home); let mut b = Source::new(&b_home);
         assert!(Rc::ptr_eq(&a.current(), &again.current()));
         assert!(!Rc::ptr_eq(&a.current(), &b.current()));
+        let mut shell = Source::new_shell(&a_home);
+        let mut shell_again = Source::new_shell(&a_home);
+        assert!(Rc::ptr_eq(&shell.current(), &shell_again.current()));
+        assert!(!Rc::ptr_eq(&a.current(), &shell.current()));
+        let shell_weak = Rc::downgrade(&shell.model);
         let colors = a.colors.clone(); drop(a); drop(again);
         assert!(weak.upgrade().is_none(), "a plan reader must not retain its profile owner");
         assert_eq!(colors.read()["mode"], "dark");
+        drop(shell); drop(shell_again); assert!(shell_weak.upgrade().is_none());
         drop(b); std::fs::remove_dir_all(a_home).unwrap(); std::fs::remove_dir_all(b_home).unwrap();
     }
 }

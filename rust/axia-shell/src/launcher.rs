@@ -308,7 +308,7 @@ impl AxiaLauncher {
             "catalog" => Ok(self.catalog()),
             "categories" => Ok(json!({"categories":CATEGORIES})),
             "view" => self.view(args),
-            "open" | "context" | "event" | "scroll" | "close" => self.menu_request(args),
+            "open" | "context" | "event" | "scroll" | "close" => self.menu_request(args, None),
             "window" => {
                 let want = string(args, "id");
                 Ok(
@@ -352,11 +352,11 @@ fn number(args: &Value, name: &str, default: f64, min: f64, max: f64) -> f64 {
 static SHELL: std::sync::atomic::AtomicPtr<AxiaLauncher> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// A request to the shell's launcher, as `lord.launcher.request` makes it.
-pub(crate) fn shell_request(args: &Value) -> Result<Value, &'static str> {
+pub(crate) fn shell_menu_request(args: &Value, appearance: Option<std::rc::Rc<Value>>) -> Result<Value, &'static str> {
     // SAFETY: the pointer is the live handle that axia_launcher_new gave the registrar, cleared by
     // axia_launcher_free before it is dropped.
     let state = unsafe { SHELL.load(std::sync::atomic::Ordering::Acquire).as_mut() };
-    state.ok_or("no launcher")?.request(args)
+    state.ok_or("no launcher")?.menu_request(args, appearance)
 }
 
 #[no_mangle]

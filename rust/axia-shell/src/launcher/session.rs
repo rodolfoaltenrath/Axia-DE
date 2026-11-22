@@ -42,6 +42,7 @@ pub(super) fn dock_id(a: &Value) -> Option<String> {
 pub(super) struct Menu {
     pub id: u64,
     pub context: Value,
+    pub appearance: Option<std::rc::Rc<Value>>,
     pub query: String,
     pub category: String,
     pub popup: Option<Value>,
@@ -152,7 +153,7 @@ impl Menu {
 }
 
 impl AxiaLauncher {
-    pub(super) fn menu_request(&mut self, args: &Value) -> Result<Value, &'static str> {
+    pub(crate) fn menu_request(&mut self, args: &Value, appearance: Option<std::rc::Rc<Value>>) -> Result<Value, &'static str> {
         let op = string(args, "op");
         if op == "open" {
             if self.menus.len() >= 16 {
@@ -165,6 +166,7 @@ impl AxiaLauncher {
             let mut menu = Menu {
                 id: self.sequence,
                 context: args["context"].clone(),
+                appearance,
                 ..Menu::default()
             };
             let reply = menu.snapshot(self);
@@ -173,6 +175,7 @@ impl AxiaLauncher {
         }
         let id = args["id"].as_u64().ok_or("invalid menu handle")?;
         let mut menu = self.menus.remove(&id).ok_or("unknown menu handle")?;
+        if appearance.is_some() { menu.appearance = appearance; }
         if op == "close" {
             return Ok(Value::Null);
         }
