@@ -9,7 +9,7 @@ export { cycleAppWindows } from './appcontrol.js';
 import { NativeView } from './nativeview.js';
 import { switcherBridge } from './nativeswitcher.js';
 
-const MANIFEST = { id: 'shell:switcher', shell: true, appearanceSource: 'native', facts: 'appcontrol', fullTheme: true };
+const MANIFEST = { id: 'shell:switcher', shell: true, appearanceSource: 'native', catalogSource: 'native', fullTheme: true };
 // Lifecycle only. Entries and the selected index are private to the Rust view.
 export const switcherState = createStore(null);
 export const switcherOpen = () => !!switcherState.get();

@@ -251,7 +251,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
             menubar::MenuBar::with_session(session,&assets,home.as_deref())
         } else { menubar::MenuBar::with_windows(session.reader(),&assets,home.as_deref()) }) as Box<dyn NativeApp>).or_else(||app(id))
     } else if id == "shell:switcher" {
-        windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
+        owner.clone().map(|session| Box::new(if native_locale {
+            switcher::Switcher::with_session(session)
+        } else { switcher::Switcher::new(session.reader()) }) as Box<dyn NativeApp>)
     } else if id == "shell:desktop-hud" {
         windows.clone().map(|reader| Box::new(if native_locale {
             desktop_hud::DesktopHud::with_displays(reader, services::displays::reader())

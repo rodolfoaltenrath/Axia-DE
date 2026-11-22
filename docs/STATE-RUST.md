@@ -222,10 +222,32 @@ a janela escolhida substitui sua representante ou remove o grupo.
 Seleção, ícones e faixa por viewport são nativos. `appswitcher.jsx` conserva
 somente o ciclo de abertura, os atalhos e a aplicação do foco escolhido.
 `nativeswitcher.js` enfileira comandos recebidos antes do mount e usa um nonce
-para que efeitos de uma abertura antiga não encerrem a seguinte. Metadados e
-aparência ainda chegam pelo adaptador compartilhado. O comando separado de
+para que efeitos de uma abertura antiga não encerrem a seguinte. Aparência e
+metadados são lidos por referências nativas: a montagem validada da sessão usa
+o Store compartilhado do catálogo e suas revisões, sem registry/catalog nos
+fatos da view. O SDK inicializa a importação compartilhada antes do mount;
+descoberta/importação inicial ainda pertencem a `nativecatalog.js`. Montagens
+locais por Reader preservam os fatos explícitos de metadados.
+
+Renomear um grupo preserva sua seleção e a origem de abertura. Se o catálogo
+remove um grupo antes de confirmar, o host consome a revisão e revalida o alvo;
+sem grupos, fecha uma única vez. Um alternador já encerrado não agenda trabalho
+por revisões posteriores de catálogo ou janelas. Fatos antigos não substituem
+a fonte vinculada. O comando separado de
 ciclar janelas do mesmo app usa o controlador nativo descrito abaixo; overview
 e o antigo binding `lord.switcher` permanecem para as próximas etapas.
+
+A ligação ao catálogo do Session passou em 686 testes da shell, oito contratos
+LPK, oito cenários gráficos ampliados do alternador e oito de regressão de
+Forçar encerramento/menu Janela, além do encerramento instalado por
+timeout/SIGTERM. Dois testes novos verificam seleção após renomear, remoção do
+grupo antes de confirmar, fechamento único e ausência de atividade após encerrar.
+O contrato compartilhado com o RPM exige ausência de transporte e revisões
+nativas com fatos JS antigos; `switcher-check` também passou na instalação
+privada com o bundle pré-compilado. Oito capturas são idênticas às anteriores,
+com claro/escuro mínimos inspecionados e pixels de material/destaque verificados.
+Build GPU=1 e bundles passaram. Evidências em
+`build/validation/native-switcher-catalog/`; medições físicas seguem no encerramento.
 
 O teste `switcher_runtime` verifica os dois estilos, claro/escuro em 640/1000 px,
 com MRU, janela representante removida antes do commit, foco em janela ausente

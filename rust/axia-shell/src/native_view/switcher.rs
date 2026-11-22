@@ -1,7 +1,7 @@
 //! App selection and scene read the context's window model directly.
 use super::NativeApp;
 use crate::{
-    winmodel::{WindowReader, WindowState},
+    winmodel::{Session, WindowReader, WindowState},
     AxiaSwitcher,
 };
 use axia_state::{Reader, Subscription};
@@ -33,8 +33,16 @@ pub struct Switcher {
 }
 impl Switcher {
     pub fn new(windows: Reader<WindowState>) -> Self {
-        let changes = windows.subscribe();
         let catalog = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.clone())));
+        Self::with_catalog(windows,catalog)
+    }
+    pub fn with_session(session: Session) -> Self {
+        let windows = session.reader();
+        let catalog = crate::forcequit::App::with_window_metadata(Rc::new(WindowReader(windows.clone())),session.catalog_store());
+        Self::with_catalog(windows,catalog)
+    }
+    fn with_catalog(windows: Reader<WindowState>, catalog: crate::forcequit::App) -> Self {
+        let changes = windows.subscribe();
         Self {
             appearance: None,
             surface: Value::Null,
@@ -227,7 +235,7 @@ impl NativeApp for Switcher {
         self.appearance = Some(theme);
     }
     fn invalidated(&self) -> bool {
-        self.changes.pending()
+        !self.done && (self.changes.pending() || self.catalog.invalidated())
     }
     fn request(&mut self, input: &Value) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
