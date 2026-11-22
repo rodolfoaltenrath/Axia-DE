@@ -3,9 +3,9 @@
 // borders on all 4 sides and 4 corners, <WindowShell>) is done by axia-server in C
 // (docs/WINDOWS.md), a maximized or snapped window coming loose at its own size as soon as it moves;
 // the JS drag below is only a fallback for when the C one can't start.
-import { View, addListener, wm, AppHost, appName, WindowShell, moveToDesktopItems, t as tr, solidOver, appAppearance, NativeTitleBar } from '@lordos/sdk';
+import { View, addListener, wm, AppHost, appName, WindowShell, solidOver, appAppearance, NativeTitleBar } from '@lordos/sdk';
 import { useEffect, useRef } from 'react';
-import { Menu } from './Menu.jsx';
+import { NativeWindowMenu } from '../../../sdk/nativewindowmenu.js';
 
 const TITLE_H = 40;
 const LIGHTS = [
@@ -42,15 +42,7 @@ export function Window({ win, app, t, focused, leaving = false }) {
       <WindowShell win={win} leaving={leaving} onMouseDown={() => wm.focus(win.id)}
         style={{ ...(app.ownFrame ? { borderRadius: win.maximized ? 0 : 12, overflow: 'hidden' } : null), boxShadow: focused ? '0 24px 56px rgba(0,0,0,0.5)' : '0 10px 28px rgba(0,0,0,0.3)', ...fxs }}>
         <AppHost id={win.id} focused={focused} />
-        {wmenu && (
-          <Menu x={wmenu.x} y={wmenu.y} onClose={() => wm.closeWindowMenu(win.id)} items={[
-            { label: tr('shell.window.minimize'), onClick: () => wm.minimize(win.id) },
-            { label: tr('shell.window.maximize'), checked: !!win.maximized, onClick: () => wm.toggleMaximize(win.id) },
-            { label: tr('shell.desktops.moveTo'), submenu: moveToDesktopItems(win.id) },
-            '-',
-            { label: tr('shell.window.close'), onClick: () => wm.close(win.id) },
-          ]} />
-        )}
+        {wmenu && <NativeWindowMenu id={win.id} />}
       </WindowShell>
     );
   }

@@ -254,6 +254,17 @@ jobs:
           name: axia-window-menu
           path: ${{ runner.temp }}/axia-window-menu/
           if-no-files-found: warn
+      - name: Rust own-frame window context menus and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_WINDOW_CONTEXT_OUTPUT: ${{ runner.temp }}/axia-window-context
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test window_context_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-window-context
+          path: ${{ runner.temp }}/axia-window-context/
+          if-no-files-found: warn
       - name: Rust application menus and graceful quit
         if: matrix.gpu == 1
         env:

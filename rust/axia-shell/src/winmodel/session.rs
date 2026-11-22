@@ -1150,6 +1150,11 @@ impl Window<'_> {
     pub fn title(&self) -> &str { self.0.data.get("title").and_then(Value::as_str).unwrap_or("") }
     pub fn frame(&self) -> Rect { self.0.rect() }
     pub fn desktop(&self) -> i64 { self.0.desktop() }
+    pub fn window_menu(&self) -> Option<(f64,f64)> {
+        let menu = self.0.data.get("windowMenu")?;
+        let (x,y) = (menu["x"].as_f64()?,menu["y"].as_f64()?);
+        (x.is_finite() && y.is_finite()).then_some((x,y))
+    }
     pub fn minimized(&self) -> bool { self.0.on("minimized") }
     pub fn pip(&self) -> bool { self.0.on("pip") }
     pub fn maximized(&self) -> bool { self.0.on("maximized") }

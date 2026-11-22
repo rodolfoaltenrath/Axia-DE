@@ -31,6 +31,11 @@ impl Default for Tree {
     }
 }
 
+impl Tree {
+    // A native consumer may prepare rows before input; the next host sync must still paint them.
+    pub(super) fn invalidate(&mut self) { self.menu_state = None; }
+}
+
 fn magnifier(size: f64, color: &Value) -> Value {
     let r = size * 0.62;
     let line = 1.4_f64.max(size / 10.);

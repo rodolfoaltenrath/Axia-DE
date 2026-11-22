@@ -97,6 +97,11 @@ function runner(handle, manifest, winId, node = () => 0) {
     if (manifest.id === 'shell:restore' && !effect.host) { restoreBridge.perform?.(effect); return; }
     // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)
     if (manifest.id === 'shell:menubar' && !effect.host) { barEffect(effect, handle); return; }
+    if (manifest.id === 'shell:window-context' && effect.kind === 'windowContext' && !effect.host) {
+      wm.closeWindowMenu(effect.id);
+      if (effect.command) barEffect({ kind: 'windowMenu', command: effect.command }, handle);
+      return;
+    }
     if (effect.host) {                 // the host's own: no result goes back to the app
       try {
         if (effect.kind === 'title' && winId) wm.setTitle(winId, effect.title);

@@ -1491,6 +1491,42 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
 
+### Menu de contexto de janelas CSD e ownFrame
+
+`WindowContext` monta as cinco entradas existentes a partir do proprietário
+Rust: coordenadas de windowMenu, marcação de maximização, destinos disponíveis
+e capacidade de criação. O SDK envia somente o ID, sem árvore, linhas, posição,
+maximização, desktops, theme ou scale. A view retém Reader/Subscription do
+contexto e usa a paleta da shell. O tema deixou de construir esses itens com
+`Menu`/`moveToDesktopItems`; um adaptador mínimo monta a nova view.
+
+O modelo reutiliza Tree para ponteiro, submenus e teclado. Revisões pendentes
+são preparadas antes dos eventos; a próxima sincronização ainda pinta o estado
+preparado. Isso evita perder o primeiro hover quando a lista nativa muda antes
+do evento. Eventos do menu verificam que a janela e seu pedido de menu ainda
+existem, rejeitando comandos para outro ID. Fechamento de janela/pedido apaga
+a árvore sem depender de um novo snapshot JS. A montagem inicial ainda depende
+da condição no tema, e efeitos de foco/fechar/minimizar/maximizar passam pelo
+adaptador existente, preservando guardas. Movimento usa o comando nativo de
+desktop já implementado. O Menu genérico e a API LPK não mudam.
+
+Validação em Fedora 44 privado: passaram 677 testes da shell (sete ignorados),
+oito contratos LPK, quatro cenários novos e 12 de regressão de
+cabeçalhos/menu Janela. Os dois testes novos cobrem coordenadas/linhas nativas,
+marcação, capacidade, fatos falsos ignorados, revisão pendente antes de hover,
+teclado, fechamento e rejeição de comandos para janela ausente/outro ID.
+A integração monta o Window real do tema e exige ID como único argumento,
+coordenadas/marcação/desktops atualizados com espelho JS antigo, submenu
+pintado por pixels, movimento, Escape, minimizar, janela removida e fechamento
+de ownFrame. Aguarda layout antes da captura; capturas claro/mínimo e escuro
+com submenu foram inspecionadas. CI GPU=1 exige o teste e publica os PNGs.
+Build completa GPU=1, bundles default/app-host e instalação privada gerados;
+encerramento instalado passou por timeout/SIGTERM. Três amostras de ociosidade
+passaram com limites impostos: 12,450 poll/s e 104,816 MiB de RSS, abaixo de
+15 poll/s e 120 MiB. Sem prova de ganho causal e sem instalar/reiniciar a sessão
+física; medições físicas ficam para o encerramento. Evidências em
+`build/validation/native-window-context/`. Nenhuma caixa inteira concluída.
+
 ### Movimento de janela para desktop numa transação nativa
 
 `AppCommand::MoveWindowToDesktop` valida a janela antes de escolher o destino.

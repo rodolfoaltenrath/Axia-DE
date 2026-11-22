@@ -121,6 +121,15 @@ sem monitor/geometria nos fatos ou assinatura React de tela na sessão. Trocar
 o principal ou conectar/desconectar monitores invalida a apresentação sem
 reiniciar o prazo; não há polling para telas. O mount de compatibilidade mantém
 a geometria explícita, selecionado pela entrada nativa do host, não pelos fatos.
+O menu de contexto de janelas CSD/ownFrame também pertence a uma view Rust,
+`shell:window-context`. O tema monta a view com apenas o ID: coordenadas,
+maximização, desktops e capacidade vêm do leitor do contexto. Não constrói
+linhas nem callbacks por item em JS. A view usa o mecanismo nativo de menus
+para ponteiro, teclado, submenus e clique externo; prepara revisões pendentes
+antes da entrada para preservar o primeiro hover. Eventos revalidam janela e
+menu aberto. A montagem condicional e a execução de fechar/minimizar/maximizar
+continuam no adaptador; comandos de desktop usam a transação nativa existente.
+O Menu genérico dos apps mantém seu contrato.
 Mover para um desktop, inclusive criando um novo, usa um comando tipado do
 serviço residente. A janela e o destino são revalidados no proprietário atual;
 criar/mover publica uma revisão única e preserva o desktop ativo. Janela já
