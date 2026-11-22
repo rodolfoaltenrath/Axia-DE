@@ -444,3 +444,46 @@ console.log(JSON.stringify({next,boundary,previous,add,close,privileged}));
     }
     assert_eq!(report["privileged"], 0);
 }
+
+#[test]
+#[ignore = "requires Node and npm ci; explicitly required by desktop CI"]
+fn isolated_restore_preferences_remain_local_without_session_access() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).unwrap();
+    let fixture = r#"
+import path from 'node:path';import {build} from 'esbuild';
+const root=process.argv[1];let value={sessionRestore:'ask',sessionBrowsers:true,sessionSaved:{clean:false}},privileged=0;
+const deny=()=>{privileged++;throw Error('isolated restore reached session');};
+const probe={settings:{get:()=>value,set:patch=>{value={...value,...patch};}},settingsBridge:{},
+ screen:{},mainDisplay:()=>({}),onScreenChange:()=>()=>{},wm:{},getApp:()=>null,isLiveSystem:()=>false,
+ setLinuxPlacement:()=>{},windowModelFacts:deny,applyNativeWindowState:deny,launchDockItem:deny,Layer:()=>null,
+ NativeView:()=>null,clearTextFocus:()=>{},sessionRestoreRequest:deny,restoreBridge:{},admin:{},clipboard:{},
+ RESTORE_MODES:['off','ask','always'],RESTORE_DEFAULT:'always'};
+globalThis.__restoreProbe=probe;globalThis.lord={appId:'sample'};
+const names={runtime:['screen','mainDisplay','onScreenChange'],'settings.js':['settings'],
+ 'nativesettings.js':['settingsBridge'],'windows.js':['wm','getApp','isLiveSystem','setLinuxPlacement','windowModelFacts','applyNativeWindowState'],
+ 'dock.js':['launchDockItem'],'layers.js':['Layer'],'nativeview.js':['NativeView'],'components.jsx':['clearTextFocus'],
+ 'appcontrol.js':['sessionRestoreRequest'],'nativerestore.js':['restoreBridge'],'admin.js':['admin'],
+ 'clipboard.js':['clipboard'],'sessionmodel.js':['RESTORE_MODES','RESTORE_DEFAULT']};
+const result=await build({entryPoints:[path.join(root,'sdk/sessionrestore.jsx')],bundle:true,write:false,format:'esm',
+ define:{__AXIA_APP_HOST__:'true'},plugins:[{name:'isolated-restore',setup(build){
+ build.onResolve({filter:/.*/},args=>{const name=args.path==='@lordos/runtime'?'runtime':path.basename(args.path);if(names[name]&&args.kind!=='entry-point')return{path:name,namespace:'probe'};});
+ build.onLoad({filter:/.*/,namespace:'probe'},args=>({contents:names[args.path].map(name=>`export const ${name}=globalThis.__restoreProbe.${name};`).join('\n')}));
+ }}]});
+const sdk=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+const initial=sdk.restoreMode()==='ask'&&sdk.restoreBrowsers()===true;
+sdk.setRestoreMode('off');sdk.setRestoreBrowsers(false);
+const local=sdk.restoreMode()==='off'&&sdk.restoreBrowsers()===false&&value.sessionSaved===null;
+sdk.setRestoreMode('bad');const invalid=sdk.restoreMode()==='off';
+const explicit=sdk.restoreMode({sessionRestore:'always'})==='always'&&sdk.restoreBrowsers({sessionBrowsers:false})===false;
+sdk.startSessionRestore();sdk.flushSession();const denied=!sdk.restoredIds.has('app:notes');
+console.log(JSON.stringify({initial,local,invalid,explicit,denied,privileged}));
+"#;
+    let output = Command::new("node").current_dir(repo)
+        .args(["--input-type=module", "-e", fixture]).arg(repo).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    for flag in ["initial", "local", "invalid", "explicit", "denied"] {
+        assert_eq!(report[flag], true, "{report}");
+    }
+    assert_eq!(report["privileged"], 0);
+}

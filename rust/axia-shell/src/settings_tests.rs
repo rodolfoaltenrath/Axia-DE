@@ -181,3 +181,6 @@ fn profiles_and_readers_remain_independent() {
         "dark"
     );
 }
+
+#[path = "session_restore_settings_tests.rs"]
+mod restore;

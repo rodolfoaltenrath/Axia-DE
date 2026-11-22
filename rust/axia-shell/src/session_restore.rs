@@ -73,6 +73,9 @@ struct Question {
 pub struct Service {
     windows: Reader<WindowState>,
     changes: Subscription,
+    settings: Option<(String, Reader<Value>, Subscription)>,
+    save_pending: bool,
+    publish_pending: bool,
     metadata: Value,
     model: Value,
     mode: String,
@@ -109,6 +112,9 @@ impl Service {
         Self {
             windows,
             changes,
+            settings: None,
+            save_pending: false,
+            publish_pending: false,
             metadata: Value::Null,
             model: Value::Null,
             mode: "always".into(),
@@ -138,6 +144,42 @@ impl Service {
             effects: Vec::new(),
             last: None,
             revision: 0,
+        }
+    }
+    pub(crate) fn bind_settings(&mut self, home: &str) {
+        let home = crate::settings::profile(home);
+        if self.settings.as_ref().is_some_and(|(current, _, _)| current == &home) {
+            return;
+        }
+        let reader = crate::settings::with(&home, |s| s.reader());
+        let changes = reader.subscribe();
+        self.settings = Some((home, reader, changes));
+        self.settings_revision = None;
+    }
+    fn settings_pending(&self) -> bool {
+        self.settings.as_ref().is_some_and(|(_, _, changes)| changes.pending())
+    }
+    fn preferences_reader(&self) -> Option<Reader<Value>> {
+        self.settings.as_ref().map(|(_, reader, _)| reader.clone())
+    }
+    fn persist(&mut self) {
+        if std::mem::take(&mut self.save_pending) {
+            if let Some((home, _, _)) = &self.settings {
+                let changed = crate::settings::with(home, |s| {
+                    let changed = s.set("sessionSaved", &self.saved);
+                    s.save(home, true);
+                    changed
+                });
+                self.publish_pending |= changed;
+            } else {
+                self.effect("save", self.saved.clone());
+            }
+        }
+        if std::mem::take(&mut self.publish_pending) {
+            if let Some((home, _, _)) = &self.settings {
+                let reply = crate::settings::with(home, |s| s.snapshot());
+                self.emit(json!({"kind":"settingsState","reply":reply}));
+            }
         }
     }
     fn emit(&mut self, effect: Value) {
@@ -227,7 +269,7 @@ impl Service {
     }
     fn write(&mut self, list: Vec<Value>, clean: Value) {
         self.saved = json!({"windows":list,"active":self.active_index(),"clean":clean});
-        self.effect("save", self.saved.clone());
+        self.save_pending = true;
     }
     fn saved_list(&self) -> Vec<Value> {
         rows(&self.saved["windows"]).to_vec()
@@ -241,7 +283,12 @@ impl Service {
         self.revision = self.revision.wrapping_add(1);
     }
     fn configure(&mut self, metadata: &Value, input: &Value, now: Instant) {
-        self.configure_preferences(metadata, input, &input["settings"], now)
+        if let Some(reader) = self.preferences_reader() {
+            if let Some((_, _, changes)) = &self.settings { changes.take(); }
+            self.configure_preferences(metadata, input, &reader.read(), now);
+        } else {
+            self.configure_preferences(metadata, input, &input["settings"], now);
+        }
     }
     fn configure_preferences(&mut self, metadata: &Value, input: &Value, preferences: &Value, now: Instant) {
         let configured = input["context"]["renderEpoch"].is_number()
@@ -268,8 +315,8 @@ impl Service {
         if model.is_object() && self.model != *model {
             self.model = model.clone();
         }
-        let settings_revision = input["settingsRevision"]
-            .as_u64()
+        let settings_revision = self.settings.as_ref().map(|(_, reader, _)| reader.revision())
+            .or_else(|| input["settingsRevision"].as_u64())
             .or_else(|| input["context"]["preferenceRevision"].as_u64());
         let current = settings_revision
             .zip(self.settings_revision)
@@ -302,7 +349,7 @@ impl Service {
                     self.hold = false;
                     self.visible(None);
                     self.saved = Value::Null;
-                    self.effect("save", Value::Null);
+                    self.save_pending = true;
                 } else if !self.hold && !self.frozen {
                     self.autosave_due = Some(now + AUTOSAVE);
                 }
@@ -329,12 +376,13 @@ impl Service {
         }
         self.started = true;
         self.revision = self.revision.wrapping_add(1);
-        self.saved = input["settings"]["sessionSaved"].clone();
+        self.saved = self.settings.as_ref().map(|(_, reader, _)| reader.read()["sessionSaved"].clone())
+            .unwrap_or_else(|| input["settings"]["sessionSaved"].clone());
         self.apply_browser();
         if self.mode == "off" {
             if !self.saved.is_null() {
                 self.saved = Value::Null;
-                self.effect("save", Value::Null);
+                self.save_pending = true;
             }
             self.hold = false;
             return;
@@ -588,6 +636,11 @@ impl Service {
         json!({"ticket":ticket,"frame":frame,"desktop":desktop})
     }
     fn tick(&mut self, session: &mut Session, now: Instant) {
+        if self.settings_pending() { self.configure(&Value::Null, &Value::Null, now); }
+        self.tick_at(session, now);
+        self.persist();
+    }
+    fn tick_at(&mut self, session: &mut Session, now: Instant) {
         let changed = self.changes.take().is_some();
         if !self.started || self.frozen || self.mode == "off" {
             return;
@@ -648,6 +701,29 @@ impl Service {
         input: &Value,
         now: Instant,
     ) -> Value {
+        if input["action"] == "preferences" {
+            let reader = self.preferences_reader();
+            let borrowed = reader.as_ref().map(Reader::read);
+            let preferences = borrowed.as_deref().unwrap_or(&input["settings"]);
+            let mode = preferences["sessionRestore"].as_str().filter(|m| ["off", "ask", "always"].contains(m)).unwrap_or("always");
+            return json!({"result":{"mode":mode,"browsers":preferences["sessionBrowsers"]!=false},"effects":[]});
+        }
+        if matches!(input["action"].as_str(), Some("setMode" | "setBrowsers")) {
+            let Some((home, _, _)) = &self.settings else { return json!({"error":"app.invalidRequest"}); };
+            if input["action"] == "setMode" {
+                let Some(mode) = input["mode"].as_str().filter(|m| ["off", "ask", "always"].contains(m)) else {
+                    return json!({"error":"app.invalidRequest"});
+                };
+                self.publish_pending |= crate::settings::with(home, |s| {
+                    let mut changed = s.set("sessionRestore", &json!(mode));
+                    if mode == "off" { changed |= s.set("sessionSaved", &Value::Null); }
+                    changed
+                });
+            } else {
+                let Some(on) = input["on"].as_bool() else { return json!({"error":"app.invalidRequest"}); };
+                self.publish_pending |= crate::settings::with(home, |s| s.set("sessionBrowsers", &json!(on)));
+            }
+        }
         self.configure(metadata, input, now);
         let mut result = Value::Null;
         match input["action"].as_str().unwrap_or("") {
@@ -706,6 +782,7 @@ impl Service {
             }
             _ => {}
         }
+        self.persist();
         json!({"result":result,"effects":std::mem::take(&mut self.effects)})
     }
 }

@@ -34,6 +34,9 @@ fn native_session_restore_survives_remount_and_preserves_clean_exit_and_claims()
                 "resumed",
                 "off",
                 "noWindowTransport",
+                "staleBootstrap",
+                "nativePreferences",
+                "noJsPersistence",
                 "saved",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -46,9 +49,10 @@ const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
 import {render,View,shellHasKeyboard} from '@lordos/runtime';
 import {configureWindows,wm,placeLinuxWindow} from '@ROOT@/sdk/windows.js';
-import {RestorePrompt,startSessionRestore,setRestoreMode,flushSession,resumeSession,restoredIds} from '@ROOT@/sdk/sessionrestore.jsx';
+import {RestorePrompt,startSessionRestore,setRestoreMode,setRestoreBrowsers,restoreMode,restoreBrowsers,flushSession,resumeSession,restoredIds} from '@ROOT@/sdk/sessionrestore.jsx';
 import {restoreBridge} from '@ROOT@/sdk/nativerestore.js';
 import {settings} from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
@@ -62,20 +66,28 @@ async function until(fn,attempts=150){for(let i=0;i<attempts&&!fn();i++)await sl
 const Icon=()=>null;
 configureWindows({apps:[{id:'files',name:'Files',Component:()=>null,Icon},{id:'notes',name:'Notes',Component:()=>null,Icon},{id:'pkg',name:'Package',package:true,Component:()=>null,Icon}]});
 const frame={x:40,y:60,w:300,h:220};
-settings.set({sessionRestore:'ask',sessionBrowsers:false,sessionSaved:{clean:false,active:1,windows:[
+settings.set({sessionRestore:'off',sessionBrowsers:false,sessionSaved:null});
+const nativeSettings=lord.settings.state;
+const preferences=()=>nativeSettings.call(lord.settings,{cmd:'snapshot'}).state;
+nativeSettings.call(lord.settings,{cmd:'patch',patch:{sessionRestore:'ask',sessionBrowsers:false,sessionSaved:{clean:false,active:1,windows:[
  {id:'app:files',f:frame},{id:'app:notes',f:frame,desk:1,args:{slug:'saved',nonce:123,command:'bad'}},
- {id:'lpk:pkg',f:frame,desk:1,min:1},{id:'desktop:../../bin/sh',f:frame}]}});
+ {id:'lpk:pkg',f:frame,desk:1,min:1},{id:'desktop:../../bin/sh',f:frame}]}}});
+const staleBootstrap=settings.get().sessionRestore==='off'&&preferences().sessionRestore==='ask';
+let jsPersistence=0;
+for(const name of ['load','save'])lord.settings[name]=()=>{jsPersistence++;throw Error('restore used JS settings '+name);};
+lord.settings.state=input=>{if(input.cmd==='patch'&&['sessionSaved','sessionRestore','sessionBrowsers'].some(key=>Object.hasOwn(input.patch||{},key))){jsPersistence++;throw Error('restore wrote preferences through JS');}return nativeSettings.call(lord.settings,input);};
 wm.open('files',{instance:'existing',frame});
 const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,request=lord.nativeApps.request;
 let handle=0,mounts=0,bound=true,noWindowTransport=true,remount,opens=[],launches=[],claimOK=false;
-const inspect=text=>{const f=JSON.parse(text);noWindowTransport&&=!('windows'in f)&&!('windows'in(f.args||{}));};
+const inspect=text=>{const f=JSON.parse(text);noWindowTransport&&=!('settings'in f)&&!('windows'in f)&&!('windows'in(f.args||{}));};
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:restore'){inspect(text);bound&&=sources[0]===source;handle=mount(node,id,text,...sources);mounts++;return handle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return send(id,text);};
-lord.nativeApps.request=text=>{const f=JSON.parse(text);if(f.cmd==='sessionRestore')noWindowTransport&&=!('windows'in f)&&!('active'in f);return request.call(lord.nativeApps,text);};
+lord.nativeApps.request=text=>{const f=JSON.parse(text);if(f.cmd==='sessionRestore')noWindowTransport&&=!('settings'in f)&&!('settingsRevision'in f)&&!('windows'in f)&&!('active'in f);return request.call(lord.nativeApps,text);};
 const direct=(op,...args)=>JSON.parse(source.call(op,JSON.stringify([{},...args])));
 const state=()=>direct('resync').state;
 const perform=restoreBridge.perform;
 restoreBridge.perform=effect=>{
+ if(effect.op==='save')throw Error('restore emitted a JS save effect');
  if(effect.op==='open')opens.push(effect.value);
  if(effect.op==='launch'){
    launches.push(effect.value);const claim=placeLinuxWindow(effect.value);
@@ -116,8 +128,13 @@ async function run(){
  direct('setFrame','files#existing',{x:199,y:80,w:320,h:240});await sleep(100);
  const held=JSON.stringify(settings.get().sessionSaved)===frozen;resumeSession();
  const resumed=held&&settings.get().sessionSaved?.clean===false;
- setRestoreMode('off');await sleep(100);const off=settings.get().sessionSaved===null&&!shellHasKeyboard();
- console.log('session_restore-observation '+JSON.stringify({bound,initialMarker,prompt,keyboardGate,remounted,acceptedOrDeclined,claims,nativeAutosave,cleanExit,resumed,off,noWindowTransport,saved:!!saved?.ok,mounts,opens:opens.length,launches:launches.length}));
+ const adopt=settingsBridge.perform;settingsBridge.perform=()=>{};
+ setRestoreMode('off');setRestoreBrowsers(true);await sleep(100);
+ const off=preferences().sessionSaved===null&&!shellHasKeyboard();
+ const nativePreferences=restoreMode()==='off'&&restoreBrowsers()===true&&settings.get().sessionRestore==='ask'&&settings.get().sessionBrowsers===false;
+ settingsBridge.perform=adopt;
+ const noJsPersistence=jsPersistence===0;
+ console.log('session_restore-observation '+JSON.stringify({bound,initialMarker,prompt,keyboardGate,remounted,acceptedOrDeclined,claims,nativeAutosave,cleanExit,resumed,off,noWindowTransport,staleBootstrap,nativePreferences,noJsPersistence,saved:!!saved?.ok,mounts,opens:opens.length,launches:launches.length}));
 }
 setTimeout(()=>run().catch(error=>console.error('session_restore driver: '+(error.stack||error))),50);
 "#;

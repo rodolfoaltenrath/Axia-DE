@@ -80,7 +80,7 @@ impl View {
 impl NativeApp for View {
     fn invalidated(&self) -> bool {
         let state = self.service.borrow();
-        state.changes.pending() || self.seen != state.revision || !state.effects.is_empty()
+        state.changes.pending() || state.settings_pending() || self.seen != state.revision || !state.effects.is_empty()
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.service
@@ -100,21 +100,15 @@ impl NativeApp for View {
             _ => Some(json!({})),
         }
     }
-    fn uses_preferences(&self) -> bool { true }
-    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
-        self.request_with_preferences(input, preferences)
+    fn resources(&mut self, _assets: &str, home: Option<&str>) {
+        if let Some(home) = home { self.service.borrow_mut().bind_settings(home); }
     }
     fn request(&mut self, input: &Value) -> Value {
-        self.request_with_preferences(input, &input["settings"])
-    }
-}
-impl View {
-    fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
         let mut state = self.service.borrow_mut();
         let now = Instant::now();
         match input["cmd"].as_str() {
             Some("sync") => {
-                state.configure_preferences(input, input, preferences, now);
+                state.configure(input, input, now);
                 state.tick(&mut self.session, now);
                 let tree = Self::tree(&state, input);
                 let effects = std::mem::take(&mut state.effects);
@@ -127,6 +121,7 @@ impl View {
             }
             Some("answer") => {
                 state.answer(&mut self.session, input["key"] == true, now);
+                state.persist();
                 json!({"effects":std::mem::take(&mut state.effects)})
             }
             _ => json!({}),

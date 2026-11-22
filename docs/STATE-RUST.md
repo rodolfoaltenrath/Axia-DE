@@ -1009,7 +1009,7 @@ instalados aprovados.
 ## Restauração da sessão
 
 `session_restore.rs` guarda o serviço no contexto `Session`, compartilhado
-entre controlador e view. O serviço retém somente um leitor do modelo;
+entre controlador e view. O serviço retém leitores do modelo e do perfil;
 remontar a view ou trocar o idioma não repete a inicialização. Snapshot,
 deduplicação, fila, geometria, desktops e associação de novas superfícies
 Linux usam esse leitor, sem transportar a lista de janelas pelo JS.
@@ -1023,11 +1023,12 @@ cancelar uma saída. A revisão das preferências impede que fatos atrasados
 da view reativem uma opção recém-desligada no controlador.
 
 `session_restore_view.rs` desenha a confirmação e trata Enter/Escape. O
-adaptador `sdk/sessionrestore.jsx` persiste preferências, abre apps, aplica
+adaptador `sdk/sessionrestore.jsx` abre apps, aplica
 efeitos ao espelho legado e executa a ação fechada de política de navegador.
 Mantém apenas um booleano de apresentação para a camada modal; a interface
 oculta não bloqueia o teclado e a visível libera o foco de campos inferiores.
-Configurações, efeitos e espelho JS ainda aguardam as próximas etapas.
+Preferências e marcadores duráveis já usam o proprietário nativo, conforme
+a atualização abaixo. Efeitos de abertura/política e espelho JS continuam pendentes.
 
 Validação desta entrega: 539 testes unitários da shell aprovados (sete
 especiais ignorados) e quatro contratos LPK. `session_restore_runtime` usa
@@ -1163,8 +1164,9 @@ assinatura. Views sem interesse em preferências não assinam essas alterações
 O host isolado mantém fatos locais e a API de pedidos anterior.
 
 Backup, Calendário, Câmera, Caracteres, Relógio, Contatos, Arquivos, Logs,
-Monitor, Notas, Gravador, Lembretes, Scanner, Configurações e a view de
-restauração usam essa entrada. Relógio guarda só região e formato de hora;
+Monitor, Notas, Gravador, Lembretes, Scanner e Configurações usam essa entrada.
+A restauração tem seu próprio leitor no serviço, descrito abaixo.
+Relógio guarda só região e formato de hora;
 o cache do Monitor guarda apenas seu bloco. O editor de Configurações conserva
 somente os blocos usados por seus controles, além das alterações pendentes e
 valores observados necessários para recuperar uma falha. Dados de outros apps,
@@ -1195,3 +1197,58 @@ mediana de 109.645.824 bytes (104,566 MiB) de RSS e 12,350 chamadas de espera/s,
 com limites impostos de 120 MiB e 15/s. Relatório em
 `build/validation/native-view-preferences/idle/report.json`. Essa coleta
 headless verifica o orçamento; não substitui as medições físicas do encerramento.
+
+### Preferências e marcadores de restauração no proprietário Rust
+
+O controlador vinculado ao contexto e a view associam `session_restore::Service`
+ao perfil validado do host, sem aceitar um caminho de perfil nos pedidos.
+O serviço possui leitor/assinatura próprios. Inicialização lê `sessionSaved`
+diretamente; modo, política de navegador e revisão também vêm do proprietário.
+`settings` e `settingsRevision` saíram dos comandos do SDK; fatos antigos ou
+com revisão falsa não conseguem substituir a configuração nativa.
+
+A leitura do perfil é emprestada. O serviço retém a lista de recuperação que
+precisa preservar; nunca retém uma cópia do perfil inteiro. Alterações de
+política são aplicadas durante o sync/command. A assinatura invalida a view
+sem polling, mesmo com o espelho JS parado. O empréstimo termina antes de
+executar a persistência dos marcadores, evitando escrever num estado emprestado.
+
+Início, autosave, saída limpa, retomada e troca de tema atualizam `sessionSaved`
+e chamam a gravação durável existente no Rust. Não há efeito `sessionRestore/save`
+no caminho vinculado da sessão, nem chamada a `settings.set`/`saveSettingsNow`
+para esses marcadores. Início e flush funcionam sem montar a view. O agendamento
+da restauração ainda é atendido pelo host da view; remover essa dependência e
+executar abertura/política sem JS continuam pendentes.
+
+A publicação `settingsState` mantém os consumidores de compatibilidade atualizados
+por revisão após uma mutação; não grava novamente. Consultas públicas do modo e
+da restauração de navegadores leem o proprietário sem consumir efeitos pendentes,
+invalidar revisões ou tocar o disco. Setters validam valores no Rust e preservam
+campos alheios. Falhas de gravação conservam o estado nativo e o indicador de
+falha do proprietário; frames quietos não repetem I/O. Um próximo flush pode
+repetir a gravação durável.
+
+O SDK isolado conserva getters/setters locais. A view da sessão não assina o
+perfil inteiro para lógica de restauração. O adaptador ainda observa somente
+posição/tamanho/autohide da Dock e a opção de barra em todos os monitores para
+atualizar os metadados de área útil fornecidos pelo tema; geometria nativa do
+tema faz parte das próximas fases.
+
+Validação de 2026-11-22 na árvore compartilhada, em Fedora 44 privado: 623
+testes da shell, oito contratos LPK e 20 cenários gráficos de restauração,
+locale/preferências, configurações, desktops e memória de posições passaram.
+Encerramento do desktop instalado também passou por timeout e SIGTERM com
+apps nativos restaurados. O teste de restauração começa com modo JS desligado
+e modo nativo ask, proíbe os campos removidos nos comandos e as gravações de
+restauração por JS; também congela o espelho para consultar/editar opções.
+Os testes unitários usam o gravador nativo simulado para exigir gravação
+durável, preservação de campos alheios, marcadores de início/flush/retomada/tema,
+quietude de consultas, política por assinatura e retenção após falha de I/O.
+Compositor e bundles recompilados, instalação privada gerada e confirmação
+visual inspecionada. Evidências em `build/validation/restore-preferences/`.
+A sessão física em uso não foi instalada nem reiniciada.
+
+Três amostras da instalação privada passaram com limites impostos: mediana
+de 109.596.672 bytes (104,520 MiB) de RSS e 12,500 chamadas de espera/s, abaixo
+de 120 MiB e 15/s. Relatório em `build/validation/restore-preferences/idle/report.json`.
+Essa coleta headless não substitui as medições físicas do encerramento.

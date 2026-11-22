@@ -7,6 +7,13 @@ inalterados. Padrões, migrações, carregamento, prazo de gravação e serializ
 são nativos. O prazo participa do loop mesmo sem views; o arquivo usa as
 primitivas atômicas/duráveis C existentes. Contratos em [STATE-RUST.md](STATE-RUST.md).
 
+A restauração da sessão também consulta esse proprietário no bootstrap e nos
+comandos, sem reenviar o perfil/revisão pelo SDK. Opções, autosave e marcadores
+de saída/retomada/troca de tema são gravados no Rust; os marcadores usam a
+gravação durável antes de devolver os efeitos. Snapshots de compatibilidade
+atualizam o espelho público, sem executar outro save JS. A abertura de apps,
+política de navegador e metadados de geometria do tema continuam no adaptador.
+
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena
 Rust já existente, até não restarem consumidores do motor.

@@ -2,7 +2,8 @@
 import { createElement as h, useEffect, useSyncExternalStore } from 'react';
 import { screen, mainDisplay, onScreenChange } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
-import { settings, settingsRevision, saveSettingsNow } from './settings.js';
+import { settings } from './settings.js';
+import { settingsBridge } from './nativesettings.js';
 import { wm, getApp, isLiveSystem, setLinuxPlacement, windowModelFacts, applyNativeWindowState } from './windows.js';
 import { launchDockItem } from './dock.js';
 import { Layer } from './layers.js';
@@ -14,24 +15,25 @@ import { admin } from './admin.js';
 import { clipboard } from './clipboard.js';
 import { RESTORE_MODES, RESTORE_DEFAULT } from './sessionmodel.js';
 
-export const restoreMode = (s = settings.get()) => RESTORE_MODES.includes(s.sessionRestore) ? s.sessionRestore : RESTORE_DEFAULT;
-export const restoreBrowsers = (s = settings.get()) => s.sessionBrowsers !== false;
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
+export const restoreMode = (s = appHost ? settings.get() : null) => s ? (RESTORE_MODES.includes(s.sessionRestore) ? s.sessionRestore : RESTORE_DEFAULT) : command('preferences').result?.mode || RESTORE_DEFAULT;
+export const restoreBrowsers = (s = appHost ? settings.get() : null) => s ? s.sessionBrowsers !== false : command('preferences').result?.browsers !== false;
 const allowed = () => typeof lord !== 'undefined' && typeof lord.appId !== 'string'
   && typeof lord.greeter === 'undefined' && !isLiveSystem();
 const visible = createStore(false); // Presentation gate for the shell's keyboard layer only.
-const MANIFEST = { id: 'shell:restore', shell: true, keyboard: true, settings: true, facts: 'appcontrol', fullTheme: true };
+const MANIFEST = { id: 'shell:restore', shell: true, keyboard: true, facts: 'appcontrol', fullTheme: true };
 
 function command(action, extra = {}) {
-  if (!allowed()) return { result: null };
-  const reply = sessionRestoreRequest({ action, settings: settings.get(), settingsRevision: settingsRevision(), model: windowModelFacts(), ...extra });
+  if (!allowed() && !['preferences', 'setMode', 'setBrowsers'].includes(action)) return { result: null };
+  const reply = sessionRestoreRequest({ action, ...(action === 'preferences' ? {} : { model: windowModelFacts() }), ...extra });
   for (const effect of reply.effects || []) restoreBridge.perform?.(effect);
   return reply;
 }
 restoreBridge.perform = effect => {
+  if (effect.kind === 'settingsState') { settingsBridge.perform?.(effect); return; }
   if (effect.kind !== 'sessionRestore') return;
   const value = effect.value;
   switch (effect.op) {
-    case 'save': settings.set({ sessionSaved: value }); saveSettingsNow(true); break;
     case 'visible': if (value) clearTextFocus(); visible.set(!!value); break;
     case 'state': applyNativeWindowState(value); break;
     case 'launch': try { launchDockItem(value); } catch (_) { /* removed app */ } break;
@@ -55,10 +57,10 @@ restoreBridge.perform = effect => {
 
 export function setRestoreMode(mode) {
   if (!RESTORE_MODES.includes(mode)) return;
-  settings.set({ sessionRestore: mode, ...(mode === 'off' ? { sessionSaved: null } : null) });
-  command('configure');
+  if (appHost) settings.set({ sessionRestore: mode, ...(mode === 'off' ? { sessionSaved: null } : null) });
+  else command('setMode', { mode });
 }
-export function setRestoreBrowsers(on) { settings.set({ sessionBrowsers: !!on }); command('configure'); }
+export function setRestoreBrowsers(on) { if (appHost) settings.set({ sessionBrowsers: !!on }); else command('setBrowsers', { on: !!on }); }
 export function flushSession() { command('flush'); }
 export function resumeSession() { command('resume'); }
 export function markThemeSwitch() { command('theme'); }
@@ -76,8 +78,9 @@ export function startSessionRestore() { command('start'); }
 
 export function RestorePrompt() {
   const shown = useStore(visible);
+  // Work areas still come from the theme; unrelated profile edits do not rerender this adapter.
+  useStore(settings, s => JSON.stringify([s.dockPosition, s.dockSize, s.dockAutohide, s.menuBarAllDisplays]));
   useEffect(() => { if (shown) clearTextFocus(); }, [shown]);
-  useStore(settings); // Geometry/configuration metadata follows preference changes.
   const display = useSyncExternalStore(onScreenChange, mainDisplay);
   if (!allowed()) return null;
   const view = h(NativeView, { manifest: MANIFEST, stateSource: lord.windowList,
