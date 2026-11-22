@@ -21,7 +21,7 @@
  *   lord.timedate.refresh()                     answer as __lordHw('timedate', …)
  *   lord.notifyd.closed(id, reason) / action(id, key)   back to the Linux app that notified
  *   lord.hwinfo.scan()                          read-only hardware facts for the Store's suggestions
- *                                               (hw/hwscan.c: DMI, device tree, PCI/USB IDs, virtio
+ *                                               (rust/axia-hw hwscan: DMI, device tree, PCI/USB IDs, virtio
  *                                               ports, missing firmware when the kernel log is readable)
  *   lord.sysinfo.report()                       System Information (sysreport/: the same report as
  *                                               axia-sysreport, no serials, addresses or names) plus
@@ -53,7 +53,7 @@
  *   lord.fan.status() / setProfile(p) / setCurve(pts) / force(v) / caseConfig()   (js_fan.c, axia-fand)
  *   lord.browserFrame.apply(on, which)          Settings → Appearance → "Browsers: tabs in the title bar":
  *                                               one preference in the user's Chromium/Firefox profiles
- *                                               (hw/brframe.c); which = 'all' | 'chromium' | 'firefox';
+ *                                               (rust/axia-hw brframe); which = 'all' | 'chromium' | 'firefox';
  *                                               { chromium: {…}, firefox: {…} } counts
  *   lord.browserFrame.tidy()                    removes LordOS's Firefox user.js line once Firefox read it
  *   lord.browserFrame.chromiumRunning()         Chromium's profile folder is in use
@@ -657,7 +657,7 @@ static const JSCFunctionListEntry sysinfo_funcs[] = {
     JS_CFUNC_DEF("community", 0, f_sysinfo_community),
 };
 
-/* ---- lord.browserFrame (Settings → Appearance; hw/brframe.c, docs/WAYLAND.md) ---- */
+/* ---- lord.browserFrame (Settings → Appearance; rust/axia-hw brframe, docs/WAYLAND.md) ---- */
 
 /* The folders are fixed: $XDG_CONFIG_HOME (absolute) or ~/.config, and ~ for the legacy ~/.mozilla. */
 static int brf_dirs(char *cfg, size_t n, const char **home) {

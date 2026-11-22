@@ -252,7 +252,7 @@ Cards are ordered: installable, then explained (not available), then installed.
 
 ### Detection
 
-`lord.hwinfo.scan()` (`server/src/hw/hwscan.c`, exposed in `ui/js_hw.c`) runs in `axia-server`,
+`lord.hwinfo.scan()` (`rust/axia-hw/src/hwscan.rs`, exposed in `ui/js_hw.c`) runs in `axia-server`,
 **without root**, and only reads world-readable kernel files: `/sys/class/dmi/id` (vendor, product,
 board, chassis; never the serial numbers, which are root-only), `/proc/device-tree/model` and
 `compatible`, `/sys/bus/pci/devices/*` (vendor, device, class, bound driver),
@@ -264,18 +264,18 @@ nothing goes over the network.
 The kernel log is readable by the session only with `kernel.dmesg_restrict=0` (as on the LordOS
 Raspberry Pi kernel). With Debian's default (`1`) the Store asks the admin helper's fixed action
 **`hw-firmware-missing`**: no arguments, any user, read-only; it reads `/dev/kmsg` as root and returns
-only `LOG fw <file> <driver>` lines whose file name passes `hwscan_fw_name_valid()` (`[A-Za-z0-9._+,/-]`,
+only `LOG fw <file> <driver>` lines whose file name passes `hwscan_fw_name_valid()` (in Rust, `hwscan::fw_name_valid`) (`[A-Za-z0-9._+,/-]`,
 no `..`, no leading `/`) and is still missing, never other log text.
 
 `LORD_HWSCAN_ROOT=/path` (development and screenshots only; an absolute path without `..`) makes
 `axia-server` read a fake tree instead, with the kernel log in `<root>/kmsg`; the Store then labels the
-section "Test data". `build/hwscan-test fixture <dir> demo` writes such a tree (also `vmware`,
-`virtualbox`, `nvidia`, `printer`, `scanner`, `rpi5`, `qemu`, `firmware`); `build/hwscan-test dump`
-prints the facts of the machine it runs on.
+section "Test data". `cargo run -p axia-hw --example fixture -- <dir> demo` writes such a tree (also `vmware`,
+`virtualbox`, `nvidia`, `printer`, `scanner`, `rpi5`, `qemu`, `firmware`); the facts of the machine it runs on
+are what `lord.hwinfo.scan()` returns without `LORD_HWSCAN_ROOT`.
 
 ### Tests
 
-- `build/hwscan-test` (`make test`): the facts over fake sysfs/DMI/PCI/USB/udev/kmsg trees for every
+- `cargo test -p axia-hw --test hwscan`: the facts over fake sysfs/DMI/PCI/USB/udev/kmsg trees for every
   kind, the kernel-log parser (kmsg and dmesg formats, Debian's "failed to load" line, duplicates,
   unsafe names such as `../../etc/shadow`), files already present (`.zst`, `updates/`), and this
   machine's facts as valid JSON.

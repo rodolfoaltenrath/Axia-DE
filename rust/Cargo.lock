@@ -371,6 +371,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-hw"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-mail"
 version = "0.1.0"
 dependencies = [
@@ -457,6 +466,7 @@ dependencies = [
  "axia-clock",
  "axia-codecs",
  "axia-fan",
+ "axia-hw",
  "axia-native",
  "axia-netstate",
  "axia-print",

@@ -2,7 +2,7 @@
 // "The switch in Settings"). On (the default): the preinstalled Chromium and Firefox draw one bar
 // with their tabs and LordOS's window buttons. Off: they use LordOS's frame.
 //
-// lord.browserFrame (server/src/hw/brframe.c) writes that one preference in the user's own
+// lord.browserFrame (rust/axia-hw/src/brframe.rs) writes that one preference in the user's own
 // profiles, and only when the switch is turned (never at login on its own):
 //   - Chromium: Preferences, only while Chromium is closed. If it is open, the change waits in
 //     settings.browserFramePending and is applied as soon as Chromium quits (checked every 5 s

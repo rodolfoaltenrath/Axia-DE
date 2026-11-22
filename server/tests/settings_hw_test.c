@@ -1,13 +1,11 @@
 /* settings_hw_test.c — tests for the pure parts of Settings' hardware pages (src/hw):
  * EDID parsing, KMS mode selection, the Night Light math (temperature, gamma ramp, sunrise and
- * sunset, schedule), mimeapps.list editing and globs2, and the power_supply reader over a fake
- * sysfs tree. Run by `make test` (mk/settings.mk). */
+ * sunset, schedule), mimeapps.list editing and globs2. Run by `make test` (mk/settings.mk). */
 #include "hw/edid.h"
 #include "hw/hw_admin.h"
 #include "hw/mimeapps.h"
 #include "hw/modes.h"
 #include "hw/night.h"
-#include "hw/power.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -216,72 +214,6 @@ static void test_mimeapps(void) {
     CHECK(desktop_id_valid("org.gnome.Evince.desktop") && desktop_id_valid("lordos-photos.desktop"));
     CHECK(!desktop_id_valid("../x.desktop") && !desktop_id_valid("a/b.desktop") && !desktop_id_valid("x.desk") && !desktop_id_valid(".desktop"));
     CHECK(!desktop_id_valid("-x.desktop") && !desktop_id_valid("a b.desktop"));
-
-}
-
-static void wfile(const char *dir, const char *dev, const char *name, const char *val) {
-    char p[512];
-    snprintf(p, sizeof p, "%s/%s", dir, dev);
-    mkdir(p, 0700);
-    snprintf(p, sizeof p, "%s/%s/%s", dir, dev, name);
-    FILE *f = fopen(p, "w");
-    if (f) { fprintf(f, "%s\n", val); fclose(f); }
-}
-
-static void test_power(void) {
-    char dir[] = "/tmp/lord-power-test-XXXXXX";
-    if (!mkdtemp(dir)) { CHECK(0); return; }
-    PowerState ps;
-    CHECK(power_read(dir, &ps) == 0 && !ps.has_battery && ps.on_ac && ps.percent == -1);
-    wfile(dir, "AC", "type", "Mains");
-    wfile(dir, "AC", "online", "0");
-    wfile(dir, "BAT0", "type", "Battery");
-    wfile(dir, "BAT0", "status", "Discharging");
-    wfile(dir, "BAT0", "capacity", "42");
-    wfile(dir, "BAT0", "energy_now", "21000000");          /* 21 Wh */
-    wfile(dir, "BAT0", "energy_full", "50000000");
-    wfile(dir, "BAT0", "energy_full_design", "57000000");
-    wfile(dir, "BAT0", "power_now", "7000000");            /* 7 W → 3 h */
-    wfile(dir, "BAT0", "cycle_count", "312");
-    wfile(dir, "BAT0", "model_name", "5B10W13930");
-    wfile(dir, "BAT0", "technology", "Li-poly");
-    wfile(dir, "hidpp_battery_0", "type", "Battery");      /* a mouse: not the system battery */
-    wfile(dir, "hidpp_battery_0", "scope", "Device");
-    wfile(dir, "hidpp_battery_0", "capacity", "90");
-    wfile(dir, "hidpp_battery_0", "status", "Discharging");
-    CHECK(power_read(dir, &ps) == 3);
-    CHECK(ps.has_battery && !ps.on_ac && ps.percent == 42 && !ps.charging);
-    CHECK(ps.minutes_left == 180);
-    const PowerSupply *b = &ps.s[1];
-    CHECK(!strcmp(b->name, "BAT0") && b->health == 87 && b->cycles == 312 && fabs(b->watts - 7) < 1e-9);
-    CHECK(!strcmp(b->technology, "Li-poly") && !strcmp(b->model, "5B10W13930"));
-    CHECK(ps.s[2].device_scope && ps.s[2].percent == 90);
-
-    /* charging with charge_* / current_now, time to full */
-    wfile(dir, "AC", "online", "1");
-    wfile(dir, "BAT0", "status", "Charging");
-    char p[512];
-    const char *gone[] = { "energy_now", "energy_full", "energy_full_design", "power_now", "capacity" };
-    for (int i = 0; i < 5; i++) { snprintf(p, sizeof p, "%s/BAT0/%s", dir, gone[i]); unlink(p); }
-    wfile(dir, "BAT0", "charge_now", "2000000");           /* 2 Ah */
-    wfile(dir, "BAT0", "charge_full", "4000000");
-    wfile(dir, "BAT0", "charge_full_design", "4000000");
-    wfile(dir, "BAT0", "current_now", "1000000");          /* 1 A → 2 h to full */
-    wfile(dir, "BAT0", "voltage_now", "12000000");
-    CHECK(power_read(dir, &ps) == 3);
-    CHECK(ps.on_ac && ps.charging && ps.percent == 50 && ps.minutes_left == 120);
-    CHECK(ps.s[1].health == 100 && fabs(ps.s[1].watts - 12) < 1e-9);
-    char json[4096];
-    size_t n = power_json(&ps, json, sizeof json);
-    CHECK(n > 0 && n < sizeof json && json[n - 1] == '}');
-    CHECK(strstr(json, "\"percent\":50") && strstr(json, "\"name\":\"BAT0\""));
-    char small[40];
-    n = power_json(&ps, small, sizeof small);
-    CHECK(n < sizeof small);
-
-    char cmd[600];
-    snprintf(cmd, sizeof cmd, "rm -rf '%s'", dir);
-    if (system(cmd)) { /* best effort */ }
 }
 
 /* What leaves the hw-serial-numbers action: real serials only, one safe line. */
@@ -479,7 +411,6 @@ int main(void) {
     test_modes();
     test_night();
     test_mimeapps();
-    test_power();
     test_serial_clean();
     printf("settings-hw: %d/%d passed\n", checks - fails, checks);
     return fails != 0;

@@ -1,6 +1,6 @@
 // suggest_engine_test.mjs — the Store's "Suggested for your computer" rules
 // (assets/store/suggestions.json + sdk/suggestengine.js) against fake hardware facts (the shape
-// lord.hwinfo.scan() returns, hw/hwscan.c) and a fake package index, one fixture per rule; and the
+// lord.hwinfo.scan() returns, rust/axia-hw hwscan) and a fake package index, one fixture per rule; and the
 // texts every rule needs in en/es/pt.
 //
 //   node tests/suggest_engine_test.mjs        (from server/; run_suites.sh runs it when node exists)

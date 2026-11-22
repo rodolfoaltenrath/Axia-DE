@@ -35,7 +35,7 @@ typedef struct {
 
 enum { BRF_CHANGED = 0, BRF_SAME = 1, BRF_BAD = -1 };
 
-/* Pure edits (tests/brframe_test.c). *out is malloc'd (NUL-terminated) only with BRF_CHANGED. */
+/* Pure edits (rust/axia-hw/tests/brframe.rs). *out is malloc'd (NUL-terminated) only with BRF_CHANGED. */
 int brf_chrome_edit(const char *in, size_t n, int on, char **out, size_t *outn);
 /* user.js: value 0/1 sets LordOS's marked line, -1 removes it. *own = 1 if a line the user wrote
  * sets the preference (then nothing is changed: BRF_SAME). */

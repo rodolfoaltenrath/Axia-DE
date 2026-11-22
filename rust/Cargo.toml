@@ -6,6 +6,7 @@ members = [
     "axia-netstate",
     "axia-sysreport",
     "axia-fan",
+    "axia-hw",
     "axia-app-appabout",
     "axia-app-backup",
     "axia-app-calculator",

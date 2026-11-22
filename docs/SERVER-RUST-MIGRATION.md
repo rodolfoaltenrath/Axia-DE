@@ -862,3 +862,35 @@ Behavior that is deliberately not identical:
   and power-supply loops of the Raspberry Pi reader) the names are sorted.
 - `build/sysreport-test fixture` and `build/sysreport-test smbios` are gone: the fixtures are `cargo run -p
   axia-sysreport --example fixture -- <dir> <kind>`.
+
+## Settings' hardware readers: axia-hw (2026-11-22)
+
+`server/src/hw/{power,uevent,hwscan,brframe}.c`, `server/tests/hwscan_test.c`, `server/tests/brframe_test.c` and
+the power case of `settings_hw_test.c` are gone. The new crate `rust/axia-hw` has the `power_supply` reader and
+its JSON (`power.rs`), the kernel's uevent socket (`uevent.rs`), the Store's hardware facts and the firmware
+misses of the kernel log (`hwscan.rs`) and the browsers' title bar switch (`brframe.rs`: Chromium's
+Preferences edit, Firefox's `user.js` line and tidy-up). `power.h`, `uevent.h`, `hwscan.h` and `brframe.h` stay
+as the C ABI (`PowerState` and `BrfResult` are `repr(C)`; returned strings are `malloc`'d for C to free).
+
+Validation:
+
+- `cargo test -p axia-hw` ports every case of `hwscan_test.c` (the eight fake trees, the kernel-log parser, the
+  firmware names and the files already installed), `brframe_test.c` (the Chromium edit with its twelve
+  malformed inputs, the `user.js` line, Chromium and Firefox and LibreWolf profiles on fake homes, running
+  browsers, stale locks, hostile `profiles.ini`, the tidy-up with a real `fcntl` lock held by another process)
+  and the power test (laptop, charger, mouse, charge/current batteries, truncated JSON), plus the uevent
+  datagram parser.
+- A temporary differential harness linked the original C beside the crate (not committed): 18,907 changed,
+  3,056 unchanged and 38,037 refused random Chromium edits and 40,000 `user.js` cases, the facts of every
+  fixture, 30,000 random kernel logs, 4,000 random power trees, 50,000 random uevent buffers, and Chromium,
+  Firefox and LibreWolf profiles on disk give the same results.
+
+Behavior that is deliberately not identical:
+
+- Directories are listed sorted where the C relied on `readdir` order.
+- The Preferences JSON is validated by `serde_json` with a strict visitor (no repeated keys, no `\u0000`, 32
+  levels), so text that is not UTF-8 is refused where the C parser let some of it through.
+- `power_json` truncates only by length, as before, but it is built from the same `PowerState` the C reader
+  filled.
+- `build/hwscan-test fixture` and `dump` are gone: the fixtures are `cargo run -p axia-hw --example fixture --
+  <dir> <kind>`.

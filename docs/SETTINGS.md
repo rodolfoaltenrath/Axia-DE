@@ -44,7 +44,7 @@ pairing, Sound with a Bluetooth headset, a Linux app's notification and Files' "
 | Notifications | with Sound | `apps/settings/personal.rs`, `sdk/notify.js`, `hw/notifyd.c` |
 | Date & Time | with Language & Region | `apps/settings/hardware.rs`, `hw/hw.c` (timedated) |
 | Default Apps | with Keyboard and Trackpad | `apps/settings/privacy.rs`, `sdk/defaults.js`, `hw/defaults.c`, `hw/mimeapps.c` |
-| Energy (Battery) | with Privacy | `apps/settings/hardware.rs`, `hw/power.c`, `hw/ppd.c` |
+| Energy (Battery) | with Privacy | `apps/settings/hardware.rs`, `rust/axia-hw/src/power.rs`, `hw/ppd.c` |
 | Cooling | after Energy | `apps/settings/cooling.rs`, `sdk/cooling.jsx`, `ui/js_fan.c` → `axia-fand` (`server/src/fan/`); see `FANS.md` |
 | Board firmware | after Cooling, only on a Raspberry Pi 5 (BCM2712: Pi 5, Pi 500, CM5) | `apps/settings/system.rs`, `hw/hw_admin.c` (`rpi-eeprom-status`, `rpi-eeprom-update`) |
 
@@ -65,7 +65,7 @@ the time fields keep `direction: 'ltr'`.
         ▼
  server/src/hw/   display.c ─ kms.c (modeset, gamma LUT, DPMS)        uevent.c (netlink: drm,
                   bt.c, ppd.c ─ sysbus.c ─ vault/dbus.c (system bus)     power_supply, backlight)
-                  notifyd.c ─ vault/dbus.c (session bus)              power.c (sysfs)
+                  notifyd.c ─ vault/dbus.c (session bus)              power (sysfs, Rust)
                   defaults.c, mimeapps.c (~/.config/mimeapps.list)
         │
         ▼  root work: closed admin actions (hw/hw_admin.c)
@@ -221,7 +221,7 @@ with real hardware** (no controller in the VMs).
 
 ![Energy](settings-power-dark.png)
 
-- **Battery.** `hw/power.c` reads `/sys/class/power_supply` (`energy_*`/`power_now` or
+- **Battery.** `rust/axia-hw/src/power.rs` reads `/sys/class/power_supply` (`energy_*`/`power_now` or
   `charge_*`/`current_now`/`voltage_now`): percentage, time to empty or to full (the kernel's
   `time_to_*_now` when present), health (`full / full_design`), cycles, watts, model and
   technology. Device batteries (mice, keyboards: `scope = Device`) are listed but not counted.
@@ -465,7 +465,7 @@ since freedesktop has no category for them).
 
 ## Appearance: «Browsers: tabs in the title bar»
 
-Not a hardware page, but its native side lives here too: `hw/brframe.c`, exposed as
+Not a hardware page, but its native side lives here too: `rust/axia-hw/src/brframe.rs`, exposed as
 `lord.browserFrame.apply(on, 'all'|'chromium'|'firefox')`, `.state()`, `.tidy()` and
 `.chromiumRunning()` in `ui/js_hw.c`; the page is `apps/settings/displays.rs` (strings in
 `settings.json`, `browserTabs.*`) and the logic `sdk/browserframe.js`. It writes one preference in the
@@ -500,7 +500,7 @@ All in `server/src/hw/hw_admin.c`, in the `actions` table through `HW_ADMIN_ACTI
 | `rpi-pmic` | — | anyone | BCM2712 boards only, read-only: `/usr/bin/vcgencmd pmic_read_adc`, parsed strictly, and the under-voltage lines of the kernel log counted; `OK uv <count> <last_s> <RAIL>=<uV>,<uA> ...` (Monitor → Voltage, `docs/MONITOR.md`) |
 | `rpi-eeprom-status` | — | anyone | BCM2712 boards only, read-only: `/usr/bin/rpi-eeprom-update` (no options), report parsed strictly; `OK <uptodate\|available\|pending> <current> <latest> <release>` (see "Board firmware") |
 | `rpi-eeprom-update` | — | admin | BCM2712 boards only: `/usr/bin/rpi-eeprom-update -A bootloader`, then the same report; the update is finished by the next restart |
-| `hw-firmware-missing` | — | anyone | read-only: reads `/dev/kmsg` and returns only the validated names of firmware files a driver asked for and that are still missing (`LOG fw <file> <driver>`), for Store → Discover's suggestions (`hw/hwscan.c`, see `PACKAGES.md`) |
+| `hw-firmware-missing` | — | anyone | read-only: reads `/dev/kmsg` and returns only the validated names of firmware files a driver asked for and that are still missing (`LOG fw <file> <driver>`), for Store → Discover's suggestions (`rust/axia-hw/src/hwscan.rs`, see `PACKAGES.md`) |
 | `hw-memory-modules` | — | anyone | read-only: parses the firmware's SMBIOS memory devices (`/sys/firmware/dmi/entries/17-<n>/raw`, root only) strictly, in Rust (`rust/axia-codecs/src/smbios.rs`) and returns one `LOG mem <size_mb>\|<type>\|<speed>\|<configured>\|<slot>\|<bank>\|<maker>` line per slot; serials, asset tags and part numbers are never read (System Information → Hardware → Memory, see `BENCHMARK.md`) |
 
 | `hw-serial-numbers` | — | admin | read-only, for the Show button in System Information → Hardware → Computer: reads only `/sys/class/dmi/id/product_serial`, `/sys/class/dmi/id/board_serial` (root only) and `/proc/device-tree/serial-number`, passes each through `hw_serial_clean` (a closed character set, firmware placeholders dropped) and answers one `LOG serial <system\|board\|device> <value>` line to the request that asked. It writes nothing, logs nothing, and nothing in `sysreport/` can see it (see `BENCHMARK.md`, "Serial numbers") |
@@ -517,7 +517,7 @@ The validators are unit-tested in `build/settings-hw-test`.
   numbers, repeated or missing lines, bad time stamps and release names, the Pi 4's VL805 block, the
   BCM2712 check).
 - `build/bt-test` (`make test`): BlueZ parsing. 32 checks.
-- `build/brframe-test` (`make test`): the browsers' title bar switch (Chromium `Preferences`,
+- `cargo test -p axia-hw --test brframe`: the browsers' title bar switch (Chromium `Preferences`,
   Firefox `user.js`, running browsers, hostile profile folders). 90 checks.
 - `cargo test -p axia-fan` (`make test`): curves, hysteresis, `fan.json`, the socket requests and the fan
   driver on fake sysfs trees (see `FANS.md`).

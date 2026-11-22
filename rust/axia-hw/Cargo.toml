@@ -1,0 +1,11 @@
+[package]
+name = "axia-hw"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Settings' hardware readers: batteries, kernel uevents, the Store's hardware facts and the browsers' title bar preference"
+
+[dependencies]
+libc = "0.2"
+serde = "1"
+serde_json = "1"

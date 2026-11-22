@@ -989,7 +989,7 @@ Only what is already decided:
   - **Chromium:** `browser.custom_chrome_frame` (and `extensions.theme.system_theme` = 1, the GTK
     theme, unless the profile uses a theme extension) in each profile's `Preferences`, only while
     Chromium is closed (if it is open, applied as soon as it quits), through the narrow
-    `lord.browserFrame` call (`hw/brframe.c`): those keys and nothing else, validated JSON before
+    `lord.browserFrame` call (`rust/axia-hw/src/brframe.rs`): those keys and nothing else, validated JSON before
     and after, a backup and an atomic rename;
   - **Firefox:** a marked `user.js` line `user_pref("browser.tabs.inTitlebar", 1|0)` in each
     profile under `~/.config/mozilla/firefox` (where Firefox 153 puts them) and `~/.mozilla/firefox`,

@@ -153,12 +153,11 @@ build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
 	./$@ || { rm -f $@; exit 1; }
 
-test-platform: build/ui-damage-test build/brframe-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/shadow-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test $(if $(filter 1,$(SKIP_RUST_TESTS)),,test-rust)
+test-platform: build/ui-damage-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/shadow-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test $(if $(filter 1,$(SKIP_RUST_TESTS)),,test-rust)
 	./build/wl-fullscreen-test
 	./build/wl-activation-test
 	./build/ui-damage-test
 	./build/glass-damage-test
-	./build/brframe-test
 	./build/wl-preview-test
 	./build/fsops-test
 	./build/battery-refresh-test
@@ -190,8 +189,8 @@ build/glass-damage-test: tests/glass_damage_test.c src/ui/paint.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lm
 build/ui-damage-test: tests/ui_damage_test.c src/main.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/outputs.c -lm
-build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/hw/power.c src/sec/json.c src/platform/power.h $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/hw/power.c src/sec/json.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/sec/json.c src/platform/power.h $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/sec/json.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/portal-files-test: tests/portal_files_test.c src/ui/portal_files.c src/ui/portal_files.h src/vault/dbus.c
 	# Keep transport calls visible to --wrap; RPM LTO can inline the real bus functions.
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -fno-lto -Wl,--wrap=dbus_send,--wrap=dbus_reply,--wrap=dbus_error -o $@ $< src/ui/portal_files.c src/vault/dbus.c

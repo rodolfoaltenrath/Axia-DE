@@ -1,6 +1,6 @@
 // suggestengine.js — the rules of the Store's "Suggested for your computer" (pure functions, no
 // `lord`, tested by server/tests/suggest_engine_test.mjs). The rules are data:
-// assets/store/suggestions.json; the hardware facts come from lord.hwinfo.scan() (hw/hwscan.c) and
+// assets/store/suggestions.json; the hardware facts come from lord.hwinfo.scan() (rust/axia-hw/src/hwscan.rs) and
 // the package state from lord.pkg.info(). See docs/PACKAGES.md, "Suggested for your computer".
 //
 //   evaluate(data, facts, { info, dismissed, check })  → [Suggestion], most useful first

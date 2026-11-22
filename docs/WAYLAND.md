@@ -315,7 +315,7 @@ own profiles, only when the switch is turned (never by itself at login):
 
 *Switch off: the same Chromium profile with the LordOS frame.*
 
-- **Who writes:** `axia-server`, as the user, in C (`server/src/hw/brframe.c`, exposed as
+- **Who writes:** `axia-server`, as the user, in Rust (`rust/axia-hw/src/brframe.rs`, C ABI `server/src/hw/brframe.h`, exposed as
   `lord.browserFrame` in `ui/js_hw.c`; the page is `apps/settings/displays.rs`, the logic
   `sdk/browserframe.js`). No program is run and JS passes no path: only `on`/`off` and which
   browser. The folders are fixed (`$XDG_CONFIG_HOME` or `~/.config`, and `~`); every file is opened
@@ -347,7 +347,7 @@ own profiles, only when the switch is turned (never by itself at login):
   `toolkit.legacyUserProfileCustomizations.stylesheets`; the roadmap keeps it as a separate item
   to weigh first. A profile created later follows the system defaults (its own bar), not the
   switch: turn the switch again for it.
-- **Tests:** `build/brframe-test` (`make -C server test`): the Chromium edit (missing keys, pretty
+- **Tests:** `cargo test -p axia-hw --test brframe`: the Chromium edit (missing keys, pretty
   and compact files, strings with braces and quotes, theme extensions, idempotence, 12 malformed
   inputs), the `user.js` line (other lines kept, the user's own line, comments, NUL bytes), and on
   fake homes: profile discovery (`Default`/`Profile N` only, `profiles.ini` with absolute and

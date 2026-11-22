@@ -11,7 +11,7 @@
  *     copying frames when a card has no gamma (virtio-gpu, some ARM boards);
  *   - idle: screen off (DPMS on every display) after N seconds without input, plus "lock" and
  *     "sleep" notices for the theme. Deadlines go into the main loop's poll timeout: no polling;
- *   - hotplug: hw/uevent.c calls display_hotplug() on a DRM "change" uevent. */
+ *   - hotplug: axia-hw uevent calls display_hotplug() on a DRM "change" uevent. */
 #ifndef LORD_HW_DISPLAY_H
 #define LORD_HW_DISPLAY_H
 
