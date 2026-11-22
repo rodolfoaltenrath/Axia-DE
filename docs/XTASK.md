@@ -18,6 +18,7 @@ Programs the tools drive stay external and are only called: `esbuild` (`npm ci`)
 | `desktop-check [--require-gpu]` | stages the installation and runs the private headless sessions of the integration fixtures (`make check`, the RPM `%check`) |
 | `clipboard-x11-check` | clipboard transfers through XWayland, with an independent Xlib peer |
 | `dock-bench` | cost of mouse moves over the Dock in a private session |
+| `network-tray-check` | the NetworkManager, brightness and tray contracts against fake services on a private session bus |
 
 ## Build and packaging
 
@@ -49,11 +50,9 @@ Programs the tools drive stay external and are only called: `esbuild` (`npm ci`)
 |---|---|
 | `collect-results MACHINE …` | the evidence of one machine and one version (`results/<version>/<machine>/`, docs/RESULTS.md) |
 | `qmp-input`, `vm-type`, `vm-record` | mouse, keyboard and screen recording of a Proxmox VM, from its host |
-| `keylag [SECONDS]`, `keylag-inject` | where the typing delay comes from, and the uinput harness (docs/TROUBLESHOOTING.md) |
+| `keylag [SECONDS]`, `keylag-inject`, `keylag-client` | where the typing delay comes from, and the uinput harness (docs/TROUBLESHOOTING.md) |
 
 ## Not migrated yet
 
-Still in `tools/`, each for a reason: `desktop/network-tray-check.py` (a mock NetworkManager and
-tray bus built on GIO), `diag/keylag-client.c` (a Wayland test client), `fedora-live/` (the live ISO
-remix and the installer apps that run inside the ISO), `demo/` (the old demo-video pipeline) and
-`hwreport/` (it reads the JavaScript helpers of the System Information app).
+Still in `tools/`: `fedora-live/` (the live ISO remix and the installer apps that run inside the ISO) and
+`hwreport/` (it reads the JavaScript helpers of the System Information app, which are still JavaScript).

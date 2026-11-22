@@ -432,8 +432,8 @@ jobs:
       - name: Rust network, brightness and background-app contracts
         if: matrix.gpu == 1
         run: |
-          dnf install -y python3-gobject-base dbus-daemon
-          dbus-run-session -- python3 tools/desktop/network-tray-check.py
+          dnf install -y dbus-daemon
+          cargo xtask network-tray-check
       - name: Touchpad regression tests
         run: |
           make -C server build/tp-test

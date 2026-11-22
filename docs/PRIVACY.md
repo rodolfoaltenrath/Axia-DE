@@ -459,7 +459,7 @@ keyboard focus to no surface (`lord.wayland.focus(0)`); when the last of them cl
 gets the keyboard back. Menus and the clipboard and emoji panels (`popover`) don't take it: they paste
 into the app in front.
 
-Check: `server/tests/keyfocus/shellkeys.sh` runs `tools/diag/keylag-client` (a Wayland window that
+Check: `server/tests/keyfocus/shellkeys.sh` runs `cargo xtask keylag-client` (a Wayland window that
 counts `wl_keyboard.key` presses) while keys are typed; with the search open it must count 0 (see
 [ISO.md](ISO.md), release test 0.8.2).
 

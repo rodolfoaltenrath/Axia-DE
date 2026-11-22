@@ -133,7 +133,7 @@ Times are in ms after the kernel event, p50 / p95:
 Other results:
 
 - **Firefox with the fix** (GPU path): on screen 31 / 39 ms.
-- **The test client** (`tools/diag/keylag-client.c`, a minimal Wayland window that repaints on each
+- **The test client** (`cargo xtask keylag-client`, a minimal Wayland window that repaints on each
   key), CPU composition: same in 0.8.0 and main. Idle: on screen 2.5 / 6.6 ms in 0.8.0 and
   2.6 / 7.5 ms in main. With Chromium animating: 32 / 47 ms in 0.8.0 and 35 / 59 ms in main.
 - **The key path itself:** reading evdev and handing the key to the app (`rx`, `flush`) stayed
@@ -145,7 +145,7 @@ Everything is in `tools/diag/`:
 
 - **`keylag-inject`** (root) creates a uinput keyboard and types at known `CLOCK_MONOTONIC`
   times. `lord-sessiond` lends the new device to the session through inotify.
-- **`keylag-client.c`** prints when `wl_keyboard.key` arrived and when its frame was presented.
+- **`keylag-client`** prints when `wl_keyboard.key` arrived and when its frame was presented.
   Build commands are at the top of the file.
 - **`LORD_INPUT_DEBUG=1`** in a drop-in for `lordos.service`
   (`[Service] Environment=LORD_INPUT_DEBUG=1`) turns the trace on in development VMs.

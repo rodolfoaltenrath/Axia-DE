@@ -14,6 +14,8 @@
 //!   cargo xtask copr-publish [--packages DIR] [--report FILE] [--build-id N]
 //!   cargo xtask desktop-check [--require-gpu] | clipboard-x11-check | dock-bench
 //!   cargo xtask gen-wallpapers SOURCE-DIR
+//!   cargo xtask network-tray-check
+//!   cargo xtask keylag-client
 //!   cargo xtask keylag [SECONDS] | keylag-inject [COUNT [INTERVAL_MS]]
 //!   cargo xtask qmp-input VMID W H CMD... | vm-type VMID TEXT | vm-record VMID FOLDER [FPS]
 //!   cargo xtask collect-results MACHINE [--no-memory] [--no-lordbench] [--bench-seconds N] [--version V]
@@ -32,10 +34,12 @@ mod emoji;
 mod errcheck;
 mod i18n;
 mod keylag;
+mod keylag_client;
 mod lbfonts;
 mod lpk;
 mod manifest;
 mod monitor_data;
+mod net_tray;
 mod ojson;
 mod release;
 mod results;
@@ -66,6 +70,8 @@ pub fn dispatch(repo: &Path, command: &str, args: &[String]) -> Option<crate::Re
         "dock-bench" => desktop_check::dock_bench(repo, args),
         "clipboard-x11-check" => desktop_check::x11_check(repo, args),
         "gen-wallpapers" => wallpapers::execute(repo, args),
+        "keylag-client" => keylag_client::execute(repo, args),
+        "network-tray-check" => net_tray::execute(repo, args),
         "keylag" => keylag::keylag(args),
         "keylag-inject" => keylag::keylag_inject(args),
         "qmp-input" => vm::qmp_input(args),

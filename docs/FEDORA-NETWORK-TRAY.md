@@ -70,11 +70,11 @@ Run the ordinary desktop checks with `make check GPU=1` in the Fedora build
 environment. Rust policy tests run with `cargo test --manifest-path
 rust/Cargo.toml --target-dir server/build/rust --locked --offline`.
 
-After building those test binaries, a host with PyGObject and dbus-daemon can
+After building those test binaries, a host with glib and dbus-daemon can
 exercise both protocol integrations on a private bus:
 
 ```sh
-dbus-run-session -- python3 tools/desktop/network-tray-check.py
+cargo xtask network-tray-check
 ```
 
 The fixture substitutes a fake NetworkManager and a fake background app. It
