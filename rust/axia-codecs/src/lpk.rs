@@ -3,7 +3,7 @@
 //!
 //! An .lpk is a tar (ustar), gzip-compressed or not, with:
 //!   manifest.json   id, name, version, permissions… (see docs/NATIVE-APPS.md)
-//!   app.js          the already bundled app (tools/lpk.mjs), which uses React and the theme SDK
+//!   app.js          the already bundled app (cargo xtask lpk), which uses React and the theme SDK
 //!   icon.png        optional
 //!   locales/<language>.json, *.wasm, images…   optional
 //!

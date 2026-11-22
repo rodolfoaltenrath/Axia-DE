@@ -236,6 +236,38 @@ impl Json {
             _ => None,
         }
     }
+    /// Sets a field of an object: an existing one keeps its place, a new one goes last.
+    pub fn set(&mut self, key: &str, value: Json) {
+        if let Json::Object(fields) = self {
+            match fields.iter_mut().find(|(k, _)| k == key) {
+                Some(slot) => slot.1 = value,
+                None => fields.push((key.to_string(), value)),
+            }
+        }
+    }
+    pub fn remove(&mut self, key: &str) {
+        if let Json::Object(fields) = self {
+            fields.retain(|(k, _)| k != key);
+        }
+    }
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Json> {
+        match self {
+            Json::Object(fields) => fields.iter_mut().find(|(k, _)| k == key).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+    pub fn items(&self) -> &[Json] {
+        match self {
+            Json::Array(items) => items,
+            _ => &[],
+        }
+    }
+    pub fn str(text: &str) -> Json {
+        Json::Str(text.to_string())
+    }
+    pub fn num(n: usize) -> Json {
+        Json::Number(n.to_string())
+    }
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Json::Str(s) => Some(s),

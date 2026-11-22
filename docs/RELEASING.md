@@ -49,7 +49,7 @@ The releases page is the project's public changelog: every release is documented
 2. **Tag.** `git tag -a v<version> -m "LordOS <version>"` on that commit, and push the tag.
 3. **Sign the system code, then build** from the tag.
    - On the maintainer's machine (where the release key lives): `npm run build`, then
-     `tools/release/sign-code.sh`. It regenerates `code-manifest.json` (the SHA-256 of every theme
+     `cargo xtask sign-code`. It regenerates `code-manifest.json` (the SHA-256 of every theme
      bundle, the app host and the system apps) and writes `code-manifest.sig` with the release key,
      checked against `tools/release/lordos-release.pub.pem` ([SIGNING.md](SIGNING.md), "Verified system
      code"). The bundles are the same for every architecture: one signature serves all the images.
@@ -81,7 +81,7 @@ The releases page is the project's public changelog: every release is documented
      Debian system has no LordOS repository yet).
 4. **SBOM.** On each build VM, `tools/release/make-sbom.sh lordos_<v>_<arch>.deb`, and put the
    `.spdx.json` files in the release folder ([COMPLIANCE.md](COMPLIANCE.md)).
-5. **Sign.** On the maintainer's machine, `tools/release/sign-release.sh <release-dir>`: it writes
+5. **Sign.** On the maintainer's machine, `cargo xtask sign-release <release-dir>`: it writes
    `SHA256SUMS` and `SHA256SUMS.sig` and checks them against the public key
    ([SIGNING.md](SIGNING.md), "Release files"). Then copy `tools/release/lordos-release.pub.pem`
    into the folder too (it is not covered by `SHA256SUMS`: it is checked by its fingerprint).

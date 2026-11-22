@@ -1,6 +1,6 @@
 // packages.js — native LordOS apps installed as a package (.lpk; see docs/NATIVE-APPS.md).
 //
-// A package brings its app already bundled (tools/lpk.mjs) without React or the SDK inside: it uses
+// A package brings its app already bundled (cargo xtask lpk) without React or the SDK inside: it uses
 // the theme's, which are shared here through globalThis.__lordos.require(). The app is only loaded
 // when its first window opens.
 //

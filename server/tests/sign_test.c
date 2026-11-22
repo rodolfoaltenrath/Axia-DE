@@ -2,7 +2,7 @@
  * .lpk packages and of the catalog (server/src/sec). No network or files: everything in memory.
  *
  *   build/sign-test                  tests
- *   build/sign-test package.lpk      also verifies a real .lpk (e.g. made with tools/lpk.mjs) */
+ *   build/sign-test package.lpk      also verifies a real .lpk (e.g. made with cargo xtask lpk) */
 #include "sec/json.h"
 #include "sec/sign.h"
 #include "pkg/crypto.h"

@@ -41,7 +41,7 @@ renderer próprios. A sessão futura não inicializa QuickJS. Manifesto, permiss
 assinatura e formato .lpk seguem independentes dessa execução. Não converter os
 apps de terceiros nem avaliar seu app.js no contexto da sessão.
 
-[tools/lpk.mjs](../tools/lpk.mjs) externaliza React/JSX, `@lordos/runtime` e `@lordos/sdk`;
+[cargo xtask lpk](../rust/xtask/src/devtools/lpk.rs) externaliza React/JSX, `@lordos/runtime` e `@lordos/sdk`;
 [runtime/app-host.js](../runtime/app-host.js) disponibiliza esses namespaces por
 `globalThis.__lordos.require` e também o adaptador de apps compilados.
 O host usa ThemeProvider/DEFAULT_TOKENS como apresentação da janela e recebe

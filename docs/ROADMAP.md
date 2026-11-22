@@ -196,7 +196,7 @@ our own installer, and network, VPN, sound and clipboard with our own interface.
     trust levels, signed catalog with revocation, and «Modified by you» / «Restore
     original» / «Share my version». Tests `build/sign-test` (55/55, RFC 8032 + NIST) and
     `build/pkgstate-test` (11/11).
-  - [x] `tools/lpk.mjs`: `keygen`, signing when packaging, `sign`, `verify` and `catalog`.
+  - [x] `cargo xtask lpk`: `keygen`, signing when packaging, `sign`, `verify` and `catalog`.
   - [x] Each `.lpk` as an isolated process (`axia-server --app <id>`): a Wayland client with the
     theme's frame, in the Dock and the remote desktop; a broker that checks every `lord.*`; system
     prompts requested by the app. The malicious app (`tests/lpk-evil`) fails at everything at

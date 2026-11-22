@@ -76,7 +76,7 @@ needs `dpkg-deb`, `dpkg-query` and `python3`; `fc-scan` is optional.
 ### Publishing it
 
 Starting with v0.8.0-beta, the SBOM of each architecture is attached to the GitHub release next to
-`SHA256SUMS`. Put it in the release folder **before** `tools/release/sign-release.sh`: that script
+`SHA256SUMS`. Put it in the release folder **before** `cargo xtask sign-release`: that script
 hashes every file in the folder, so the SBOM is listed in `SHA256SUMS` and covered by the release
 signature (see [SIGNING.md](SIGNING.md), "Release files").
 

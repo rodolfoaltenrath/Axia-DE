@@ -48,7 +48,7 @@ Tests:
 | 21 | Low | `install.sh` | An empty or non-PEM key override (`LORDOS_PUBKEY_FILE`) skipped the signature with a warning. | Fixed: there is no skip path; a missing or bad key is an error. | 6e2b66f |
 | 22 | Low | `install.sh` | An old, validly signed release served as "latest" could downgrade an install. | Fixed: refuses to downgrade unless `--version` is given. A signed version line in SHA256SUMS would be stronger (later). | 6e2b66f |
 | 23 | Low | `tools/web/deploy.sh` | The release key was uploaded without being compared with the repository's copy. | Fixed. | 6e2b66f |
-| 24 | Low | `tools/release/sign-release.sh` | The file list is word-split. | Fixed: unexpected file names are refused. | 6e2b66f |
+| 24 | Low | `cargo xtask sign-release` | The file list is word-split. | Fixed: unexpected file names are refused. | 6e2b66f |
 | 25 | Low | `hw/notifyd.c` | If asking the bus who sent a Notify failed, the notification was shown (fail open). | Fixed: dropped. | c1f12c7 |
 | 26 | Low | Website | Table alignment used inline `style=` (dropped by a CSP without `unsafe-inline`); the team LinkedIn link accepted any scheme. | Fixed: classes; `https://` only. | 0c6a344 |
 | 27 | Low | axia-netperm | `RELOAD` can be sent in a loop by any local user (CPU only: 4 connections per uid, each reload rereads a file of up to 4 MB). | Open: rate-limit per uid. | — |

@@ -20,7 +20,7 @@ An `.lpk` is a tar (ustar), compressed with gzip:
 
 ```
 manifest.json      id, name, version, icon, window size, permissions
-app.js             the bundled app (tools/lpk.mjs)
+app.js             the bundled app (cargo xtask lpk)
 icon.png           required: the app's own icon (PNG, 128×128 or larger)
 locales/<lang>.json   the app's texts (optional)
 assets/…           what the app reads at runtime: .wasm, images, data (optional)
@@ -48,7 +48,7 @@ Manifest rules:
 - The id cannot be one of LordOS's own (`files`, `terminal`, `shell`, `store`…).
 - `name` and `description` can be a string or an object keyed by language.
 - `version` starts with a digit.
-- `icon` is required: every app has its own icon. Without it, `tools/lpk.mjs` won't package and
+- `icon` is required: every app has its own icon. Without it, `cargo xtask lpk` won't package and
   axia-server won't install.
 
 When installing, axia-server rejects the package if it finds:
@@ -68,10 +68,10 @@ An installable app is just like one in `apps/`: a folder with `manifest.json` an
 that exports the window component and, optionally, `Icon`. It is packaged with:
 
 ```sh
-node tools/lpk.mjs examples/apps/fractal            # → fractal-1.1.0.lpk
+cargo xtask lpk examples/apps/fractal            # → fractal-1.1.0.lpk
 ```
 
-`tools/lpk.mjs` bundles `index.jsx` with esbuild, but **without** React or the SDK. The app uses
+`cargo xtask lpk` bundles `index.jsx` with esbuild, but **without** React or the SDK. The app uses
 those of the running theme, which the SDK shares in `globalThis.__lordos.require()`:
 `react`, `react/jsx-runtime`, `@lordos/sdk` and `@lordos/runtime`. That keeps the app small
 (Fractal weighs 5 KB) and lets it share the SDK's state: windows, language, clipboard. `icon.png`,

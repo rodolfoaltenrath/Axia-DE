@@ -5,13 +5,18 @@
 //!   cargo xtask brand-check
 //!   cargo xtask err-check
 //!   cargo xtask i18n-check [LANG | lordos-lang-xx.json]
+//!   cargo xtask lpk FOLDER | keygen | sign | verify | catalog
+//!   cargo xtask sign-code [ROOT [KEY]] | sign-release DIR [KEY]
 //!   cargo xtask i18n-pack new ID NAME ENGLISH [PLURAL [REGION]] | export ID
 
+mod b64;
 mod brand;
 mod errcheck;
 mod i18n;
+mod lpk;
 mod manifest;
 mod ojson;
+mod release;
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -24,6 +29,9 @@ pub fn dispatch(repo: &Path, command: &str, args: &[String]) -> Option<crate::Re
         "err-check" => errcheck::execute(repo, args),
         "i18n-check" => i18n::check(repo, args),
         "i18n-pack" => i18n::pack(repo, args),
+        "lpk" => lpk::execute(repo, args),
+        "sign-code" => release::sign_code(repo, args),
+        "sign-release" => release::sign_release(repo, args),
         _ => return None,
     })
 }

@@ -166,7 +166,7 @@ export default function QuickNotes() {    // the window's content
 (Real apps don't hard-code visible text like this: see "Texts and languages" below.)
 
 `npm run build` rebundles every theme with every app. To distribute an app without touching the
-themes, it is packaged as an `.lpk` with `node tools/lpk.mjs <folder>` and installed from the
+themes, it is packaged as an `.lpk` with `cargo xtask lpk <folder>` and installed from the
 Store (see `docs/NATIVE-APPS.md`).
 
 ## Available API (`@lordos/sdk`)

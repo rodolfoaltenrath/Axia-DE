@@ -95,17 +95,17 @@ They are shown in the Store and in the install dialog:
 | ![modified by you](signing-modified.png) | ![restored](signing-restored.png) |
 | "Modified by you": what changed, Restore and Share | "Fractal restored to the original" |
 
-## Tools (`tools/lpk.mjs`)
+## Tools (`cargo xtask lpk`)
 
 ```sh
-node tools/lpk.mjs keygen [--name "Nombre"] [--out archivo]   # Ed25519 key pair
-node tools/lpk.mjs <carpeta> [salida.lpk] [--key clave.json | --unsigned]   # package and sign
-node tools/lpk.mjs sign <paquete.lpk> --key clave.json        # (re)sign
-node tools/lpk.mjs verify <paquete.lpk>                       # show signature and hashes
-node tools/lpk.mjs catalog <fuente.json> --key oficial.json [carpeta]   # signed catalog
+cargo xtask lpk keygen [--name "Nombre"] [--out archivo]   # Ed25519 key pair
+cargo xtask lpk <carpeta> [salida.lpk] [--key clave.json | --unsigned]   # package and sign
+cargo xtask lpk sign <paquete.lpk> --key clave.json        # (re)sign
+cargo xtask lpk verify <paquete.lpk>                       # show signature and hashes
+cargo xtask lpk catalog <fuente.json> --key oficial.json [carpeta]   # signed catalog
 ```
 
-`lpk.mjs` signs while packaging if given `--key`, `$LPK_KEY`, or if
+`cargo xtask lpk` signs while packaging if given `--key`, `$LPK_KEY`, or if
 `~/.config/axia/lpk-key.json` exists. With `--unsigned` the result is "Unsigned" (still with
 hashes).
 
@@ -132,7 +132,7 @@ in `SHA256SUMS`, and `SHA256SUMS` is signed with the LordOS release key:
   `tools/install/install.sh`.
 - Fingerprint (SHA-256 of the DER public key):
   `c7155b8e6bbbb180f907381994d06af76d333016cd6f3facf67cadd053ea108e`
-- Signing: `tools/release/sign-release.sh <release-dir>` writes `SHA256SUMS` and `SHA256SUMS.sig`
+- Signing: `cargo xtask sign-release <release-dir>` writes `SHA256SUMS` and `SHA256SUMS.sig`
   and checks the result against the public key. The private key lives only on the maintainer's
   machine (`~/.config/lordos-release/release-ed25519.key.pem`, mode 0600), never in the repository
   or on a build VM. Keep an offline backup of it.
@@ -309,7 +309,7 @@ noise of the build without the check (727–870 ms against 745–855 ms).
 
 ### The release flow
 
-1. On the maintainer's machine: `npm run build`, then `tools/release/sign-code.sh` (regenerates
+1. On the maintainer's machine: `npm run build`, then `cargo xtask sign-code` (regenerates
    `code-manifest.json`, signs it with `~/.config/lordos-release/release-ed25519.key.pem` into
    `code-manifest.sig` and verifies it against `lordos-release.pub.pem`). The bundles don't depend on
    the architecture, so one signature serves amd64 and arm64.
@@ -341,7 +341,7 @@ See [RELEASING.md](RELEASING.md), step 3.
   the development and release policies, the SHA-256 vectors on every path and the compiled-in key.
 - A **test build** can trust a throwaway key instead of the release key:
   `make -C server CODE_PUBKEY=<64 hex digits>` (refused together with `RELEASE=1`), and
-  `CODE_PUB=test.pub.pem tools/release/sign-code.sh "$PWD" test.key.pem` signs with it. That is how the
+  `CODE_PUB=test.pub.pem cargo xtask sign-code "$PWD" test.key.pem` signs with it. That is how the
   "Verified" screenshots above were taken on VM 118; the release key was not used.
 
 ## Files
@@ -354,9 +354,9 @@ See [RELEASING.md](RELEASING.md), step 3.
 | `rust/axia-codecs/src/json.rs` | strict JSON reader |
 | `server/src/sec/keys.h` | official public keys |
 | `server/src/ui/js_sec.c` | `lord.sign` for the SDK (status, restore, share, userKey) |
-| `tools/lpk.mjs` | package, sign, verify, keygen and catalog |
+| `cargo xtask lpk` | package, sign, verify, keygen and catalog |
 | `packaging/keys/lordos-dev.pub` | development public key |
 | `server/src/sec/codesig.c` | verified system code: the signed manifest and the check of each bundle at load time |
 | `cargo xtask code-manifest` | writes `code-manifest.json` (run by `npm run build`) |
-| `tools/release/sign-code.sh` | signs it with the release key (maintainer's machine only) |
+| `cargo xtask sign-code` | signs it with the release key (maintainer's machine only) |
 | `sdk/codesig.js` | the "component was modified" notification and `codeStatus()` for About |

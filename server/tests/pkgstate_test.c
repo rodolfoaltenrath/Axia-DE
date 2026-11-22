@@ -1,6 +1,6 @@
 /* pkgstate_test.c — the signing "business" flow in C: install, detect "Modified by
  * you", restore, share (signed derivative) and the update-by-key rule. Works
- * in $HOME (a VM), with a real .lpk passed as an argument (made with tools/lpk.mjs).
+ * in $HOME (a VM), with a real .lpk passed as an argument (made with cargo xtask lpk).
  *
  *   build/pkgstate-test <app.lpk> <id>
  */

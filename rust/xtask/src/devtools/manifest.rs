@@ -1,6 +1,6 @@
 //! `code-manifest.json`: the size and SHA-256 of every file Axia runs as its own code (see
 //! docs/SIGNING.md, "Verified system code"). axia-server checks each file against it before loading
-//! it (server/src/sec/codesig.c); tools/release/sign-code.sh signs it with the release key.
+//! it (server/src/sec/codesig.c); cargo xtask sign-code signs it with the release key.
 //!
 //!   cargo xtask code-manifest [--root DIR] [--check]
 //!

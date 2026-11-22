@@ -2,6 +2,7 @@
 //! borrows caller-owned protected work memory, all other state stays on stack.
 //! Pointer contracts: inputs cover their lengths; output/work is exclusive and
 //! disjoint from keys/nonces/AD. Message input/output may be equal or disjoint.
+pub mod ed25519;
 use chacha20::cipher::{inout::InOutBuf, KeyIvInit, StreamCipher, StreamCipherSeek};
 use chacha20poly1305::{AeadInOut, KeyInit, XChaCha20Poly1305};
 use std::{ptr, slice};
