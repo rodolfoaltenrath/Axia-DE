@@ -114,10 +114,15 @@ contextos. O leitor mantém o armazenamento seguro até o descarte da view.
 
 `TitleBar` lê título e janela em foco diretamente do modelo. Os fatos enviados
 por `sdk/nativetitlebar.jsx` carregam identidade, nome localizado do app para
-títulos vazios e aparência; título e foco dinâmicos não são reenviados nesse
+títulos vazios e geometria; título e foco dinâmicos não são reenviados nesse
 JSON. A escolha da janela em foco usa a mesma regra do modelo que alimenta o
-adaptador transitório. Os efeitos de controles, a moldura e o espelho JS ainda
-fazem parte das etapas pendentes.
+adaptador transitório. Na entrada validada da sessão, o cabeçalho retém também
+o `Session` e executa minimizar/maximizar pelos controles e maximizar por duplo
+clique via `AppCommand::WindowAction`. Cada mutação publica uma revisão e
+devolve somente `windowModel` para atualizar o espelho de compatibilidade.
+Janelas fechadas são revalidadas antes da execução. Montagens por Reader e
+controladores sem proprietário preservam os efeitos explícitos anteriores.
+Arraste, guarda de fechamento, geometria da moldura e espelho JS seguem pendentes.
 
 O protocolo antigo de fatos explícitos permanece para controladores puros sem
 proprietário de janelas. A sessão vincula o leitor e prioriza os valores do

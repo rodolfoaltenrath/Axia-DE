@@ -532,11 +532,16 @@ Na Fase 2, título e foco desse cabeçalho passaram a vir diretamente de
 `Session.reader()`. O mount recebe e valida a lista de janelas do seu contexto,
 sem reter ponteiro C ou objeto JS. A assinatura pede sincronização imediata no
 loop nativo quando há revisão pendente e não mantém timer ocioso. O adaptador
-envia aparência e nome localizado de fallback, sem título/foco dinâmicos no
-JSON. A integração altera o modelo sem atualizar o espelho JS e exige o título
+envia geometria e nome localizado de fallback, sem título/foco dinâmicos no
+JSON. A aparência também vem da fonte Rust por referência compartilhada.
+A integração altera o modelo sem atualizar o espelho JS e exige o título
 novo na cena. Propriedade, cancelamento, foco com fatos discordantes e rejeição
 de fonte opaca inválida também são verificados; detalhes em `STATE-RUST.md`.
-Moldura, efeitos e demais consumidores de janelas continuam pendentes.
+Minimizar e maximizar pelos controles, e maximizar por duplo clique no cabeçalho,
+agora executam no `Session` nativo. A integração bloqueia os wrappers JS dessas
+ações durante os cliques e exige que nenhuma chamada chegue a eles. O retorno
+apenas atualiza o espelho; arraste, área útil e guardas de fechamento continuam
+nos adaptadores. Montagens locais sem proprietário conservam o protocolo antigo.
 
 Uma regressão Rust com o host real reproduziu um duplo clique num controle
 emitindo duas ações e uma maximização indevida. Cada controle agora intercepta
@@ -548,8 +553,8 @@ A integração abre janelas pelo gerenciador real, usa os alvos do hit test da
 cena e cobre foco, atualização do título, arraste, maximizar/restaurar pelos
 controles e por duplo clique, minimizar/reabrir, guarda contra fechamento,
 fechamento e rotas CSD/ownFrame. A captura aguarda a nova posição na cena,
-além de conferir o estado Rust. Não há substituição das ações do gerenciador
-por mocks; o fixture somente observa `beginMove` e chama sua implementação.
+além de conferir o estado Rust. O fixture observa `beginMove` e chama sua
+implementação, além de bloquear os wrappers antigos de minimizar/maximizar.
 Em headless o grab nativo recusa iniciar sem botão físico pressionado: essa
 coleta verifica o fallback JS sobre o modelo Rust. O grab físico fica para a
 validação final da sessão, junto das medições em hardware adiadas pelo usuário.

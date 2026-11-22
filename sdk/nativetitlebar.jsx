@@ -1,10 +1,11 @@
 // A window's title bar drawn by the Rust native view host (native_view/titlebar.rs).
 // The shell always mounts this header for framed windows. Lean on purpose:
 // it only mounts the view, sends identity/geometry, and hands the
-// window manager's actions (drag, zoom, a light) to the theme's callbacks.
+// native state replies to the compatibility mirror and remaining effects to the theme.
 import { createElement as h, useEffect, useLayoutEffect, useRef } from 'react';
 import { View } from '@lordos/runtime';
 import { addRunner } from './nativeview.js';
+import { applyNativeWindowState } from './windows.js';
 
 // Rust reads the palette and controls natively. onDrag(x, y): screen coordinates.
 export function NativeTitleBar({ id, fallbackTitle, height, onDrag, onMax, onAct }) {
@@ -20,6 +21,7 @@ export function NativeTitleBar({ id, fallbackTitle, height, onDrag, onMax, onAct
       const c = calls.current;
       try {
         if (effect.kind === 'winDrag') { const [ox, oy] = lord.getLayout(ref.current.id); c.onDrag(ox + (effect.x || 0), oy + (effect.y || 0)); }
+        else if (effect.kind === 'windowModel') applyNativeWindowState(effect.reply);
         else if (effect.kind === 'winMax') c.onMax();
         else if (effect.kind === 'winAct') c.onAct(effect.key);
       } catch (e) { console.error('title bar:', e); }

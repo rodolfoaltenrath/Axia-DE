@@ -3,17 +3,19 @@
 //! themes/default/components/Window.jsx. The shell binds its context-owned window reader for title
 //! and focus. The session borrows native appearance and derives its frame/controls locally;
 //! facts carry only the window identity, localized fallback title and mount geometry.
-//! Unbound controllers retain explicit local styling facts. Effects go to the shell:
+//! Session controls minimize/zoom through the owner; the reply updates only the JS mirror.
+//! Unbound controllers retain explicit local styling facts. Remaining effects go to the shell:
 //! `{"kind":"winDrag"|"winMax"|"winAct","id","key","x","y"}`.
 use super::NativeApp;
 use serde_json::{json, Value};
 use axia_state::{Reader, Subscription};
-use crate::winmodel::WindowState;
+use crate::winmodel::{AppCommand, Session, WindowMenuAction, WindowState};
 
 const TITLE_H: f64 = 40.;
 
 #[derive(Default)]
 pub struct TitleBar {
+    session: Option<Session>,
     windows: Option<(Reader<WindowState>, Subscription)>,
     appearance: Option<std::rc::Rc<Value>>,
     chrome: Value,
@@ -35,6 +37,9 @@ fn merge(base: Value, over: &Value) -> Value {
 }
 
 impl TitleBar {
+    pub fn with_session(session: Session) -> Self {
+        Self { session: Some(session.clone()), ..Self::with_windows(session.reader()) }
+    }
     pub fn with_windows(windows: Reader<WindowState>) -> Self {
         let changes = windows.subscribe();
         Self { windows: Some((windows, changes)), ..Self::default() }
@@ -113,6 +118,20 @@ impl NativeApp for TitleBar {
         self.windows.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
     fn request(&mut self, input: &Value) -> Value {
+        if let Some(session) = &mut self.session {
+            let action = match (input["cmd"].as_str(), input["key"].as_str()) {
+                (Some("max"), _) | (Some("act"), Some("max")) => Some(WindowMenuAction::Zoom),
+                (Some("act"), Some("min")) => Some(WindowMenuAction::Minimize),
+                _ => None,
+            };
+            if let Some(action) = action {
+                let Some(id) = self.id.as_str() else { return json!({}); };
+                if session.reader().read().window(id).is_none() { return json!({}); }
+                return session.app_command(AppCommand::WindowAction(action), &[id])
+                    .map(|reply| json!({"effects":[{"kind":"windowModel","reply":reply}]}))
+                    .unwrap_or_else(|_| json!({}));
+            }
+        }
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
                 self.id = input["args"]["id"].clone();
@@ -185,6 +204,30 @@ mod tests {
         let mut input = args(Value::Null, false); input["fallbackTitle"] = json!("Localized Files");
         let tree = sync(&mut app, input)["tree"].clone();
         assert_eq!(tree["children"][0]["label"], "Localized Files");
+    }
+
+    #[test]
+    fn session_controls_mutate_the_owner_and_ignore_closed_windows() {
+        let mut session = Session::default();
+        session.call("open", &[json!({}), json!({"app":"files"})]).unwrap();
+        let mut app = TitleBar::with_session(session.clone());
+        sync(&mut app, args(Value::Null, true));
+        for cmd in ["max", "act"] {
+            let revision = session.reader().revision();
+            let reply = act(&mut app, cmd, json!("max"));
+            assert_eq!(reply["effects"][0]["kind"], "windowModel");
+            assert_eq!(session.reader().revision(), revision + 1);
+        }
+        assert!(!session.reader().read().window("files").unwrap().maximized());
+        let reply = act(&mut app, "act", json!("min"));
+        assert_eq!(reply["effects"][0]["kind"], "windowModel");
+        assert!(session.reader().read().window("files").unwrap().minimized());
+        assert_eq!(act(&mut app, "act", json!("close"))["effects"][0]["kind"], "winAct", "close guards stay in the adapter");
+        session.call("close", &[json!({}), json!("files")]).unwrap();
+        let revision = session.reader().revision();
+        assert_eq!(act(&mut app, "max", Value::Null), json!({}));
+        assert_eq!(act(&mut app, "act", json!("min")), json!({}));
+        assert_eq!(session.reader().revision(), revision);
     }
 
     #[test]

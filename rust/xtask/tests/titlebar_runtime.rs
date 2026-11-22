@@ -41,6 +41,7 @@ fn window_headers_stay_native_and_preserve_window_manager_actions() {
                 assert!(matching > 10, "native header ink was not painted: {appearance}/{mode}/{width}: {report}");
                 for flag in [
                     "nativeHeaders",
+                    "nativeControlCommands",
                     "noAppearanceTransport",
                     "withoutAppearanceFacts",
                     "staleAppearanceMirror",
@@ -143,15 +144,18 @@ async function run(){
  await until(()=>wm.frame(wm.get(primary)).x!==before.x);const after=wm.frame(wm.get(primary));const moved=after.x===before.x+30&&after.y===before.y+25;
  const sceneMoved=await until(()=>{const node=find(primary,'A long updated title — Axia window');return node&&lord.getLayout(node)[0]>=after.x;});const titleRect=lord.getLayout(find(primary,'A long updated title — Axia window'));
  const image=lord.media.screenshot('screenshots');const saved=await media.saveImage(image,@IMAGE@);media.close(image);
+ const toggleMaximize=wm.toggleMaximize,minimize=wm.minimize;let legacyControlCalls=0;
+ wm.toggleMaximize=()=>{legacyControlCalls++;};wm.minimize=()=>{legacyControlCalls++;};
  let count=drags.length;await control(primary,'max');const maximized=!!wm.get(primary)?.maximized;await control(primary,'max');const restored=!wm.get(primary)?.maximized;let noControlDrag=drags.length===count;
  [x,y]=point(primary);for(let i=0;i<2;i++)for(const type of ['down','up'])pointer(type,lord.nativeViews.hitTest(x,y),x,y);
  await until(()=>!!wm.get(primary)?.maximized);const doubleMaximized=!!wm.get(primary)?.maximized;await control(primary,'max');
  count=drags.length;await control(primary,'min');const minimized=!!wm.get(primary)?.minimized;
+ const nativeControlCommands=legacyControlCalls===0;wm.toggleMaximize=toggleMaximize;wm.minimize=minimize;
  wm.focus(primary);await until(()=>!wm.get(primary)?.minimized&&!!handles.get(primary));await sleep(70);const reopened=!wm.get(primary)?.minimized;
  const unguard=wm.setCloseGuard(primary,()=>false);await control(primary,'close');const guardKept=!!wm.get(primary);unguard();await control(primary,'close');await until(()=>!wm.get(primary));const closed=!wm.get(primary);noControlDrag=noControlDrag&&drags.length===count;
  const csd=wm.open('probe',{new:true,args:{csd:true},frame:{x:40,y:400,w:260,h:150}});const own=wm.open('own-probe',{frame:{x:70,y:420,w:260,h:150}});await sleep(100);
  const csdHasNoHeader=!handles.has(csd),ownHasNoHeader=!handles.has(own);
- console.log('@KIND@-observation '+JSON.stringify({noAppearanceTransport,withoutAppearanceFacts,staleAppearanceMirror,retainedAfterPoison,nativeHeaders,nativeStateTransport,directModelTitle,sourceChecked,focused,retitled,moved,sceneMoved,maximized,restored,doubleMaximized,minimized,reopened,guardKept,closed,noControlDrag,csdHasNoHeader,ownHasNoHeader,titleRect,after,drags,saved:!!saved?.ok}));
+ console.log('@KIND@-observation '+JSON.stringify({nativeControlCommands,noAppearanceTransport,withoutAppearanceFacts,staleAppearanceMirror,retainedAfterPoison,nativeHeaders,nativeStateTransport,directModelTitle,sourceChecked,focused,retitled,moved,sceneMoved,maximized,restored,doubleMaximized,minimized,reopened,guardKept,closed,noControlDrag,csdHasNoHeader,ownHasNoHeader,titleRect,after,drags,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('@KIND@ driver: '+(error.stack||error))),200);
 "#;

@@ -235,7 +235,9 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         }
     }
     let app = if id == "shell:titlebar" {
-        windows.clone().map(|reader| Box::new(titlebar::TitleBar::with_windows(reader)) as Box<dyn NativeApp>).or_else(|| app(id))
+        owner.clone().map(|session| Box::new(if native_locale {
+            titlebar::TitleBar::with_session(session)
+        } else { titlebar::TitleBar::with_windows(session.reader()) }) as Box<dyn NativeApp>).or_else(|| app(id))
     } else if id == "forcequit" {
         windows.clone().map(|reader| Box::new(crate::forcequit::App::with_windows(
             std::rc::Rc::new(crate::winmodel::WindowReader(reader)))) as Box<dyn NativeApp>).or_else(|| app(id))
