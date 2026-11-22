@@ -13,6 +13,8 @@ pub mod shared;
 pub mod dnsmap;
 #[path = "../../../rust/axia-codecs/src/fwlists.rs"]
 pub mod fwlists;
+#[path = "../../../rust/axia-codecs/src/json.rs"]
+pub mod json;
 #[path = "../../../rust/axia-codecs/src/fwrules.rs"]
 pub mod fwrules;
 mod lanparse {

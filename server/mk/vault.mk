@@ -43,8 +43,8 @@ $(VC_OBJ): $(wildcard src/vault/vclient.h src/vault/vwire.h src/vault/fidodev.h 
 build/vault-e2e: tests/vault_e2e.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c src/vault/vjson.c src/vault/smem.c $(VAULT_HDR) build/axia-vault
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vault_e2e.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c src/vault/vjson.c src/vault/smem.c -lpthread
 # the keyring op of isolated .lpk apps (src/sec/brokerkr.c) against axia-vault (needs build/axia-vault)
-build/brokerkr-e2e: tests/brokerkr_e2e.c src/sec/brokerkr.c src/sec/json.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c src/sec/broker_int.h src/sec/broker.h $(VAULT_HDR) build/axia-vault
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/brokerkr_e2e.c src/sec/brokerkr.c src/sec/json.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c -lpthread
+build/brokerkr-e2e: tests/brokerkr_e2e.c src/sec/brokerkr.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c src/sec/broker_int.h src/sec/broker.h $(VAULT_HDR) build/axia-vault $(CODEC_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/brokerkr_e2e.c src/sec/brokerkr.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c -lpthread $(FW_LINK)
 # demo vault for the screenshots (not a test)
 build/vault-demo: tests/vault_demo.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c src/vault/vjson.c src/vault/smem.c $(VAULT_HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/vault_demo.c src/vault/vclient.c src/vault/vwire.c src/vault/fidodev.c src/vault/vjson.c src/vault/smem.c -lpthread

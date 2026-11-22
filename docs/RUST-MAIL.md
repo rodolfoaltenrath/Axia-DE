@@ -22,7 +22,7 @@ the C callers (`maild.c`, `imap.c`, `smtp.c`, `msgview.c`, `pim.c`, `dav.c`,
   `jb_*` on the same buffer.
 - Time zones still go through the C TZif reader (`server/src/ui/tzif.c`):
   Rust calls `tz_zone_valid` and `tzif_lookup`. The Clock uses the same reader.
-- `vcard_build` reads the C `JVal` tree of `sec/json.c` directly.
+- `vcard_build` reads the C `JVal` tree of `axia-codecs` `json.rs` (`sec/json.h`) directly.
 - The IMAP response parser (`imapp.c`) and the network code stay C.
 
 `axia_mail_layout()` reports the size and key offsets of every exported struct.

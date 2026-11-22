@@ -270,7 +270,7 @@ axia-server (no Poppler or libarchive)
     open `~/.ssh` or `~/.bashrc`, write to `/tmp`, open sockets (neither network nor unix, so no
     D-Bus, CUPS or Wayland) or fork. Fonts can be read.
 - **What comes back:**
-  - **JSON:** axia-server validates it with the strict reader in `sec/json.c` before passing it to
+  - **JSON:** axia-server validates it with the strict reader in `axia-codecs` `json.rs` (`sec/json.h`) before passing it to
     JS.
   - **Images:** premultiplied ARGB32, the engine's format, in a memfd. axia-server requires the
     `F_SEAL_SHRINK` seal before mapping it, so a cheating helper can't cause SIGBUS by shrinking

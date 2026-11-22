@@ -37,7 +37,7 @@ it, it is "Unsigned" and has no hashes.
 SHA-256 and Ed25519 are **our own code**, small and readable. Ed25519 follows the arithmetic of
 **TweetNaCl** (public domain; field 2^255-19 in 16 words of 16 bits); **signing**
 (`ed25519_sign`/`ed25519_public`) was added on top of the verification the package engine already
-had. The JSON reader is our own and strict (`server/src/sec/json.c`).
+had. The JSON reader is our own and strict (`rust/axia-codecs/src/json.rs`, C ABI `server/src/sec/json.h`).
 
 **No OpenSSL:** by policy only `lord-sessiond`, `axia-maild` and (0.8.5) `axia-dl` and `lord-tls` link it (`axia-rdesk` loads it through libfreerdp), never
 `axia-server`. `.lpk` verification happens in C, at
@@ -351,7 +351,7 @@ See [RELEASING.md](RELEASING.md), step 3.
 | `server/src/pkg/crypto.c` | SHA-256/512 and Ed25519 (verify and sign), our own |
 | `server/src/sec/sign.c` | package and catalog verification, trust levels, revocation |
 | `server/src/sec/pkgstate.c` | saved original, "Modified by you", restore, share, update rule |
-| `server/src/sec/json.c` | strict JSON reader |
+| `rust/axia-codecs/src/json.rs` | strict JSON reader |
 | `server/src/sec/keys.h` | official public keys |
 | `server/src/ui/js_sec.c` | `lord.sign` for the SDK (status, restore, share, userKey) |
 | `tools/lpk.mjs` | package, sign, verify, keygen and catalog |

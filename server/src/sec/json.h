@@ -1,4 +1,4 @@
-/* json.h — small, strict JSON reader (RFC 8259) for the files LordOS verifies in C:
+/* json.h — small, strict JSON reader (RFC 8259), implemented in rust/axia-codecs/src/json.rs, for the files LordOS verifies in C:
  * contenido.json and firma.json of .lpk packages, the signed catalog and the saved permissions
  * (see docs/SIGNING.md and docs/PRIVACY.md). Everything lives in a single memory block. */
 #ifndef LORD_SEC_JSON_H

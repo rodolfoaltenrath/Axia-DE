@@ -5,7 +5,7 @@
 # $(MAIL_CODEC_LIB). The IMAP response parser (rust/axia-mail/src/imapp.rs) and the TZif reader (axia-codecs/src/tzif.rs) are Rust too.
 MAIL_PARSE :=
 MAIL_HDR := $(wildcard src/mail/*.h) src/doc/wire.h src/sec/json.h src/ui/tzif.h
-MAIL_TEST_SRC := tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c src/sec/json.c
+MAIL_TEST_SRC := tests/mail_test.c $(MAIL_PARSE) src/doc/wire.c
 # parsers: IMAP, MIME, HTML sanitizer, iCalendar, vCard and XML, with a small fuzzer (tests/mail_test.c)
 test: build/mail-test
 build/mail-test: $(MAIL_TEST_SRC) $(MAIL_HDR) $(MAIL_CODEC_LIB)
@@ -26,9 +26,9 @@ build/axia-server: $(MAILC_OBJ)
 $(MAILC_OBJ): $(wildcard src/mail/*.h) src/ui/js_mail.h
 # the connector's policy: allowed endpoints and the public-address check for remote images
 test: build/mailc-test
-build/mailc-test: tests/mailc_test.c src/mail/mailc.c src/mail/mailc.h src/doc/wire.c src/sec/json.c $(NETCONN_SRC) $(CODEC_LIB)
+build/mailc-test: tests/mailc_test.c src/mail/mailc.c src/mail/mailc.h src/doc/wire.c $(NETCONN_SRC) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/mailc_test.c src/mail/mailc.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread -lm $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/mailc_test.c src/mail/mailc.c src/doc/wire.c $(NETCONN_SRC) -lpthread -lm $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # hostile servers: HTTP chunk sizes / Content-Length / header limits and IMAP literal sizes,
 # over a socketpair (no network). Needs the OpenSSL headers (net.c), like axia-maild.
@@ -50,7 +50,7 @@ mail-asan: build/mailnet-test-asan
 # binary that links OpenSSL; built when its headers are there (MAILNET).
 LMD_SRC := src/mail/maild.c src/mail/store.c src/mail/search.c src/mail/imap.c src/mail/imapio.c src/mail/smtp.c \
            src/mail/msgview.c src/mail/http.c src/mail/dav.c src/mail/pim.c src/mail/net.c src/mail/snpf.c $(MAIL_PARSE) \
-           src/doc/wire.c src/sec/json.c src/sec/sandbox.c src/sec/cgroup.c
+           src/doc/wire.c src/sec/sandbox.c src/sec/cgroup.c
 ifeq ($(MAILNET),1)
 all: build/axia-maild
 endif
@@ -58,6 +58,6 @@ build/axia-maild: $(LMD_SRC) $(MAIL_CODEC_LIB) $(MAIL_HDR) src/sec/sandbox.h src
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ $(LMD_SRC) $(MAIL_CODEC_LIB) $(shell pkg-config --libs openssl) -lpthread -lm $(CODEC_NATIVE_LIBS)
 # manual driver for axia-maild (not in `make test`): build/maild-cli '{"op":"status"}' --wait 5
-build/maild-cli: tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c src/mail/mailc.h $(NETCONN_SRC) $(CODEC_LIB)
+build/maild-cli: tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/mail/mailc.h $(NETCONN_SRC) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/maild_cli.c src/mail/mailc.c src/doc/wire.c src/sec/json.c $(NETCONN_SRC) -lpthread -lm $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/maild_cli.c src/mail/mailc.c src/doc/wire.c $(NETCONN_SRC) -lpthread -lm $(FW_LINK)

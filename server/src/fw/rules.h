@@ -21,7 +21,7 @@
  * network) for addresses and networks. Everything is O(1) or O(key length).
  *
  * The store and the decider are Rust (rust/axia-codecs/src/fwrules.rs); the JSON file
- * (fw_to_json … fw_load) is rules_json.c on top of this API. */
+ * (fw_to_json … fw_load) is rust/axia-codecs/src/fwrules/file.rs. */
 #ifndef LORD_FW_RULES_H
 #define LORD_FW_RULES_H
 

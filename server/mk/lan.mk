@@ -9,7 +9,7 @@ $(LAN_SRV_OBJ): $(wildcard src/lan/*.h) src/doc/wire.h src/print/mdns.h src/sec/
 build/axia-server: $(LAN_SRV_OBJ)
 build/obj/ui/js.o: src/ui/js_lan.h
 
-LAN_HELPER_SRC := src/lan/lanhelper.c src/lan/smbauth.c src/pkg/crypto.c src/doc/wire.c src/sec/sandbox.c src/sec/cgroup.c src/sec/json.c
+LAN_HELPER_SRC := src/lan/lanhelper.c src/lan/smbauth.c src/pkg/crypto.c src/doc/wire.c src/sec/sandbox.c src/sec/cgroup.c
 all: build/axia-lan
 build/axia-lan: $(LAN_HELPER_SRC) $(wildcard src/lan/*.h) src/pkg/crypto.h src/doc/wire.h src/doc/proto.h src/print/mdns.h src/sec/sandbox.h src/sec/cgroup.h $(CODEC_LIB)
 	@mkdir -p build
@@ -35,8 +35,8 @@ build/rconnect-run-test: $(RCONNECT_RUN_SRC) src/lan/rconnect.h src/sec/sandbox.
 # one real pass on the network this machine is on, printed as JSON (a tool, not part of make test):
 #   build/lan-scan   (not in a LordOS session: there are no sockets there without a connector). Built with
 #   LAN_ANY_LINK, so a test server behind a veth on an isolated network namespace counts as a link.
-build/lan-scan: tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/json.c src/sec/netconn.c src/sec/cgroup.c build/axia-lan $(CODEC_LIB)
-	$(CC) $(CPPFLAGS) -DLAN_ANY_LINK $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/json.c src/sec/netconn.c src/sec/cgroup.c src/fw/rules_json.c src/fw/fwmap.c $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
+build/lan-scan: tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/netconn.c src/sec/cgroup.c build/axia-lan $(CODEC_LIB)
+	$(CC) $(CPPFLAGS) -DLAN_ANY_LINK $(CFLAGS) $(WARN) -std=c11 -o $@ tests/lan_scan.c src/lan/lan.c src/doc/wire.c src/sec/netconn.c src/sec/cgroup.c src/fw/fwmap.c $(CODEC_LIB) -lpthread -lm $(CODEC_NATIVE_LIBS)
 
 # the share-* actions alone, real mounts as root on a test machine (a tool, not part of make test)
 build/share-cli: tests/share_cli.c src/lan/share_admin.c src/lan/share_admin.h src/lan/lanaddr.h $(CODEC_LIB)

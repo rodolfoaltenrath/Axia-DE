@@ -84,7 +84,7 @@ QJS_OBJ := $(patsubst %,build/qjs/%.o,quickjs libregexp libunicode cutils dtoa)
 MON_SRC := src/ui/js_monitor.c src/ui/js_nativeview.c
 # Media (src/media, docs/MEDIA.md): only the axia-server side. Only axia-media links FFmpeg.
 MEDIA_SRC := src/media/media.c src/media/hwdec.c src/media/mview.c src/media/capture.c src/media/annot.c src/media/maudio.c src/media/mpulse.c src/media/proto.c src/ui/js_media.c
-SEC_SRC := src/sec/json.c src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
+SEC_SRC := src/sec/sign.c src/sec/pkgstate.c src/sec/perms.c src/sec/cgroup.c src/sec/sandbox.c src/sec/brokersrv.c src/sec/brokercam.c src/sec/brokerkr.c src/sec/brokermail.c src/sec/restrict.c src/sec/appid.c src/sec/pwguard.c src/sec/codesig.c
 # App mode: axia-server --app <id> runs an .lpk app as an isolated Wayland client (src/app)
 APP_SRC := src/ui/js_app_host.c src/ui/js_broker.c src/ui/js_brokercam.c src/ui/js_brokermail.c
 SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c src/users/homedirs.c src/wl/wl.c src/wl/xwm.c \
@@ -99,7 +99,7 @@ SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c 
 DOC_SRC := src/doc/doc.c src/doc/wire.c src/ui/js_doc.c src/ui/js_print.c
 SRC += $(DOC_SRC)
 # Per-app firewall (src/fw, docs/FIREWALL.md): rules, decision and names learned from DNS
-FW_SRC := src/fw/rules_json.c src/fw/fwmap.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
+FW_SRC := src/fw/fwmap.c src/fw/fwsub.c src/ui/js_fw.c src/sec/netconn.c
 SRC += $(FW_SRC)
 OBJ := $(SRC:src/%.c=build/obj/%.o)
 HDR := $(wildcard src/*.h src/gpu/*.h src/ui/*.h src/term/*.h src/wl/*.h src/wasm/*.h src/sound/*.h src/pkg/*.h src/net/*.h src/users/*.h src/sec/*.h src/platform/*.h src/media/*.h src/app/*.h src/doc/*.h src/print/*.h) $(WL_GEN) $(APP_CLIENT_HDR)
@@ -189,8 +189,8 @@ build/glass-damage-test: tests/glass_damage_test.c src/ui/paint.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lm
 build/ui-damage-test: tests/ui_damage_test.c src/main.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/outputs.c -lm
-build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/sec/json.c src/platform/power.h $(HDR) $(RUST_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/sec/json.c $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
+build/battery-refresh-test: tests/battery_refresh_test.c src/hw/hw.c src/platform/power.h $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lpthread -lm
 build/portal-files-test: tests/portal_files_test.c src/ui/portal_files.c src/ui/portal_files.h src/vault/dbus.c
 	# Keep transport calls visible to --wrap; RPM LTO can inline the real bus functions.
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -fno-lto -Wl,--wrap=dbus_send,--wrap=dbus_reply,--wrap=dbus_error -o $@ $< src/ui/portal_files.c src/vault/dbus.c
@@ -296,7 +296,7 @@ endif
 .DEFAULT_GOAL := all
 BPF ?= 0
 NP_INPUTS := $(wildcard src/netperm/*.rs src/netperm/*.h) ../rust/axia-netperm/Cargo.toml ../rust/axia-netperm/build.rs $(RUST_MANIFEST) ../rust/Cargo.lock ../.cargo/config.toml
-NP_INPUTS += ../rust/axia-codecs/src/fwrules.rs ../rust/axia-codecs/src/fwlists.rs ../rust/axia-codecs/src/dnsmap.rs
+NP_INPUTS += ../rust/axia-codecs/src/fwrules.rs ../rust/axia-codecs/src/fwrules/file.rs ../rust/axia-codecs/src/json.rs ../rust/axia-codecs/src/fwlists.rs ../rust/axia-codecs/src/dnsmap.rs
 NP_FEATURES := $(if $(filter 1,$(BPF)),--features bpf,)
 # Separate outputs prevent switching BPF=0/1 from reusing the wrong executable.
 NP_TARGET := build/netperm-$(BPF)
@@ -317,9 +317,9 @@ endif
 test: build/npcompile-test netperm-rust-test
 netperm-rust-test:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) -p axia-netperm --locked --offline --target-dir $(NP_TARGET) $(NP_FEATURES)
-build/npcompile-test: tests/npcompile_test.c src/fw/rules_json.c src/sec/json.c $(wildcard src/fw/*.h) $(NP_LIB)
+build/npcompile-test: tests/npcompile_test.c $(wildcard src/fw/*.h) $(NP_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c src/fw/rules_json.c src/sec/json.c $(NP_LIB) $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/npcompile_test.c $(NP_LIB) $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # axia-fand (rust/axia-fan, docs/FANS.md): the root service that drives the fans by temperature. libc
 # only; it executes nothing and has no network. Its tests (curves, fan.json, requests, a fake sysfs
@@ -363,17 +363,17 @@ build/wasm-test: tests/wasm_test.c src/wasm/wasm.h $(CODEC_LIB)
 build/thbrk-test: tests/thbrk_test.c src/ui/thbrk.h $(CODEC_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/thbrk_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 # package signing: SHA-256 (NIST), Ed25519 (RFC 8032), JSON, contenido.json and catalog
-build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/sec/json.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+build/pkgstate-test: tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/pkgstate_test.c src/sec/pkgstate.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 build/sandbox-test: tests/sandbox_test.c src/sec/sandbox.c src/sec/cgroup.c src/sec/sandbox.h src/sec/cgroup.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -D_GNU_SOURCE -o $@ tests/sandbox_test.c src/sec/sandbox.c src/sec/cgroup.c -lpthread
-build/sign-test: tests/sign_test.c src/sec/json.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h) src/lpk.h src/pkg/crypto.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_SIGN_TEST -o $@ tests/sign_test.c src/sec/json.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+build/sign-test: tests/sign_test.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) $(wildcard src/sec/*.h) src/lpk.h src/pkg/crypto.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -DLORD_SIGN_TEST -o $@ tests/sign_test.c src/sec/sign.c src/pkg/crypto.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 # Verified system code: manifest parser, signature, per-file check, reading under the root (docs/SIGNING.md)
 test: build/codesig-test
-build/codesig-test: tests/codesig_test.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c src/sec/codesig.h src/sec/json.h src/pkg/crypto.h build/gen/codesig_build.h
+build/codesig-test: tests/codesig_test.c src/sec/codesig.c src/pkg/crypto.c src/sec/codesig.h src/sec/json.h src/pkg/crypto.h build/gen/codesig_build.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/codesig_test.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/codesig_test.c src/sec/codesig.c src/pkg/crypto.c -lpthread $(FW_LINK)
 	./$@ ../tools/release/lordos-release.pub.pem || { rm -f $@; exit 1; }
 # Clock time zones: TZif and POSIX rules against glibc (docs/SYSTEM.md)
 # tests/xwm_test.c: Rust X11 wire helpers of the window manager (x11/wire.rs, docs/WAYLAND.md)
@@ -409,25 +409,25 @@ build/journal-test: tests/journal_test.c src/logs/journal.h $(CODEC_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/journal_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 # per-app firewall: rules (precedence, networks, JSON) and DNS names (broken packets, LRU)
-test: build/fw-rules-test build/dnsmap-test build/broker-restrict-test
+test: build/dnsmap-test build/broker-restrict-test
 # the firewall's non-network restrictions in the real broker code (docs/FIREWALL.md); open() is
 # wrapped so a fake /dev/video9 can be opened
-BROKER_RESTRICT_SRC := src/sec/brokersrv.c src/sec/brokercam.c src/sec/restrict.c src/sec/perms.c src/sec/json.c \
-                       src/fw/rules_json.c src/fw/fwmap.c src/media/proto.c
+BROKER_RESTRICT_SRC := src/sec/brokersrv.c src/sec/brokercam.c src/sec/restrict.c src/sec/perms.c \
+                       src/fw/fwmap.c src/media/proto.c
 build/broker-restrict-test: tests/broker_restrict_test.c $(BROKER_RESTRICT_SRC) $(wildcard src/sec/*.h src/fw/*.h src/media/*.h) $(CODEC_LIB)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/broker_restrict_test.c $(BROKER_RESTRICT_SRC) -Wl,--wrap=open $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # axia-maild for the isolated system apps (src/sec/brokermail.c): who may ask what, files, Mail-only verbs
 test: build/brokermail-test
-build/brokermail-test: tests/brokermail_test.c src/sec/brokermail.c src/sec/json.c $(wildcard src/sec/*.h src/mail/*.h)
+build/brokermail-test: tests/brokermail_test.c src/sec/brokermail.c $(wildcard src/sec/*.h src/mail/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/brokermail_test.c src/sec/brokermail.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/brokermail_test.c src/sec/brokermail.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # tests/launch_cli.c: the real Linux app launcher outside the desktop, for tests/fwlinux/files.sh
 # (built by `make test`, run by that script in the VM)
 LAUNCH_CLI_SRC := src/sec/cgroup.c src/sec/sandbox.c \
-                  src/sec/restrict.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
+                  src/sec/restrict.c src/fw/fwmap.c
 test: build/launch-cli
 build/launch-cli: tests/launch_cli.c $(LAUNCH_CLI_SRC) src/apps.h $(wildcard src/sec/*.h src/fw/*.h src/hw/*.h)
 	@mkdir -p build
@@ -446,7 +446,7 @@ build/defaults-test: tests/defaults_test.c $(LAUNCH_CLI_SRC) src/apps.h $(wildca
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/defaults_test.c $(LAUNCH_CLI_SRC) $(RUST_LIB) $(RUST_NATIVE_LIBS) -ldl -lm -lpthread
 	./$@ || { rm -f $@; exit 1; }
 # tests/notifyd_cli.c: the real notification server on a private bus, for tests/fwlinux/notify.sh
-NOTIFYD_CLI_SRC := src/hw/notifyd.c src/sec/appid.c src/hw/jbuf.c src/vault/dbus.c src/sec/restrict.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
+NOTIFYD_CLI_SRC := src/hw/notifyd.c src/sec/appid.c src/hw/jbuf.c src/vault/dbus.c src/sec/restrict.c src/fw/fwmap.c
 test: build/notifyd-cli build/notifyd-test
 build/notifyd-test: tests/notifyd_test.c $(NOTIFYD_CLI_SRC) $(wildcard src/hw/*.h src/sec/*.h src/fw/*.h src/vault/*.h) $(CODEC_LIB)
 	@mkdir -p build
@@ -457,7 +457,7 @@ build/notifyd-cli: tests/notifyd_cli.c $(NOTIFYD_CLI_SRC) $(wildcard src/hw/*.h 
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/notifyd_cli.c $(NOTIFYD_CLI_SRC) $(FW_LINK)
 # tests/pwguard_cli.c: the PipeWire guard against the session's PipeWire, for tests/fwlinux/mic.sh;
 # tests/pwguard_test.c: its POD reader and node classes
-PWGUARD_SRC := src/sec/pwguard.c src/sec/appid.c src/sec/restrict.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c
+PWGUARD_SRC := src/sec/pwguard.c src/sec/appid.c src/sec/restrict.c src/fw/fwmap.c
 test: build/pwguard-cli build/pwguard-test
 build/pwguard-cli: tests/pwguard_cli.c $(PWGUARD_SRC) $(wildcard src/sec/*.h src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
@@ -470,30 +470,26 @@ build/pwguard-test: tests/pwguard_test.c $(PWGUARD_SRC) $(wildcard src/sec/*.h s
 build/wl-globals: tests/wl_globals.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(WARN) -std=c11 -o $@ $< -lwayland-client
-build/fw-rules-test: tests/fw_rules_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
-	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fw_rules_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
-	./$@ || { rm -f $@; exit 1; }
 # subscribed blocklists (0.8.5): raw parsers, the set, the compiled file, fuzzing (docs/FIREWALL.md, "Blocklists")
 test: build/fwlists-test
-build/fwlists-test: tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
+build/fwlists-test: tests/fwlists_test.c src/fw/fwmap.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwmap.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/fwlists-test-asan: tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) $(CODEC_LIB)
+build/fwlists-test-asan: tests/fwlists_test.c src/fw/fwmap.c $(wildcard src/fw/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(WARN) -std=c11 -o $@ tests/fwlists_test.c src/fw/fwmap.c $(FW_LINK)
 	./$@
 # the destinations a user types in the rule sheet (tests/fw_dest_cases.txt), through the store's
 # parser; apps/monitor/tests.rs checks the Rust editor against the same cases.
 test: build/fwdest-test
-build/fwdest-test: tests/fwdest_test.c tests/fw_dest_cases.txt tests/fw_domain_cases.txt src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
+build/fwdest-test: tests/fwdest_test.c tests/fw_dest_cases.txt tests/fw_domain_cases.txt src/fw/fwmap.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwdest_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/fwdest_test.c src/fw/fwmap.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
-build/dnsmap-test: tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
+build/dnsmap-test: tests/dnsmap_test.c src/fw/fwmap.c $(wildcard src/fw/*.h) src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/rules_json.c src/fw/fwmap.c src/sec/json.c $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/dnsmap_test.c src/fw/fwmap.c $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # Backup engine, encryption and service: tests are in rust/axia-backup/tests/.
 # Printing and scanning (IPP, HTTP, CUPS, eSCL, tasks): tests are in rust/axia-print/ (src and tests/).
@@ -711,7 +707,7 @@ clean:
 
 # ---- documents (M9) ----
 LD_SRC := src/doc/helper.c src/doc/h_pdf.c src/doc/h_arc.c src/doc/h_font.c src/doc/h_make.c src/doc/wire.c src/doc/arcpath.c \
-          src/sec/json.c src/sec/sandbox.c src/sec/cgroup.c
+          src/sec/sandbox.c src/sec/cgroup.c
 LD_PKGS := poppler-glib libarchive cairo-pdf cairo-ft freetype2 fontconfig
 build/axia-doc: $(LD_SRC) $(CODEC_LIB) $(wildcard src/doc/*.h) src/sec/sandbox.h src/sec/cgroup.h src/sec/json.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 $(shell pkg-config --cflags $(LD_PKGS)) -o $@ $(LD_SRC) $(CODEC_LIB) $(shell pkg-config --libs $(LD_PKGS)) -lm $(CODEC_NATIVE_LIBS)
@@ -720,17 +716,17 @@ build/arcpath-test: tests/arcpath_test.c src/doc/arcpath.c src/doc/arcpath.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/arcpath_test.c src/doc/arcpath.c
 # (0.8.5) the components' network connectors (src/sec/netconn.c) and what they need, for the tests
-NETCONN_SRC := src/sec/netconn.c src/sec/cgroup.c src/fw/rules_json.c src/fw/fwmap.c
+NETCONN_SRC := src/sec/netconn.c src/sec/cgroup.c src/fw/fwmap.c
 # the connectors: requests, sockets, the real connector process and its fail-closed start
 test: build/netconn-test
-build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c src/sec/netconn.h src/sec/cgroup.h $(CODEC_LIB)
+build/netconn-test: tests/netconn_test.c $(NETCONN_SRC) src/sec/netconn.h src/sec/cgroup.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) src/sec/json.c -lpthread $(FW_LINK)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/netconn_test.c $(NETCONN_SRC) -lpthread $(FW_LINK)
 	./$@ || { rm -f $@; exit 1; }
 # axia-doc end to end: malicious archives, PDF and the lockdown (needs build/axia-doc)
-build/doc-test: tests/doc_test.c src/doc/wire.c src/sec/json.c $(wildcard src/doc/*.h)
+build/doc-test: tests/doc_test.c src/doc/wire.c $(wildcard src/doc/*.h) $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/doc_test.c src/doc/wire.c src/sec/json.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/doc_test.c src/doc/wire.c $(FW_LINK)
 
 # Passwords and the system keyring (docs/PASSWORDS.md): rules in mk/vault*.mk
 include $(sort $(wildcard mk/*.mk))
@@ -757,9 +753,9 @@ build/smartctl-test: tests/smartctl_test.c src/disk/disk.h $(CODEC_LIB)
 # Disks without root: the C ABI of src/disk/disk.h (list, tools, SMART-independent helpers, watch) against
 # this machine's /sys, udev database and mountinfo. The Rust unit tests cover the parsers on synthetic trees.
 test: build/disk-test
-build/disk-test: tests/disk_test.c src/disk/disk.h src/sec/json.c src/sec/json.h $(CODEC_LIB)
+build/disk-test: tests/disk_test.c src/disk/disk.h src/sec/json.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/disk_test.c src/sec/json.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/disk_test.c $(CODEC_LIB) -lm $(CODEC_NATIVE_LIBS)
 	./$@ || { rm -f $@; exit 1; }
 
 # a system with no administrator (src/users/admin_rescue.c): who may become one

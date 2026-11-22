@@ -894,3 +894,34 @@ Behavior that is deliberately not identical:
   filled.
 - `build/hwscan-test fixture` and `dump` are gone: the fixtures are `cargo run -p axia-hw --example fixture --
   <dir> <kind>`.
+
+## The strict JSON reader and the firewall's file (2026-11-22)
+
+`server/src/sec/json.c`, `server/src/fw/rules_json.c` and `server/tests/fw_rules_test.c` are gone. The JSON
+reader is `rust/axia-codecs/src/json.rs`: a Rust API (`json::parse`, `Json`, `json::quote`) and the C ABI of
+`sec/json.h` (`json_parse`, `json_free`, `json_get`, `json_str`, `json_num`, `json_bool`, `json_quote`; the
+`JVal` tree is built in one `malloc`'d block, as before). The firewall's file (`fw_to_json`, `fw_from_json`,
+`fw_save`, `fw_load`) is `rust/axia-codecs/src/fwrules/file.rs`, next to the store and the decider it was a
+layer over. `fwmap.c` (an intrusive C hash table whose layout `js_fw.c` and others read) and `fwsub.c`
+(blocklist subscriptions, on top of the wire protocol and `netconn`) stay in C.
+
+Every C program that linked `json.c` or `rules_json.c` now links the Rust codecs instead (`$(FW_LINK)`, or
+`libaxia_shell.a` where it already did); `axia-netperm` compiles `json.rs` and `file.rs` with its copy of the
+store, so `npcompile-test` loads the file through the same code.
+
+Validation:
+
+- `cargo test -p axia-codecs --lib fwrules` ports every case of `fw_rules_test.c` (ids and scopes, destinations,
+  LAN, every precedence step, restrictions, durations, the file round trip and its 40 bad inputs, 20,000
+  mutations, 30,000 random decisions against a linear decider, and a timing guard) and adds the reader's own
+  cases (nesting limit, repeated keys, `\u0000`, surrogates, error positions).
+- A temporary differential harness linked the original C beside the crate (not committed): 300,000 random and
+  mutated JSON texts (18,226 accepted), 20,000 `json_quote` calls with random buffer sizes, 60,000 firewall
+  files (4,151 accepted) and the files `fw_save` and `fw_load` write and read (missing, link, directory, too big,
+  unwritable) all give the same result, the same error text with the same byte position, and byte-identical
+  JSON back.
+
+Behavior that is deliberately not identical:
+
+- The one error text that was in Spanish ("clave repetida") is now "repeated key".
+- Numbers are read with Rust's `f64` parser instead of `strtod`: both round correctly.

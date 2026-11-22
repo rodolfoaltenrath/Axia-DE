@@ -44,6 +44,9 @@ pub mod ids;
 mod night;
 #[cfg(not(feature = "secure-memory"))]
 pub mod edid;
+// The strict JSON reader (server/src/sec/json.h).
+#[cfg(not(feature = "secure-memory"))]
+pub mod json;
 // The firewall's rule store and decider (server/src/fw/rules.h).
 #[cfg(not(feature = "secure-memory"))]
 mod fwrules;

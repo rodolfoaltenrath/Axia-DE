@@ -13,7 +13,7 @@ build/axia-fetch: build/axia-sysreport
 	ln -sf axia-sysreport $@
 build/axia-sysreport: src/sysreport/cli.c src/sysreport/sysreport.h $(wildcard src/bench/*.h) build/gen/lord_version.h $(SYSREPORT_LIB) $(BENCH_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) -Ibuild/gen $(CFLAGS) $(WARN) -std=c11 -o $@ src/sysreport/cli.c src/sec/json.c $(SYSREPORT_LIB) $(BENCH_LIB) -lm -lpthread $(CODEC_NATIVE_LIBS)
+	$(CC) $(CPPFLAGS) -Ibuild/gen $(CFLAGS) $(WARN) -std=c11 -o $@ src/sysreport/cli.c $(SYSREPORT_LIB) $(BENCH_LIB) -lm -lpthread $(CODEC_NATIVE_LIBS)
 # The fake machines full of serials, UUIDs, MACs and names that must not reach a report, the peripherals
 # (on screen only), the session facts and the boot medium are tests of the crate (cargo test, part of
 # test-rust); `cargo run -p axia-sysreport --example fixture -- <dir> amd|intel|nvidia|rpi5|vm` writes a fake
@@ -21,7 +21,7 @@ build/axia-sysreport: src/sysreport/cli.c src/sysreport/sysreport.h $(wildcard s
 # (0.8.7) the catalogue's signed snapshot (src/sysreport/hwsnap.c, lord.sysinfo.community()): signature first,
 # structure, limits, no links; and the snapshot tools/hwreport/catalog.mjs wrote, signed with a test key
 test: build/hwsnap-test
-build/hwsnap-test: tests/hwsnap_test.c src/sysreport/hwsnap.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c src/sysreport/hwsnap.h src/sec/codesig.h src/sec/json.h src/pkg/crypto.h build/gen/codesig_build.h
+build/hwsnap-test: tests/hwsnap_test.c src/sysreport/hwsnap.c src/sec/codesig.c src/pkg/crypto.c src/sysreport/hwsnap.h src/sec/codesig.h src/sec/json.h src/pkg/crypto.h build/gen/codesig_build.h $(CODEC_LIB)
 	@mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/hwsnap_test.c src/sysreport/hwsnap.c src/sec/codesig.c src/sec/json.c src/pkg/crypto.c -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -std=c11 -o $@ tests/hwsnap_test.c src/sysreport/hwsnap.c src/sec/codesig.c src/pkg/crypto.c -lpthread $(FW_LINK)
 	./$@ ../assets/hwreport/snapshot.json || { rm -f $@; exit 1; }

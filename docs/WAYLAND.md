@@ -328,7 +328,7 @@ own profiles, only when the switch is turned (never by itself at login):
   user's `chromium` processes; a lock from another host counts as open). If Chromium is open the
   change waits (`settings.browserFramePending`, a check every 5 s and at login) and is applied when
   it quits. The edit is surgical: only those values change, the rest of the file stays byte for
-  byte; the file must parse as JSON before (strict reader, `sec/json.c`) and after, with the asked
+  byte; the file must parse as JSON before (strict reader, `axia-codecs` `json.rs`) and after, with the asked
   value in it; a malformed or unexpected file (`browser` not an object, an escaped duplicate key) is
   left alone and reported. The previous file goes to `Preferences.lordos-backup`, then the new one
   is written next to it (`O_EXCL`, `fsync`) and renamed over it, keeping its mode. Chromium

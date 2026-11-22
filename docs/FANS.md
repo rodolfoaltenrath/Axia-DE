@@ -120,7 +120,7 @@ A motherboard channel gets its original `pwmN_enable` (usually 2 or 5, the chip'
 ## Configuration and protocol
 
 `/etc/lordos/fan.json` is written only by `axia-fand` (temporary file, `fsync`, `rename`), and read
-only if it is a root-owned regular file nobody else can write. Strict reader (`sec/json.c`):
+only if it is a root-owned regular file nobody else can write. Strict reader (`json.rs` in axia-codecs):
 unknown keys, wrong types or an invalid curve make it fall back to the defaults.
 
 ```json

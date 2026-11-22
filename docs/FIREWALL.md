@@ -17,10 +17,11 @@ Step 1 is C code only, with no daemon and without touching the kernel or the net
 below, is the service that enforces it):
 
 ```
-server/src/fw/rules.{c,h}    rules, lists, mode, fw_decide, JSON
+rust/axia-codecs/src/fwrules.rs   rules, lists, mode, fw_decide (C ABI: server/src/fw/rules.h)
+rust/axia-codecs/src/fwrules/file.rs   the JSON file (fw_to_json, fw_from_json, fw_save, fw_load)
 server/src/fw/dnsmap.{c,h}   IP → names per app (LRU with TTL) and DNS response reader
 server/src/fw/fwmap.{c,h}    internal hash table (per-process seed)
-tests/fw_rules_test.c        build/fw-rules-test
+rust/axia-codecs/src/fwrules/cases.rs   cargo test -p axia-codecs fwrules
 tests/dnsmap_test.c          build/dnsmap-test
 ```
 
@@ -467,7 +468,7 @@ In the test, with 50,000 rules from 500 apps, a decision with one name and one I
 ### File
 
 There is one per user: `~/.config/axia/firewall.json`. It is compact JSON read by the strict
-reader in `server/src/sec/json.c`. For example:
+reader in `rust/axia-codecs/src/json.rs`. For example:
 
 ```json
 {"v":1,"mode":"ask","trusted":["lordos"],"restricted":{"lpk:juego":["no-internet","no-camera"]},
@@ -535,7 +536,7 @@ Otherwise, an app with its own DNS server could claim that `permitido.com` is an
 
 ### Tests
 
-`build/fw-rules-test` covers:
+`cargo test -p axia-codecs --lib fwrules` covers:
 
 - canonical ids and scopes;
 - valid and invalid destinations, round trip;
@@ -992,7 +993,7 @@ in the kernel. Before, it was the standalone `curl`, which can't be filtered.
 The deny mode is `FW_MODE_DENY` in `rust/axia-codecs/src/fwrules.rs` and `NP_M_DENY` in `np_decide` (the last step: a
 rule, a restriction or a list decides first); with it every app's packet filter decides, so a
 connection that was open when the mode changed is cut ("Existing connections are cut"). It is offered
-in Settings → Privacy → App network and in the menu bar item. Tested: `fw-rules-test` (loopback,
+in Settings → Privacy → App network and in the menu bar item. Tested: `fwrules::cases` (loopback,
 `::1`, a mapped `127.0.0.1`, a rule that allows, a trusted app, the file round trip) and the random
 comparison of `npcompile-test`, which now draws the deny mode too.
 

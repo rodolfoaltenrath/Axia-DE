@@ -1,7 +1,6 @@
 //! Per-app network rules: the rule store and the decider (docs/FIREWALL.md, "Rules").
 //! It doesn't touch the kernel or the network. C ABI of server/src/fw/rules.h; the
-//! JSON file (fw_to_json, fw_from_json, fw_save, fw_load) stays in rules_json.c on
-//! top of this API.
+//! JSON file (fw_to_json, fw_from_json, fw_save, fw_load) is `file.rs`.
 //!
 //! Decision order (fw_decide), from strongest to weakest:
 //!   1. the app's restrictions (FW_R_*): always deny;
@@ -20,6 +19,12 @@ use crate::lanparse::cstr;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
+
+#[path = "fwrules/file.rs"]
+mod file;
+#[cfg(test)]
+#[path = "fwrules/cases.rs"]
+mod cases;
 
 const FW_APP_MAX: usize = 128;
 pub(crate) const FW_NAME_MAX: usize = 254;
@@ -568,6 +573,46 @@ impl FwStore {
         Some(id)
     }
 
+    /// Trusts (or stops trusting) an app, which also drops its restrictions. False if there is no room.
+    fn set_trusted(&mut self, c: &[u8], on: bool) -> bool {
+        if !self.apps.contains_key(c) {
+            if !on {
+                return true;
+            }
+            if self.apps.len() >= FW_MAX_APPS {
+                return false;
+            }
+            self.apps.insert(c.to_vec(), App { id: c.to_vec(), ..Default::default() });
+        }
+        let Some(a) = self.apps.get_mut(c) else { return false };
+        a.trusted = on;
+        if on {
+            a.restricted = 0;
+        }
+        self.prune_app(c);
+        true
+    }
+
+    /// Sets an app's restrictions (0 removes them); restricting an app stops trusting it. False if there is no room.
+    fn set_restricted(&mut self, c: &[u8], flags: u32) -> bool {
+        if !self.apps.contains_key(c) {
+            if flags == 0 {
+                return true;
+            }
+            if self.apps.len() >= FW_MAX_APPS {
+                return false;
+            }
+            self.apps.insert(c.to_vec(), App { id: c.to_vec(), ..Default::default() });
+        }
+        let Some(a) = self.apps.get_mut(c) else { return false };
+        a.restricted = flags;
+        if flags != 0 {
+            a.trusted = false;
+        }
+        self.prune_app(c);
+        true
+    }
+
     fn remove(&mut self, id: u32) -> bool {
         let Some(r) = self.ids.remove(&id) else { return false };
         let app = cs(&r.app).to_vec();
@@ -1063,22 +1108,7 @@ pub unsafe extern "C" fn fw_app_forget(s: *mut FwStore, app: *const c_char) {
 #[no_mangle]
 pub unsafe extern "C" fn fw_set_trusted(s: *mut FwStore, app: *const c_char, on: c_int) -> c_int {
     let (Some(s), Some(c)) = (store_mut(s), canon(app)) else { return -1 };
-    if !s.apps.contains_key(&c) {
-        if on == 0 {
-            return 0;
-        }
-        if s.apps.len() >= FW_MAX_APPS {
-            return -1;
-        }
-        s.apps.insert(c.clone(), App { id: c.clone(), ..Default::default() });
-    }
-    let a = s.apps.get_mut(&c).unwrap();
-    a.trusted = on != 0;
-    if on != 0 {
-        a.restricted = 0;
-    }
-    s.prune_app(&c);
-    0
+    if s.set_trusted(&c, on != 0) { 0 } else { -1 }
 }
 /// # Safety
 /// `s` is NULL or a store; `app` NULL or a C string.
@@ -1097,22 +1127,7 @@ pub unsafe extern "C" fn fw_set_restricted(s: *mut FwStore, app: *const c_char, 
     if flags & !FW_R_ALL != 0 {
         return -1;
     }
-    if !s.apps.contains_key(&c) {
-        if flags == 0 {
-            return 0;
-        }
-        if s.apps.len() >= FW_MAX_APPS {
-            return -1;
-        }
-        s.apps.insert(c.clone(), App { id: c.clone(), ..Default::default() });
-    }
-    let a = s.apps.get_mut(&c).unwrap();
-    a.restricted = flags;
-    if flags != 0 {
-        a.trusted = false;
-    }
-    s.prune_app(&c);
-    0
+    if s.set_restricted(&c, flags) { 0 } else { -1 }
 }
 /// # Safety
 /// `s` is NULL or a store; `app` NULL or a C string.
