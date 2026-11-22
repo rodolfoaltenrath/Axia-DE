@@ -160,3 +160,45 @@ fn unbound_app_host_retains_local_locale_facts_and_null_session_is_rejected() {
     drop(host);
     scene::destroy(mount);
 }
+
+struct AppearanceProbe {
+    theme: Rc<Value>,
+    log: Rc<RefCell<Vec<Rc<Value>>>>,
+}
+impl NativeApp for AppearanceProbe {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: Rc<Value>) { self.theme = theme; }
+    fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] != "sync" { return json!({}); }
+        assert!(input["context"].get("theme").is_none());
+        assert!(input["context"].get("scale").is_none());
+        self.log.borrow_mut().push(self.theme.clone());
+        json!({"tree":{"kind":"text","label":self.theme["accent"]}})
+    }
+}
+#[test]
+fn native_appearance_is_shared_ignores_stale_facts_and_only_repaints_for_changed_colors() {
+    let root=std::env::temp_dir().join(format!("axia-view-appearance-{}",std::process::id()));
+    std::fs::create_dir_all(&root).unwrap(); let home=root.to_str().unwrap();
+    let assets=concat!(env!("CARGO_MANIFEST_DIR"),"/../../assets");
+    crate::settings::with(home,|s|{s.command(&json!({"cmd":"initialize"}));s.set("accent",&json!("azul"));});
+    let mut owner=crate::native_style::appearance::Source::new(home);
+    let expected=owner.current();
+    let mount=scene::create(scene::VIEW);let log=Rc::new(RefCell::new(Vec::new()));
+    let mut host=Host::new(mount,Box::new(AppearanceProbe{theme:Rc::new(Value::Null),log:log.clone()}),assets,Some(home));
+    host.bind_locale(home,assets);
+    let stale=json!({"context":{"theme":{"accent":"#ff0000"},"scale":{"body":999}}});
+    host.facts(stale.clone());assert_eq!(log.borrow().len(),1);
+    assert!(Rc::ptr_eq(&expected,&log.borrow()[0]));
+    host.facts(stale.clone());assert_eq!(log.borrow().len(),1);
+    crate::settings::with(home,|s|{s.set("unrelated",&json!([1,2,3]));});
+    assert_eq!(host.deadline(),Some(0.));host.tick(1000.);
+    assert_eq!(log.borrow().len(),1);assert!(host.deadline().is_none());
+    crate::settings::with(home,|s|{s.set("accent",&json!("violeta"));});
+    assert_eq!(host.deadline(),Some(0.));host.tick(2000.);
+    assert_eq!(log.borrow().len(),2);assert_eq!(log.borrow()[1]["accent"],"#bf5af2");
+    assert!(Rc::ptr_eq(&owner.current(),&log.borrow()[1]));
+    host.facts(stale);host.tick(3000.);assert_eq!(log.borrow().len(),2);
+    assert!(host.deadline().is_none());drop(host);scene::destroy(mount);
+    std::fs::remove_dir_all(root).unwrap();
+}

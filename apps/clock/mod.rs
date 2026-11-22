@@ -32,7 +32,7 @@ pub struct App {
     pub editing: Option<Editor>,
     pub query: String,
     pub timer_fields: [i64; 3],
-    pub theme: Value,
+    pub theme: std::rc::Rc<Value>,
     pub width: f64,
     pub hover: String,
     pub region: String,
@@ -57,7 +57,7 @@ impl Default for App {
             editing: None,
             query: String::new(),
             timer_fields: [0, 5, 0],
-            theme: Value::Null,
+            theme: std::rc::Rc::new(Value::Null),
             width: 560.,
             hover: String::new(),
             region: String::new(),
@@ -77,6 +77,8 @@ impl Default for App {
     }
 }
 impl NativeApp for App {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.theme = theme; }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
     }
@@ -249,7 +251,9 @@ impl App {
                 clock::with(|s| s.sync(&preferences["clock"]));
                 self.lang = input["lang"].as_str().unwrap_or("en").into();
                 self.decimal = input["context"]["decimal"].as_str().unwrap_or(".").into();
-                self.theme = input["context"]["theme"].clone();
+                if input["context"]["theme"].is_object() {
+                    self.theme = std::rc::Rc::new(input["context"]["theme"].clone());
+                }
                 self.width = input["context"]["width"].as_f64().unwrap_or(560.);
                 if input["args"] != self.args {
                     self.args = input["args"].clone();

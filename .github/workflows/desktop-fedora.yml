@@ -119,6 +119,11 @@ jobs:
         env:
           AXIA_THEME_TOKENS_OUTPUT: ${{ runner.temp }}/axia-theme-tokens
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test theme_tokens_runtime -- --ignored --nocapture
+      - name: Native appearance without JS facts
+        if: matrix.gpu == 1
+        env:
+          AXIA_NATIVE_APPEARANCE_OUTPUT: ${{ runner.temp }}/axia-native-appearance
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_appearance_runtime -- --ignored --nocapture
       - name: Native locale ownership
         if: matrix.gpu == 1
         env:
@@ -316,6 +321,12 @@ jobs:
         with:
           name: axia-theme-tokens
           path: ${{ runner.temp }}/axia-theme-tokens
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-native-appearance
+          path: ${{ runner.temp }}/axia-native-appearance
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

@@ -184,17 +184,24 @@ export function NativeView(props) { return props.icon ? h(NativeIcon, props) : h
 
 // args: the window's (or a Settings section's).
 function NativeApp(props) {
-  const source = useTheme(), win = useAppWindow() || {};
+  return !appHost && props.manifest.appearanceSource === 'native'
+    ? h(NativeInputs, props) : h(ThemedNativeApp, props);
+}
+function ThemedNativeApp(props) {
+  const source = useTheme();
   const { lang, region, dir, revision: localeRevision = 0 } = appHost ? useLocale() : {};
-  const theme = nativeTheme(source, props.manifest), previous = useRef(null), previousArgs = useRef(null);
-  if (!sameRecord(previous.current, theme)) previous.current = theme;
+  const theme = nativeTheme(source, props.manifest);
+  return h(NativeInputs, { ...props, theme, lang, region, dir, localeRevision });
+}
+function NativeInputs(props) {
+  const win = useAppWindow() || {}, previous = useRef(null), previousArgs = useRef(null);
+  if (!sameRecord(previous.current, props.theme)) previous.current = props.theme;
   const args = props.args || null;
   if (!sameRecord(previousArgs.current, args)) previousArgs.current = args;
-  // Window context objects may be recreated by their parent frame. Only facts
-  // actually read by this mount cross the memo boundary.
   const windowSource = win.id && !props.manifest.shell ? lord.windowList : null;
-  return h(NativeBridge, { ...props, args: previousArgs.current, theme: previous.current, lang, region: region || '', dir,
-    localeRevision, winId: win.id, windowSource, focused: windowSource ? undefined : win.focused !== false, windowMode: win.mode });
+  return h(NativeBridge, { ...props, args: previousArgs.current, theme: previous.current,
+    region: props.region || '', winId: win.id, windowSource,
+    focused: windowSource ? undefined : win.focused !== false, windowMode: win.mode });
 }
 const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, handleRef, stateSource, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
   const preferences = useStore(appHost && manifest.settings ? preferenceFacts : emptyFactsStore);
@@ -223,10 +230,10 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   // theme/settings/catalog strings rather than stringifying the complete facts.
   const block = (name, value) => encoder.block(name, value);
   const contextFields = { theme: block('theme', theme), windowMode: block('windowMode', windowMode),
+    ...(appHost ? { scale: block('scale', typeScale) } : {}),
     ...(appHost && manifest.settings ? { preferenceRevision: block('preferenceRevision', settingsRevision()) } : {}),
     ...(appHost ? { region: block('region', region), direction: block('direction', dir), localeRevision: block('localeRevision', localeRevision),
       decimal: block('decimal', formats.decimal), group: block('group', formats.group) } : {}),
-    scale: block('scale', typeScale),
     ...(manifest.facts === 'system' ? { screen: block('screen', { width: screen.width, height: screen.height }),
       reactVersion: block('reactVersion', reactVersion), version: block('version', lord.version) } : {}) };
   const context = `{${Object.entries(contextFields).filter(([, value]) => value !== undefined).map(([key, value]) => `"${key}":${value}`).join(',')}}`;

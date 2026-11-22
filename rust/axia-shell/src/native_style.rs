@@ -4,6 +4,8 @@ pub use axia_native::style::*;
 pub(crate) mod shell_theme;
 #[path = "theme_catalog.rs"]
 pub(crate) mod catalog;
+#[path = "appearance_source.rs"]
+pub(crate) mod appearance;
 // Pure style transport: no filesystem/session initialization, workers or polling.
 // SAFETY: the C bridge supplies a valid NUL-terminated string for this call.
 #[no_mangle]

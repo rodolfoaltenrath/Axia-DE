@@ -2,6 +2,10 @@ use serde_json::Value;
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
+    /// Migrated session models share an immutable native appearance plan.
+    /// Legacy/isolated requests still accept their own context facts.
+    fn uses_native_appearance(&self) -> bool { false }
+    fn set_native_appearance(&mut self, _theme: std::rc::Rc<Value>) {}
     /// A native state subscription has an unread revision. The host schedules
     /// an immediate sync; the app consumes the invalidation during that sync.
     fn invalidated(&self) -> bool { false }

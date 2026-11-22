@@ -226,6 +226,8 @@ pub struct Host {
     app: Box<dyn NativeApp>,
     i18n: I18n,
     locale: Option<locale_source::Source>,
+    appearance: Option<crate::native_style::appearance::Source>,
+    appearance_theme: Option<std::rc::Rc<Value>>,
     preferences: Option<(axia_state::Reader<Value>, axia_state::Subscription)>,
     assets: String,
     facts: Value,
@@ -304,6 +306,8 @@ impl Host {
             app,
             i18n: I18n::new(assets, home),
             locale: None,
+            appearance: None,
+            appearance_theme: None,
             preferences: None,
             assets: assets.into(),
             facts: Value::Null,
@@ -345,7 +349,7 @@ impl Host {
         }
     }
     fn theme(&self, key: &str, fallback: &str) -> Value {
-        let v = &self.facts["context"]["theme"][key];
+        let v = &self.theme_values()[key];
         if v.is_null() {
             json!(fallback)
         } else {
@@ -353,7 +357,18 @@ impl Host {
         }
     }
     fn dark(&self) -> bool {
-        self.facts["context"]["theme"]["mode"] != "light"
+        self.theme_values()["mode"] != "light"
+    }
+    fn theme_values(&self) -> &Value {
+        self.appearance_theme.as_deref().unwrap_or(&self.facts["context"]["theme"])
+    }
+    fn refresh_appearance(&mut self) -> bool {
+        let Some(source) = &mut self.appearance else { return false; };
+        let theme = source.current();
+        if self.appearance_theme.as_ref().is_some_and(|old| std::rc::Rc::ptr_eq(old, &theme)) { return false; }
+        self.app.set_native_appearance(theme.clone());
+        self.appearance_theme = Some(theme);
+        true
     }
     fn icon_mode(&self) -> Option<f64> {
         self.facts["icon"].as_f64()
@@ -381,6 +396,9 @@ impl Host {
     }
     pub fn bind_locale(&mut self, home: &str, assets: &str) {
         self.locale = Some(locale_source::Source::new(home, assets));
+        if self.app.uses_native_appearance() {
+            self.appearance = Some(crate::native_style::appearance::Source::new(home));
+        }
         if self.app.uses_preferences() {
             let reader = crate::settings::with(home, |settings| settings.reader());
             let changes = reader.subscribe();
@@ -388,6 +406,12 @@ impl Host {
         }
     }
     pub fn facts(&mut self, mut facts: Value) {
+        let appearance_changed = self.refresh_appearance();
+        if self.appearance.is_some() {
+            if let Some(context) = facts["context"].as_object_mut() {
+                context.remove("theme"); context.remove("scale");
+            }
+        }
         if let Some(source) = &mut self.locale {
             source.apply(&mut self.i18n, &mut facts);
             if let Some(object) = facts.as_object_mut() { object.remove("settings"); }
@@ -402,7 +426,7 @@ impl Host {
         if self.locale.is_none() && facts["context"]["localeRevision"] != self.facts["context"]["localeRevision"] {
             self.i18n.invalidate();
         }
-        if facts == self.facts {
+        if facts == self.facts && !appearance_changed {
             return;
         }
         self.render_epoch = self.render_epoch.wrapping_add(1);
@@ -948,7 +972,7 @@ impl Host {
         let base = json!({
             "height":if small {22} else {28},"paddingHorizontal":if small {10} else {14},
             "borderRadius":self.theme(if small {"controlRadiusSmall"} else {"controlRadius"},"6"),
-            "borderWidth":if self.facts["context"]["theme"]["buttonBorder"] == true {1} else {0},
+            "borderWidth":if self.theme_values()["buttonBorder"] == true {1} else {0},
             "borderColor":self.theme("separator","#555555"),
             "flexDirection":"row","gap":6,"justifyContent":"center","alignItems":"center",
             "backgroundColor":self.theme("control","#3a3a3f"),
@@ -1065,7 +1089,7 @@ impl Host {
             .filter(|f| f.2 > 0. && f.3 > 0.)
             .map_or((1920., 1080.), |f| (f64::from(f.2), f64::from(f.3)));
         let caption = |v: &Value| v.as_str().unwrap_or("").to_owned();
-        let theme = |k: &str| Some(self.facts["context"]["theme"][k].clone()).filter(|v| !v.is_null());
+        let theme = |k: &str| Some(self.theme_values()[k].clone()).filter(|v| !v.is_null());
         let measure = |t: &str, size: f64, weight: f64| super::menu::measure(t, size, weight);
         super::menu::expand(
             &spec,
@@ -1821,10 +1845,15 @@ impl Host {
         if self.icon_mode().is_some() {
             return;
         }
+        let appearance_changed = self.appearance.as_ref().is_some_and(|source| source.pending())
+            && self.refresh_appearance();
         if self.locale.as_ref().is_some_and(|source| source.pending())
             || self.preferences.as_ref().is_some_and(|(_, changes)| changes.pending()) {
             let facts = std::mem::take(&mut self.facts);
             self.facts(facts);
+        } else if appearance_changed {
+            self.render_epoch = self.render_epoch.wrapping_add(1);
+            self.sync();
         }
         // The window was resized: update either viewport dimension, even for idle apps.
         let (width, height) = scene::frame(self.mount).map_or((0., 0.), |f| (f.2, f.3));
@@ -1856,7 +1885,7 @@ impl Host {
         }
     }
     pub fn deadline(&self) -> Option<f64> {
-        if self.preferences.as_ref().is_some_and(|(_, changes)| changes.pending()) || self.locale.as_ref().is_some_and(|source| source.pending()) || self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
+        if self.appearance.as_ref().is_some_and(|source| source.pending()) || self.preferences.as_ref().is_some_and(|(_, changes)| changes.pending()) || self.locale.as_ref().is_some_and(|source| source.pending()) || self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
         [
             self.next_sync,
             self.next_blink.filter(|_| self.field != 0),

@@ -259,7 +259,7 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
     }
     let facts = json(facts);
     let mut host = Host::new(node, app, &assets, home.as_deref());
-    if native_locale { host.bind_locale(home.as_deref().unwrap_or(""), &assets); }
+    if native_locale && facts["icon"].is_null() { host.bind_locale(home.as_deref().unwrap_or(""), &assets); }
     if facts["windowId"].as_str().is_some_and(|id| !id.is_empty()) && facts["icon"].is_null() {
         if let Some(reader) = windows { host.bind_window(reader); }
     }

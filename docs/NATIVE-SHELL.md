@@ -47,6 +47,14 @@ compilado em `theme_catalog.rs` e compartilhado por referência na serializaçã
 O publicador JS e `lord.broker.publish` foram retirados. Montagem do tema,
 espelhos e transporte dos fatos de aparência às views ainda usam adaptadores.
 
+O Relógio já recebe aparência diretamente de uma fonte Rust compartilhada por
+perfil (`appearance_source.rs`). Seu modelo e o publicador LPK mantêm referências
+ao mesmo plano imutável; o corpo da view não consulta o contexto React de tema
+nem recebe theme/scale no JSON. O host ignora esses campos antigos e acorda por
+assinatura. Ícones não vinculam fontes de locale/preferências/aparência.
+Os demais apps e as interfaces da shell ainda precisam migrar seus fatos de
+aparência; a capacidade nativa está ligada somente no Relógio nesta etapa.
+
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena
 Rust já existente, até não restarem consumidores do motor.

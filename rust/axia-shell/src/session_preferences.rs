@@ -28,6 +28,7 @@ impl Service {
         let changes = reader.subscribe();
         let locale = crate::locale::reader(&home, assets);
         let locale_changes = locale.subscribe();
+        let tokens = tokens::Service::new(&home);
         Self {
             assets: assets.into(),
             home,
@@ -38,7 +39,7 @@ impl Service {
             locale_changes,
             locale_sent: None,
             appearance: appearance::Service::default(),
-            tokens: tokens::Service::default(),
+            tokens,
         }
     }
     pub(crate) fn matches(&self, home: &str, assets: &str) -> bool {
@@ -55,8 +56,7 @@ impl Service {
         if self.sent != Some(revision) {
             let plan = appearance::Plan::from_profile(&self.reader.read());
             self.appearance.sync(plan);
-            let tokens = tokens::Service::resolve(&self.reader.read());
-            self.tokens.sync(tokens);
+            self.tokens.sync();
             self.sent = Some(revision);
             let reply = crate::settings::with(&self.home, |s| s.snapshot());
             effects.push(json!({"kind":"settingsState","reply":reply}));

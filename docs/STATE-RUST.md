@@ -1665,3 +1665,59 @@ bundles default/app-host e instalação privada gerados. Evidências em
 `build/validation/resident-theme-tokens/`; a sessão física foi preservada.
 
 Três amostras de ociosidade passaram com limites impostos: 12,550 poll/s e 104,672 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Não é prova de ganho causal nem medição de hardware; as medições físicas continuam reservadas ao encerramento.
+
+### Aparência compartilhada por perfil e leitura direta no Relógio
+
+`appearance_source.rs` deriva o plano de cores de um leitor do perfil e guarda
+`Store<Rc<Value>>`. A chave contém somente os campos relevantes; preferências sem
+relação não mudam o plano. Planos com resultado igual também não publicam outra
+revisão. O registro por perfil é fraco, sem ponteiros C/JS nem proprietário global
+que retenha janelas. Cada consumidor tem uma assinatura; uma referência às cores
+não mantém o modelo derivador vivo. Perfis distintos têm proprietários distintos.
+
+O publicador LPK usa essa fonte em vez de gerar outro plano. Seu cache compara
+identidades e o serializador empresta as cores e os catálogos. O Relógio também
+retém Rc do mesmo objeto, sem clonar a árvore de cores nos syncs periódicos.
+O contrato NativeApp ganhou uma capacidade explícita e um setter de referência;
+os modelos antigos conservam seus métodos atuais. O Relógio é o primeiro app
+ligado a essa capacidade. Os demais apps e cenas ainda recebem aparência pelo
+adaptador e continuam no escopo; esta entrega não conclui o transporte de tema.
+
+Somente o mount da sessão validado vincula a fonte. A capacidade do modelo Rust
+manda no host; a propriedade `appearanceSource: native` do manifesto apenas
+seleciona o adaptador SDK que não consulta useTheme. Views do host LPK usam seus
+fatos locais, mesmo com esse metadado no manifesto, preservando o contrato isolado.
+O host descarta theme/scale antigos quando está vinculado e lê a mesma referência
+para os estilos dos seus widgets. Uma mudança efetiva acorda/renderiza a view;
+assinaturas de aparência sem mudança efetiva são consumidas sem forçar render.
+O Relógio ainda tem sua assinatura de preferências para configuração do engine.
+
+Os ícones deixam de vincular locale e preferências de janela: seu contrato é
+somente tamanho/args. O SDK deixou de enviar scale na sessão porque nenhum app
+Rust o consome; o host isolado preserva esse campo. Não há timer de aparência,
+consulta RPC de cores por frame ou snapshot de perfil por view.
+
+Os testes novos cobrem compartilhamento e invalidação, perfis separados, vida
+útil fraca e o host emprestando a referência sem theme no input. O teste gráfico
+`native_appearance_runtime`, incluído no CI GPU=1 com capturas, usa o manifesto
+compilado real do Relógio, congela o espelho JS, exige ausência de theme/scale e
+nenhum novo fato JS na troca de cor, injeta fatos antigos e confere pixels verdes
+produzidos pela preferência atual. O caminho legado de requests do app foi
+preservado: só substitui sua referência por um contexto local quando ele existe.
+
+Validação em Fedora 44 privado em 2026-11-22: passaram 656 testes da shell,
+com sete ignorados de integrações específicas, cinco testes do app Relógio e
+oito contratos LPK. Os três testes novos verificam estado compartilhado,
+perfis/vida útil e a ligação do host sem cópia do plano nos fatos.
+
+Passaram 48 cenários gráficos de aparência nativa, locale, agendamento, foco,
+configurações, notificações, Dock, Arquivos, cabeçalhos e apps isolados, além
+do encerramento instalado por timeout/SIGTERM. Capturas de aparência em
+claro/escuro e 640/1000 px geradas e variantes mínimas inspecionadas; a integração
+exige pixels da cor verde do proprietário após injetar dados vermelhos antigos.
+As oito capturas de Arquivos são idênticas byte a byte às de
+`resident-theme-tokens`. Compositor GPU=1, bundles default/app-host e instalação
+privada gerados. Evidências em `build/validation/native-appearance-source/`;
+sem instalação ou reinício da sessão física.
+
+Três amostras de ociosidade passaram com limites impostos: 12,550 poll/s e 104,992 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal nem medição física; o protocolo em hardware continua para o encerramento.
