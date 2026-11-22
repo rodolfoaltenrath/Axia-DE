@@ -406,9 +406,9 @@ fn isolated_desktop_commands_keep_local_state_without_session_authority() {
     let fixture = r#"
 import path from 'node:path';
 import {build} from 'esbuild';
-const root=process.argv[1];let list=[1,2,3],active=2,privileged=0;
+const root=process.argv[1];let list=[1,2,3],active=2,privileged=0;const moved=[];
 const store=get=>({get,subscribe:()=>()=>{}}),deny=()=>{privileged++;throw Error('isolated desktop reached session authority');};
-const probe={windows:store(()=>[]),wm:{},activeDesktop:store(()=>active),desktopList:store(()=>list),
+const probe={windows:store(()=>[]),wm:{moveToDesktop:(id,desktop)=>moved.push([id,desktop])},activeDesktop:store(()=>active),desktopList:store(()=>list),
  setActiveDesktop:id=>{active=id;},setDesktops:(ids,id)=>{list=ids;active=id;},
  createDesktop:()=>{const id=Math.max(...list)+1;list.push(id);return id;},
  closeDesktop:id=>{if(list.length<2)return false;const i=list.indexOf(id),next=list[i+1]??list[i-1];list=list.filter(x=>x!==id);if(active===id)active=next;return true;},
@@ -437,7 +437,9 @@ sdk.nextDesktopBy(1);const next=active===3;sdk.nextDesktopBy(1);const boundary=a
 sdk.nextDesktopBy(-1);const previous=active===2;
 const added=sdk.addDesktopAndShow(),add=added===4&&active===4;
 const close=sdk.closeActiveDesktop()===true&&active===3&&!list.includes(4);
-console.log(JSON.stringify({next,boundary,previous,add,close,privileged}));
+sdk.moveWindowToDesktop('local',1);const desktop=sdk.moveWindowToDesktop('local');
+const moves=desktop===4&&active===3&&JSON.stringify(moved)===JSON.stringify([['local',1],['local',4]]);
+console.log(JSON.stringify({next,boundary,previous,add,close,moves,privileged}));
 "#;
     let output = Command::new("node")
         .current_dir(repo)
@@ -451,7 +453,7 @@ console.log(JSON.stringify({next,boundary,previous,add,close,privileged}));
         String::from_utf8_lossy(&output.stderr)
     );
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
-    for flag in ["next", "boundary", "previous", "add", "close"] {
+    for flag in ["next", "boundary", "previous", "add", "close", "moves"] {
         assert_eq!(report[flag], true, "{report}");
     }
     assert_eq!(report["privileged"], 0);

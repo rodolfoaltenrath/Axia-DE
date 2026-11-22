@@ -33,6 +33,7 @@ fn native_window_menu_reads_current_titles_and_executes_live_actions() {
                 "freshArrange",
                 "bringAll",
                 "staleAction",
+                "nativeDesktopMoves",
                 "legacyMenu",
                 "noJsRows",
                 "noWindowTransport",
@@ -124,9 +125,25 @@ async function run(){
  await open();raw('close','notes#latest');let closes=0;const close=wm.close;wm.close=(...args)=>{closes++;return close(...args);};
  lord.nativeViews.action(handle,{action:['windowMenu',{action:'close',id:'notes#latest'}]});__lordNativeView();wm.close=close;
  const staleAction=closes===0&&!!win(a);
+ const call=lord.windowList.call;let legacyMoves=0;
+ lord.windowList.call=function(op,...args){if(op==='createDesktop'||op==='moveToDesktop')legacyMoves++;return call.call(this,op,...args);};
+ let nativeDesktopMoves=false;
+ try{
+   wm.focus(a);await open();point(t('shell.desktops.moveTo'),'move');await until(()=>has(t('shell.desktops.name',{n:2})));
+   const beforeMove=state();click(t('shell.desktops.name',{n:2}));
+   const moved=await until(()=>win(a)?.desktop===2);
+   const afterMove=state();
+   wm.focus(a);await open();point(t('shell.desktops.moveTo'),'move');await until(()=>has(t('shell.desktops.new')));
+   const beforeNew=state();click(t('shell.desktops.new'));
+   const created=await until(()=>state().desktops.length===beforeNew.desktops.length+1);
+   const afterNew=state();
+   nativeDesktopMoves=moved&&created&&afterMove.active===beforeMove.active&&afterMove.desktops.length===beforeMove.desktops.length
+     &&win(a)?.desktop===afterNew.desktops.at(-1)&&afterNew.active===beforeNew.active&&legacyMoves===0;
+ }finally{lord.windowList.call=call;}
+
  click('Help');await until(()=>has('Legacy help'));click('Legacy help');const legacyMenu=help===1;
  hideBar();await until(()=>unmounted&&!lord.nativeViews.text(handle));
- console.log('window_menu-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
+ console.log('window_menu-observation '+JSON.stringify({noAppearanceFacts,...appearance,appearanceRetained,bound,initial,directTitle,directMembership,desktopSuffix,focusDesktop,rawMinimize,freshArrange,bringAll,staleAction,nativeDesktopMoves,legacyMenu,noJsRows:jsRows===0,noWindowTransport,unmounted,saved:!!saved?.ok,prepared}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_menu driver: '+(error.stack||error))),200);
 "#;

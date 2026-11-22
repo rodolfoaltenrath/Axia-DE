@@ -97,6 +97,17 @@ impl Service {
     }
     pub fn command(&mut self, session: &mut Session, input: &Value) -> Value {
         let mut reply = match input["action"].as_str() {
+            Some(action @ ("move" | "moveNew")) => {
+                let Some(id) = input["id"].as_str().filter(|id| !id.is_empty()) else {
+                    return json!({"error":"app.invalidRequest"});
+                };
+                let target = if action == "move" {
+                    let Some(target) = input["desktop"].as_i64() else { return json!({"error":"app.invalidRequest"}); };
+                    Some(target)
+                } else { None };
+                session.app_command(AppCommand::MoveWindowToDesktop(target), &[id])
+                    .unwrap_or_else(|error| json!({"error":error}))
+            }
             Some("arrowsEnabled") => {
                 let enabled = self.settings.as_ref().map_or(true, |(_, reader, _)| reader.read()["desktopArrows"] != false);
                 json!({"result":enabled})

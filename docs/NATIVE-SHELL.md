@@ -121,6 +121,13 @@ sem monitor/geometria nos fatos ou assinatura React de tela na sessão. Trocar
 o principal ou conectar/desconectar monitores invalida a apresentação sem
 reiniciar o prazo; não há polling para telas. O mount de compatibilidade mantém
 a geometria explícita, selecionado pela entrada nativa do host, não pelos fatos.
+Mover para um desktop, inclusive criando um novo, usa um comando tipado do
+serviço residente. A janela e o destino são revalidados no proprietário atual;
+criar/mover publica uma revisão única e preserva o desktop ativo. Janela já
+fechada, limite de nove desktops ou esgotamento de IDs não criam desktop órfão.
+Barra de menus e callbacks de mover dos menus legados enviam só id/destino,
+sem fatos de apps/monitores. A construção JS dos menus legados ainda permanece;
+os hosts LPK conservam a sequência local de criação e movimento.
 Gestos horizontais e setas de desktop da sessão enviam somente a direção de
 entrada ao serviço residente. O Rust consulta o locale atual antes de escolher
 o passo; a permissão das setas Ctrl vem do perfil nativo. O espelho JS não

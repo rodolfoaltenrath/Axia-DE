@@ -571,7 +571,7 @@ impl WindowState {
         if self.desktops.len() >= MAX_DESKTOPS {
             return Value::Null;
         }
-        let id = self.desktops.iter().copied().max().unwrap_or(0).max(0) + 1;
+        let Some(id) = self.desktops.iter().copied().max().unwrap_or(0).max(0).checked_add(1) else { return Value::Null; };
         self.desktops.push(id);
         Value::from(id)
     }
@@ -1015,7 +1015,7 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
 
 impl WindowState {
     // Both the isolated-host API and native desktop gestures use the same selection rule.
@@ -1058,6 +1058,19 @@ impl WindowState {
                 let id = self.create_desktop();
                 if let Some(id) = id.as_i64() { self.active = id; }
                 return id;
+            }
+            AppCommand::MoveWindowToDesktop(target) => {
+                let Some(index) = ids.first().and_then(|id| self.find(id)) else { return Value::Null; };
+                let target = match target {
+                    Some(target) if self.desktops.contains(&target) => target,
+                    Some(_) => return Value::Null,
+                    None => match self.create_desktop().as_i64() {
+                        Some(target) => target,
+                        None => return Value::Null,
+                    },
+                };
+                self.wins[index].set("desktop", json!(target));
+                return json!(target);
             }
             AppCommand::CloseActiveDesktop => return self.close_desktop(self.active),
             AppCommand::BringAll => {

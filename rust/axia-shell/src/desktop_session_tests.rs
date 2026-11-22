@@ -345,3 +345,44 @@ fn input_policy_borrows_current_locale_and_preferences_without_window_mirrors() 
     command(&mut session, json!({"action":"swipe","direction":"left"}));
     assert_eq!(reader.read().focused_window(), Some("first"));
 }
+
+#[test]
+fn menu_moves_validate_the_live_target_and_create_only_one_revision() {
+    let mut session = Session::default();
+    call(&mut session, "setDesktops", &[json!([10,20]),json!(10)]);
+    call(&mut session, "open", &[json!({"app":"notes","frame":{"x":30,"y":40,"w":300,"h":220}})]);
+    let reader = session.reader();
+    let revision = reader.revision();
+    let moved = command(&mut session, json!({"action":"move","id":"notes","desktop":20,"desktops":[999]}));
+    assert_eq!(moved["result"], 20);
+    assert_eq!(reader.revision(), revision+1);
+    assert_eq!(reader.read().active_desktop(), 10);
+    assert_eq!(reader.read().window("notes").unwrap().desktop(), 20);
+    let revision = reader.revision();
+    command(&mut session, json!({"action":"move","id":"notes","desktop":20}));
+    for input in [json!({"action":"moveNew","id":"gone"}),json!({"action":"move","id":"notes","desktop":999})] {
+        assert!(command(&mut session, input)["result"].is_null());
+    }
+    assert_eq!(reader.revision(), revision);
+    assert_eq!(reader.read().desktops(), &[10,20]);
+    let moved = command(&mut session, json!({"action":"moveNew","id":"notes","desktop":999,"active":999}));
+    assert_eq!(moved["result"], 21);
+    assert_eq!(reader.revision(), revision+1);
+    assert_eq!(reader.read().active_desktop(), 10);
+    assert_eq!(reader.read().window("notes").unwrap().desktop(), 21);
+    assert_eq!(reader.read().window("notes").unwrap().frame(), crate::winmodel::Rect::new(30.,40.,300.,220.));
+    while reader.read().desktops().len()<crate::winmodel::desktops::MAX_DESKTOPS { call(&mut session,"createDesktop",&[]); }
+    let revision = reader.revision();
+    assert!(command(&mut session, json!({"action":"moveNew","id":"notes"}))["result"].is_null());
+    assert_eq!(reader.revision(), revision);
+    for input in [
+        json!({"action":"move","id":"notes","desktop":1.5}),
+        json!({"action":"move","id":"notes","desktop":"10"}),
+        json!({"action":"moveNew","id":""}),json!({"action":"moveNew"}),
+    ] { assert_eq!(command(&mut session,input)["error"], "app.invalidRequest"); }
+    assert_eq!(reader.revision(), revision);
+    call(&mut session,"setDesktops",&[json!([i64::MAX]),json!(i64::MAX)]);
+    let revision = reader.revision();
+    assert!(command(&mut session,json!({"action":"moveNew","id":"notes"}))["result"].is_null());
+    assert_eq!(reader.revision(), revision, "exhausted identifiers must not overflow or create a desktop");
+}

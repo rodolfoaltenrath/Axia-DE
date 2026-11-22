@@ -1491,6 +1491,42 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
 
+### Movimento de janela para desktop numa transação nativa
+
+`AppCommand::MoveWindowToDesktop` valida a janela antes de escolher o destino.
+Um destino existente deve pertencer à lista atual; destino novo é criado apenas
+se a janela ainda existe e há capacidade. Criação e movimento ocorrem dentro da
+mesma atualização do proprietário, com uma revisão e um snapshot de
+compatibilidade. O desktop ativo, geometria e demais flags são preservados.
+Repetir o destino atual não altera revisão. `create_desktop` passa a verificar
+a soma do identificador, retornando nulo se ele não puder ser incrementado.
+
+O serviço residente atende `move`/`moveNew` com id e destino escalares, sem
+catálogo, lista ou fatos de geometria. `barEffect` e os callbacks de
+`moveToDesktopItems` passam por esse caminho. O host LPK mantém a criação e o
+movimento locais. O menu legado ainda consulta o espelho para montar linhas;
+a mudança revalida a decisão na execução, sem declarar esses consumidores
+migrados por inteiro.
+
+Validação em Fedora 44 privado: passaram 675 testes da shell (sete ignorados),
+oito contratos LPK ampliados, quatro cenários do menu e 12 de regressão de
+desktops/cabeçalhos. O teste Rust verifica revisão única, repetição sem mudança,
+janela ausente sem desktop órfão, destino inexistente, capacidade, dados inválidos,
+frame/ativo preservados e identificador esgotado sem overflow. A integração
+executa os dois itens do menu real e intercepta os antigos comandos JS de
+criação/movimento, exigindo contagem zero. O contrato LPK exige que o helper
+use os métodos locais e não alcance a autoridade da sessão.
+Build completa GPU=1, bundles default/app-host e instalação privada gerados;
+encerramento instalado passou por timeout/SIGTERM. Capturas claro/mínimo e
+escuro inspecionadas; as quatro são idênticas byte a byte às de
+`native-shell-scene-appearance/menubar`. Evidências em
+`build/validation/native-desktop-menu-moves/`.
+
+Três amostras de ociosidade passaram com limites impostos: 12.300 poll/s e
+104.320 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal;
+medições físicas ficam para o encerramento. Nenhuma caixa de fase inteira
+concluída.
+
 ### Política de entrada dos desktops no serviço residente
 
 O serviço de desktops atende `arrow`, `swipe` e `arrowsEnabled`. Os dois

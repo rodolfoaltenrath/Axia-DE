@@ -79,13 +79,21 @@ export function removeDesktopById(id) { return closeDesktop(id); }
 export const closeActiveDesktop = () => typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__
   ? closeDesktop(activeDesktop.get()) : desktopCommand('closeActive');
 
+// A session move validates the current target and creates a new desktop atomically.
+export function moveWindowToDesktop(id, desktop) {
+  if (!appHost) return sessionCommand(desktop === undefined ? 'moveNew' : 'move', { id, desktop });
+  const target = desktop === undefined ? createDesktop() : desktop;
+  if (target != null) wm.moveToDesktop(id, target);
+  return target;
+}
+
 // The window menu's Move to Desktop.
 export function moveToDesktopItems(id) {
   const w = wm.get(id);
   const items = desktopList.get().filter((d) => d !== w?.desktop)
-    .map((d) => ({ label: desktopName(d), onClick: () => wm.moveToDesktop(id, d) }));
+    .map((d) => ({ label: desktopName(d), onClick: () => moveWindowToDesktop(id, d) }));
   if (items.length) items.push('-');
-  items.push({ label: t('shell.desktops.new'), disabled: !canAddDesktop(), onClick: () => { const d = createDesktop(); if (d != null) wm.moveToDesktop(id, d); } });
+  items.push({ label: t('shell.desktops.new'), disabled: !canAddDesktop(), onClick: () => moveWindowToDesktop(id) });
   return items;
 }
 

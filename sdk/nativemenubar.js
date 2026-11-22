@@ -3,7 +3,8 @@
 // rows; this only knows what Rust can't: the items of a menu (built when it opens, with their
 // callbacks) and running one. The Window menu reads native state; the other
 // menus are published by MenuBar.jsx here on each render.
-import {wm,createDesktop} from './windows.js';
+import {wm} from './windows.js';
+import {moveWindowToDesktop} from './desktops.js';
 import {arrangeWindowMenu,bringAllWindows} from './appcontrol.js';
 import {openOverview} from './overview.jsx';
 export const NATIVE_MENUBAR = { id: 'shell:menubar', shell: true, appearanceSource: 'native', keyboard: true, fullTheme: true, facts: 'appcontrol' };
@@ -39,8 +40,8 @@ export function barEffect(effect, handle) {
       case 'center':wm.center(id);break;
       case 'snap':wm.snap(id,c.zone);break;
       case 'display':wm.moveToDisplay(id,c.display);break;
-      case 'desktop':wm.moveToDesktop(id,c.desktop);break;
-      case 'newDesktop':{const desktop=createDesktop();if(desktop!=null)wm.moveToDesktop(id,desktop);break;}
+      case 'desktop':moveWindowToDesktop(id,c.desktop);break;
+      case 'newDesktop':moveWindowToDesktop(id);break;
       case 'overview':openOverview();break;
       case 'bringAll':bringAllWindows(id);break;
       case 'arrange':arrangeWindowMenu(id,c.layout);break;
