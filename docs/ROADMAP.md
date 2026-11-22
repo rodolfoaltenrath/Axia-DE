@@ -575,7 +575,7 @@ LordBench and a desktop that stays smooth under load. Each item is described in 
   LordOS kernel (`rpi-6.18.y`) only exposes the firmware's under-voltage alarm (`rpi_volt`'s `in0_lcrit_alarm`, the
   last 2 s), not its capped, throttled or soft-limit bits, so LordBench watches that alarm and `get_throttled` where
   an older kernel has it, and counts 80 °C on a Pi as the firmware's limit (peak tests stop as throttled); System
-  Information's Raspberry Pi rows read the same way through the shared `hw/rpifw.c`. Tested on fake sysfs trees, and
+  Information's Raspberry Pi rows read the same way through the shared `rust/axia-sysreport/src/rpifw.rs`. Tested on fake sysfs trees, and
   on the Pi 5: the `rpi_volt` alarm is present and reads 0 with the official supply (`piFirmware.voltageAlarm` true,
   `underVoltage` false), `get_throttled` absent. An actual under-voltage was not provoked.
 
@@ -848,7 +848,7 @@ Only what is already decided:
     with the live session flag.
   - [x] The boot medium as a class (internal, USB, SD, eMMC, optical, network), a USB medium's link speed and the
     copy to memory of a live session, from world-readable kernel facts without root (`collect_boot` in
-    `sysreport/sysreport.c`; no device names), in the report, the schema, the summary, the workflow's labels and
+    `rust/axia-sysreport/src/collect.rs`; no device names), in the report, the schema, the summary, the workflow's labels and
     plausibility checks.
   - [x] Share on GitHub in System Information: the report and a self-contained page in Documents, opened with
     `lord.apps.launchWith('', path)`; the issue link carries only the short summary.

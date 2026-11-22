@@ -83,14 +83,14 @@ which also returns a Raspberry Pi's serial from the device tree. The reply reach
 in that one component while it is on screen, and goes when it closes or with **Hide**. There is no copy button, and the
 window is protected while they show (`wm.setProtected`), so screenshots, recordings and remote desktop see black.
 `SysReport` has no field for them, `apps/sysinfo` never adds them to the report object, and
-`tests/sysreport_test.c` fills every fake machine with them and checks that no report carries them.
+`rust/axia-sysreport/tests` fills every fake machine with them and checks that no report carries them.
 
 **Input and peripherals** lists keyboards, mice, receivers and the rest of USB, the devices behind a wireless receiver
 (with their HID++ battery) and a laptop's built-in keyboard and touchpad (`lord.sysinfo.peripherals()`,
-`sysreport/periph.c`), plus BlueZ's paired or connected devices (`lord.bt`, with Battery1 where BlueZ has it, which for
+`rust/axia-sysreport/src/periph.rs`), plus BlueZ's paired or connected devices (`lord.bt`, with Battery1 where BlueZ has it, which for
 an LE device usually means only while it is connected). This list is not in the report: a device names itself and
 that name can carry a person's, so `SysReport` has no place for these strings, `axia-sysreport` and `axia-fetch`
-don't link `periph.c`, and `apps/sysinfo/model.js` builds each row field by field, so no address or D-Bus path can come
+don't link `periph.rs`, and `apps/sysinfo/model.js` builds each row field by field, so no address or D-Bus path can come
 along. USB `serial`, an input device's `uniq` and `phys` and a power supply's `serial_number` are never read.
 
 **Audio** cards now have names in the report too, not ALSA's ids: a USB card by its `usb.ids` entry
@@ -427,7 +427,7 @@ development package.
   run by hand as root, said `0x0` throughout). Not verified yet: that the alarm reads `1` during an actual
   under-voltage, and how fast the Pi 5 reaches 80 °C without a cooler in the peak tests.
 
-  The reader is shared (`hw/rpifw.c`, `rpifw_read`: axia-server, `axia-sysreport` and the tests link it), and
+  The reader is shared (`rust/axia-sysreport/src/rpifw.rs`, `rpifw_read`: axia-server, `axia-sysreport` and the tests link it), and
   System Information's Raspberry Pi section uses it too (2026-10-29; before, it looked only for `get_throttled`, so on
   the Pi 5 with the LordOS kernel its Power and Throttling rows were always empty). It shows what the kernel shows
   and leaves out the rest: with only `rpi_volt` (the LordOS kernel), a Power row for the last few seconds ("No
@@ -435,7 +435,7 @@ development package.
   and no Throttling row; with only `get_throttled` (an older kernel), Power and Throttling "now" and "since boot";
   with both, the sticky bits cover only the last 2 s window, so the rows say so; with neither, model and revision
   only. The report's `raspberryPi` has `throttled` (the raw bits or `null`) and `underVoltageAlarm` (`true`,
-  `false` or `null`). Tested on fake sysfs trees (`tests/sysreport_test.c`: the LordOS kernel with the alarm clear,
+  `false` or `null`). Tested on fake sysfs trees (`rust/axia-sysreport/tests`: the LordOS kernel with the alarm clear,
   set, malformed and missing; older Pi 4 and Pi 5 kernels with `get_throttled`; both; neither; a machine that isn't
   a Pi); on the Pi 5 the shared reader gave LordBench the values above, while System Information's rows themselves
   were not looked at there.
@@ -903,7 +903,7 @@ composed per frame, what slows V3D under an all-core load, optionally a 1000 Hz 
 - **Boot medium** (2026-10-29): the collector also records what the system started from, as a class only
   (`software.bootMedium`: `internal`, `usb`, `sd`, `emmc`, `optical`, `network`, or `""` when it can't tell), a USB
   medium's link speed (`bootLinkMbps`, from the USB device's `speed`) and whether a live session was copied to memory
-  (`bootToRam`, the `toram` boot option). How (`collect_boot` in `sysreport/sysreport.c`, no root, world-readable
+  (`bootToRam`, the `toram` boot option). How (`collect_boot` in `rust/axia-sysreport/src/collect.rs`, no root, world-readable
   files only): the mount under `/` (installed) or live-boot's `/run/live/medium` (live) is found in
   `/proc/self/mountinfo` (the last line for that mount point); an NFS or SMB file system is `network`; otherwise its
   `major:minor` is followed through `/sys/dev/block` (a link that climbs out of `/sys/devices` is refused), from a
@@ -975,7 +975,7 @@ composed per frame, what slows V3D under an all-core load, optionally a 1000 Hz 
   plausibility, labels, the comment's escaping, the catalogue, the snapshot being the one the reports give, and the
   community matching), in `run_suites.sh`; `build/hwsnap-test` (43 checks: signature before parsing, another key,
   one byte changed, malformed signatures, 19 malformed snapshots, limits, links refused, and the snapshot the
-  builder wrote signed with a test key passing the C checks), in `make test`; `build/sysreport-test` checks the
+  builder wrote signed with a test key passing the C checks), in `make test`; `cargo test -p axia-sysreport` checks the
   live flag and the boot medium on 23 fake trees (NVMe, USB 3 and USB 2 behind a hub, a copy to memory with and
   without the medium, `notoram`, SD, eMMC, an unknown MMC card, LUKS on NVMe, LVM on LUKS on USB, a device mapper
   loop, btrfs, stacked mounts, a DVD, NFS, iSCSI, NBD, a live system fetched over the network, virtio, a loop
@@ -1190,12 +1190,12 @@ the launcher. The app takes only that one value and starts no measurement. No ro
 
 ## Work plan for 0.8.5
 
-**Built (2026-10-26):** `server/src/sysreport/` (the collector, `ids.h` (`rust/axia-codecs/src/ids.rs`) for `pci.ids`/`usb.ids`, the JSON
+**Built (2026-10-26):** `rust/axia-sysreport/` (the collector, `rust/axia-codecs/src/ids.rs` for `pci.ids`/`usb.ids`, the JSON
 and Markdown output), `axia-sysreport report [--json | --markdown]` in `/usr/bin` (package `lordos`,
-which recommends `pci.ids` and `usb.ids`), and `tests/sysreport_test.c`: five fake machines (AMD desktop,
+which recommends `pci.ids` and `usb.ids`), and `rust/axia-sysreport/tests`: five fake machines (AMD desktop,
 Intel laptop, Nvidia desktop, Raspberry Pi 5, VM) full of serials, UUIDs, MAC addresses, a host name, a
 user name, monitor serials and a MAC inside an interface name, none of which may reach a report
-(`build/sysreport-test fixture <dir> <kind>` writes one for `--root`). Checked on VM 116 against the real
+(`cargo run -p axia-sysreport --example fixture -- <dir> <kind>` writes one for `--root`). Checked on VM 116 against the real
 machine. `axia-fetch` (the same binary under that name; `axia-sysreport fetch`) shows the crown in
 the brand colors beside a short summary (system, computer, kernel, uptime, packages, shell, display, CPU,
 GPU, memory, disk, isolation); the user and host names appear only on screen and `--share` leaves them out
@@ -1224,7 +1224,7 @@ existing file), with **Show in Files**. Nothing is sent anywhere: publishing is 
 **Memory modules (2026-10-26):** Hardware → Memory → **Read modules** runs the read-only admin action
 `hw-memory-modules` (the SMBIOS type 17 entries only root can read, parsed in `rust/axia-codecs/src/smbios.rs`:
 slot, bank, size, type, speeds, manufacturer; never serial, asset tag or part number). On VM 116 the
-parser read `mem 4096|RAM|0|0|DIMM 0||QEMU` from QEMU's real tables (`build/sysreport-test smbios` as
+parser read `mem 4096|RAM|0|0|DIMM 0||QEMU` from QEMU's real tables (the SMBIOS reader as
 root); the button itself was not exercised on screen (the isolated test session has no admin helper,
 so it shows disabled):
 
@@ -1232,7 +1232,7 @@ so it shows disabled):
 
 **Checks, part 1 (2026-10-26):** what `axia-server` can see itself, evaluated in `apps/sysinfo/checks.js`
 (the thresholds are constants there, so they are signed with the theme bundle instead of a separate
-`checks.json`), from `lord.sysinfo.facts()` (`sysreport/facts.c`: axia-server's uid/euid from
+`checks.json`), from `lord.sysinfo.facts()` (`rust/axia-sysreport/src/facts.rs`: axia-server's uid/euid from
 `/proc/self/status`, its cgroup and who owns it, the app scopes beside it, and whether anything
 listens on port 5673 in `/proc/net/tcp{,6}`): display server without root (§2.2), Landlock ABI ≥ 6
 (§6.4), `axia-netperm` running with cgroup BPF and the BPF LSM (§6.6), verified system code

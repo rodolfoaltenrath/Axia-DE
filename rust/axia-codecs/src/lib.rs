@@ -39,11 +39,11 @@ mod disk;
 #[cfg(not(feature = "secure-memory"))]
 mod smbios;
 #[cfg(not(feature = "secure-memory"))]
-mod ids;
+pub mod ids;
 #[cfg(not(feature = "secure-memory"))]
 mod night;
 #[cfg(not(feature = "secure-memory"))]
-mod edid;
+pub mod edid;
 // The firewall's rule store and decider (server/src/fw/rules.h).
 #[cfg(not(feature = "secure-memory"))]
 mod fwrules;

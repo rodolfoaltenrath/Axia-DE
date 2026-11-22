@@ -828,3 +828,37 @@ Behavior that is deliberately not identical:
 - A `search` or `domain` line of `resolv.conf` that starts with blanks is read properly (the C cut
   its first characters).
 
+
+## System Information: axia-sysreport (2026-11-22)
+
+`server/src/sysreport/{sysreport,sysreport_out,facts,periph,fetch}.c`, `fetch.h`, `ids.h`,
+`server/src/hw/rpifw.c` and `server/tests/sysreport_test.c` are gone. The new crate
+`rust/axia-sysreport` has the collector (`collect.rs`: machine, CPU, memory, GPUs, displays, storage, PCI,
+USB, network, audio, Bluetooth, power, thermal, Raspberry Pi, the boot medium and the software facts), the
+JSON and Markdown report (`out.rs`), the Checks tab's facts (`facts.rs`), the peripherals of the Hardware tab
+(`periph.rs`), `axia-fetch`'s summary (`fetch.rs`) and the Raspberry Pi firmware reader (`rpifw.rs`, with
+`hw_is_bcm2712` and `rpifw_parse_throttled`, which `hw_admin.c` and `settings-hw-test` use). `sysreport.h`
+now has the whole C ABI: `sysreport_json`, `sysreport_markdown`, `sysreport_fetch`, `sysreport_color_mode`,
+`sysreport_cmdline_has` (and `periph_json` and `sr_facts` in their headers). `cli.c` stays in C for the
+command's main and the benchmark's glue and calls the crate, which is also built as a static library for it
+(`mk/sysreport.mk`). `hwsnap.c` (the signed catalogue snapshot) stays in C. `axia-codecs` now exports its
+`ids` and `edid` modules to Rust callers.
+
+Validation:
+
+- `cargo test -p axia-sysreport` ports every case of `sysreport_test.c` over the same fake trees: the five
+  machines and what each report finds, no serial, UUID, MAC, host or user name, monitor serial or device name
+  in the JSON, the Markdown or the summary, the 13 Raspberry Pi firmware cases, the 23 boot-medium cases, the
+  peripherals (an intentionally named keyboard included), the session facts, the colors and the command
+  line. The SMBIOS and `ids` cases of that C test are tests of `axia-codecs` (`smbios.rs`, `ids.rs`).
+- A temporary differential harness linked the original C beside the crate. It was not committed. For each of
+  the five machines, the 13 firmware cases, the 23 boot cases, the peripherals tree, an empty tree and a live
+  session, the JSON, the Markdown, the summary (three colors, with and without names), the peripherals and the
+  facts are byte for byte the same; the report of this very machine is the same too (live temperatures aside).
+
+Behavior that is deliberately not identical:
+
+- Directories are listed in the same natural order, but where the C relied on `readdir` order (the hwmon
+  and power-supply loops of the Raspberry Pi reader) the names are sorted.
+- `build/sysreport-test fixture` and `build/sysreport-test smbios` are gone: the fixtures are `cargo run -p
+  axia-sysreport --example fixture -- <dir> <kind>`.

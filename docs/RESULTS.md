@@ -9,7 +9,7 @@ results/<version>/<machine>/
     README.md        the conditions (hardware or VM, monitor or headless, idle time, apps open, power)
                      and the exact commands
     sysreport.json   axia-sysreport report --json: the hardware and what LordOS made of it, with no
-                     serial numbers, addresses or user and host names (tests/sysreport_test.c checks it)
+                     serial numbers, addresses or user and host names (rust/axia-sysreport/tests checks it)
     testbench.json   axia-testbench --gl --auto N: the Wayland checklist, frame times (average, p50,
                      p99, frames that missed the refresh budget), presentation, the 3D renderer, latency
     memory.txt       the whole system (`free -m`) and PSS per process (/proc/<pid>/smaps_rollup)

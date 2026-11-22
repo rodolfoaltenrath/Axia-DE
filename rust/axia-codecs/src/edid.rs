@@ -6,20 +6,36 @@ use std::ffi::{c_char, c_int};
 
 #[repr(C)]
 pub struct Edid {
-    vendor: [u8; 4],
-    product: u16,
-    serial: u32,
-    name: [u8; 14],
-    serial_text: [u8; 14],
-    year: c_int,
-    week: c_int,
-    width_cm: c_int,
-    height_cm: c_int,
-    pref_w: c_int,
-    pref_h: c_int,
-    version: c_int,
-    revision: c_int,
-    digital: c_int,
+    pub vendor: [u8; 4],
+    pub product: u16,
+    pub serial: u32,
+    pub name: [u8; 14],
+    pub serial_text: [u8; 14],
+    pub year: c_int,
+    pub week: c_int,
+    pub width_cm: c_int,
+    pub height_cm: c_int,
+    pub pref_w: c_int,
+    pub pref_h: c_int,
+    pub version: c_int,
+    pub revision: c_int,
+    pub digital: c_int,
+}
+
+impl Edid {
+    /// An empty block's worth of fields (all zero).
+    pub fn zeroed() -> Edid {
+        // SAFETY: only integers and byte arrays, zero is valid.
+        unsafe { std::mem::zeroed() }
+    }
+    /// The 3-letter PNP code.
+    pub fn vendor_text(&self) -> &[u8] {
+        cs(&self.vendor)
+    }
+    /// The monitor name descriptor ("" if none).
+    pub fn name_text(&self) -> &[u8] {
+        cs(&self.name)
+    }
 }
 
 fn cs(b: &[u8]) -> &[u8] {

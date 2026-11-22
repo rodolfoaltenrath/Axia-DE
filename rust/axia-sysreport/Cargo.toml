@@ -1,0 +1,16 @@
+[package]
+name = "axia-sysreport"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "System Information's collector: what hardware this machine has and what the kernel made of it, read without root"
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+axia-codecs = { path = "../axia-codecs", default-features = false }
+libc = "0.2"
+
+[dev-dependencies]
+serde_json = "1"

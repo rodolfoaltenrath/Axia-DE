@@ -27,14 +27,14 @@
  *                                               axia-sysreport, no serials, addresses or names) plus
  *                                               session: how this session composes the screen and its
  *                                               GPU context (gpu/gpu.h gpu_info, lord_composition)
- *   lord.sysinfo.facts()                        the Checks tab's facts (sysreport/facts.c): axia-server's
+ *   lord.sysinfo.facts()                        the Checks tab's facts (rust/axia-sysreport/src/facts.rs): axia-server's
  *                                               uid/euid, its cgroup and who owns it, and app scopes
  *   lord.sysinfo.probe()                        the last sandbox probe's result (sec/brokersrv.c, BOP_PROBE:
  *                                               the system package `sysprobe`, app/probe.c), or null
  *   lord.sysinfo.markdown()                     the same report as Markdown, as axia-sysreport prints it,
  *                                               with a "This session" section (System Information's Report tab)
  *   lord.sysinfo.peripherals()                  (0.8.7) keyboards, mice, receivers and other devices on this machine's USB
- *                                               and input buses (sysreport/periph.c), for the Hardware tab only: their
+ *                                               and input buses (rust/axia-sysreport/src/periph.rs), for the Hardware tab only: their
  *                                               names can carry a person's, so it is not part of report() or markdown()
  *   lord.sysinfo.community()                    (0.8.7) the tested-hardware catalogue's snapshot for the Compatibility
  *                                               panel: { state, snapshot } where snapshot is given only when
@@ -446,22 +446,18 @@ static const JSCFunctionListEntry hwinfo_funcs[] = { JS_CFUNC_DEF("scan", 0, f_h
 
 /* ---- lord.sysinfo (System Information, docs/BENCHMARK.md) ---- */
 
-/* The report of this machine (or of the development fixture), with LordOS's version; NULL on OOM. */
-static SysReport *sysinfo_collect(void) {
-    SysReport *r = malloc(sizeof *r);
-    if (!r) return NULL;
-    sysreport_collect(r, hwscan_root(), NULL, NULL);      /* the same development fixtures as the Store's */
-    snprintf(r->sw.lordos, sizeof r->sw.lordos, "%s%s%s", LORD_VERSION, LORD_CHANNEL[0] ? "-" : "", LORD_CHANNEL);
-    return r;
+/* LordOS's version for the report: "0.8.5" or "0.8.5-beta". */
+static const char *sysinfo_lordos(char *buf, size_t n) {
+    snprintf(buf, n, "%s%s%s", LORD_VERSION, LORD_CHANNEL[0] ? "-" : "", LORD_CHANNEL);
+    return buf;
 }
 
 static JSValue f_sysinfo_report(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     (void)t; (void)argc; (void)argv;
     const char *root = hwscan_root();
-    SysReport *r = sysinfo_collect();
-    if (!r) return JS_NULL;
-    JSValue v = json_or_null(c, sysreport_json(r));
-    free(r);
+    char ver[48];
+    /* the same development fixtures as the Store's */
+    JSValue v = json_or_null(c, sysreport_json(root, sysinfo_lordos(ver, sizeof ver)));
     if (!JS_IsObject(v)) return v;
     GpuInfo g;
     gpu_info(&g);
@@ -479,9 +475,8 @@ static JSValue f_sysinfo_report(JSContext *c, JSValueConst t, int argc, JSValueC
 
 static JSValue f_sysinfo_markdown(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     (void)t; (void)argc; (void)argv;
-    SysReport *r = sysinfo_collect();
-    char *md = r ? sysreport_markdown(r) : NULL;
-    free(r);
+    char ver[48];
+    char *md = sysreport_markdown(hwscan_root(), sysinfo_lordos(ver, sizeof ver));
     if (!md) return JS_NULL;
     GpuInfo g;
     gpu_info(&g);

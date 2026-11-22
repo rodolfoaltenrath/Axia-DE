@@ -14,7 +14,6 @@
  * links), the same guards and the same result file as System Information → Performance. Without a session
  * the helper gets no cgroup scope and the desktop test can't run. */
 #include "sysreport.h"
-#include "fetch.h"
 #include "lord_version.h"
 #include "../bench/lbproto.h"
 #include "../bench/lbrun.h"
@@ -170,19 +169,11 @@ int main(int argc, char **argv) {
     if (bnch) return root[0] ? usage(0) : bench(full, json);
     if (!report && !fetch) return usage(0);
 
-    SysReport *r = malloc(sizeof *r);
-    if (!r) return 1;
-    sysreport_collect(r, root, NULL, NULL);
-    snprintf(r->sw.lordos, sizeof r->sw.lordos, "%s%s%s", LORD_VERSION, LORD_CHANNEL[0] ? "-" : "", LORD_CHANNEL);
+    char lordos[48];
+    snprintf(lordos, sizeof lordos, "%s%s%s", LORD_VERSION, LORD_CHANNEL[0] ? "-" : "", LORD_CHANNEL);
     char *out;
-    if (fetch) {
-        FetchLive l;
-        fetch_live(&l, root, share);
-        out = fetch_render(r, &l, fetch_color_mode(color, isatty(1)));
-    } else {
-        out = !strcmp(mode, "json") ? sysreport_json(r) : sysreport_markdown(r);
-    }
-    free(r);
+    if (fetch) out = sysreport_fetch(root, lordos, share, sysreport_color_mode(color, isatty(1)));
+    else out = !strcmp(mode, "json") ? sysreport_json(root, lordos) : sysreport_markdown(root, lordos);
     if (!out) { fprintf(stderr, "%s: out of memory\n", base); return 1; }
     fputs(out, stdout);
     free(out);

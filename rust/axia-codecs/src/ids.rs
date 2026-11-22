@@ -6,6 +6,7 @@
 use crate::lanparse::cstr;
 use std::ffi::{c_char, c_int};
 use std::io::Read;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 
 const IDS_MAX: u64 = 8 << 20;
@@ -34,7 +35,7 @@ fn copy_name(s: &[u8], size: usize) -> (Vec<u8>, usize) {
     (out, n)
 }
 
-type Name = (Vec<u8>, usize);
+pub type Name = (Vec<u8>, usize);
 
 /// The line starts (after `tabs` tabs) with the hex id followed by a space: the rest after the id.
 fn id_line<'a>(line: &'a [u8], tabs: usize, id: &[u8]) -> Option<&'a [u8]> {
@@ -144,6 +145,24 @@ unsafe fn out(p: *mut c_char, size: usize, (s, n): &Name) {
 }
 
 const EMPTY: Name = (Vec::new(), 0);
+
+/// The names a lookup found: the text of a `Name` (what the C copies and terminates).
+pub fn name_text(n: &Name) -> &[u8] {
+    &n.0[..n.1.min(n.0.len())]
+}
+
+/// The file's text (at most 8 MB, a regular file), or `None` like `ids_open` returning -1.
+pub fn load(path: &[u8]) -> Option<Vec<u8>> {
+    let path = std::ffi::OsStr::from_bytes(path);
+    let mut f = std::fs::File::open(path).ok()?;
+    let meta = f.metadata().ok()?;
+    if !meta.is_file() || meta.size() == 0 || meta.size() > IDS_MAX {
+        return None;
+    }
+    let mut data = Vec::with_capacity(meta.size() as usize);
+    let _ = (&mut f).take(meta.size()).read_to_end(&mut data);
+    (!data.is_empty()).then_some(data)
+}
 
 /// # Safety
 /// `db` points to an IdsDb and `path` is a C string.

@@ -1,6 +1,6 @@
 /* rpifw.h — what the Raspberry Pi firmware says about power and throttling, as the kernel shows it to an
- * unprivileged process (docs/BENCHMARK.md, "The Raspberry Pi firmware's throttling"). Shared by LordBench's
- * guards (bench/lbcond.c) and System Information (sysreport/sysreport.c). World-readable sysfs only: no
+ * unprivileged process (docs/BENCHMARK.md, "The Raspberry Pi firmware's throttling"). Implemented in Rust (rust/axia-sysreport/src/rpifw.rs). Shared by LordBench's
+ * guards (bench/lbcond.c) and System Information (rust/axia-sysreport). World-readable sysfs only: no
  * mailbox (/dev/vcio), no vcgencmd, no exec. Every reader takes a root folder ("" for the real one) so tests
  * can feed fake trees.
  *

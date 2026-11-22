@@ -461,6 +461,7 @@ dependencies = [
  "axia-netstate",
  "axia-print",
  "axia-state",
+ "axia-sysreport",
  "image",
  "libc",
  "regex",
@@ -471,6 +472,15 @@ dependencies = [
 [[package]]
 name = "axia-state"
 version = "0.1.0"
+
+[[package]]
+name = "axia-sysreport"
+version = "0.1.0"
+dependencies = [
+ "axia-codecs",
+ "libc",
+ "serde_json",
+]
 
 [[package]]
 name = "base64ct"
