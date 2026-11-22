@@ -49,6 +49,10 @@ impl NativeApp for App {
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, v: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(v, preferences, crate::clock::now())
+    }
     fn request(&mut self, v: &Value) -> Value {
         self.request_at(v, crate::clock::now())
     }
@@ -177,6 +181,9 @@ impl App {
         Some(self.request_at(&cmd, now))
     }
     pub fn request_at(&mut self, v: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(v, &v["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, v: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = s(&v["cmd"]);
         if cmd == "icon" {
             return ui::icon(v["size"].as_f64().unwrap_or(32.), now);
@@ -192,9 +199,9 @@ impl App {
             self.theme = v["context"]["theme"].clone();
             self.region = v["context"]["region"]
                 .as_str()
-                .unwrap_or(s(&v["settings"]["region"]))
+                .unwrap_or(s(&preferences["region"]))
                 .into();
-            self.hour = s(&v["settings"]["clock"]["hour24"]).into();
+            self.hour = s(&preferences["clock"]["hour24"]).into();
             self.width = v["context"]["width"]
                 .as_f64()
                 .filter(|n| n.is_finite() && *n > 1.)

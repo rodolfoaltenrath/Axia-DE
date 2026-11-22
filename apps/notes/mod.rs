@@ -216,6 +216,10 @@ impl NativeApp for App {
         self.save_editor();
         Some(self.output(now))
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, v: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(v, preferences, crate::clock::now())
+    }
     fn request(&mut self, v: &Value) -> Value {
         self.request_at(v, crate::clock::now())
     }
@@ -774,11 +778,14 @@ impl App {
     }
 
     fn request_at(&mut self, input: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(input, &input["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, input: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         match cmd {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
-                let presentation = json!([input["context"], input["lang"], input["settings"]["region"]]);
+                let presentation = json!([input["context"], input["lang"], preferences["region"]]);
                 if presentation != self.presentation {
                     self.presentation = presentation;
                     self.ui_revision = self.ui_revision.wrapping_add(1);
@@ -786,7 +793,7 @@ impl App {
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
                 self.theme = input["context"]["theme"].clone();
                 self.foreground = input["context"]["focused"].as_bool().unwrap_or(true);
-                self.region = input["settings"]["region"].as_str().unwrap_or("").into();
+                self.region = preferences["region"].as_str().unwrap_or("").into();
                 self.width = input["context"]["width"].as_f64().unwrap_or(860.);
                 self.height = input["context"]["height"].as_f64().unwrap_or(560.);
                 self.screen = (

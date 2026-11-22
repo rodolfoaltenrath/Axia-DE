@@ -136,6 +136,10 @@ impl NativeApp for App {
             },
         )
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, v: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(v, preferences, crate::clock::now())
+    }
     fn request(&mut self, v: &Value) -> Value {
         self.request_at(v, crate::clock::now())
     }
@@ -208,6 +212,9 @@ impl App {
         self.state["message"] = json!({"ok":ok,"text":text});
     }
     fn request_at(&mut self, v: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(v, &v["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, v: &Value, preferences: &Value, now: i64) -> Value {
         self.now = now;
         match s(&v["cmd"]) {
             "icon" => return system::icon(n(&v["size"]).max(1.)),
@@ -231,10 +238,12 @@ impl App {
                 if let Some(lang) = v["lang"].as_str() {
                     self.i18n.borrow_mut().lang = lang.into();
                 }
-                if v["settings"].is_object() && v["settings"] != self.observed_settings {
-                    self.observed_settings = v["settings"].clone();
+                if preferences.is_object() && UI_PREFERENCE_ROOTS.iter().any(|key| preferences.get(*key) != self.observed_settings.get(*key)) {
+                    // The editor keeps observed/pending values for its own controls,
+                    // never unrelated apps, window places or session snapshots.
+                    self.observed_settings = Value::Object(UI_PREFERENCE_ROOTS.iter().filter_map(|key| preferences.get(*key).map(|v| ((*key).into(), v.clone()))).collect());
                     self.settings = defaults();
-                    for (k, value) in v["settings"].as_object().unwrap() {
+                    for (k, value) in self.observed_settings.as_object().unwrap() {
                         if self.settings[k].is_object() && value.is_object() {
                             merge(&mut self.settings[k], value);
                         } else {
@@ -1211,6 +1220,13 @@ impl App {
         )
     }
 }
+const UI_PREFERENCE_ROOTS: &[&str] = &[
+    "mode", "accent", "effects", "reduceMotion", "scrollBars", "nativeAppearance", "filesAppearance",
+    "externalWindowStyle", "dockPosition", "dockSize", "dockMagnify", "dockMagnifySize", "dockAutohide", "dockRecents",
+    "clipboard", "notifications", "clock", "night", "power", "trackpad", "video",
+    "browserTabsInTitlebar", "browserFramePending", "sessionRestore", "sessionBrowsers", "desktopArrows", "shortcutProfile",
+    "wallpaper", "wallpaperUser", "keyboard", "keyboards", "keyboardIndex", "language", "region", "menuBarAllDisplays",
+];
 fn defaults() -> Value {
     json!({"mode":"dark","effects":true,"reduceMotion":false,"scrollBars":"auto","nativeAppearance":"adwaita","externalWindowStyle":false,"dockPosition":"bottom","dockSize":54,"dockMagnify":false,"dockMagnifySize":86,"dockAutohide":false,"dockRecents":false,"clipboard":{"save":true,"max":500,"maxMB":200,"expireDays":30,"ignoreApps":[],"clearOnLogout":false},"notifications":{"dnd":false,"schedule":{"on":false,"from":1320,"to":420},"grouping":"app","apps":{},"seen":[]},"clock":{"hour24":"auto","date":"short","seconds":false},"night":{"schedule":"off","from":1320,"to":420,"temp":3400,"manual":null},"power":{"offAC":600,"offBattery":180,"lockDelay":0,"sleepAC":0,"sleepBattery":900,"lowBattery":true,"menuPercent":true},"trackpad":{"speed":0.5,"tap":true,"tapDrag":true,"natural":true,"secondary":"bottom-right","threeDrag":false,"dwt":true,"scroll":true,"kinetic":true,"pinch":true,"swipe3":true,"swipe4":false},"video":{"mode":"auto","autoLower":false},"browserTabsInTitlebar":true,"sessionRestore":"ask","sessionBrowsers":true,"desktopArrows":true,"shortcutProfile":"macos"})
 }

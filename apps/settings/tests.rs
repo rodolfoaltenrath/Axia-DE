@@ -1,5 +1,27 @@
 use super::*;
 #[test]
+fn borrowed_preferences_keep_only_editor_roots_and_preserve_pending_rollback() {
+    let mut app = fixture();
+    let preferences = json!({"dockSize":60,"clock":{"hour24":"12"},
+        "windowPlaces":{"huge":"x".repeat(100_000)},"sessionSaved":[{"private":"session"}],
+        "notes":{"documents":["unrelated app state"]}});
+    let facts = json!({"cmd":"sync","args":{},"context":{"theme":app.theme},"settings":{"dockSize":999}});
+    app.sync_with_preferences(&facts, &preferences);
+    assert_eq!(app.pref("dockSize"), 60);
+    assert_eq!(app.pref("clock.hour24"), "12");
+    for key in ["windowPlaces", "sessionSaved", "notes"] {
+        assert!(app.observed_settings.get(key).is_none());
+        assert!(app.settings.get(key).is_none());
+    }
+    app.patch("dockSize", json!(70));
+    assert_eq!(app.output()["effect"]["patch"]["dockSize"], 70);
+    app.sync_with_preferences(&facts, &preferences);
+    assert_eq!(app.pref("dockSize"), 70);
+    app.request_at(&json!({"cmd":"next","result":"save failed"}), app.now);
+    assert_eq!(app.pref("dockSize"), 60);
+    assert!(app.pending_settings.is_empty());
+}
+#[test]
 fn choosing_the_current_popup_option_has_no_system_side_effect() {
     let mut app = fixture();
     app.popup = json!({"value":"argon-one-v5","binding":{"op":"fanCase"}});

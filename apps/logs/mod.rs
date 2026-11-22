@@ -223,6 +223,10 @@ impl NativeApp for App {
             None
         }
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(input, preferences, crate::clock::now())
+    }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, crate::clock::now())
     }
@@ -662,6 +666,9 @@ impl App {
         );
     }
     pub fn request_at(&mut self, input: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(input, &input["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, input: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         let key = input["key"].as_str().unwrap_or("");
         match cmd {
@@ -681,7 +688,7 @@ impl App {
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
                 self.i18n.decimal = input["context"]["decimal"].as_str().unwrap_or(".").into();
                 self.i18n.group = input["context"]["group"].as_str().unwrap_or(",").into();
-                self.region = input["settings"]["region"].as_str().unwrap_or("").into();
+                self.region = preferences["region"].as_str().unwrap_or("").into();
                 if self.owner == 0 {
                     self.owner = input["args"]["__nativeOwner"].as_i64().unwrap_or(0);
                     if self.owner > 0 {

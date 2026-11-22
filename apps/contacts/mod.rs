@@ -60,6 +60,10 @@ impl NativeApp for App {
                 200.
             })
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, v: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(v, preferences, crate::clock::now())
+    }
     fn request(&mut self, v: &Value) -> Value {
         self.request_at(v, crate::clock::now())
     }
@@ -167,6 +171,9 @@ impl App {
         None
     }
     pub fn request_at(&mut self, v: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(v, &v["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, v: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = string(&v["cmd"]);
         if cmd == "icon" {
             return ui::icon(v["size"].as_f64().unwrap_or(32.));
@@ -182,7 +189,7 @@ impl App {
             self.theme = v["context"]["theme"].clone();
             self.region = v["context"]["region"]
                 .as_str()
-                .unwrap_or(string(&v["settings"]["region"]))
+                .unwrap_or(string(&preferences["region"]))
                 .into();
             self.width = v["context"]["width"]
                 .as_f64()

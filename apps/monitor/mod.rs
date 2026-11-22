@@ -150,7 +150,7 @@ pub struct App {
 struct Built {
     seq: u64,
     context: Value,
-    settings: Value,
+    preferences: Value,
     services: Value,
     catalog: Value,
 }
@@ -202,6 +202,10 @@ impl Default for App {
 }
 /// Mounted directly into the scene by the native view host (no React).
 impl crate::native_view::NativeApp for App {
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences(input, preferences)
+    }
     fn request(&mut self, input: &Value) -> Value {
         App::request(self, input)
     }
@@ -242,7 +246,7 @@ impl App {
         let span = self.history_span;
         self.service().job(worker::Job::Query(json!({"from":now.saturating_sub(span),"step":if span>86400{3600}else{60},"n":if span>86400{span/3600}else{span/60},"app":self.app})));
     }
-    fn sync(&mut self, input: &Value) {
+    fn sync(&mut self, input: &Value, preferences: &Value) {
         if input["args"] != self.args {
             self.args = input["args"].clone();
             self.built = None;
@@ -254,7 +258,7 @@ impl App {
             }
             self.section = input["args"]["section"].as_str().unwrap_or("").into();
         }
-        self.prefs = input["settings"]["monitor"].clone();
+        self.prefs = preferences["monitor"].clone();
         self.services = input["services"].clone();
         self.catalog = input["catalog"].clone();
         if !self.app.is_empty() && self.requested_app != self.app {
@@ -316,6 +320,9 @@ impl App {
         }
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        self.request_with_preferences(input, &input["settings"])
+    }
+    fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         let key = input["key"].as_str().unwrap_or("");
         match cmd {
@@ -326,7 +333,7 @@ impl App {
                 self.built = None;
                 return Value::Null;
             }
-            "sync" => self.sync(input),
+            "sync" => self.sync(input, preferences),
             "tab" => {
                 self.tab = Tab::parse(key);
                 self.query.clear();
@@ -589,7 +596,7 @@ impl App {
         let unchanged = self.built.as_ref().is_some_and(|b| {
             b.seq == shown
                 && b.context == input["context"]
-                && b.settings == input["settings"]
+                && b.preferences == self.prefs
                 && b.services == input["services"]
                 && b.catalog == input["catalog"]
         });
@@ -599,7 +606,7 @@ impl App {
         self.built = Some(Built {
             seq: shown,
             context: input["context"].clone(),
-            settings: input["settings"].clone(),
+            preferences: self.prefs.clone(),
             services: input["services"].clone(),
             catalog: input["catalog"].clone(),
         });

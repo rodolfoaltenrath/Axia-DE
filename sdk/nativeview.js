@@ -195,7 +195,7 @@ function NativeApp(props) {
     localeRevision, winId: win.id, windowSource, focused: windowSource ? undefined : win.focused !== false, windowMode: win.mode });
 }
 const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, handleRef, stateSource, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
-  const preferences = useStore(manifest.settings ? preferenceFacts : emptyFactsStore);
+  const preferences = useStore(appHost && manifest.settings ? preferenceFacts : emptyFactsStore);
   const apps = useStore(manifest.id === 'forcequit' || manifest.facts === 'appcontrol' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
   const clock = useStore(manifest.facts === 'clock' ? clockState : emptyFactsStore);
   useStore(manifest.facts === 'system' ? screenFacts : emptyFactsStore);
@@ -221,7 +221,7 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   // theme/settings/catalog strings rather than stringifying the complete facts.
   const block = (name, value) => encoder.block(name, value);
   const contextFields = { theme: block('theme', theme), windowMode: block('windowMode', windowMode),
-    ...(manifest.settings ? { preferenceRevision: block('preferenceRevision', settingsRevision()) } : {}),
+    ...(appHost && manifest.settings ? { preferenceRevision: block('preferenceRevision', settingsRevision()) } : {}),
     ...(appHost ? { region: block('region', region), direction: block('direction', dir), localeRevision: block('localeRevision', localeRevision),
       decimal: block('decimal', formats.decimal), group: block('group', formats.group) } : {}),
     scale: block('scale', typeScale),
@@ -238,7 +238,7 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
   ];
   const layers = block('layers', layerFacts());
   if (layers !== undefined) parts.push(`"layers":${layers}`);
-  if (manifest.settings) parts.push(`"settings":${block('settings', preferences)}`);
+  if (appHost && manifest.settings) parts.push(`"settings":${block('settings', preferences)}`);
   if (apps) parts.push(`"catalog":${block('catalog', apps.catalog)}`, `"registry":${block('registry', apps.registry)}`);
   const json = `{${parts.join(',')}}`;
   useLayoutEffect(() => {

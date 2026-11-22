@@ -1,4 +1,58 @@
 use super::*;
+struct PreferenceProbe {
+    reader: axia_state::Reader<Value>,
+    log: Rc<RefCell<Vec<(Value, Value)>>>,
+}
+impl NativeApp for PreferenceProbe {
+    fn uses_preferences(&self) -> bool { true }
+    fn request(&mut self, input: &Value) -> Value {
+        assert_ne!(input["cmd"], "sync", "session sync must borrow native preferences");
+        json!({})
+    }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        assert!(std::ptr::eq(preferences, &*self.reader.read()), "profile must not be cloned");
+        assert!(input.get("settings").is_none());
+        assert_eq!(input["context"]["preferenceRevision"], self.reader.revision());
+        self.log.borrow_mut().push((input.clone(), preferences["probe"].clone()));
+        json!({"tree":{"kind":"text","label":preferences["probe"].to_string()}})
+    }
+}
+#[test]
+fn bound_preferences_borrow_the_owner_ignore_stale_facts_and_wake_without_transport() {
+    let root = std::env::temp_dir().join(format!("axia-view-preferences-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let home = root.to_str().unwrap();
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    let reader = crate::settings::with(home, |s| {
+        s.command(&json!({"cmd":"initialize"}));
+        s.set("probe", &json!(1));
+        s.reader()
+    });
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(PreferenceProbe { reader, log:log.clone() }), assets, Some(home));
+    host.bind_locale(home, assets);
+    let stale = json!({"settings":{"probe":999},"context":{"preferenceRevision":999}});
+    host.facts(stale.clone());
+    assert_eq!(log.borrow().len(), 1);
+    assert_eq!(log.borrow()[0].1, 1);
+    assert!(host.deadline().is_none());
+    host.facts(stale.clone());
+    assert_eq!(log.borrow().len(), 1);
+    crate::settings::with(home, |s| { s.set("probe", &json!(2)); });
+    assert_eq!(host.deadline(), Some(0.));
+    host.tick(1000.);
+    assert_eq!(log.borrow().len(), 2);
+    assert_eq!(log.borrow()[1].1, 2);
+    assert!(host.deadline().is_none());
+    host.facts(stale);
+    host.tick(2000.);
+    assert_eq!(log.borrow().len(), 2);
+    assert!(host.deadline().is_none());
+    drop(host);
+    scene::destroy(mount);
+    std::fs::remove_dir_all(root).unwrap();
+}
 struct Probe(Rc<RefCell<Vec<Value>>>);
 impl NativeApp for Probe {
     fn request(&mut self, input: &Value) -> Value {
@@ -74,6 +128,11 @@ fn bound_views_read_locale_without_transport_and_wake_only_on_changes() {
     assert!(host.deadline().is_none());
     host.tick(4000.);
     assert_eq!(log.borrow().len(), 3);
+    crate::settings::with(home, |s| { s.set("unrelated", &json!(true)); });
+    crate::locale::tick();
+    host.tick(5000.);
+    assert_eq!(log.borrow().len(), 3, "presentation-only views do not subscribe to preferences");
+    assert!(host.deadline().is_none());
     drop(host);
     scene::destroy(mount);
     std::fs::remove_dir_all(root).unwrap();

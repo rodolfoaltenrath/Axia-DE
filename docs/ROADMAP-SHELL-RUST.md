@@ -357,8 +357,8 @@ views nativas lerem direto, sem JSON.
       Dados pendentes sobrevivem à recriação do adaptador. Carregamento, prazo
       monotônico de 300 ms e serialização/gravação já pertencem ao modelo;
       o loop nativo atende o prazo sem depender de views. API legada de arquivo
-      e primitivas C atômicas/duráveis preservadas. Os demais consumidores dos
-      fatos de preferências ainda precisam migrar.
+      e primitivas C atômicas/duráveis preservadas. Views da sessão já leem
+      preferências por empréstimo; demais consumidores de serviços ainda pendentes.
       Serviços de notificações/alarmes já usam fonte observável nativa de locale:
       preferência salva, LANG dos arquivos do perfil/sistema, fallback inglês e
       revisão dos catálogos, com recargas por eventos do host. Store público já
@@ -375,9 +375,14 @@ views nativas lerem direto, sem JSON.
       separadores e revisão não entram nos fatos JS de NativeBridge. Mudanças
       acordam o host nativo sem polling, com cache de formatos compartilhado por
       perfil. Montagem exige o proprietário validado do contexto; o host LPK
-      preserva fatos locais. Retomar pelos snapshots de settings, sua revisão
-      e demais fatos de preferências ainda enviados às views/serviços. Troca de
-      tema grava pela API nativa.
+      preserva fatos locais. `settings` e `preferenceRevision` também saíram do
+      transporte de NativeBridge; modelos interessados recebem uma referência
+      ao perfil durante sync e acordam por assinatura nativa, sem cópia completa
+      por view. Relógio retém somente região/12–24 h; Monitor guarda seu bloco;
+      Configurações mantém os blocos editáveis e os valores pendentes. Restauração
+      também usa essa leitura. Retomar por bootstrap/consumidores de preferências
+      dos serviços e por tema/escala ainda calculados em JS. Troca de tema grava
+      pela API nativa.
 - [ ] Notificações, relógio e alarmes (`notify.js`, `alarms.js`).
       Lista, histórico limitado, agrupamento, Não Perturbe, entrega, IDs e
       prazos de notificações pertencem ao contexto Rust. A view monta os
@@ -632,3 +637,4 @@ mostraram.
 | 2026-11-20 | Fase 2: tradução pública do SDK pelo resolvedor Rust | Commit desta linha | t/tOptional/appName usam catálogos e idioma atuais do proprietário, mesmo com espelho antigo. Resolução, fallback e plural compartilhados com serviços/views; SDK só adapta interpolação/coerção. Corrigido truncamento de frações no plural nativo. Testes cobrem sete regras, NaN/infinito, contagem textual preservada, fallback de manifesto e recarga. Passaram 611 testes da shell, sete contratos LPK, 24 cenários gráficos de locale/configurações/notificações/relógio/Forçar encerramento/menu, encerramento instalado, smoke e apps compilados em GPU=1; compositor/bundles recompilados e captura inspecionada. Integração bloqueia leitores JS durante tradução e verifica texto do pacote instalado. Evidências em build/validation/native-translation; CI usa native_locale_runtime/axia-native-locale. Pausa solicitada após esta entrega. Retomar por formatação de datas/horas/números e enumeração de idiomas do SDK; demais consumidores e medições físicas continuam pendentes. |
 | 2026-11-21 | Fase 2: formatos e lista pública de idiomas no Rust | Commit desta linha | formatDate/formatTime/formatNumber/monthName/weekdayName/languages consultam o proprietário atual, com cache por revisão e sem ler catálogos/configurações no JS. Precisão fixa preserva arredondamento binário, até 100 casas e RangeError; metadados limitados a 4 KiB, duplicatas e ordenação NFC do QuickJS preservadas. Host LPK mantém implementação local. Passaram 617 testes da shell, 17 do toolkit, sete contratos LPK e 16 cenários gráficos de locale/configurações/relógio/notificações. Integração compara 570 combinações numéricas por cenário e bloqueia toFixed durante as chamadas migradas; capturas inspecionadas. Compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram com limites impostos: 12,200 poll/s e 104,770 MiB de RSS; sem medição física ou comparação antes/depois. Evidências em build/validation/native-formats. Retomar pelos fatos de locale/preferências de NativeBridge (sdk/nativeview.js) e demais consumidores; a Fase 2 permanece aberta. |
 | 2026-11-21 | Fase 2: locale direto no host das views | Commit desta linha | NativeBridge da sessão deixa de assinar locale JS e transportar lang/região/direção/separadores/revisão. Host retém leitor/assinatura do proprietário por perfil e acorda sem polling; fatos antigos não sobrepõem estado atual. Separadores usam o cache compartilhado, sem catálogo de formatos por janela. Montagem nativa exige proprietário validado do contexto; ABI anterior e fatos locais preservados para isolados. Passaram 619 testes da shell, sete contratos LPK, integração dos apps compilados e 32 cenários gráficos de locale/menu/foco/configurações/relógio/notificações/barras de título. Relógio muda para português com espelho inglês e sem novos fatos; recarga atualiza texto aberto; capturas inspecionadas. Compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram: 12,350 poll/s e 104,582 MiB de RSS, com limites impostos. Evidências em build/validation/native-view-locale. Retomar pelos snapshots de settings/preferenceRevision e leitores tipados de preferências nos consumidores; sem introduzir cópia completa do perfil por view. Medições físicas permanecem para o encerramento. |
+| 2026-11-22 | Fase 2: preferências das views lidas por empréstimo Rust | Commit desta linha | NativeBridge da sessão deixa de assinar/serializar settings e preferenceRevision. Host associa leitor/assinatura apenas aos modelos interessados, empresta o perfil durante sync e usa a revisão nativa; fatos antigos não sobrescrevem o estado. Migrados 14 apps e a view de restauração; Relógio conserva escalares, Monitor seu bloco e Configurações apenas blocos editáveis/pendências. Passaram 1.268 testes do workspace (620 da shell), sete contratos LPK, integração dos apps compilados e 40 cenários gráficos. Relógio alterna 12/24 h com espelho JS congelado e sem novos fatos; captura inspecionada. Compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram: 12,350 poll/s e 104,566 MiB de RSS, com limites impostos. Evidências em build/validation/native-view-preferences. Retomar pelo bootstrap/consumidores de preferências dos serviços e por tema/escala ainda calculados em JS. Medições físicas permanecem para o encerramento. |

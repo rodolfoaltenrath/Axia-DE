@@ -241,6 +241,9 @@ impl Service {
         self.revision = self.revision.wrapping_add(1);
     }
     fn configure(&mut self, metadata: &Value, input: &Value, now: Instant) {
+        self.configure_preferences(metadata, input, &input["settings"], now)
+    }
+    fn configure_preferences(&mut self, metadata: &Value, input: &Value, preferences: &Value, now: Instant) {
         let configured = input["context"]["renderEpoch"].is_number()
             && self.configuration_revision != input["context"]["renderEpoch"];
         if configured {
@@ -271,7 +274,7 @@ impl Service {
         let current = settings_revision
             .zip(self.settings_revision)
             .is_none_or(|(next, current)| next >= current);
-        if let Some(settings) = input["settings"].as_object().filter(|_| current) {
+        if let Some(settings) = preferences.as_object().filter(|_| current) {
             if settings_revision.is_some() {
                 self.settings_revision = settings_revision;
             }

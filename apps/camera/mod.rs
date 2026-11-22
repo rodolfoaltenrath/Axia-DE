@@ -148,6 +148,10 @@ impl NativeApp for App {
     fn background_refresh_ms(&self) -> Option<f64> {
         (self.rec_start.is_some() || self.video_pending).then_some(200.)
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(input, preferences, crate::clock::now())
+    }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, crate::clock::now())
     }
@@ -531,6 +535,9 @@ impl App {
         }
     }
     fn request_at(&mut self, input: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(input, &input["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, input: &Value, preferences: &Value, now: i64) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
@@ -538,8 +545,8 @@ impl App {
                 self.theme = input["context"]["theme"].clone();
                 let lang = self.i18n.lang.clone();
                 self.rtl = self.i18n.entry(&lang, "meta", "direction") == Some(json!("rtl"));
-                let prefs = if input["settings"]["camera"].is_object() {
-                    input["settings"]["camera"].clone()
+                let prefs = if preferences["camera"].is_object() {
+                    preferences["camera"].clone()
                 } else {
                     json!({})
                 };

@@ -126,6 +126,10 @@ impl NativeApp for App {
                 200.
             })
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, v: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(v, preferences, crate::clock::now())
+    }
     fn request(&mut self, v: &Value) -> Value {
         self.request_at(v, crate::clock::now())
     }
@@ -494,6 +498,9 @@ impl App {
         out
     }
     pub fn request_at(&mut self, v: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(v, &v["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, v: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = string(&v["cmd"]);
         let k = string(&v["key"]);
         match cmd {
@@ -507,9 +514,9 @@ impl App {
                 self.theme = v["context"]["theme"].clone();
                 self.region = v["context"]["region"]
                     .as_str()
-                    .unwrap_or(string(&v["settings"]["region"]))
+                    .unwrap_or(string(&preferences["region"]))
                     .into();
-                self.hour = string(&v["settings"]["clock"]["hour24"]).into();
+                self.hour = string(&preferences["clock"]["hour24"]).into();
                 let lang = self.i18n.lang.clone();
                 self.rtl = v["context"]["direction"]
                     .as_str()

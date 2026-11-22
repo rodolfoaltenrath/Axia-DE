@@ -46,6 +46,7 @@ fn locale_state_is_native_with_stale_mirrors_and_no_js_text_setters() {
                 "fixedPrecision",
                 "nativeViewLocale",
                 "nativeViewReload",
+                "nativeViewPreferences",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
             }
@@ -67,7 +68,7 @@ async function run(){
  settings.set({language:'en',region:'',mode:'@MODE@'});configureWindows({apps:[]});
  let handle=0,clockHandle=0,clockFacts=0,bound=true,noPayload=true,remount,hold=false;const seen=[];
  const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts;
- const inspect=text=>{const value=JSON.parse(text);noPayload&&=!('lang'in value)&&!('locale'in value)&&['region','direction','decimal','group','localeRevision'].every(key=>!(key in(value.context||{})));};
+ const inspect=text=>{const value=JSON.parse(text);noPayload&&=!('lang'in value)&&!('locale'in value)&&!('settings'in value)&&['region','direction','decimal','group','localeRevision','preferenceRevision'].every(key=>!(key in(value.context||{})));};
  lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:settings'||id==='clock'){inspect(text);bound&&=sources[0]===lord.windowList;const result=mount(node,id,text,...sources);if(id==='clock')clockHandle=result;else handle=result;return result;}return mount(node,id,text,...sources);};
  lord.nativeViews.facts=(id,text)=>{if(id===handle||id===clockHandle)inspect(text);if(id===clockHandle)clockFacts++;return facts(id,text);};
  const perform=localeBridge.perform;localeBridge.perform=effect=>{seen.push(effect.reply);if(!hold)perform(effect);};
@@ -98,6 +99,17 @@ async function run(){
  for(const c of expected){const actual=formatNumber(c.value,c.digits);if(actual!==c.text){fixedPrecision=false;console.log('fixed mismatch '+JSON.stringify({value:String(c.value),digits:c.digits,expected:c.text,actual}));break;}}
  try{formatNumber(1,101);fixedPrecision=false;}catch(error){fixedPrecision&&=error instanceof RangeError;}
  Number.prototype.toFixed=fixed;
+ // Freeze the JS preference mirror as well: a real view must read the Rust owner.
+ const {settingsBridge}=await import('@ROOT@/sdk/nativesettings.js');
+ const settingsPerform=settingsBridge.perform;settingsBridge.perform=()=>{};
+ lord.settings.state({cmd:'patch',patch:{clock:{hour24:'12'}}});
+ const twelve=await until(()=>/\d+:\d+ (AM|PM)/.test(lord.nativeViews.text(clockHandle)));
+ const stalePreferences=settings.get().clock?.hour24!=='12';
+ lord.settings.state({cmd:'patch',patch:{clock:{hour24:'24'}}});
+ const twentyFour=await until(()=>!/\d+:\d+ (AM|PM)/.test(lord.nativeViews.text(clockHandle)));
+ const nativeViewPreferences=twelve&&twentyFour&&stalePreferences&&clockFacts===sentLocaleFacts;
+ lord.settings.state({cmd:'patch',patch:{clock:{hour24:'auto'}}});
+ settingsBridge.perform=settingsPerform;
  lord.locale.state({cmd:'patch',value:{lang:'ar',region:''}});
  translating=false;
  locale.set(value=>({...value,region:value.lang==='ar'?'ar_EG':'wrong'}));
@@ -122,7 +134,7 @@ async function run(){
  const automatic=await until(()=>locale.get().lang==='pt'&&direction()==='ltr');
  await sleep(80);
  const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
- console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,nativeFormatting,nativeLanguages,fixedPrecision,nativeViewLocale,nativeViewReload,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
+ console.log('native_locale-observation '+JSON.stringify({bound,noPayload,mirrorStale,observed,nativeUpdater,staleRejected,quiet,savedProfile,explicitDirection,remounted,packReload,singleReload,automatic,nativeTranslation,staleTranslation,nativeFormatting,nativeLanguages,fixedPrecision,nativeViewLocale,nativeViewReload,nativeViewPreferences,noJsLocale:legacy===0,legacy,saved:!!saved?.ok}));
 }
 run().catch(error=>console.error('native_locale driver: '+(error.stack||error)));
 "#;

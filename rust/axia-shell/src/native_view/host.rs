@@ -226,6 +226,7 @@ pub struct Host {
     app: Box<dyn NativeApp>,
     i18n: I18n,
     locale: Option<locale_source::Source>,
+    preferences: Option<(axia_state::Reader<Value>, axia_state::Subscription)>,
     assets: String,
     facts: Value,
     render_epoch: u64,
@@ -303,6 +304,7 @@ impl Host {
             app,
             i18n: I18n::new(assets, home),
             locale: None,
+            preferences: None,
             assets: assets.into(),
             facts: Value::Null,
             render_epoch: 0,
@@ -379,9 +381,23 @@ impl Host {
     }
     pub fn bind_locale(&mut self, home: &str, assets: &str) {
         self.locale = Some(locale_source::Source::new(home, assets));
+        if self.app.uses_preferences() {
+            let reader = crate::settings::with(home, |settings| settings.reader());
+            let changes = reader.subscribe();
+            self.preferences = Some((reader, changes));
+        }
     }
     pub fn facts(&mut self, mut facts: Value) {
-        if let Some(source) = &mut self.locale { source.apply(&mut self.i18n, &mut facts); }
+        if let Some(source) = &mut self.locale {
+            source.apply(&mut self.i18n, &mut facts);
+            if let Some(object) = facts.as_object_mut() { object.remove("settings"); }
+            if let Some(context) = facts["context"].as_object_mut() {
+                context.remove("preferenceRevision");
+                if let Some((reader, _)) = &self.preferences {
+                    context.insert("preferenceRevision".into(), json!(reader.revision()));
+                }
+            }
+        }
 
         if self.locale.is_none() && facts["context"]["localeRevision"] != self.facts["context"]["localeRevision"] {
             self.i18n.invalidate();
@@ -548,6 +564,7 @@ impl Host {
         context["height"] = json!(self.height);
         context["focused"] = json!(self.window_focused);
         context["renderEpoch"] = json!(self.render_epoch);
+        if let Some((reader, _)) = &self.preferences { context["preferenceRevision"] = json!(reader.revision()); }
         context
     }
     /// Asks the app for its tree and reconciles it into the scene.
@@ -571,7 +588,11 @@ impl Host {
             }
             input.insert("context".into(), context);
             let mut input = Value::Object(input);
-            let reply = self.app.request(&input);
+            let reply = if let Some((reader, changes)) = &self.preferences {
+                changes.take();
+                let preferences = reader.read();
+                self.app.sync_with_preferences(&input, &preferences)
+            } else { self.app.request(&input) };
             if let (Value::Object(facts), Value::Object(lent)) = (&mut self.facts, &mut input) {
                 for k in SYNC_FACTS {
                     if let (Some(v), Some(slot)) = (lent.remove(k), facts.get_mut(k)) {
@@ -1800,7 +1821,8 @@ impl Host {
         if self.icon_mode().is_some() {
             return;
         }
-        if self.locale.as_ref().is_some_and(|source| source.pending()) {
+        if self.locale.as_ref().is_some_and(|source| source.pending())
+            || self.preferences.as_ref().is_some_and(|(_, changes)| changes.pending()) {
             let facts = std::mem::take(&mut self.facts);
             self.facts(facts);
         }
@@ -1834,7 +1856,7 @@ impl Host {
         }
     }
     pub fn deadline(&self) -> Option<f64> {
-        if self.locale.as_ref().is_some_and(|source| source.pending()) || self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
+        if self.preferences.as_ref().is_some_and(|(_, changes)| changes.pending()) || self.locale.as_ref().is_some_and(|source| source.pending()) || self.app.invalidated() || self.window_source.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
         [
             self.next_sync,
             self.next_blink.filter(|_| self.field != 0),

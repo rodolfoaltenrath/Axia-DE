@@ -100,12 +100,21 @@ impl NativeApp for View {
             _ => Some(json!({})),
         }
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences(input, preferences)
+    }
     fn request(&mut self, input: &Value) -> Value {
+        self.request_with_preferences(input, &input["settings"])
+    }
+}
+impl View {
+    fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
         let mut state = self.service.borrow_mut();
         let now = Instant::now();
         match input["cmd"].as_str() {
             Some("sync") => {
-                state.configure(input, input, now);
+                state.configure_preferences(input, input, preferences, now);
                 state.tick(&mut self.session, now);
                 let tree = Self::tree(&state, input);
                 let effects = std::mem::take(&mut state.effects);

@@ -130,6 +130,10 @@ impl NativeApp for App {
         self.booted
             .then_some(if self.jobs.busy() { 50. } else { 200. })
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(input, preferences, crate::clock::now())
+    }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, crate::clock::now())
     }
@@ -532,6 +536,9 @@ impl App {
         }
     }
     pub fn request_at(&mut self, input: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(input, &input["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, input: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         let arg = string(&input["key"]);
         // A confirmation captures its snapshot/options and blocks background actions.
@@ -549,8 +556,8 @@ impl App {
                     .as_f64()
                     .filter(|n| n.is_finite())
                     .unwrap_or(980.);
-                self.region = input["settings"]["region"].as_str().unwrap_or("").into();
-                self.hour = input["settings"]["clock"]["hour24"]
+                self.region = preferences["region"].as_str().unwrap_or("").into();
+                self.hour = preferences["clock"]["hour24"]
                     .as_str()
                     .unwrap_or("auto")
                     .into();

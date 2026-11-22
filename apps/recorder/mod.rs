@@ -171,6 +171,10 @@ impl NativeApp for App {
     fn background_refresh_ms(&self) -> Option<f64> {
         (self.rec > 0 || self.play > 0 || self.record_start || self.play_start).then_some(100.)
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(input, preferences, crate::clock::now())
+    }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, crate::clock::now())
     }
@@ -751,12 +755,15 @@ impl App {
         }
     }
     pub fn request_at(&mut self, input: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(input, &input["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, input: &Value, preferences: &Value, now: i64) -> Value {
         match input["cmd"].as_str().unwrap_or("") {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
-                self.region = input["settings"]["region"].as_str().unwrap_or("").into();
-                self.hour = input["settings"]["clock"]["hour24"]
+                self.region = preferences["region"].as_str().unwrap_or("").into();
+                self.hour = preferences["clock"]["hour24"]
                     .as_str()
                     .unwrap_or("auto")
                     .into();

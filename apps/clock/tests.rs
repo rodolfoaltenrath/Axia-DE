@@ -105,7 +105,7 @@ fn locale_hour_cycle_and_day_labels_keep_the_existing_preferences() {
     tm.tm_hour = 13;
     tm.tm_min = 7;
     assert_eq!(a.time(&tm), "13:07");
-    a.settings["clock"]["hour24"] = json!("12");
+    a.hour_override = "12".into();
     assert_eq!(a.time(&tm), "1:07 PM");
     assert_eq!(a.days(&[])["key"], "clock.alarm.once");
     assert_eq!(a.days(&[0, 6])["key"], "clock.alarm.weekends");

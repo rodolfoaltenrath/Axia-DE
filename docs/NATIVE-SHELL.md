@@ -145,10 +145,18 @@ região, direção, separadores e revisão não cruzam o NativeBridge em JS. O h
 acorda por invalidação, inclusive sem timer do app, e ignora fatos de locale
 antigos. Separadores usam o cache compartilhado do perfil. A ABI de montagem da
 sessão exige o proprietário do contexto validado pelo adaptador; apps isolados
-continuam no caminho de fatos locais. Snapshots de settings permanecem pendentes.
+continuam no caminho de fatos locais. Preferências das views também vêm do
+proprietário Rust: NativeBridge não envia `settings` nem `preferenceRevision`
+na sessão. Somente modelos interessados assinam as mudanças; o sync recebe
+uma referência ao perfil, liberada antes de executar efeitos de persistência.
+Relógio guarda região/formato de hora; Monitor guarda seu bloco; Configurações
+mantém apenas os blocos editáveis e os valores pendentes. Não há cópia do perfil
+completo por view. Bootstrap de serviços, tema e escala ainda têm consumidores JS.
 `native_locale_runtime` cobre quatro variantes de tema/tamanho, com setters JS
 de texto e leitores legados de formatos bloqueados; o CI GPU=1
-publica `axia-native-locale`. Evidências mais recentes em `build/validation/native-view-locale/`.
+publica `axia-native-locale`. A integração também congela o espelho JS de
+preferências e exige que o Relógio alterne entre 12/24 h sem novos fatos.
+Evidências mais recentes em `build/validation/native-view-preferences/`.
 O Rust consulta os armazenamentos nativos de permissões e firewall na entrega
 e nos pulsos; revogar uma permissão cancela o toque sem atualização de settings.
 A gravação de permissões de notificações, validação de ID e revogação aos apps

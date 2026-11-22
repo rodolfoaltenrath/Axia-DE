@@ -167,6 +167,10 @@ impl NativeApp for App {
     fn refresh_ms(&self) -> Option<f64> {
         (self.jobs.busy() || self.save.as_ref().is_some_and(|s| s.job.is_some())).then_some(50.)
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences_at(input, preferences, crate::clock::now())
+    }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, crate::clock::now())
     }
@@ -622,6 +626,9 @@ impl App {
         }
     }
     pub fn request_at(&mut self, input: &Value, now: i64) -> Value {
+        self.request_with_preferences_at(input, &input["settings"], now)
+    }
+    fn request_with_preferences_at(&mut self, input: &Value, preferences: &Value, now: i64) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         let key = input["key"].as_str().unwrap_or("");
         match cmd {
@@ -639,8 +646,8 @@ impl App {
                     .unwrap_or(620.)
                     .max(0.);
                 self.i18n.lang = input["lang"].as_str().unwrap_or("en").into();
-                self.region = input["settings"]["region"].as_str().unwrap_or("").into();
-                self.hour_override = input["settings"]["clock"]["hour24"]
+                self.region = preferences["region"].as_str().unwrap_or("").into();
+                self.hour_override = preferences["clock"]["hour24"]
                     .as_str()
                     .unwrap_or("auto")
                     .into();

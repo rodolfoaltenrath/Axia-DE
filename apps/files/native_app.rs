@@ -68,12 +68,12 @@ fn advance(items:&[Value],from:i64,direction:i64)->Option<i64> {
 }
 
 impl FilesView {
-    fn theme(input: &Value) -> Value {
+    fn theme(input: &Value, preferences: &Value) -> Value {
         let mut theme = input["context"]["theme"].clone();
         if !theme.is_object() {
             theme = json!({});
         }
-        theme["nativeAppearance"] = json!(input["settings"]["nativeAppearance"].as_str().unwrap_or("adwaita"));
+        theme["nativeAppearance"] = json!(preferences["nativeAppearance"].as_str().unwrap_or("adwaita"));
         theme
     }
     fn size(input: &Value) -> (f64, f64) {
@@ -150,13 +150,13 @@ impl FilesView {
     fn selectable(&self, i: i64) -> bool {
         usize::try_from(i).ok().and_then(|i| self.menu_items.get(i)).is_some_and(|it| it.is_object() && it["header"].is_null() && it["disabled"] != true)
     }
-    fn session(&mut self, input: &Value, theme: &Value) -> Value {
+    fn session(&mut self, input: &Value, theme: &Value, preferences: &Value) -> Value {
         let (width, height) = Self::size(input);
         let request = if self.id == 0 {
             let args = &input["args"];
             json!({"op":"create","native":true,"mode":args["mode"].as_str().unwrap_or("browser"),"args":args,
                 "title":"","start":"","name":"","multiple":false,"filter":"","ignoreCase":false,
-                "preferences":input["settings"]["files"],"theme":theme,"apps":apps(input),"width":width,"height":height,
+                "preferences":preferences["files"],"theme":theme,"apps":apps(input),"width":width,"height":height,
                 "locale":input["lang"].as_str().unwrap_or("en")})
         } else {
             json!({"op":"poll","native":true,"id":self.id,"width":width,"height":height,"theme":theme,
@@ -227,12 +227,24 @@ impl FilesView {
 }
 
 impl NativeApp for FilesView {
+    fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
+        FilesView::key(self, key, chr, flags)
+    }
     /// Listings and jobs come from workers: polled at 16 ms while one is being worked, 100 ms idle.
     fn refresh_ms(&self) -> Option<f64> {
         Some(if self.loading { 16. } else { 100. })
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences(input, preferences)
+    }
     fn request(&mut self, input: &Value) -> Value {
-        let theme = Self::theme(input);
+        self.request_with_preferences(input, &input["settings"])
+    }
+}
+impl FilesView {
+    fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        let theme = Self::theme(input, preferences);
         match input["cmd"].as_str().unwrap_or("") {
             "sync" => {
                 let mut pending=Vec::new();
@@ -252,7 +264,7 @@ impl NativeApp for FilesView {
                         pending.extend(self.absorb(&changed));
                     }
                 }
-                let files = self.session(input, &theme);
+                let files = self.session(input, &theme, preferences);
                 let mut reply=self.reply(&files, input, &theme);
                 if !pending.is_empty() {
                     pending.extend(reply["effects"].as_array().into_iter().flatten().cloned());

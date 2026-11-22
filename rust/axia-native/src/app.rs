@@ -16,6 +16,15 @@ pub trait NativeApp {
         None
     }
     fn request(&mut self, input: &Value) -> Value;
+    /// Whether the scene model consumes profile preferences. Only these views
+    /// subscribe; presentation-only views do not wake for unrelated edits.
+    fn uses_preferences(&self) -> bool { false }
+    /// Session sync borrows the authoritative preferences, with no JSON snapshot.
+    /// The read is scoped to this call; persist edits through deferred effects.
+    /// Isolated/legacy callers continue to use request(input).
+    fn sync_with_preferences(&mut self, input: &Value, _preferences: &Value) -> Value {
+        self.request(input)
+    }
     /// Full specification behind a revisioned marker, for remount/context recovery.
     fn retained_tree(&self, _key: &str) -> Option<&Value> {
         None

@@ -35,7 +35,8 @@ pub struct App {
     pub theme: Value,
     pub width: f64,
     pub hover: String,
-    pub settings: Value,
+    pub region: String,
+    pub hour_override: String,
     pub lang: String,
     pub decimal: String,
     pub zone: String,
@@ -59,7 +60,8 @@ impl Default for App {
             theme: Value::Null,
             width: 560.,
             hover: String::new(),
-            settings: json!({}),
+            region: String::new(),
+            hour_override: "auto".into(),
             lang: "en".into(),
             decimal: ".".into(),
             zone: "UTC".into(),
@@ -77,6 +79,10 @@ impl Default for App {
 impl NativeApp for App {
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
+    }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences(input, preferences)
     }
     fn request(&mut self, input: &Value) -> Value {
         App::request(self, input)
@@ -117,7 +123,7 @@ impl App {
             .unwrap_or_else(|| day.to_string())
     }
     pub fn time(&mut self, t: &libc::tm) -> String {
-        let region = self.settings["region"].as_str().unwrap_or("").to_owned();
+        let region = self.region.clone();
         let rlang = if region.is_empty() {
             self.lang.clone()
         } else {
@@ -131,9 +137,9 @@ impl App {
             .i18n
             .entry(&rlang, "format", "regions")
             .unwrap_or(Value::Null);
-        let hour12 = match self.settings["clock"]["hour24"].as_str() {
-            Some("24") => false,
-            Some("12") => true,
+        let hour12 = match self.hour_override.as_str() {
+            "24" => false,
+            "12" => true,
             _ => own[&region]["hour12"]
                 .as_bool()
                 .unwrap_or(base.as_bool().unwrap_or(false)),
@@ -229,17 +235,18 @@ impl App {
         json!({"effect":{"host":true,"kind":"clock"}})
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        self.request_with_preferences(input, &input["settings"])
+    }
+    fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
         let now = clock::now();
         let cmd = input["cmd"].as_str().unwrap_or("");
         let k = input["key"].as_str().unwrap_or("");
         match cmd {
             "icon" => return ui::icon(input["size"].as_f64().unwrap_or(32.)),
             "sync" => {
-                self.settings = input["settings"]
-                    .as_object()
-                    .map(|_| input["settings"].clone())
-                    .unwrap_or(json!({}));
-                clock::with(|s| s.sync(&self.settings["clock"]));
+                self.region = preferences["region"].as_str().unwrap_or("").into();
+                self.hour_override = preferences["clock"]["hour24"].as_str().unwrap_or("auto").into();
+                clock::with(|s| s.sync(&preferences["clock"]));
                 self.lang = input["lang"].as_str().unwrap_or("en").into();
                 self.decimal = input["context"]["decimal"].as_str().unwrap_or(".").into();
                 self.theme = input["context"]["theme"].clone();

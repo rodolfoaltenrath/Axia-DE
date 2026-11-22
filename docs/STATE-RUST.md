@@ -48,8 +48,9 @@ A mesma preservação de referências vale para `migrateSettings`.
 
 O root monta `shell:settings`, vinculado ao proprietário validado da sessão e
 independente do tema. Esse observador consome invalidações e publica snapshots
-somente quando a revisão muda, sem polling. Os demais apps ainda recebem
-preferências nos fatos JSON; a leitura direta nesses consumidores está pendente.
+somente quando a revisão muda, sem polling. As views da sessão que consomem
+preferências agora as leem por empréstimo do proprietário Rust; esses dados
+não entram nos fatos JSON de NativeBridge.
 O host `.lpk` preserva o store e as migrações locais.
 
 O modelo também possui o prazo monotônico de 300 ms, serialização e confirmação
@@ -772,7 +773,7 @@ escalares de apresentação; essa compatibilidade interna não serializa JSON pe
 ponte. O host isolado mantém o locale local. Snapshots de `settings`,
 `preferenceRevision`, escala, tema e outros serviços ainda estão no adaptador;
 retomar pela leitura tipada de preferências nos consumidores, sem introduzir uma
-cópia do perfil completo por view.
+cópia do perfil completo por view. Essa etapa foi implementada na fatia abaixo.
 
 Testes Rust verificam precedência sobre fatos falsos, português/inglês, região,
 direção explícita, recarga de catálogo, deadline imediato e retorno à ociosidade,
@@ -1144,3 +1145,53 @@ a view e atualização após trocar idioma. Compositor/frontend recompilados;
 integração dos apps compilados, oito cenários de Arquivos, seis do launcher,
 quatro de foco e dois contratos LPK também passaram. Capturas e logs continuam
 em `build/validation/forcequit/`, com o mesmo teste obrigatório no CI.
+
+### Preferências emprestadas pelas views da sessão
+
+`NativeApp::uses_preferences` identifica os modelos que precisam do perfil.
+Na montagem validada da sessão, o host lhes associa um `Reader<Value>` e uma
+assinatura do proprietário de configurações. Durante `sync_with_preferences`,
+o modelo recebe uma referência emprestada ao valor autoritativo. O empréstimo
+termina antes da fila de efeitos; alterações persistentes continuam como efeitos
+adiados. Não se deve gravar nesse proprietário dentro do sync emprestado.
+
+NativeBridge não assina o espelho de preferências da sessão nem serializa
+`settings`/`preferenceRevision`. O host descarta esses campos antigos, atribui
+a revisão nativa ao contexto interno e reage às invalidações sem timer adicional.
+Várias edições antes do tick se agrupam; após o consumo não resta prazo da
+assinatura. Views sem interesse em preferências não assinam essas alterações.
+O host isolado mantém fatos locais e a API de pedidos anterior.
+
+Backup, Calendário, Câmera, Caracteres, Relógio, Contatos, Arquivos, Logs,
+Monitor, Notas, Gravador, Lembretes, Scanner, Configurações e a view de
+restauração usam essa entrada. Relógio guarda só região e formato de hora;
+o cache do Monitor guarda apenas seu bloco. O editor de Configurações conserva
+somente os blocos usados por seus controles, além das alterações pendentes e
+valores observados necessários para recuperar uma falha. Dados de outros apps,
+posições de janelas e sessão salva não são copiados para esse editor.
+
+Testes verificam identidade de ponteiro com o leitor nativo, prioridade sobre
+fatos falsos, revisão atual, atualização sem transporte, retorno à ociosidade e
+cancelamento pelo ciclo de vida do host. O editor também é exercitado com um
+bloco alheio grande, edição pendente e falha de persistência. A integração do
+Relógio congela o espelho JS de preferências, alterna 12/24 h diretamente no
+proprietário e exige atualização na cena sem novos fatos à view. Montagens e
+atualizações são inspecionadas para proibir os campos removidos.
+
+Bootstrap de serviços e consumidores de tema/escala ainda precisam migrar;
+o espelho público de configurações continua necessário para esses adaptadores.
+
+Validação de 2026-11-22 no Fedora 44 em contêiner: 1.268 testes do workspace
+Rust passaram, incluindo 620 da shell; 22 testes dependentes de ambiente ficam
+ignorados nessa execução padrão. Também passaram sete contratos LPK,
+integração dos apps compilados e 40 cenários gráficos de locale/preferências,
+Arquivos, restauração, configurações, relógio, foco, notificações e cabeçalhos.
+Compositor otimizado, bundles e instalação privada foram gerados; captura do
+Relógio inspecionada. Logs/capturas em `build/validation/native-view-preferences/`.
+Nenhuma instalação ou reinicialização da sessão física foi executada.
+
+As três amostras da instalação privada passaram no orçamento de ociosidade:
+mediana de 109.645.824 bytes (104,566 MiB) de RSS e 12,350 chamadas de espera/s,
+com limites impostos de 120 MiB e 15/s. Relatório em
+`build/validation/native-view-preferences/idle/report.json`. Essa coleta
+headless verifica o orçamento; não substitui as medições físicas do encerramento.

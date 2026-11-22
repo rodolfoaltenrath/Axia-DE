@@ -47,6 +47,10 @@ impl NativeApp for App {
         self.i18n = I18n::new(assets, home);
         self.index = None;
     }
+    fn uses_preferences(&self) -> bool { true }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        self.request_with_preferences(input, preferences)
+    }
     fn request(&mut self, input: &Value) -> Value {
         App::request(self, input)
     }
@@ -144,6 +148,9 @@ impl App {
             .collect()
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        self.request_with_preferences(input, &input["settings"])
+    }
+    fn request_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
         let cmd = input["cmd"].as_str().unwrap_or("");
         let k = input["key"].as_str().unwrap_or("");
         match cmd {
@@ -151,7 +158,7 @@ impl App {
             "sync" => {
                 self.theme = input["context"]["theme"].clone();
                 self.lang = input["lang"].as_str().unwrap_or("en").into();
-                let recent = &input["settings"]["emojiRecent"];
+                let recent = &preferences["emojiRecent"];
                 if recent.is_array() && *recent != self.recent_facts {
                     self.recent = recent
                         .as_array()
@@ -165,7 +172,7 @@ impl App {
                 }
                 if !self.initialized {
                     self.initialized = true;
-                    self.tone = input["settings"]["emojiTone"].as_u64().unwrap_or(0).min(5) as u8;
+                    self.tone = preferences["emojiTone"].as_u64().unwrap_or(0).min(5) as u8;
                     if !self.recent.is_empty() {
                         self.group = "recent".into();
                     }
