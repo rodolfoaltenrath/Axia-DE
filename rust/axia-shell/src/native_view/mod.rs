@@ -239,8 +239,11 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
             titlebar::TitleBar::with_session(session)
         } else { titlebar::TitleBar::with_windows(session.reader()) }) as Box<dyn NativeApp>).or_else(|| app(id))
     } else if id == "forcequit" {
-        windows.clone().map(|reader| Box::new(crate::forcequit::App::with_windows(
-            std::rc::Rc::new(crate::winmodel::WindowReader(reader)))) as Box<dyn NativeApp>).or_else(|| app(id))
+        owner.clone().map(|session| {
+            let source = std::rc::Rc::new(crate::winmodel::WindowReader(session.reader()));
+            Box::new(if native_locale { crate::forcequit::App::with_window_metadata(source,session.catalog_store()) }
+                else { crate::forcequit::App::with_windows(source) }) as Box<dyn NativeApp>
+        }).or_else(|| app(id))
     } else if id == "shell:window-context" {
         owner.clone().map(|session| Box::new(window_context::WindowContext::new(session)) as Box<dyn NativeApp>)
     } else if id == "shell:menubar" {

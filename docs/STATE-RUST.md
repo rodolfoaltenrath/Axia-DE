@@ -154,16 +154,34 @@ A view monta os grupos a partir dessas referências. O catálogo compartilhado
 de apps ainda fornece nomes localizados, indicadores de pacote/painel e
 descritores de ícone. O catálogo só depende de apps e idioma; o adaptador
 `NativeView` deixou de assinar o espelho de janelas e retirou `windowFacts`.
-O manifesto do painel agora pede metadados de apps, não fatos de janelas.
+Na sessão, o manifesto declara `catalogSource: 'native'`: o painel compartilha
+o Store de metadados do Session e assina suas revisões. `NativeBridge` inicializa
+a importação compartilhada antes do mount e não assina nem envia catálogo/registro
+à view. Nomes, classificação e ícones vêm por empréstimo dessa fonte; fatos
+antigos não substituem o catálogo, inclusive quando ele está vazio. Hosts locais
+e isolados conservam os fatos explícitos pelo contrato `facts: 'apps'`.
 A correspondência de identidade desktop/WM_CLASS é compartilhada com o launcher.
 
-A revisão do leitor invalida a view, inclusive quando o modelo muda sem
+A revisão do leitor e a do catálogo invalidam a view, inclusive quando o modelo muda sem
 atualizar o espelho JS. Antes de despachar uma ação, o host sincroniza qualquer
 invalidação pendente: uma seleção removida não pode iniciar encerramento entre
 a mutação do modelo e o próximo quadro. A assinatura não adiciona polling.
 
-O catálogo de apps, a moldura e o espelho JS continuam no escopo das próximas
+A descoberta/importação inicial dos apps, a moldura e o espelho JS continuam no escopo das próximas
 etapas. Não é uma sessão sem JavaScript.
+
+Validação do catálogo direto no painel: 684 testes da shell, 15 do app, oito
+contratos LPK, quatro cenários ampliados do painel e 36 cenários de regressão
+de aparência/menus/comandos passaram, além do encerramento instalado por
+timeout/SIGTERM. Os dois testes novos verificam atualização por assinatura,
+seleção preservada após renomear, erro preservado, fonte vazia e cancelamento
+do encerramento quando o catálogo remove o grupo antes da próxima entrada.
+A integração exige ausência de registry/catalog nos fatos da view, revisão
+nativa sem fatos novos e rejeição de metadados antigos. Quatro capturas são
+idênticas às anteriores; texto pintado é verificado em claro/escuro e 640/1000 px.
+Build GPU=1, bundles e instalação privada passaram. Evidências em
+`build/validation/native-forcequit-catalog/`; medições físicas continuam no
+encerramento do roadmap.
 
 ## Controlador de encerramento da sessão
 

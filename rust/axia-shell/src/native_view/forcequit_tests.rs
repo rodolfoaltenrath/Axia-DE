@@ -44,3 +44,33 @@ fn native_handle_rejects_unknown_ids_and_invalid_json() {
         axia_native_app_free(std::ptr::null_mut());
     }
 }
+
+#[test]
+fn forcequit_reads_shared_catalog_and_revalidates_selection_before_quit() {
+    use super::Host;
+    use crate::runtime::native as scene;
+    use serde_json::json;
+    let mut session = crate::winmodel::Session::default();
+    session.call("open",&[json!({}),json!({"app":"notes"})]).unwrap();
+    let mut control = crate::app_control::Controller::new(session.clone());
+    control.request(&json!({"cmd":"metadata","registry":[{"id":"notes","name":"Native Notes"}],"catalog":[]}));
+    let node = scene::create(scene::VIEW);
+    let mut host = Host::new(node,Box::new(crate::forcequit::App::with_window_metadata(
+        std::rc::Rc::new(crate::winmodel::WindowReader(session.reader())),session.catalog_store())),"",None);
+    host.facts(json!({"registry":[{"id":"notes","name":"Forged Notes","builtin":true}]}));
+    assert_ne!(host.find_text("Native Notes"),0);
+    assert_eq!(host.find_text("Forged Notes"),0);
+    host.action(&json!({"action":["select","notes"]}));
+    control.request(&json!({"cmd":"metadata","registry":[{"id":"notes","name":"Renamed Notes"}],"catalog":[]}));
+    assert_eq!(host.deadline(),Some(0.));
+    host.tick(0.);
+    assert_ne!(host.find_text("Renamed Notes"),0);
+    control.request(&json!({"cmd":"metadata","registry":[{"id":"notes","builtin":true}],"catalog":[]}));
+    // No frame or new JS facts before the pending action: native input preparation must revalidate.
+    host.action(&json!({"action":["quit"]}));
+    assert!(host.take().is_none());
+    assert_eq!(host.find_text("Renamed Notes"),0);
+    assert!(host.deadline().is_none());
+    drop(host);
+    scene::destroy(node);
+}

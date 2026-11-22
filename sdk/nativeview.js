@@ -210,7 +210,8 @@ function NativeInputs(props) {
 }
 const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, handleRef, stateSource, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
   const preferences = useStore(appHost && manifest.settings ? preferenceFacts : emptyFactsStore);
-  const apps = useStore(manifest.id === 'forcequit' || manifest.facts === 'appcontrol' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
+  const nativeCatalog = !appHost && manifest.catalogSource === 'native';
+  const apps = useStore(nativeCatalog ? emptyFactsStore : manifest.id === 'forcequit' || manifest.facts === 'appcontrol' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
   const clock = useStore(manifest.facts === 'clock' ? clockState : emptyFactsStore);
   useStore(manifest.facts === 'system' ? screenFacts : emptyFactsStore);
   const ref = useRef(null), mounted = useRef({ handle: 0, sent: '' });

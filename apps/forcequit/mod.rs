@@ -33,6 +33,7 @@ pub struct App {
     source: Option<Rc<dyn WindowSource>>,
     revision: Option<u64>,
     metadata: axia_state::Store<Value>,
+    metadata_changes: Option<axia_state::Subscription>,
 }
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
@@ -151,12 +152,14 @@ impl App {
         Self { source: Some(source), ..Self::default() }
     }
     pub fn with_window_metadata(source: Rc<dyn WindowSource>, metadata: axia_state::Store<Value>) -> Self {
-        Self { source: Some(source), metadata, ..Self::default() }
+        let changes = metadata.subscribe();
+        Self { source: Some(source), metadata, metadata_changes: Some(changes), ..Self::default() }
     }
     fn refresh(&mut self, input: &Value) {
+        if let Some(changes) = &self.metadata_changes { changes.take(); }
         self.groups = if let Some(source) = &self.source {
             let metadata = self.metadata.read();
-            let facts = if input["registry"].is_array() { input } else { &metadata };
+            let facts = if self.metadata_changes.is_none() && input["registry"].is_array() { input } else { &metadata };
             let groups = native_groups(source.as_ref(), facts, false);
             self.revision = Some(source.revision());
             groups
@@ -267,6 +270,7 @@ impl crate::native_view::NativeApp for App {
 
     fn invalidated(&self) -> bool {
         self.source.as_ref().is_some_and(|source| self.revision != Some(source.revision()))
+            || self.metadata_changes.as_ref().is_some_and(|changes| changes.pending())
     }
     fn request(&mut self, input: &Value) -> Value {
         match s(input, "cmd") {

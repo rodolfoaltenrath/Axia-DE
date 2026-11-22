@@ -315,3 +315,34 @@ fn session_metadata_is_shared_by_reference_and_survives_controller_recreation() 
     app.request(&json!({"cmd":"metadata","registry":null,"catalog":[]}));
     assert_eq!(metadata.revision(),revision,"invalid imports cannot clear the shared catalog");
 }
+
+#[test]
+fn shared_catalog_invalidates_rows_preserves_selection_and_rejects_old_view_facts() {
+    use crate::native_view::NativeApp;
+    let source = Rc::new(Source::default());
+    source.set(vec![json!({"id":"notes#a","app":"notes"})]);
+    let metadata = axia_state::Store::new(json!({"registry":[{"id":"notes","name":"Native Notes"}],"catalog":[]}));
+    let mut app = App::with_window_metadata(source,metadata.clone());
+    let stale = json!({"cmd":"sync","registry":[{"id":"notes","name":"Forged Notes","builtin":true}]});
+    NativeApp::request(&mut app,&stale);
+    assert_eq!(app.groups[0].name,"Native Notes");
+    NativeApp::request(&mut app,&json!({"cmd":"select","key":"notes"}));
+    NativeApp::request(&mut app,&json!({"cmd":"next","result":"Keep this error"}));
+    assert!(!app.invalidated());
+    metadata.set(json!({"registry":[{"id":"notes","name":"Renamed Notes"}],"catalog":[]}));
+    assert!(app.invalidated());
+    NativeApp::request(&mut app,&stale);
+    assert_eq!(app.groups[0].name,"Renamed Notes");
+    assert_eq!(app.selected.as_deref(),Some("notes"));
+    assert_eq!(app.error,"Keep this error");
+    assert!(!app.invalidated());
+    metadata.set(json!({"registry":[{"id":"notes","name":"Panel","builtin":true}],"catalog":[]}));
+    NativeApp::request(&mut app,&stale);
+    assert!(app.groups.is_empty());
+    assert!(app.selected.is_none());
+    assert!(NativeApp::request(&mut app,&json!({"cmd":"quit"})).is_null());
+    metadata.set(serde_json::Value::Null);
+    NativeApp::request(&mut app,&stale);
+    assert_eq!(app.groups[0].key,"notes","empty native metadata must not use the forged builtin flag");
+    assert_ne!(app.groups[0].name,"Forged Notes","empty native metadata must not fall back to stale view data");
+}
