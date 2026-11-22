@@ -240,7 +240,7 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         windows.clone().map(|reader| Box::new(crate::forcequit::App::with_windows(
             std::rc::Rc::new(crate::winmodel::WindowReader(reader)))) as Box<dyn NativeApp>).or_else(|| app(id))
     } else if id == "shell:window-context" {
-        windows.clone().map(|reader| Box::new(window_context::WindowContext::new(reader)) as Box<dyn NativeApp>)
+        owner.clone().map(|session| Box::new(window_context::WindowContext::new(session)) as Box<dyn NativeApp>)
     } else if id == "shell:menubar" {
         windows.clone().map(|reader| Box::new(menubar::MenuBar::with_windows(reader,&assets,home.as_deref())) as Box<dyn NativeApp>).or_else(||app(id))
     } else if id == "shell:switcher" {

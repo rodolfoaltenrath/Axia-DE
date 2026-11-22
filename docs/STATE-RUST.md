@@ -1505,10 +1505,18 @@ são preparadas antes dos eventos; a próxima sincronização ainda pinta o esta
 preparado. Isso evita perder o primeiro hover quando a lista nativa muda antes
 do evento. Eventos do menu verificam que a janela e seu pedido de menu ainda
 existem, rejeitando comandos para outro ID. Fechamento de janela/pedido apaga
-a árvore sem depender de um novo snapshot JS. A montagem inicial ainda depende
-da condição no tema, e efeitos de foco/fechar/minimizar/maximizar passam pelo
-adaptador existente, preservando guardas. Movimento usa o comando nativo de
-desktop já implementado. O Menu genérico e a API LPK não mudam.
+a árvore sem depender de um novo snapshot JS. O modelo retém um clone do
+Session do contexto, sem ciclo com seu proprietário. `WindowMenuAction` limpa
+o pedido de menu junto de minimizar/mover/alternar maximização numa transação
+tipada. Escape e
+clique externo também limpam o pedido no Rust. A view publica `windowModel`
+para atualizar o espelho; não chama wrappers JS nem reenvia fatos de apps/telas.
+A montagem inicial ainda depende da condição no tema. Foco da moldura,
+cálculo visual da área útil e guardas de fechamento usam os adaptadores
+existentes; a guarda recebe o menu já encerrado no Rust. Maximizar preserva o
+retângulo normal do modelo e muda a flag; o tema continua derivando o frame
+visível pela área útil, como antes. O Menu genérico e a API
+LPK não mudam.
 
 Validação em Fedora 44 privado: passaram 677 testes da shell (sete ignorados),
 oito contratos LPK, quatro cenários novos e 12 de regressão de
@@ -1526,6 +1534,26 @@ passaram com limites impostos: 12,450 poll/s e 104,816 MiB de RSS, abaixo de
 15 poll/s e 120 MiB. Sem prova de ganho causal e sem instalar/reiniciar a sessão
 física; medições físicas ficam para o encerramento. Evidências em
 `build/validation/native-window-context/`. Nenhuma caixa inteira concluída.
+
+A execução nativa do menu foi validada em Fedora 44 privado: passaram 678
+testes da shell (sete ignorados), oito contratos LPK e quatro cenários
+ampliados do contexto, além de 16 de desktops/cabeçalhos/menu Janela. O teste
+novo exige minimizar, mover/criar e limpar o menu numa revisão; repetição não
+muta e capacidade esgotada apenas encerra o pedido. Zoom mantém o retângulo
+normal, e fechar publica o snapshot antes de pedir a guarda do app.
+A integração intercepta closeWindowMenu, minimize, toggleMaximize,
+moveToDesktop e comandos desktopSession de movimento, exigindo contagem zero.
+Verifica a área útil pelo frame calculado e pelo layout real do conteúdo após
+maximizar, fechamento recusado pela guarda, criação e persistência da contagem
+pelo serviço residente. As quatro capturas são idênticas byte a byte às de
+`native-window-context`. Build completa GPU=1, bundles default/app-host,
+instalação privada e encerramento por timeout/SIGTERM passaram. Evidências em
+`build/validation/native-window-context-commands/`.
+
+Três amostras de ociosidade passaram com limites impostos: 12.550 poll/s e
+104.430 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem prova de ganho causal;
+medições físicas seguem para o encerramento. Montagem, foco, área útil e
+guardas de fechar continuam no roadmap; nenhuma caixa inteira concluída.
 
 ### Movimento de janela para desktop numa transação nativa
 

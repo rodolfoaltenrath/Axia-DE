@@ -14,7 +14,7 @@ fn context_rows_coordinates_and_checks_follow_native_revisions() {
     call(&mut session,"setDesktops",&[json!([10,20]),json!(10)]);
     call(&mut session,"open",&[json!({"app":"notes"})]);
     call(&mut session,"patch",&[json!("notes"),json!({"windowMenu":{"x":100,"y":80}})]);
-    let mut menu = WindowContext::new(session.reader());
+    let mut menu = WindowContext::new(session.clone());
     let tree = menu.request(&input())["tree"].clone();
     assert_eq!(tree["x"],100.); assert_eq!(tree["y"],80.);
     assert_eq!(tree["items"][1]["checked"],false);
@@ -38,22 +38,83 @@ fn context_rows_coordinates_and_checks_follow_native_revisions() {
     assert!(menu.request(&input())["tree"].is_null());
 }
 #[test]
-fn keyboard_pointer_and_dismiss_revalidate_the_window_before_effects() {
+fn keyboard_pointer_and_dismiss_revalidate_and_mutate_the_native_owner() {
     let mut session = Session::default();
     call(&mut session,"open",&[json!({"app":"notes"})]);
-    call(&mut session,"patch",&[json!("notes"),json!({"windowMenu":{"x":10,"y":20}})]);
-    let mut menu = WindowContext::new(session.reader()); menu.request(&input());
+    let mut menu = WindowContext::new(session.clone());
+    let reader = session.reader();
+    let open = |session: &mut Session, menu: &mut WindowContext| {
+        call(session,"patch",&[json!("notes"),json!({"windowMenu":{"x":10,"y":20}})]);
+        menu.request(&input());
+    };
+    open(&mut session,&mut menu);
     menu.key("Home","",0).unwrap();
+    let revision = reader.revision();
     let reply = menu.key("Enter","",0).unwrap();
-    assert_eq!(reply["effects"][0]["command"]["action"],"minimize");
-    assert_eq!(reply["effects"][0]["id"],"notes");
-    assert!(menu.key("Escape","",0).unwrap()["effects"][0]["command"].is_null());
+    assert_eq!(reply["effects"][0]["kind"],"windowModel");
+    assert_eq!(reader.revision(),revision+1);
+    assert!(reader.read().window("notes").unwrap().minimized());
+    assert!(reader.read().window("notes").unwrap().window_menu().is_none());
+    open(&mut session,&mut menu);
+    let revision = reader.revision();
+    let frame = reader.read().window("notes").unwrap().frame();
+    let zoom = menu.request(&json!({"cmd":"windowContext","key":{"action":"zoom","id":"notes"}}));
+    assert_eq!(zoom["effects"].as_array().unwrap().len(),1);
+    assert_eq!(reader.revision(),revision+1);
+    assert!(reader.read().window("notes").unwrap().maximized());
+    assert_eq!(reader.read().window("notes").unwrap().frame(),frame,"maximizing retains normal geometry");
+    assert!(reader.read().window("notes").unwrap().window_menu().is_none());
+    open(&mut session,&mut menu);
+    let revision = reader.revision();
+    assert_eq!(menu.key("Escape","",0).unwrap()["effects"][0]["kind"],"windowModel");
+    assert_eq!(reader.revision(),revision+1);
+    assert!(reader.read().window("notes").unwrap().window_menu().is_none());
+    open(&mut session,&mut menu);
     let forged = json!({"cmd":"windowContext","key":{"action":"close","id":"other"}});
     assert!(menu.request(&forged)["effects"].as_array().unwrap().is_empty());
+    assert!(reader.read().window("notes").unwrap().window_menu().is_some());
     let close = json!({"cmd":"windowContext","key":{"action":"close","id":"notes"}});
-    assert_eq!(menu.request(&close)["effects"][0]["command"]["action"],"close");
+    let reply = menu.request(&close);
+    assert_eq!(reply["effects"][0]["kind"],"windowModel");
+    assert_eq!(reply["effects"][1]["command"]["action"],"close");
+    assert!(reader.read().window("notes").is_some(),"the app's close guard must still run");
+    assert!(reader.read().window("notes").unwrap().window_menu().is_none());
     call(&mut session,"close",&[json!("notes")]);
     assert!(menu.request(&close)["effects"].as_array().unwrap().is_empty());
     assert!(menu.key("Enter","",0).is_none());
     assert!(menu.request(&input())["tree"].is_null());
+}
+
+#[test]
+fn native_menu_moves_and_dismissal_publish_one_window_revision() {
+    let mut session = Session::default();
+    call(&mut session,"open",&[json!({"app":"notes"})]);
+    let reader = session.reader();
+    let mut menu = WindowContext::new(session.clone());
+    let open = |session: &mut Session, menu: &mut WindowContext| {
+        call(session,"patch",&[json!("notes"),json!({"windowMenu":{"x":10,"y":20}})]);
+        menu.request(&input());
+    };
+    open(&mut session,&mut menu);
+    let revision = reader.revision();
+    let action = json!({"cmd":"windowContext","key":{"action":"newDesktop","id":"notes"}});
+    let reply = menu.request(&action);
+    assert_eq!(reader.revision(),revision+1);
+    assert_eq!(reader.read().desktops(),&[1,2]);
+    assert_eq!(reader.read().window("notes").unwrap().desktop(),2);
+    assert!(reader.read().window("notes").unwrap().window_menu().is_none());
+    assert_eq!(reply["effects"].as_array().unwrap().len(),1);
+    assert_eq!(reply["effects"][0]["kind"],"windowModel");
+    let revision = reader.revision();
+    assert!(menu.request(&action)["effects"].as_array().unwrap().is_empty());
+    assert_eq!(reader.revision(),revision);
+    assert_eq!(reader.read().active_desktop(),1);
+    while reader.read().desktops().len()<crate::winmodel::desktops::MAX_DESKTOPS { call(&mut session,"createDesktop",&[]); }
+    open(&mut session,&mut menu);
+    let revision = reader.revision();
+    menu.request(&action);
+    assert_eq!(reader.revision(),revision+1,"capacity failure only dismisses the menu");
+    assert_eq!(reader.read().desktops().len(),crate::winmodel::desktops::MAX_DESKTOPS);
+    assert_eq!(reader.read().window("notes").unwrap().desktop(),2);
+    assert!(reader.read().window("notes").unwrap().window_menu().is_none());
 }

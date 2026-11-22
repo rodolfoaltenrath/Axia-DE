@@ -15,7 +15,7 @@ fn own_frame_window_context_reads_native_state_and_preserves_commands() {
                 assert!(pixels.enumerate_pixels().filter(|(x,y,pixel)| *x>=200 && *x<390 && *y>=160 && *y<300 && pixel.0==ink).count()>30,"native context menu ink");
                 assert!(pixels.enumerate_pixels().filter(|(x,y,pixel)| *x>=410 && *x<630 && *y>=205 && *y<330 && pixel.0==ink).count()>20,"native desktop submenu must actually be painted");
             });
-            for flag in ["bound","noRows","position","nativeChecks","nativeDesktops","mirrorStale","moved","escaped","minimized","staleAction","ownFrame","closed","saved"] {
+            for flag in ["bound","noRows","position","nativeChecks","nativeDesktops","mirrorStale","moved","escaped","minimized","staleAction","ownFrame","guardKept","zoomGeometry","nativeCommands","nativeCreated","closed","saved"] {
                 assert_eq!(report[flag],true,"{mode}/{width}/{flag}: {report}");
             }
         }
@@ -27,6 +27,7 @@ import {render,View,Text} from '@lordos/runtime';
 import {Window} from '@ROOT@/themes/default/components/Window.jsx';
 import {configureWindows,wm,useWindows,getApp,setDesktops,desktopList} from '@ROOT@/sdk/windows.js';
 import {settings} from '@ROOT@/sdk/settings.js';
+import {startDesktops} from '@ROOT@/sdk/desktops.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {locale,t} from '@ROOT@/sdk/i18n.js';
@@ -35,9 +36,10 @@ import {media} from '@ROOT@/sdk/media.js';
 locale.set({...locale.get(),lang:'en'});enableShellLayers();
 settings.set({language:'en',mode:'@MODE@',effects:false,reduceMotion:true,nativeAppearance:'axia'});
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
-const Body=()=>h(View,{style:{flex:1,padding:20}},h(Text,{style:{color:theme.text}},'Own content'));
+const body={current:null};
+const Body=()=>h(View,{ref:body,style:{flex:1,padding:20}},h(Text,{style:{color:theme.text}},'Own content'));
 configureWindows({apps:[{id:'probe',name:'Probe',Component:Body},{id:'own',name:'Own frame',ownFrame:true,Component:Body}],workArea:{x:10,y:28,w:@WIDTH@-20,h:650}});
-setDesktops([10,20],10);
+startDesktops();setDesktops([10,20],10);
 const id=wm.open('probe',{args:{csd:true},frame:{x:40,y:55,w:360,h:250}});
 let handle=0,bound=false,noRows=true;
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts;
@@ -46,6 +48,13 @@ lord.nativeViews.mount=(node,key,text,...sources)=>{const value=mount(node,key,t
 lord.nativeViews.facts=(key,text)=>{if(key===handle)inspect(text);return facts(key,text);};
 function App(){const{mounted,focused}=useWindows();return h(ThemeProvider,{tokens:theme},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},mounted.map(win=>h(Window,{key:win.id,win,app:getApp(win.id),t:theme,focused:win.id===focused}))));}
 render(h(App));
+let legacyCommands=0,bridgedMoves=0;
+for(const name of ['closeWindowMenu','minimize','toggleMaximize','moveToDesktop']){
+ const original=wm[name];wm[name]=(...args)=>{legacyCommands++;return original(...args);};
+}
+const request=lord.nativeApps.request;
+lord.nativeApps.request=function(text){const input=JSON.parse(text);if(input.cmd==='desktopSession'&&['move','moveNew'].includes(input.action))bridgedMoves++;return request.call(this,text);};
+
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<100&&!fn();i++)await sleep(20);return!!fn();}
 const find=label=>lord.nativeViews.findText(handle,label);
@@ -67,15 +76,24 @@ async function run(){
  await until(()=>{const node=find(t('shell.desktops.name',{n:3}));return node&&lord.getLayout(node)[2]>0;});await sleep(60);
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);
  await point(t('shell.desktops.name',{n:3}),'down');const activeBeforeMove=state().active;await point(t('shell.desktops.name',{n:3}),'up');const moved=await until(()=>win(id)?.desktop===30&&!wm.get(id)?.windowMenu)&&state().active===activeBeforeMove;
+ wm.focus(id);await open(id);await point(t('shell.desktops.moveTo'),'move');await click(t('shell.desktops.new'));
+ const nativeCreated=await until(()=>{const current=state();return current.desktops.length===4&&win(id)?.desktop===current.desktops.at(-1)&&!wm.get(id)?.windowMenu&&settings.get().desktopCount===4;});
  wm.focus(id);await open(id);lord.nativeViews.key('Escape','',0);__lordNativeView();const escaped=await until(()=>!wm.get(id)?.windowMenu);
+ await open(id);await click(t('shell.window.maximize'));await until(()=>!win(id)?.maximized);
+ await open(id);await click(t('shell.window.maximize'));
+ const zoomGeometry=await until(()=>{const frame=wm.frame(wm.get(id)),layout=lord.getLayout(body.current.id);return win(id)?.maximized&&frame.x===10&&frame.y===28&&frame.w===@WIDTH@-20&&frame.h===650&&layout[0]===10&&layout[1]===28&&layout[2]===@WIDTH@-20&&layout[3]===650;});
+ const zoomDetails={frame:wm.frame(wm.get(id)),layout:lord.getLayout(body.current.id)};
  await open(id);await click(t('shell.window.minimize'));const minimized=await until(()=>win(id)?.minimized===true&&!wm.get(id)?.windowMenu);
  wm.focus(id);await open(id);raw('close',id);await until(()=>!lord.nativeViews.text(handle));
  let calls=0;const close=wm.close;wm.close=(...args)=>{calls++;return close(...args);};
  lord.nativeViews.action(handle,{action:['windowContext',{action:'close',id}]});__lordNativeView();wm.close=close;
  const staleAction=calls===0&&!!wm.get(id)&&!win(id);wm.close(id);
  const own=wm.open('own',{frame:{x:40,y:55,w:360,h:250}});await open(own);const ownFrame=!!find(t('shell.window.maximize'));
+ const unguard=wm.setCloseGuard(own,()=>false);await click(t('shell.window.close'));
+ const guardKept=!!wm.get(own)&&!wm.get(own).windowMenu;unguard();await open(own);
  await click(t('shell.window.close'));const closed=await until(()=>!wm.get(own));
- console.log('window_context-observation '+JSON.stringify({bound,noRows,position,nativeChecks,nativeDesktops,mirrorStale,moved,escaped,minimized,staleAction,ownFrame,closed,saved:!!saved?.ok}));
+ const nativeCommands=legacyCommands===0&&bridgedMoves===0;
+ console.log('window_context-observation '+JSON.stringify({bound,noRows,position,nativeChecks,nativeDesktops,mirrorStale,moved,escaped,minimized,staleAction,ownFrame,guardKept,zoomGeometry,zoomDetails,nativeCommands,nativeCreated,closed,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('window_context driver: '+(error.message+' '+(error.stack||'')))),150);
 "#;

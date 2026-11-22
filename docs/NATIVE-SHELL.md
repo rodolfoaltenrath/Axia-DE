@@ -127,8 +127,10 @@ maximização, desktops e capacidade vêm do leitor do contexto. Não constrói
 linhas nem callbacks por item em JS. A view usa o mecanismo nativo de menus
 para ponteiro, teclado, submenus e clique externo; prepara revisões pendentes
 antes da entrada para preservar o primeiro hover. Eventos revalidam janela e
-menu aberto. A montagem condicional e a execução de fechar/minimizar/maximizar
-continuam no adaptador; comandos de desktop usam a transação nativa existente.
+menu aberto. Fechar o menu, minimizar, alternar maximização e mover usam comando tipado
+no próprio Rust, incluindo limpeza do pedido de menu na mesma revisão. O JS
+recebe somente o snapshot de compatibilidade. Montagem condicional, foco da
+moldura, cálculo visual da área útil e guardas de fechamento continuam no adaptador.
 O Menu genérico dos apps mantém seu contrato.
 Mover para um desktop, inclusive criando um novo, usa um comando tipado do
 serviço residente. A janela e o destino são revalidados no proprietário atual;

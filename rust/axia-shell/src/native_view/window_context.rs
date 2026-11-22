@@ -1,19 +1,21 @@
 //! The own-frame window menu reads rows and coordinates from the native owner.
 use super::{tree::Tree, NativeApp};
-use crate::winmodel::WindowState;
+use crate::winmodel::{AppCommand, Session, WindowMenuAction, WindowState};
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
 
 pub struct WindowContext {
+    session: Session,
     windows: Reader<WindowState>,
     changes: Subscription,
     id: String,
     menu: Tree,
 }
 impl WindowContext {
-    pub fn new(windows: Reader<WindowState>) -> Self {
+    pub fn new(session: Session) -> Self {
+        let windows = session.reader();
         let changes = windows.subscribe();
-        Self { windows, changes, id: String::new(), menu: Tree::default() }
+        Self { session, windows, changes, id: String::new(), menu: Tree::default() }
     }
     fn tree(&self) -> Value {
         let state = self.windows.read();
@@ -44,21 +46,38 @@ impl WindowContext {
             self.menu.invalidate();
         }
     }
-    fn route(&self, mut reply: Value) -> Value {
+    fn route(&mut self, mut reply: Value) -> Value {
         if let Some(effects) = reply["effects"].as_array_mut() {
-            let state = self.windows.read();
-            let current = state.window(&self.id).is_some_and(|window| window.window_menu().is_some());
-            *effects = effects.iter().filter_map(|effect| {
-                if effect["kind"] != "tree" || !current { return None; }
+            let mut result = Vec::new();
+            for effect in std::mem::take(effects) {
+                if effect["kind"] != "tree" { continue; }
+                let current = self.windows.read().window(&self.id).is_some_and(|window| window.window_menu().is_some());
+                if !current { continue; }
                 let action = &effect["action"];
-                if action[0] == "dismiss" {
-                    return Some(json!({"kind":"windowContext","id":self.id}));
-                }
                 let command = &action[1];
-                if action[0] != "windowContext" || command["id"] != self.id
-                    || !matches!(command["action"].as_str(),Some("minimize"|"zoom"|"desktop"|"newDesktop"|"close")) { return None; }
-                Some(json!({"kind":"windowContext","id":self.id,"command":command}))
-            }).collect();
+                let selected = if action[0] == "dismiss" { WindowMenuAction::Dismiss }
+                    else if action[0] == "windowContext" && command["id"] == self.id {
+                        match command["action"].as_str() {
+                            Some("minimize") => WindowMenuAction::Minimize,
+                            Some("zoom") => WindowMenuAction::Zoom,
+                            Some("desktop") => match command["desktop"].as_i64() {
+                                Some(desktop) => WindowMenuAction::MoveDesktop(Some(desktop)),
+                                None => continue,
+                            },
+                            Some("newDesktop") => WindowMenuAction::MoveDesktop(None),
+                            Some("close") => WindowMenuAction::Dismiss,
+                            _ => continue,
+                        }
+                    } else { continue; };
+                if let Ok(reply) = self.session.app_command(AppCommand::WindowMenu(selected), &[&self.id]) {
+                    result.push(json!({"kind":"windowModel","reply":reply}));
+                    // App close guards still belong to the existing adapter.
+                    if action[0] == "windowContext" && command["action"] == "close" {
+                        result.push(json!({"kind":"windowContext","id":self.id,"command":command}));
+                    }
+                }
+            }
+            *effects = result;
         }
         reply
     }

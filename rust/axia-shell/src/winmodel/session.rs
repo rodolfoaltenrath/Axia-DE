@@ -1015,7 +1015,10 @@ impl Session {
 }
 
 #[derive(Clone, Copy)]
-pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
+pub enum WindowMenuAction { Dismiss, Minimize, Zoom, MoveDesktop(Option<i64>) }
+
+#[derive(Clone, Copy)]
+pub enum AppCommand { Cycle(bool), Hide, HideOthers, ShowAll, ToggleDesktop, BringAll, Arrange(&'static str), StepDesktop(i64), SwipeDesktop { left: bool, rtl: bool }, AddDesktopAndShow, WindowMenu(WindowMenuAction), MoveWindowToDesktop(Option<i64>), CloseActiveDesktop, PrepareDesktops(usize, Option<usize>), InitializeDesktops(usize,usize) }
 
 impl WindowState {
     // Both the isolated-host API and native desktop gestures use the same selection rule.
@@ -1058,6 +1061,18 @@ impl WindowState {
                 let id = self.create_desktop();
                 if let Some(id) = id.as_i64() { self.active = id; }
                 return id;
+            }
+            AppCommand::WindowMenu(action) => {
+                let Some(index) = ids.first().and_then(|id| self.find(id)) else { return Value::Null; };
+                if Window(&self.wins[index]).window_menu().is_none() { return Value::Null; }
+                let result = match action {
+                    WindowMenuAction::Dismiss => json!(true),
+                    WindowMenuAction::Minimize => { self.wins[index].set("minimized",json!(true)); json!(true) }
+                    WindowMenuAction::Zoom => { self.toggle_maximize(index); json!(true) }
+                    WindowMenuAction::MoveDesktop(target) => self.app_command(AppCommand::MoveWindowToDesktop(target),ids,facts),
+                };
+                self.wins[index].set("windowMenu", Value::Null);
+                return result;
             }
             AppCommand::MoveWindowToDesktop(target) => {
                 let Some(index) = ids.first().and_then(|id| self.find(id)) else { return Value::Null; };

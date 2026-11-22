@@ -20,7 +20,7 @@ import { useAppWindow } from './components.jsx';
 import { typeScale } from './controls.jsx';
 import { useTheme } from './theme.js';
 import { useLocale, formatNumber } from './i18n.js';
-import { wm } from './windows.js';
+import { wm, applyNativeWindowState } from './windows.js';
 import { launchApp } from './apps.js';
 import { nativeCatalogFacts } from './nativecatalog.js';
 import { switcherBridge } from './nativeswitcher.js';
@@ -97,9 +97,9 @@ function runner(handle, manifest, winId, node = () => 0) {
     if (manifest.id === 'shell:restore' && !effect.host) { restoreBridge.perform?.(effect); return; }
     // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)
     if (manifest.id === 'shell:menubar' && !effect.host) { barEffect(effect, handle); return; }
-    if (manifest.id === 'shell:window-context' && effect.kind === 'windowContext' && !effect.host) {
-      wm.closeWindowMenu(effect.id);
-      if (effect.command) barEffect({ kind: 'windowMenu', command: effect.command }, handle);
+    if (manifest.id === 'shell:window-context' && !effect.host) {
+      if (effect.kind === 'windowModel') applyNativeWindowState(effect.reply);
+      else if (effect.kind === 'windowContext' && effect.command) barEffect({ kind: 'windowMenu', command: effect.command }, handle);
       return;
     }
     if (effect.host) {                 // the host's own: no result goes back to the app
