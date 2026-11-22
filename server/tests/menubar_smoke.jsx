@@ -77,8 +77,8 @@ async function run() {
   const first = lord.getLayout(find('Window'));
   check(first[0] > 0 && first[2] > 20, 'items have a place in the bar');
   press(find('Axia DE'));                       // the app menu
-  check(await until(() => find('About Axia DE')), 'a click opens the menu with its items');
-  press(find('About Axia DE'));                 // runs wm.open('about') and closes the menu
+  check(await until(() => find('About Axia')), 'a click opens the menu with its items');
+  press(find('About Axia'));                 // runs wm.open('about') and closes the menu
   check(await until(() => lines().length === bar), 'running an item closes the menu');
   press(find('Window'));
   check(await until(() => lines().length > bar), 'the Window menu opens');
