@@ -15,13 +15,13 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-root=${1:-$repo}
+root=$(cd "${1:-$repo}" && pwd)
 key=${2:-$HOME/.config/lordos-release/release-ed25519.key.pem}
 pub=${CODE_PUB:-$here/lordos-release.pub.pem}
 [ -r "$key" ] || { echo "no private key at $key" >&2; exit 1; }
 command -v openssl >/dev/null || { echo "openssl is needed" >&2; exit 1; }
-command -v node >/dev/null || { echo "node is needed" >&2; exit 1; }
-node "$repo/tools/code-manifest.mjs" --root "$root"
+command -v cargo >/dev/null || { echo "cargo is needed" >&2; exit 1; }
+(cd "$repo" && cargo xtask code-manifest --root "$root")
 cd "$root"
 rm -f code-manifest.sig
 openssl pkeyutl -sign -rawin -inkey "$key" -in code-manifest.json | base64 | tr -d '\n' > code-manifest.sig

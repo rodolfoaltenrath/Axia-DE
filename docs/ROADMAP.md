@@ -99,7 +99,7 @@ Details in `LANGUAGES.md`. It comes before Wayland so GTK/Qt apps receive the sa
 - [x] Interface: catalogs per namespace (`assets/locales/<language>/*.json`), `t()`/`useLocale()`,
       plurals (our own CLDR rules), dates and numbers per region; live switching without losing
       windows or terminals; English fallback. 391 keys.
-- [x] Spanish, English and Portuguese complete; `tools/i18n-check.mjs` and `tools/i18n-pack.mjs`;
+- [x] Spanish, English and Portuguese complete; `cargo xtask i18n-check` and `cargo xtask i18n-pack`;
       test French pack installed from Settings.
 - [x] Language packs: LordOS catalogs (user, no root) + glibc region + the language's Debian
       packages (manpages, hunspell, aspell, hyphen, mythes, fonts for the script).

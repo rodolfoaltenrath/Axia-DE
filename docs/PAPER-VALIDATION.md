@@ -58,7 +58,7 @@ memory from a process's RSS (§7.1) and points to versioned results (§11.5, `do
 | 4.2 | React 19.3.1, QuickJS 2025-04-26; default theme 367 KB | Build output | Size changed → corrected in 0.8.5 (about 1.8 MB, 540 KB compressed) |
 | 4.2 | Shaping identical to HarfBuzz on 409 of 409 sentences | Test (`shape-test`, `hb_compare.py` in `test-full`) | Holds |
 | 4.2, 7.4 | NEON loops bit-identical to C | Test (`canvas-test` on the Pi) | Holds |
-| 4.4 | English, Spanish, Portuguese; keys and brand names checked | Test (`tools/i18n-check.mjs`) | Holds |
+| 4.4 | English, Spanish, Portuguese; keys and brand names checked | Test (`cargo xtask i18n-check`) | Holds |
 | 5.1 | About thirty native apps | Count | 34 in `apps/`, System Information and its hidden probe included; the 0.8.5 edition says thirty-one (without the live installer and the hidden probe) |
 | 5.2 | `.lpk` limits: 2,000 files, 64 MB | Test (`pkg-test`, `sign-test`) | Holds |
 | 5.3 | InRelease signatures, plans equal to apt's in 12 cases | Test (`pkg-test`, `engine-test`) | Holds |

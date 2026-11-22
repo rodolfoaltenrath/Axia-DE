@@ -8,6 +8,7 @@
 //!   cargo xtask switcher-check --installation DIR --output DIR
 //!   cargo xtask build-memory --output report.json -- make -j2 check
 //!   cargo xtask gen-wallpaper --palette aurora --output assets/wallpapers/gradients/aurora.png
+//!   cargo xtask code-manifest | brand-check | err-check | i18n-check | i18n-pack (src/devtools)
 //!   cargo xtask profile-check --variant fedora --target-dir /var/tmp/axia-fedora --output fedora.json
 //!
 //! This crate runs on the development or build machine only.
@@ -15,6 +16,7 @@
 #[path = "../../native_apps.rs"]
 mod native_apps;
 mod build_memory;
+mod devtools;
 mod profile_check;
 mod deploy;
 mod dist;
@@ -87,7 +89,10 @@ fn dispatch(args: &[String]) -> Result<ExitCode> {
     let repo = repo();
     let (command, rest) = args
         .split_first()
-        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|switcher-check|build-memory|profile-check|gen-wallpaper>")?;
+        .ok_or("usage: cargo xtask <install|deploy|dist|srpm|desktop-binaries|native-apps|idle-check|switcher-check|build-memory|profile-check|gen-wallpaper|code-manifest|brand-check|err-check|i18n-check|i18n-pack>")?;
+    if let Some(done) = devtools::dispatch(&repo, command, rest) {
+        return done;
+    }
     if command == "build-memory" {
         return build_memory::execute(rest).map(ExitCode::from);
     }

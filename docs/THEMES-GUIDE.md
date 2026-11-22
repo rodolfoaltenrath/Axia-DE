@@ -404,7 +404,7 @@ the `shell` catalog (`assets/locales/{en,es,pt}/shell.json`). A theme of your ow
 `shell.*` keys (the example does) or bring its own namespace: `lord.locale.catalog` reads
 `<lang>/<namespace>.json` from `~/.local/share/axia/locales/` first and then LordOS's
 `assets/locales/` (`f_locale_catalog` in `js_sys.c`). A missing key shows the key itself. Inside the
-LordOS tree, `node tools/i18n-check.mjs` checks every `t()` key in `themes/` against the English
+LordOS tree, `cargo xtask i18n-check` checks every `t()` key in `themes/` against the English
 catalog and every language against English.
 
 ## 3. Building it
@@ -428,7 +428,7 @@ bundle is 1.5–1.8 MB and why every theme carries the same apps. Apps with `"pr
 The tool only builds folders under `themes/` of the tree it lives in: there is no option for a theme
 elsewhere, so a theme is developed inside a LordOS development tree (copy it to `themes/<id>`).
 
-After building, it rewrites **`code-manifest.json`** at the tree's root (`tools/code-manifest.mjs`):
+After building, it rewrites **`code-manifest.json`** at the tree's root (`cargo xtask code-manifest`):
 the size and SHA-256 of every `themes/*/theme.bundle.js`, `assets/app-host.bundle.js` and
 `assets/sysapps/*/app.js`. If the manifest changed, a `code-manifest.sig` next to it is deleted (it
 signed the old one).

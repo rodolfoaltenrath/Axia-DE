@@ -39,6 +39,6 @@ LordOS did not sign").
 ## Status
 
 Built with the repository's own tooling (`node tools/build-theme.mjs minimal`, esbuild 0.24.2) on
-2026-10-26 in a copy of the tree, where `node tools/i18n-check.mjs` also passed with it in `themes/`.
+2026-10-26 in a copy of the tree, where `cargo xtask i18n-check` also passed with it in `themes/`.
 **Not yet run on a LordOS session**: there is no screenshot of it,
 so treat it as a starting point and check it with the guide's checklist.

@@ -199,7 +199,7 @@ and a system app's `manifest.json` (its window size; its permissions are decided
 They are data read by bounded parsers, not code. A modified catalog can change what a text says
 but cannot run anything; phase 3 (fs-verity over the whole system image) covers them.
 
-`tools/code-manifest.mjs` writes the manifest (deterministic: the same bundles give the same bytes);
+`cargo xtask code-manifest` writes the manifest (deterministic: the same bundles give the same bytes);
 `npm run build` runs it after building, and removes a `code-manifest.sig` that no longer matches.
 
 ### How axia-server checks it (`server/src/sec/codesig.c`)
@@ -357,6 +357,6 @@ See [RELEASING.md](RELEASING.md), step 3.
 | `tools/lpk.mjs` | package, sign, verify, keygen and catalog |
 | `packaging/keys/lordos-dev.pub` | development public key |
 | `server/src/sec/codesig.c` | verified system code: the signed manifest and the check of each bundle at load time |
-| `tools/code-manifest.mjs` | writes `code-manifest.json` (run by `npm run build`) |
+| `cargo xtask code-manifest` | writes `code-manifest.json` (run by `npm run build`) |
 | `tools/release/sign-code.sh` | signs it with the release key (maintainer's machine only) |
 | `sdk/codesig.js` | the "component was modified" notification and `codeStatus()` for About |

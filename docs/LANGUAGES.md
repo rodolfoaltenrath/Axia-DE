@@ -86,7 +86,7 @@ the translated description (`errors.errno.ENOENT`) and `reason=<code line>` is a
   `statusText(line)`. Code that needs to react to an error compares `e.code`, never the text.
 - Logs and the journal stay English prose, for developers.
 - Tests match codes (`lerr_has(err, "pkg.removeAlso")`), not text.
-- `node tools/i18n-check.mjs` fails if a code used in C has no English string, or if an `ERR`
+- `cargo xtask i18n-check` fails if a code used in C has no English string, or if an `ERR`
   line or a JS exception is written as prose.
 
 ### Formats
@@ -112,18 +112,18 @@ The ones shipped with LordOS are in `assets/locales/`; the user's in
 To create one:
 
 ```sh
-node tools/i18n-pack.mjs new fr "Français" French zero-one-other fr_FR   # lordos-lang-fr.json, in English
+cargo xtask i18n-pack new fr "Français" French zero-one-other fr_FR   # lordos-lang-fr.json, in English
 # translate the file's strings…
-node tools/i18n-check.mjs lordos-lang-fr.json                           # missing keys and variables
+cargo xtask i18n-check lordos-lang-fr.json                           # missing keys and variables
 ```
 
 Then copy `lordos-lang-fr.json` to your Downloads folder and use **Settings → Language & Region →
 Add**. Available plural rules: `one-other`, `zero-one-other`, `none`, `east-slavic`, `polish`,
-`czech-slovak`, `arabic`. `node tools/i18n-pack.mjs export pt` exports an existing language in
+`czech-slovak`, `arabic`. `cargo xtask i18n-pack export pt` exports an existing language in
 the same format.
 
-`node tools/i18n-check.mjs` with no arguments checks every bundled language and also the keys the
-code uses (`t('…')` in apps, themes and SDK) that don't exist in English. Today (0.8.5-beta): 8,002 keys, complete in es, en and pt, and 496 error codes from the server. It also runs `tools/brand-check.mjs`, which fails when a third-party
+`cargo xtask i18n-check` with no arguments checks every bundled language and also the keys the
+code uses (`t('…')` in apps, themes and SDK) that don't exist in English. Today (0.8.5-beta): 8,002 keys, complete in es, en and pt, and 496 error codes from the server. It also runs `cargo xtask brand-check`, which fails when a third-party
 brand or product name (another system, its apps or features) shows up in the catalogs,
 the Help articles, the app manifests, README.md or CHANGELOG.md: LordOS uses its own names
 (Search, Apps, Night Light, Quick Preview…) and generic wording. Real exceptions go in its

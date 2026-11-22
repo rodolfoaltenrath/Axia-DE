@@ -211,7 +211,7 @@ the automatic mode both go from 1080p to 720p). At 25 fps both play smoothly (1â
 
 ```sh
 make -C server test          # settings-hw-test (video-optimize), hwdec-test
-node tools/i18n-check.mjs
+cargo xtask i18n-check
 ```
 
 On a VM: log in, then `cat ~/.cache/axia/video-hw.json` and the two files above. On a YouTube

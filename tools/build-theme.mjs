@@ -6,7 +6,6 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { writeManifest } from './code-manifest.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const nativeApps = JSON.parse(execFileSync(process.env.CARGO || 'cargo', ['xtask', 'native-apps'], { cwd: root, encoding: 'utf8' }));
@@ -179,5 +178,4 @@ if (!names.length) await build({
 });
 // the verified-code manifest of what was just built (unsigned: a development build until
 // tools/release/sign-code.sh signs it on the maintainer's machine)
-const cm = writeManifest(root);
-console.log(`code-manifest.json: ${cm.files} files${cm.changed ? '' : ' (unchanged)'}`);
+execFileSync(process.env.CARGO || 'cargo', ['xtask', 'code-manifest', '--root', root], { cwd: root, stdio: 'inherit' });

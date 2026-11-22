@@ -177,7 +177,7 @@ cargo test --manifest-path rust/Cargo.toml --package axia-shell \
   --locked --offline --test native_apps_runtime -- --ignored --nocapture
 cargo test --manifest-path rust/Cargo.toml --package axia-shell \
   --locked --offline --release native_chart_benchmark -- --ignored --nocapture
-node tools/i18n-check.mjs
+cargo xtask i18n-check
 ```
 
 The optional runtime test starts the real compositor headlessly with an isolated

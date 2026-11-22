@@ -43,8 +43,8 @@ Pull requests with unsigned commits can't be merged.
 - **English only** in code, comments, commit messages and documentation. Interface text goes in
   `assets/locales/{en,es,pt}/`, never hard-coded.
 - **Tests must pass:** `make -C server test` (and `make -C server test-full` when you touch the
-  helpers or the sandbox), plus `node tools/i18n-check.mjs`, which also runs
-  `tools/brand-check.mjs` and `tools/err-check.mjs`.
+  helpers or the sandbox), plus `cargo xtask i18n-check`, which also runs
+  `cargo xtask brand-check` and `cargo xtask err-check`.
 - **Follow AGENTS.md** for the architecture and code rules of each part.
 - **Brand rules:** Axia DE does not use the LordOS name, crown logo or Lumo (the LordOS trademark
   policy reserves them; "based on LordOS" is fine), and don't use third-party brand or product names in

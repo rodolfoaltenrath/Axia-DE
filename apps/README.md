@@ -210,7 +210,7 @@ Visible texts aren't written in the code: they go through `t('myapp.key')` with 
 translations in `assets/locales/{es,en,pt}/myapp.json` (`{ "key": "Text" }`). The app's name is
 translated in `apps.json` (`"myapp": "My app"`). Lists containing texts are built at render
 time, not as module constants, because the UI is remounted when the language changes.
-`node tools/i18n-check.mjs` warns if any key is missing.
+`cargo xtask i18n-check` warns if any key is missing.
 
 ## Permissions
 

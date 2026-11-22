@@ -50,7 +50,7 @@ pairing, Sound with a Bluetooth headset, a Linux app's notification and Files' "
 
 Shared pieces: `apps/settings/ui.rs` (a row with a hint, a pop-up button, the page header),
 drawn directly in the Rust scene with the existing grouped styling (`docs/DESIGN.md`). Text uses the existing locale namespaces
-(`assets/locales/{en,es,pt}/prefs.json`); `node tools/i18n-check.mjs` passes. Pages use
+(`assets/locales/{en,es,pt}/prefs.json`); `cargo xtask i18n-check` passes. Pages use
 `textAlign: 'start'` and leading/trailing layout, so they mirror in Arabic and Hebrew; sliders and
 the time fields keep `direction: 'ltr'`.
 

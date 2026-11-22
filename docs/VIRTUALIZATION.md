@@ -9,7 +9,7 @@ How to read it:
 - **Measured** means checked on our own hardware or in the named package on 2026-11-01. **Reported** means a public source says so
   and we haven't reproduced it. **To test** means nobody here has run it. Any number under a "target" heading is a goal, not a result.
 - "virtio-win guest" means a guest system that needs the virtio-win driver set. Public pages and the app use generic wording
-  ("other systems"), as [the brand rule](../tools/brand-check.mjs) requires; a guest's real name appears only as the label of its
+  ("other systems"), as [the brand rule](../rust/xtask/src/devtools/brand.rs) requires; a guest's real name appears only as the label of its
   download or its installer.
 
 

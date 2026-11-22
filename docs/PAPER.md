@@ -288,7 +288,7 @@ The JavaScript side calls native services through `lord.*` APIs implemented in C
 
 ### 4.4 Languages
 
-The interface ships in English (the default), Spanish and Portuguese, and more languages are added as language packs without code changes. Text goes through the SDK's `t('namespace.key')`, with plurals and locale formats. The whole interface mirrors for right-to-left languages, and the region (`LANG`/`LC_*`) is passed to Linux apps. `node tools/i18n-check.mjs` checks that every key exists in every language and that no third-party brand names appear in the interface.
+The interface ships in English (the default), Spanish and Portuguese, and more languages are added as language packs without code changes. Text goes through the SDK's `t('namespace.key')`, with plurals and locale formats. The whole interface mirrors for right-to-left languages, and the region (`LANG`/`LC_*`) is passed to Linux apps. `cargo xtask i18n-check` checks that every key exists in every language and that no third-party brand names appear in the interface.
 
 ### Source files
 

@@ -262,7 +262,7 @@ The overclock warns that not every board is stable and how to undo it (delete ou
   In the desktop app the browser's own focus does the same and every control has a screen-reader
   label, role and state (`aria-label`, `aria-checked`, `aria-selected`, `role="progressbar"`…).
   LordOS itself has no screen reader yet; the labels are in place for when it does.
-- **Texts:** every string is in English, Spanish and Portuguese (`node tools/i18n-check.mjs`).
+- **Texts:** every string is in English, Spanish and Portuguese (`cargo xtask i18n-check`).
 - **Never color alone:** problems carry text, the steps carry numbers and checkmarks.
 
 ## Building the desktop downloads

@@ -506,7 +506,7 @@ for now.
   temporary `Dir::State::Lists` (nothing on the board changed; removed afterwards): signature good,
   `binary-arm64/Packages` read, `lordos 0.8.0 arm64` listed with the right `Filename` and SHA-256.
 - `make -C server test` (21 suites passed, 5 skipped for missing tools; `pkg-test` 83/83 with the
-  release-notes reader and pre-release version order), `node tools/i18n-check.mjs`, the brand
+  release-notes reader and pre-release version order), `cargo xtask i18n-check`, the brand
   check and `shellcheck` on every new script.
 - **Not yet:** the CDN change above, so `https://lordos.org/apt-staging` is uploaded and signed but
   `InRelease` still answers 404 (the router) and http 301; `apt-repo.sh verify staging` passes
