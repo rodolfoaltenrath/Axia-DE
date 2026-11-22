@@ -80,9 +80,10 @@ impl View {
 impl NativeApp for View {
     fn invalidated(&self) -> bool {
         let state = self.service.borrow();
-        state.changes.pending() || state.settings_pending() || self.seen != state.revision || !state.effects.is_empty()
+        (!self.session.resident() && (state.changes.pending() || state.settings_pending())) || self.seen != state.revision || !state.effects.is_empty()
     }
     fn refresh_ms(&self) -> Option<f64> {
+        if self.session.resident() { return None; }
         self.service
             .borrow()
             .deadline()
@@ -109,7 +110,7 @@ impl NativeApp for View {
         match input["cmd"].as_str() {
             Some("sync") => {
                 state.configure(input, input, now);
-                state.tick(&mut self.session, now);
+                if !self.session.resident() { state.tick(&mut self.session, now); }
                 let tree = Self::tree(&state, input);
                 let effects = std::mem::take(&mut state.effects);
                 self.seen = state.revision;

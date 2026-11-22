@@ -1,38 +1,19 @@
 use super::*;
-use axia_native::NativeApp;
 
 #[test]
-fn nonvisual_observer_keeps_pending_count_across_remount_without_an_idle_timer() {
+fn context_service_keeps_pending_count_without_an_observer_or_idle_timer() {
     let mut session = Session::default();
-    command(
-        &mut session,
-        json!({"action":"start","settings":{"desktopCount":2}}),
-    );
+    command(&mut session, json!({"action":"start","settings":{"desktopCount":2}}));
     let shared = session.desktop_service();
-    let mut observer = Observer::new(shared.clone());
-    assert!(!observer.request(&json!({"cmd":"sync"}))["tree"].is_null());
-    assert!(observer.refresh_ms().is_none());
-    assert!(observer.background_refresh_ms().is_none());
     call(&mut session, "createDesktop", &[]);
-    assert!(observer.invalidated());
-    drop(observer);
-    let mut observer = Observer::new(shared);
-    assert_eq!(
-        observer.request(&json!({"cmd":"sync"}))["effects"][0]["patch"]["desktopCount"],
-        3
-    );
-    assert!(!observer.invalidated());
-    assert_eq!(
-        observer.request(&json!({"cmd":"sync"})),
-        json!({"same":true,"effects":[]})
-    );
-    drop(observer);
+    assert!(shared.borrow().invalidated());
+    assert_eq!(shared.borrow_mut().effects()[0]["patch"]["desktopCount"], 3);
+    assert!(!shared.borrow().invalidated());
+    assert!(shared.borrow_mut().effects().is_empty());
+    drop(shared);
     let weak = std::rc::Rc::downgrade(&session.desktop_service());
     drop(session);
-    assert!(
-        weak.upgrade().is_none(),
-        "the service must not retain its owning Session"
-    );
+    assert!(weak.upgrade().is_none(), "the service must not retain its owning Session");
 }
 
 fn command(session: &mut Session, input: Value) -> Value {
@@ -278,15 +259,14 @@ fn native_profile_initializes_desktops_consumes_handoff_and_persists_count_once(
     assert!(preferences.read()["themeDesktops"].is_null());
     assert!(reply["effects"].as_array().unwrap().iter().all(|e|e["kind"]!="settings"));
     call(&mut session, "createDesktop", &[]);
-    let mut observer = Observer::new(shared.clone());
-    let reply = observer.request(&json!({"cmd":"sync"}));
+    let reply = shared.borrow_mut().effects();
     assert_eq!(preferences.read()["desktopCount"], 4);
-    assert_eq!(reply["effects"][0]["kind"], "settingsState");
-    observer.request(&json!({"cmd":"sync"}));
+    assert_eq!(reply[0]["kind"], "settingsState");
+    shared.borrow_mut().effects();
     let revision = preferences.revision();
-    observer.request(&json!({"cmd":"sync"}));
+    shared.borrow_mut().effects();
     assert_eq!(preferences.revision(), revision);
-    assert!(!observer.invalidated());
+    assert!(!shared.borrow().invalidated());
     let reply = command(&mut session, json!({"action":"theme"}));
     assert_eq!(preferences.read()["themeDesktops"], reply["result"]);
     assert_eq!(preferences.read()["unrelated"]["keep"], 7);
@@ -308,19 +288,17 @@ fn native_reduced_motion_overrides_facts_and_restores_animation_immediately() {
     shared.borrow_mut().bind_settings(home);
     let node = scene::create(scene::VIEW);
     shared.borrow_mut().animation.bind("notes#b", node, crate::native_view::now_ms());
-    let mut observer = Observer::new(shared.clone());
-    let facts = json!({"cmd":"sync","args":{"reduceMotion":false}});
-    observer.request(&facts);
+    shared.borrow_mut().effects();
     call(&mut session, "setActiveDesktop", &[json!(2)]);
-    observer.request(&facts);
+    shared.borrow_mut().effects();
     assert_ne!(scene::animation_props(node).unwrap().translate_x, 0.);
     crate::settings::with(home, |s| { s.set("reduceMotion", &json!(true)); });
-    assert!(observer.invalidated());
+    assert!(shared.borrow().invalidated());
     command(&mut session, json!({"action":"active"}));
     assert_eq!(scene::animation_props(node).unwrap().translate_x, 0., "commands must consume native motion changes too");
-    observer.request(&facts);
+    shared.borrow_mut().effects();
     assert_eq!(scene::animation_props(node).unwrap().translate_x, 0.);
-    assert!(!observer.invalidated());
+    assert!(!shared.borrow().invalidated());
     scene::destroy(node);
     std::fs::remove_dir_all(root).unwrap();
 }

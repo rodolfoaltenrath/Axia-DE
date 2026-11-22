@@ -420,12 +420,12 @@ ativo e cada associação antes de aplicá-los. O formato persistido continua
 de preferências Rust; o snapshot de compatibilidade continua para a interface
 legada. O SDK não reenvia os campos no bootstrap nem os grava novamente.
 
-O observador sem interface `shell:desktops` é montado pelo root do SDK,
-independentemente do indicador visual do tema. Revisões agrupam alterações
-da quantidade; valores iguais não geram nova gravação e não existe polling
-ocioso. O serviço sobrevive à remontagem do observador. O JS grava os patches;
-o caminho local de compatibilidade dos `.lpk` permanece separado no build.
-Animação, efeitos finais e o espelho legado seguem para as próximas etapas.
+O observador sem interface `shell:desktops` foi removido. O loop Rust atende o
+serviço diretamente, independentemente do indicador visual do tema. Revisões
+agrupam alterações da quantidade; valores iguais não geram nova gravação e
+não existe polling ocioso dessa assinatura. A persistência é nativa; o caminho
+local de compatibilidade dos `.lpk` permanece separado no build. Animação já
+usa seleção/conclusão Rust; efeitos finais e o espelho legado seguem pendentes.
 
 Os sete testes novos verificam inicialização atômica/idempotente, isolamento
 e vida útil, validação das preferências, consultas atuais, associação de
@@ -1217,9 +1217,9 @@ executar a persistência dos marcadores, evitando escrever num estado emprestado
 Início, autosave, saída limpa, retomada e troca de tema atualizam `sessionSaved`
 e chamam a gravação durável existente no Rust. Não há efeito `sessionRestore/save`
 no caminho vinculado da sessão, nem chamada a `settings.set`/`saveSettingsNow`
-para esses marcadores. Início e flush funcionam sem montar a view. O agendamento
-da restauração ainda é atendido pelo host da view; remover essa dependência e
-executar abertura/política sem JS continuam pendentes.
+para esses marcadores. Início, flush e agendamento funcionam sem montar a view:
+o loop Rust atende o serviço residente; a confirmação apenas desenha o estado
+e recebe entrada. Executar abertura/política sem JS continua pendente.
 
 A publicação `settingsState` mantém os consumidores de compatibilidade atualizados
 por revisão após uma mutação; não grava novamente. Consultas públicas do modo e
@@ -1290,9 +1290,9 @@ antes da escrita. Dados alheios e edições posteriores à coleta são preservad
 
 As publicações `settingsState` atualizam somente consumidores de compatibilidade,
 sem reaplicar patches ou gravar novamente. O host isolado mantém sua inicialização
-e suas opções locais. A persistência ainda é atendida pelos observadores montados
-no root; desvincular os serviços desse host e retirar metadados do tema/espelhos
-continua pendente.
+e suas opções locais. Desktops e restauração são atendidos pelo loop residente;
+a memória de posições ainda usa seu observador. Retirar metadados do tema/espelhos
+e desvincular os demais serviços das views continua pendente.
 
 Validação de 2026-11-22 em Fedora 44 privado: 627 testes da shell, oito contratos
 LPK, 24 cenários gráficos de desktops, animação, posições, restauração,
@@ -1310,3 +1310,59 @@ passaram com limites impostos: mediana de 109.785.088 bytes (104,699 MiB) de RSS
 e 12,350 chamadas de espera/s, abaixo de 120 MiB e 15/s. Relatório em
 `build/validation/native-desktop-memory-preferences/idle/report.json`. Medições
 físicas continuam reservadas ao encerramento do roadmap.
+
+### Serviços residentes e vida útil do contexto
+
+`Session` compartilha um `SessionCore` por `Rc`: modelo de janelas, serviços e
+fila de efeitos pertencem ao mesmo contexto. Clones preservam a identidade;
+leitores de janelas continuam emprestando somente o estado e não mantêm o
+contexto vivo. O controlador criado pela entrada C validada ativa os serviços;
+a ativação não vem de uma preferência ou de um campo nos pedidos JSON.
+
+`session_runtime.rs` registra referências fracas, deduplica o proprietário e
+remove registros cujo último dono terminou. O registro não retém o contexto,
+nem ponteiros C/JS. A iteração libera o empréstimo do registro antes de atender
+cada modelo, sem copiar uma lista de contextos a cada quadro. O loop existente
+chama esse atendimento antes das views; assinaturas pendentes e deadlines entram
+no mínimo nativo do poll. Não há timer JS de agendamento ou polling adicional.
+
+Desktops aplicam preferências/locale atuais, concluem a seleção da animação e
+persistem mudanças pelo serviço, sem `shell:desktops` ou `DesktopSession` no
+bundle. A apresentação do indicador segue separada. A restauração atende início,
+abertura escalonada, espera de estabilização, coleta e autosave mesmo sem a
+confirmação montada. Seu catálogo acompanha o leitor publicado pelo controlador;
+revisões são consumidas sem depender de novos fatos da view. Geometria ainda usa
+a última configuração recebida do SDK e das telas, até migrar esse proprietário.
+
+A view de restauração lê revisões e recebe Enter/Escape; no contexto residente
+não mantém um segundo prazo nem atende o serviço no sync. Os pedidos diretos
+continuam executando a intenção e devolvendo seus efeitos imediatamente. O
+caminho interno não registrado usado pelos testes anteriores mantém o atendimento
+explícito, sem reintroduzir um caminho alternativo no bootstrap da sessão.
+
+Efeitos produzidos fora de uma view ficam na fila do contexto. Snapshots completos
+de preferências por revisão se agrupam pelo último valor; comandos de restauração
+mantêm a ordem. O adaptador C expõe `takeServices` somente no controlador do root,
+com validação do objeto opaco; modelos criados no host isolado não recebem o método.
+Uma leitura quieta retorna null sem serializar JSON. O SDK drena a fila pelos
+adaptadores existentes, com guarda contra drenagem reentrante e sem exigir um
+handle visual. Abertura de apps, política de navegadores e espelhos de compatibilidade
+ainda usam JS. Relógio, notificações e memória de posições ainda precisam migrar
+seus atendimentos das views para esse loop.
+
+Validação de 2026-11-22 na árvore compartilhada, em Fedora 44 privado: 631 testes
+da shell e oito contratos LPK passaram. Quatro testes novos verificam prazos e
+autosave sem cena, confirmação e catálogo por revisão, vida útil/isolamento de
+contextos e agrupamento/drenagem silenciosa. Passaram 44 cenários gráficos de
+restauração, desktops, animação, Arquivos, foco, cabeçalhos, configurações, locale
+e posições de janela, além do encerramento instalado por timeout e SIGTERM.
+O teste real começa sem view de confirmação, exige o aviso após o prazo e só
+então monta a apresentação; desmonta-a antes de mover a janela e exigir autosave.
+Compositor e bundles recompilados, instalação privada gerada. Evidências em
+`build/validation/resident-session-services/`. A sessão física foi preservada.
+
+As mensagens da shell em português, inglês e espanhol usam o nome Axia.
+A confirmação foi revalidada nos quatro cenários e a captura com o nome
+corrigido foi inspecionada.
+
+Três amostras de ociosidade do binário final passaram com limites impostos: 12,450 poll/s e 105,016 MiB de RSS, abaixo de 15 poll/s e 120 MiB.

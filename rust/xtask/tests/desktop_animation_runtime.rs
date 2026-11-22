@@ -63,7 +63,7 @@ import {createElement as h,useState} from 'react';
 import {render,View} from '@lordos/runtime';
 import {configureWindows,wm,useWindows,setActiveDesktop} from '@ROOT@/sdk/windows.js';
 import {WindowShell} from '@ROOT@/sdk/windowshell.jsx';
-import {DesktopSession,startDesktops} from '@ROOT@/sdk/desktops.js';
+import {startDesktops} from '@ROOT@/sdk/desktops.js';
 import {settings} from '@ROOT@/sdk/settings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
@@ -79,28 +79,26 @@ const a=wm.open('notes',{instance:'a',desktop:1,frame:{x:60,y:120,w:220,h:160}})
 setActiveDesktop(1);
 const source=lord.windowList,bind=source.bindFx,bindings=new Map();let bindingCalls=0,unbindings=0;
 source.bindFx=(id,node)=>{bindingCalls++;if(node)bindings.set(id,node);else{bindings.delete(id);unbindings++;}return bind.call(source,id,node);};
-let jsAnimations=0,callbacks=0,renders=0,remount,handle=0,serviceFacts=0,noPreferencePayload=true;
+let jsAnimations=0,callbacks=0,renders=0,remount,legacyObservers=0;
 lord.anim.slide=()=>{jsAnimations++;throw Error('desktop slide ran through JS');};
 lord.anim.clear=()=>{jsAnimations++;throw Error('desktop clear ran through JS');};
 globalThis.__lordAnimDone=()=>{callbacks++;};
 const mount=lord.nativeViews.mount,send=lord.nativeViews.facts;
-lord.nativeViews.mount=(node,id,text,...sources)=>{const h=mount(node,id,text,...sources);if(id==='shell:desktops'){handle=h;noPreferencePayload&&=!('reduceMotion'in(JSON.parse(text).args||{}));}return h;};
-lord.nativeViews.facts=(id,text)=>{if(id===handle){serviceFacts++;noPreferencePayload&&=!('reduceMotion'in(JSON.parse(text).args||{}));}return send(id,text);};
+lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:desktops')legacyObservers++;return mount(node,id,text,...sources);};
 function Windows(){const{mounted}=useWindows();renders++;return mounted.map(win=>h(WindowShell,{key:win.id,win,style:{backgroundColor:win.id===b?'#2e81c6':'#d04a4a'}},null));}
 function App(){const[rev,setRev]=useState(0);remount=()=>setRev(n=>n+1);return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'#3489bd',effects:{}})},
- h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},h(Windows),h(DesktopSession,{key:rev})));}
+ h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},h(Windows,{key:rev})));}
 render(h(App));
 async function run(){
- await until(()=>bindings.has(a)&&bindings.has(b)&&handle>0);await sleep(100);
+ await until(()=>bindings.has(a)&&bindings.has(b));await sleep(100);
  const bound=bindingCalls>=2;setActiveDesktop(2);await sleep(60);const before=renders;await sleep(230);const noFrameRenders=renders===before;
  setActiveDesktop(1);await sleep(25);setActiveDesktop(2);await sleep(25);setActiveDesktop(1);await sleep(250);
- const old=handle;remount();const remounted=await until(()=>handle!==old);
- const beforePreferences=serviceFacts;
+ const old=bindingCalls,removed=unbindings;remount();const remounted=await until(()=>bindingCalls>old+2&&unbindings>removed&&bindings.has(b));
  lord.settings.state({cmd:'patch',patch:{reduceMotion:true}});await sleep(40);
  const stale=settings.get().reduceMotion===false;
  setActiveDesktop(2);await sleep(20);
  const reducedImage=lord.media.screenshot('screenshots'),reducedSaved=await media.saveImage(reducedImage,@IMAGE@+'.reduced.png');media.close(reducedImage);
- const reduced=stale&&noPreferencePayload&&serviceFacts===beforePreferences&&!!reducedSaved?.ok;
+ const reduced=stale&&legacyObservers===0&&!!reducedSaved?.ok;
  setActiveDesktop(1);await sleep(60);
  settings.set({reduceMotion:false});await sleep(80);setActiveDesktop(2);await sleep(300);
  const image=lord.media.screenshot('screenshots'),saved=await media.saveImage(image,@IMAGE@);media.close(image);

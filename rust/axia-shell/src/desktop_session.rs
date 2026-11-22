@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 pub struct Service {
     pub(crate) animation: crate::desktop_animation::Animation,
     settings: Option<(String, Reader<Value>, Subscription)>,
+    locale: Option<(Reader<crate::locale::State>, Subscription)>,
     windows: Reader<WindowState>,
     changes: Subscription,
     started: bool,
@@ -28,6 +29,7 @@ impl Service {
             animation: crate::desktop_animation::Animation::new(windows.clone()),
             changes: windows.subscribe(),
             settings: None,
+            locale: None,
             windows,
             started: false,
             saved_count: None,
@@ -40,6 +42,9 @@ impl Service {
         if self.settings.as_ref().is_some_and(|(current, _, _)| current == &home) { return; }
         let reader = crate::settings::with(&home, |s| s.reader());
         let changes = reader.subscribe();
+        let locale = crate::locale::reader(&home, &crate::native_view::resource_roots().0);
+        let locale_changes = locale.subscribe();
+        self.locale = Some((locale, locale_changes));
         self.settings = Some((home, reader, changes));
     }
     fn persist(&self, key: &str, value: &Value) -> Vec<Value> {
@@ -52,6 +57,7 @@ impl Service {
     }
     pub fn invalidated(&self) -> bool {
         self.changes.pending() || self.settings.as_ref().is_some_and(|(_, _, changes)| changes.pending())
+            || self.locale.as_ref().is_some_and(|(_, changes)| changes.pending())
     }
     fn index(&self, id: Option<i64>) -> usize {
         let state = self.windows.read();
@@ -63,6 +69,7 @@ impl Service {
     }
     pub fn effects(&mut self) -> Vec<Value> {
         self.changes.take();
+        if let Some((reader, changes)) = &self.locale { changes.take(); self.rtl = reader.read().dir == "rtl"; }
         if let Some((_, reader, changes)) = &self.settings {
             changes.take();
             self.animation.configure(reader.read()["reduceMotion"]==true, self.rtl);
@@ -178,41 +185,3 @@ impl Service {
 #[cfg(test)]
 #[path = "desktop_session_tests.rs"]
 mod tests;
-
-/// Nonvisual observer: persistence must not depend on a theme mounting its HUD.
-pub struct Observer {
-    service: std::rc::Rc<std::cell::RefCell<Service>>,
-    mounted: bool,
-}
-impl Observer {
-    pub fn new(service: std::rc::Rc<std::cell::RefCell<Service>>) -> Self {
-        Self {
-            service,
-            mounted: false,
-        }
-    }
-}
-impl axia_native::NativeApp for Observer {
-    fn resources(&mut self, _assets: &str, home: Option<&str>) {
-        if let Some(home) = home { self.service.borrow_mut().bind_settings(home); }
-    }
-    fn invalidated(&self) -> bool {
-        self.service.borrow().invalidated()
-    }
-    fn request(&mut self, input: &Value) -> Value {
-        if input["cmd"] != "sync" {
-            return json!({});
-        }
-        let mut service = self.service.borrow_mut();
-        let reduced = service.settings.as_ref().map_or(input["args"]["reduceMotion"]==true,
-            |(_, reader, _)| reader.read()["reduceMotion"]==true);
-        service.rtl = input["context"]["direction"]=="rtl";
-        let rtl = service.rtl;
-        service.animation.configure(reduced,rtl);
-        let effects = service.effects();
-        if std::mem::replace(&mut self.mounted, true) {
-            return json!({"same":true,"effects":effects});
-        }
-        json!({"tree":{"kind":"view","style":{"pointerEvents":"none"}},"effects":effects})
-    }
-}

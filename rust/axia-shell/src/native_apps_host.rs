@@ -78,6 +78,7 @@ pub unsafe extern "C" fn axia_native_app_new_windows(
     (*windows).restore_service().borrow_mut().bind_settings(home.as_deref().unwrap_or(""));
     let mut control = crate::app_control::Controller::new((*windows).clone());
     control.bind_settings(home.as_deref().unwrap_or(""));
+    (*windows).activate_services();
     Box::into_raw(Box::new(NativeApp::Control(control)))
 }
 #[no_mangle]
@@ -106,6 +107,16 @@ pub unsafe extern "C" fn axia_native_app_request(
         _ => json!({"error":"app.invalidRequest"}),
     };
     CString::new(reply.to_string()).unwrap().into_raw()
+}
+/// Only the root controller exposes this drain. Quiet reads allocate no JSON.
+#[no_mangle]
+pub unsafe extern "C" fn axia_native_app_take_services(app: *const NativeApp) -> *mut c_char {
+    let effects = match app.as_ref() {
+        Some(NativeApp::Control(control)) => control.take_services(),
+        _ => None,
+    };
+    effects.and_then(|effects| CString::new(effects.to_string()).ok())
+        .map_or(std::ptr::null_mut(), CString::into_raw)
 }
 #[no_mangle]
 pub unsafe extern "C" fn axia_native_app_reply_free(reply: *mut c_char) {

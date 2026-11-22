@@ -14,6 +14,13 @@ gravação durável antes de devolver os efeitos. Snapshots de compatibilidade
 atualizam o espelho público, sem executar outro save JS. A abertura de apps,
 política de navegador e metadados de geometria do tema continuam no adaptador.
 
+Desktops e restauração são atendidos diretamente pelo loop Rust, com referências
+fracas ao contexto e prazo nativo único. A confirmação não agenda o serviço;
+o observador invisível de desktops foi retirado. O adaptador ainda drena efeitos
+de compatibilidade pelo controlador validado, mesmo sem nenhuma view montada.
+Relógio, notificações e memória de posições continuam com atendimentos ligados
+a views; retirar essas dependências permanece no roadmap.
+
 Desktops e memória de posições também usam esse perfil: bootstrap, contagem,
 troca de tema e movimento reduzido são consultados/persistidos no Rust. Abertura
 de janelas empresta somente a posição solicitada, sem transportar a lista de

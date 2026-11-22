@@ -82,7 +82,7 @@ export {
 } from './windows.js';
 // Desktops and the Overview (docs/DESKTOPS.md)
 export { desktopName, nextDesktopBy, addDesktopAndShow, closeActiveDesktop, moveToDesktopItems, flowDesktopKeys, linuxDesktopKeys, flowGrabs, ctrlArrowsOn, desktopSwipe, DesktopHud } from './desktops.js';
-import { startDesktops, desktopsForThemeSwitch, desktopAt, indexOfDesktop, DesktopSession } from './desktops.js';
+import { startDesktops, desktopsForThemeSwitch, desktopAt, indexOfDesktop } from './desktops.js';
 export { overview, OverviewBackdrop, OverviewChrome, openOverview, closeOverview, toggleOverview, toggleAppWindows, overviewOpen } from './overview.jsx';
 export { codeStatus } from './codesig.js';
 import { reportRefusedCode } from './codesig.js';
@@ -268,7 +268,6 @@ function LocaleRoot({ children }) {
     at('popover', ClipboardPanel, EmojiPanel),
     at('modal', PrintDialog),
     createElement(RestorePrompt, { key: 'restore' }),
-    createElement(DesktopSession, { key: 'desktops' }),
     createElement(ClockSession, { key: 'clock' }),
     createElement(SettingsSession, { key: 'settings' }),
     at('notification', NotificationBanner, ClipboardToast, DisplayIdentify),

@@ -56,7 +56,18 @@ const preferenceFacts = createFactsStore([settings], () => settings.get(), () =>
 const runners = new Map();          // handle → runs one effect
 // A shell component that runs the effects of its own view (the title bar): returns the way to stop.
 export function addRunner(handle, run) { runners.set(handle, run); return () => runners.delete(handle); }
+let drainingServices = false;
 globalThis.__lordNativeView = () => {
+  if (!appHost && !drainingServices) {
+    drainingServices = true;
+    try {
+      for (let n = 0, list; n < 64 && (list = lord.nativeApps?.takeServices?.()); n++)
+        for (const effect of list) {
+          if (effect.kind === 'settingsState') settingsBridge.perform?.(effect);
+          else if (effect.kind === 'sessionRestore') restoreBridge.perform?.(effect);
+        }
+    } finally { drainingServices = false; }
+  }
   for (const [handle, run] of runners) {
     for (let list = lord.nativeViews.take(handle), n = 0; list && n < 64; list = lord.nativeViews.take(handle), n++)
       for (const effect of list) run(effect);

@@ -37,6 +37,8 @@ fn native_session_restore_survives_remount_and_preserves_clean_exit_and_claims()
                 "staleBootstrap",
                 "nativePreferences",
                 "noJsPersistence",
+                "backgroundPrompt",
+                "backgroundAutosave",
                 "saved",
             ] {
                 assert_eq!(report[flag], true, "{mode}/{width}/{flag}: {report}");
@@ -77,17 +79,19 @@ let jsPersistence=0;
 for(const name of ['load','save'])lord.settings[name]=()=>{jsPersistence++;throw Error('restore used JS settings '+name);};
 lord.settings.state=input=>{if(input.cmd==='patch'&&['sessionSaved','sessionRestore','sessionBrowsers'].some(key=>Object.hasOwn(input.patch||{},key))){jsPersistence++;throw Error('restore wrote preferences through JS');}return nativeSettings.call(lord.settings,input);};
 wm.open('files',{instance:'existing',frame});
-const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,request=lord.nativeApps.request;
-let handle=0,mounts=0,bound=true,noWindowTransport=true,remount,opens=[],launches=[],claimOK=false;
+const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,request=lord.nativeApps.request,unmount=lord.nativeViews.unmount;
+let handle=0,mounts=0,bound=true,noWindowTransport=true,remount,togglePrompt,restoreUnmounted=false,backgroundPrompt=false,opens=[],launches=[],claimOK=false;
 const inspect=text=>{const f=JSON.parse(text);noWindowTransport&&=!('settings'in f)&&!('windows'in f)&&!('windows'in(f.args||{}));};
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:restore'){inspect(text);bound&&=sources[0]===source;handle=mount(node,id,text,...sources);mounts++;return handle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return send(id,text);};
+lord.nativeViews.unmount=id=>{if(id===handle)restoreUnmounted=true;return unmount(id);};
 lord.nativeApps.request=text=>{const f=JSON.parse(text);if(f.cmd==='sessionRestore')noWindowTransport&&=!('settings'in f)&&!('settingsRevision'in f)&&!('windows'in f)&&!('active'in f);return request.call(lord.nativeApps,text);};
 const direct=(op,...args)=>JSON.parse(source.call(op,JSON.stringify([{},...args])));
 const state=()=>direct('resync').state;
 const perform=restoreBridge.perform;
 restoreBridge.perform=effect=>{
  if(effect.op==='save')throw Error('restore emitted a JS save effect');
+ if(effect.op==='visible'&&effect.value===true&&handle===0)backgroundPrompt=true;
  if(effect.op==='open')opens.push(effect.value);
  if(effect.op==='launch'){
    launches.push(effect.value);const claim=placeLinuxWindow(effect.value);
@@ -96,12 +100,13 @@ restoreBridge.perform=effect=>{
  }
  perform(effect);
 };
-function App(){const[rev,setRev]=useState(0);remount=()=>setRev(n=>n+1);return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'#3489bd',effects:{}})},
- h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},h(TextInput,{key:'field-'+rev,autoFocus:true,value:'',onChange:()=>{}}),h(RestorePrompt,{key:rev})));}
+function App(){const[rev,setRev]=useState(0),[enabled,setEnabled]=useState(false);remount=()=>setRev(n=>n+1);togglePrompt=setEnabled;return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'#3489bd',effects:{}})},
+ h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},h(TextInput,{key:'field-'+rev,autoFocus:true,value:'',onChange:()=>{}}),enabled?h(RestorePrompt,{key:rev}):null));}
 render(h(App));startSessionRestore();
 const text=()=>lord.nativeViews.text(handle)||'';
 const key=name=>{__lordKey(0,1,name,'',name,0);__lordKey(0,0,name,'',name,0);__lordNativeView();};
 async function run(){
+ await until(()=>backgroundPrompt);togglePrompt(true);
  await until(()=>handle>0);const marker=settings.get().sessionSaved;
  const initialMarker=marker?.clean===false&&marker.windows.length===3&&!JSON.stringify(marker).includes('command');
  const prompt=await until(()=>text().includes('Reopen your windows?'));
@@ -116,14 +121,17 @@ async function run(){
    const model=state(),note=model.windows.find(w=>w.w?.app==='notes'),pkg=model.windows.find(w=>w.w?.args?.pkg);
    acceptedOrDeclined=opens.length===1&&opens[0].app==='notes'&&opens[0].new===false&&pendingLogin&&await until(()=>!shellHasKeyboard());
    claims=launches.length===1&&claimOK&&pkg?.w.minimized===true&&note?.w.desktop===model.active;
+   restoreUnmounted=false;togglePrompt(false);await until(()=>restoreUnmounted);
    direct('setFrame',note.id,{x:90,y:80,w:320,h:240});
    nativeAutosave=await until(()=>settings.get().sessionSaved?.windows.some(e=>e.id==='app:notes'&&e.f.x===90),850);
  }else{
    key('Escape');acceptedOrDeclined=await until(()=>!shellHasKeyboard()&&settings.get().sessionSaved?.windows.length===1);
    claims=launches.length===0&&opens.length===0;
+   restoreUnmounted=false;togglePrompt(false);await until(()=>restoreUnmounted);
    direct('setFrame','files#existing',{x:90,y:80,w:320,h:240});
    nativeAutosave=await until(()=>settings.get().sessionSaved?.windows[0]?.f.x===90);
  }
+ const backgroundAutosave=restoreUnmounted&&nativeAutosave;
  flushSession();const frozen=JSON.stringify(settings.get().sessionSaved),cleanExit=settings.get().sessionSaved?.clean===true;
  direct('setFrame','files#existing',{x:199,y:80,w:320,h:240});await sleep(100);
  const held=JSON.stringify(settings.get().sessionSaved)===frozen;resumeSession();
@@ -134,7 +142,7 @@ async function run(){
  const nativePreferences=restoreMode()==='off'&&restoreBrowsers()===true&&settings.get().sessionRestore==='ask'&&settings.get().sessionBrowsers===false;
  settingsBridge.perform=adopt;
  const noJsPersistence=jsPersistence===0;
- console.log('session_restore-observation '+JSON.stringify({bound,initialMarker,prompt,keyboardGate,remounted,acceptedOrDeclined,claims,nativeAutosave,cleanExit,resumed,off,noWindowTransport,staleBootstrap,nativePreferences,noJsPersistence,saved:!!saved?.ok,mounts,opens:opens.length,launches:launches.length}));
+ console.log('session_restore-observation '+JSON.stringify({bound,initialMarker,prompt,keyboardGate,remounted,acceptedOrDeclined,claims,nativeAutosave,cleanExit,resumed,off,noWindowTransport,staleBootstrap,nativePreferences,noJsPersistence,backgroundPrompt,backgroundAutosave,saved:!!saved?.ok,mounts,opens:opens.length,launches:launches.length}));
 }
 setTimeout(()=>run().catch(error=>console.error('session_restore driver: '+(error.stack||error))),50);
 "#;

@@ -15,6 +15,7 @@ mod session;
 mod tests;
 
 pub use layout::{grid, ASSIST_GRID, OVERVIEW_GRID};
+pub(crate) use session::WeakSession;
 pub use session::{AppCommand, Session, Window, WindowReader, WindowState};
 
 use serde_json::Value;

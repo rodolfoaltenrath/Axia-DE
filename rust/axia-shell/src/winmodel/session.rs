@@ -881,26 +881,76 @@ impl axia_native::windows::WindowSource for WindowReader {
 /// below remains the transitional JS/LPK adapter; native consumers use `reader`.
 #[derive(Clone, Default)]
 pub struct Session {
+    core: std::rc::Rc<SessionCore>,
+}
+#[derive(Default)]
+struct SessionCore {
     state: Store<WindowState>,
-    restore: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>>,
-    desktops: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>>,
+    restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
+    desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
+    resident: std::cell::Cell<bool>,
+    effects: std::cell::RefCell<Vec<Value>>,
+}
+#[derive(Clone)]
+pub(crate) struct WeakSession(std::rc::Weak<SessionCore>);
+impl WeakSession {
+    pub(crate) fn upgrade(&self) -> Option<Session> { self.0.upgrade().map(|core| Session { core }) }
+    pub(crate) fn ptr_eq(&self, other: &Self) -> bool { self.0.ptr_eq(&other.0) }
 }
 
 impl Session {
+    pub(crate) fn activate_services(&self) {
+        self.core.resident.set(true);
+        crate::native_view::services::register(self.downgrade());
+    }
+    pub(crate) fn downgrade(&self) -> WeakSession { WeakSession(std::rc::Rc::downgrade(&self.core)) }
+    pub(crate) fn resident(&self) -> bool { self.core.resident.get() }
+    pub(crate) fn service_tick(&mut self, now: std::time::Instant) {
+        let desktops = self.core.desktops.borrow().clone();
+        if let Some(service) = desktops {
+            let mut service = service.borrow_mut();
+            if service.invalidated() { self.queue_service_effects(service.effects()); }
+        }
+        let restore = self.core.restore.borrow().clone();
+        if let Some(service) = restore {
+            let mut service = service.borrow_mut();
+            if service.background_wait(now).is_some_and(|wait| wait <= 0.) {
+                let effects = service.background_tick(self, now);
+                self.queue_service_effects(effects);
+            }
+        }
+    }
+    fn queue_service_effects(&self, effects: Vec<Value>) {
+        let mut queued = self.core.effects.borrow_mut();
+        for effect in effects {
+            // Compatibility preferences are complete revisioned snapshots: keep the latest.
+            if effect["kind"] == "settingsState" { queued.retain(|old| old["kind"] != "settingsState"); }
+            queued.push(effect);
+        }
+    }
+    pub(crate) fn service_wait(&self, now: std::time::Instant) -> Option<f64> {
+        if self.core.desktops.borrow().as_ref().is_some_and(|service| service.borrow().invalidated()) { return Some(0.); }
+        self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now))
+    }
+    pub(crate) fn service_pending(&self) -> bool { !self.core.effects.borrow().is_empty() }
+    pub(crate) fn take_service_effects(&self) -> Option<Value> {
+        let mut effects = self.core.effects.borrow_mut();
+        (!effects.is_empty()).then(|| Value::Array(std::mem::take(&mut *effects)))
+    }
     pub(crate) fn notification_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::notifications::Service>> {
-        self.notifications.clone()
+        self.core.notifications.clone()
     }
     pub(crate) fn desktop_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>> {
-        self.desktops.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::desktop_session::Service::new(self.reader())))).clone()
+        self.core.desktops.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::desktop_session::Service::new(self.reader())))).clone()
     }
     pub(crate) fn restore_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>> {
-        self.restore.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::session_restore::Service::new(self.reader())))).clone()
+        self.core.restore.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::session_restore::Service::new(self.reader())))).clone()
     }
-    pub fn reader(&self) -> Reader<WindowState> { self.state.reader() }
+    pub fn reader(&self) -> Reader<WindowState> { self.core.state.reader() }
 
     pub fn call(&mut self, op: &str, args: &[Value]) -> Result<Value, String> {
-        self.state.update(|state| match state.call(op, args, None) {
+        self.core.state.update(|state| match state.call(op, args, None) {
             Ok((reply, changed)) => (Ok(reply), changed),
             Err(error) => (Err(error), false),
         })
@@ -912,7 +962,7 @@ impl Session {
         self.app_command_with_facts(command, ids, &Value::Null)
     }
     pub fn app_command_with_facts(&mut self, command: AppCommand, ids: &[&str], facts: &Value) -> Result<Value, String> {
-        self.state.update(|state| match state.call("appControl", std::slice::from_ref(facts), Some((command, ids))) {
+        self.core.state.update(|state| match state.call("appControl", std::slice::from_ref(facts), Some((command, ids))) {
             Ok((reply, changed)) => (Ok(reply), changed),
             Err(error) => (Err(error), false),
         })
@@ -1093,10 +1143,10 @@ fn get_value(w: &Win, k: &str) -> Value {
 impl Session {
     /// Tests: windows as they are (bottom to top), appended.
     pub fn debug_load(&mut self, list: &[Value]) {
-        self.state.update(|state| { state.debug_load(list); ((), !list.is_empty()) });
+        self.core.state.update(|state| { state.debug_load(list); ((), !list.is_empty()) });
     }
     pub fn debug_window(&self, id: &str) -> Value {
-        let state = self.state.read();
+        let state = self.core.state.read();
         state.find(id).map_or(Value::Null, |i| Value::Object(state.wins[i].data.clone()))
     }
 }

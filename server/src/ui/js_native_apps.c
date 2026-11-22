@@ -9,6 +9,7 @@ extern AxiaNativeApp *axia_native_app_new_windows(const char *, const AxiaWindow
 extern void axia_native_app_free(AxiaNativeApp *);
 extern char *axia_native_app_request(AxiaNativeApp *, const char *);
 extern void axia_native_app_reply_free(char *);
+extern char *axia_native_app_take_services(const AxiaNativeApp *);
 static JSClassID class_id;
 static void finalize(JSRuntime *rt, JSValue value) {
     (void)rt;
@@ -29,6 +30,17 @@ static JSValue request(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     JS_FreeCString(ctx, input);
     if (!reply) return JS_ThrowOutOfMemory(ctx);
     JSValue result = JS_ParseJSON(ctx, reply, strlen(reply), "<axia-native-app>");
+    axia_native_app_reply_free(reply);
+    return result;
+}
+/* Root-only service effects; NULL means quiet and does not allocate/parse JSON. */
+static JSValue take_services(JSContext *ctx, JSValueConst self, int argc, JSValueConst *argv) {
+    (void)argc; (void)argv;
+    AxiaNativeApp *state = JS_GetOpaque2(ctx, self, class_id);
+    if (!state) return JS_EXCEPTION;
+    char *reply = axia_native_app_take_services(state);
+    if (!reply) return JS_NULL;
+    JSValue result = JS_ParseJSON(ctx, reply, strlen(reply), "<axia-service-effects>");
     axia_native_app_reply_free(reply);
     return result;
 }
@@ -94,6 +106,7 @@ void js_native_apps_register(JSContext *ctx, JSValue lord) {
         fprintf(stderr, "native apps: the shared host could not start\n");
         return;
     }
+    JS_SetPropertyStr(ctx, object, "takeServices", JS_NewCFunction(ctx, take_services, "takeServices", 0));
     JS_SetPropertyStr(ctx, object, "create", JS_NewCFunction(ctx, create, "create", 1));
     JS_SetPropertyStr(ctx, lord, "nativeApps", object);
 }

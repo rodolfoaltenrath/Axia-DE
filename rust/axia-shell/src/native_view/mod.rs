@@ -6,6 +6,8 @@
 //! clipboard). The compositor delivers pointer events here before JS sees them
 //! (see `server/src/ui/js_nativeview.c`).
 mod host;
+#[path = "../session_runtime.rs"]
+pub(crate) mod services;
 #[cfg(test)]
 pub(crate) use axia_native::retained;
 pub use axia_native::icons;
@@ -243,8 +245,6 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         windows.clone().map(|reader| Box::new(switcher::Switcher::new(reader)) as Box<dyn NativeApp>)
     } else if id == "shell:desktop-hud" {
         windows.clone().map(|reader| Box::new(desktop_hud::DesktopHud::new(reader)) as Box<dyn NativeApp>)
-    } else if id == "shell:desktops" {
-        owner.clone().map(|session| Box::new(crate::desktop_session::Observer::new(session.desktop_service())) as Box<dyn NativeApp>)
     } else if id == "shell:notifications" {
         owner.clone().map(|session| Box::new(notifications::Banners::new(session.notification_service())) as Box<dyn NativeApp>)
     } else if id == "shell:clock" {
@@ -410,6 +410,7 @@ pub unsafe extern "C" fn axia_view_key(key: *const c_char, chr: *const c_char, f
 pub extern "C" fn axia_view_tick(now: f64) {
     crate::settings::tick();
     crate::locale::tick();
+    services::tick(std::time::Instant::now());
     for handle in handles() {
         with_host(handle, |h| h.tick(now));
     }
@@ -418,7 +419,8 @@ pub extern "C" fn axia_view_tick(now: f64) {
 #[no_mangle]
 pub extern "C" fn axia_view_timeout(now: f64) -> f64 {
     if crate::locale::pending() {return 0.;}
-    let preferences = crate::settings::timeout().unwrap_or(-1.);
+    let preferences = [crate::settings::timeout(), services::timeout(std::time::Instant::now())]
+        .into_iter().flatten().reduce(f64::min).unwrap_or(-1.);
     let views = with(|r| {
         r.hosts
             .values()
@@ -438,7 +440,7 @@ pub extern "C" fn axia_view_timeout(now: f64) -> f64 {
 /// Effects are waiting for the shell (it calls `__lordNativeView`).
 #[no_mangle]
 pub extern "C" fn axia_view_pending() -> i32 {
-    with(|r| i32::from(r.hosts.values().any(Host::pending)))
+    i32::from(services::pending() || with(|r| r.hosts.values().any(Host::pending)))
 }
 
 #[cfg(test)]

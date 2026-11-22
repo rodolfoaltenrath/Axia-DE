@@ -21,6 +21,7 @@ impl Controller {
     pub fn new(windows: Session) -> Self {
         let app = crate::forcequit::App::with_windows(Rc::new(WindowReader(windows.reader())));
         windows.notification_service().borrow_mut().bind_catalog(app.metadata_reader());
+        windows.restore_service().borrow_mut().bind_catalog(app.metadata_reader());
         Self {
             app,
             windows: Some(windows),
@@ -32,6 +33,9 @@ impl Controller {
         let home = crate::settings::profile(home);
         self.preferences = Some(crate::settings::with(&home, |s| s.reader()));
         if let Some(windows) = &self.windows { windows.desktop_service().borrow_mut().bind_settings(&home); }
+    }
+    pub(crate) fn take_services(&self) -> Option<Value> {
+        self.windows.as_ref().and_then(Session::take_service_effects)
     }
     pub fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "clockCommand" {

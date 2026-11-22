@@ -74,6 +74,7 @@ pub struct Service {
     windows: Reader<WindowState>,
     changes: Subscription,
     settings: Option<(String, Reader<Value>, Subscription)>,
+    catalog: Option<(Reader<Value>, Subscription)>,
     save_pending: bool,
     publish_pending: bool,
     metadata: Value,
@@ -113,6 +114,7 @@ impl Service {
             windows,
             changes,
             settings: None,
+            catalog: None,
             save_pending: false,
             publish_pending: false,
             metadata: Value::Null,
@@ -155,6 +157,22 @@ impl Service {
         let changes = reader.subscribe();
         self.settings = Some((home, reader, changes));
         self.settings_revision = None;
+    }
+    pub(crate) fn bind_catalog(&mut self, reader: Reader<Value>) {
+        let changes = reader.subscribe();
+        self.catalog = Some((reader, changes));
+    }
+    pub(crate) fn background_wait(&self, now: Instant) -> Option<f64> {
+        if self.changes.pending() || self.settings_pending()
+            || self.catalog.as_ref().is_some_and(|(_, changes)| changes.pending()) { return Some(0.); }
+        self.deadline().map(|until| until.saturating_duration_since(now).as_secs_f64()*1000.)
+    }
+    pub(crate) fn background_tick(&mut self, session: &mut Session, now: Instant) -> Vec<Value> {
+        if let Some(reader) = self.catalog.as_ref().and_then(|(reader, changes)| changes.take().map(|_| reader.clone())) {
+            self.configure(&reader.read(), &Value::Null, now);
+        }
+        self.tick(session, now);
+        std::mem::take(&mut self.effects)
     }
     fn settings_pending(&self) -> bool {
         self.settings.as_ref().is_some_and(|(_, _, changes)| changes.pending())

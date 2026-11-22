@@ -47,7 +47,7 @@ const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
 import {render,View} from '@lordos/runtime';
 import {setDesktops,setActiveDesktop,activeDesktop,desktopList,windows} from '@ROOT@/sdk/windows.js';
-import {DesktopHud,DesktopSession,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch,desktopSwipe} from '@ROOT@/sdk/desktops.js';
+import {DesktopHud,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch,desktopSwipe} from '@ROOT@/sdk/desktops.js';
 import {settings} from '@ROOT@/sdk/settings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
@@ -68,15 +68,15 @@ setDesktops([10,20,30],10);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
 const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
-let handle=0,bound=false,serviceBound=false,noWindowTransport=true,unmounted=false,hide,remount,mounts=0;
+let handle=0,bound=false,legacyObservers=0,noWindowTransport=true,unmounted=false,hide,remount,mounts=0;
 const request=lord.nativeApps.request;
 lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='desktopCommand')noWindowTransport&&=!('active'in input)&&!('desktops'in input)&&!('id'in input);if(input.cmd==='desktopSession')noWindowTransport&&=!('settings'in input)&&!('windows'in input)&&!('desktops'in input)&&!('active'in input);return request.call(lord.nativeApps,text);};
 function inspect(text){const input=JSON.parse(text);noWindowTransport&&=!('windows'in input)&&!('desktops'in(input.args||{}))&&!('active'in(input.args||{}));}
-lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:desktops'){inspect(text);serviceBound=sources[0]===source;}if(id==='shell:desktop-hud'){inspect(text);bound=sources[0]===source;mounts++;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
+lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:desktops')legacyObservers++;if(id==='shell:desktop-hud'){inspect(text);bound=sources[0]===source;mounts++;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle)inspect(text);return send(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounted=true;return unmount(id);};
 function App(){const[on,setOn]=useState(true),[rev,setRev]=useState(0);hide=()=>setOn(false);remount=()=>setRev(n=>n+1);return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'#3489bd',effects:{}})},
- h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},h(DesktopSession,{key:'service-'+rev}),on?h(DesktopHud,{key:rev}):null));}
+ h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#202126':'#e9ebef'}},on?h(DesktopHud,{key:rev}):null));}
 render(h(App));
 const text=()=>lord.nativeViews.text(handle)||'';
 const direct=(op,...args)=>source.call(op,JSON.stringify([{},...args]));
@@ -129,7 +129,7 @@ async function run(){
    locale.set({...locale.get(),dir:'ltr'});nativeSwipes=first&&switched&&boundary&&rtl;
  }finally{desktopList.get=listGet;}
  direct('setDesktops',[10],10);
- direct('createDesktop');const withoutHud=serviceBound&&await until(()=>settings.get().desktopCount===2);
+ direct('createDesktop');const withoutHud=legacyObservers===0&&await until(()=>settings.get().desktopCount===2);
  console.log('desktop_hud-observation '+JSON.stringify({bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('desktop_hud driver: '+(error.stack||error))),150);

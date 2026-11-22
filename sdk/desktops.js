@@ -25,7 +25,6 @@ import { nativeAnim, whenAnimDone } from './anim.js';
 import { toggleOverview, toggleAppWindows } from './overview.jsx';
 
 const NATIVE_DESKTOP_HUD = { id: 'shell:desktop-hud', shell: true, fullTheme: true };
-const NATIVE_DESKTOP_SESSION = { id: 'shell:desktops', shell: true };
 const hudHandle = { current: 0 };
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 function sessionCommand(action, extra = {}) {
@@ -200,11 +199,4 @@ export function DesktopHud() {
     h(NativeView, { manifest: NATIVE_DESKTOP_HUD, stateSource: lord.windowList, handleRef: hudHandle,
       args: { display: { x: d.x, y: d.y, w: d.w, h: d.h } },
       style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, pointerEvents: 'none' } }));
-}
-
-// Mounted by the SDK root, independently of the theme's optional indicator.
-export function DesktopSession() {
-  if (appHost || typeof lord === 'undefined' || typeof lord.appId === 'string' || typeof lord.greeter !== 'undefined') return null;
-  return h(NativeView, { manifest: NATIVE_DESKTOP_SESSION, stateSource: lord.windowList,
-    style: { position: 'absolute', left: 0, top: 0, width: 1, height: 1, pointerEvents: 'none' } });
 }

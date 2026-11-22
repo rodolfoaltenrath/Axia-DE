@@ -1,7 +1,7 @@
 # Roadmap: shell, SDK e temas em Rust
 
 Este roadmap acompanha **uma migração específica**: tirar React e JavaScript da
-sessão da Axia DE (`sdk/`, `runtime/` e `themes/`, 16.368 linhas em 2026-11-18)
+sessão da Axia (`sdk/`, `runtime/` e `themes/`, 16.368 linhas em 2026-11-18)
 e substituí-los por Rust. Ele complementa:
 
 - [`ROADMAP.md`](ROADMAP.md): o roadmap geral do produto, desde o LordOS;
@@ -344,16 +344,19 @@ views nativas lerem direto, sem JSON.
       sem lista de posições ou memoryMerge pelo JS. O adaptador fornece metadados.
       Restauração também pertence ao serviço Rust do contexto: snapshot por
       assinatura, prazos, plano de abertura, posições, confirmação nativa e
-      marcadores de saída. Remontar a interface não reinicia o serviço.
+      marcadores de saída. O loop nativo atende seus prazos e assinaturas sem
+      montar a confirmação; a view apenas apresenta o estado e recebe entrada.
+      Contextos usam um proprietário compartilhado e registro fraco de serviços;
+      leitores de janelas não retêm o contexto. Remontar não reinicia o serviço.
       Inicialização, opções e marcadores de recuperação/saída já leem/gravam
       o proprietário de preferências do perfil no Rust, com gravação durável.
       Comandos não enviam settings/revisão e não há efeito JS de save da sessão.
       Consultas/edições das opções também usam esse proprietário, com espelho
       antigo; o host LPK mantém as opções locais. O adaptador ainda abre apps
       e executa a política de navegador. Inicialização, contagem e posições na troca de tema agora
-      pertencem a `desktop_session.rs`, com observador sem interface no root
-      do SDK. Não dependem do indicador montado pelo tema nem de assinatura
-      da lista JS. Contagem, hand-off de tema e movimento reduzido usam o perfil
+      pertencem a `desktop_session.rs`, atendido pelo loop residente Rust.
+      O observador invisível shell:desktops foi retirado. Não dependem do
+      indicador montado pelo tema nem de assinatura da lista JS. Contagem, hand-off de tema e movimento reduzido usam o perfil
       Rust; o SDK não envia configurações no start nem reduceMotion nos fatos.
       Patches de persistência JS foram retirados desses serviços. Molduras,
       metadados de geometria do tema, comandos legados e efeitos seguem pendentes.
@@ -648,3 +651,4 @@ mostraram.
 | 2026-11-22 | Fase 2: preferências das views lidas por empréstimo Rust | Commit desta linha | NativeBridge da sessão deixa de assinar/serializar settings e preferenceRevision. Host associa leitor/assinatura apenas aos modelos interessados, empresta o perfil durante sync e usa a revisão nativa; fatos antigos não sobrescrevem o estado. Migrados 14 apps e a view de restauração; Relógio conserva escalares, Monitor seu bloco e Configurações apenas blocos editáveis/pendências. Passaram 1.268 testes do workspace (620 da shell), sete contratos LPK, integração dos apps compilados e 40 cenários gráficos. Relógio alterna 12/24 h com espelho JS congelado e sem novos fatos; captura inspecionada. Compositor/bundles e instalação privada gerados. Três amostras de ociosidade passaram: 12,350 poll/s e 104,566 MiB de RSS, com limites impostos. Evidências em build/validation/native-view-preferences. Retomar pelo bootstrap/consumidores de preferências dos serviços e por tema/escala ainda calculados em JS. Medições físicas permanecem para o encerramento. |
 | 2026-11-22 | Fase 2: bootstrap e marcadores de restauração no perfil Rust | Commit desta linha | Serviço do contexto possui leitor/assinatura de configurações. Startup e consultas usam o proprietário; comandos do SDK não enviam settings/revisão. Opções são validadas/editadas no Rust; marcadores de início/autosave/saída/retomada/tema usam gravação durável antes dos efeitos, sem save JS. Snapshot por revisão mantém consumidores legados; host LPK preserva opções locais. Empréstimos terminam antes da escrita; falhas conservam dados sem I/O repetido em frames quietos. Passaram 623 testes da shell, oito contratos LPK, 20 cenários gráficos e encerramento instalado por timeout/SIGTERM. Fixture inicia com modo JS off e nativo ask, proíbe campos removidos e gravação JS e consulta/edita com espelho congelado. Confirmação inspecionada. Compositor/bundles e instalação privada gerados; três amostras de ociosidade passaram: 12,500 poll/s e 104,520 MiB de RSS, com limites impostos. Evidências em build/validation/restore-preferences. Adaptador ainda executa abertura/política e fornece geometria do tema; agendamento ainda atendido pelo host da view. Retomar por preferências/persistência de desktops e memória de posições. Medições físicas no encerramento. |
 | 2026-11-22 | Fase 2: preferências/persistência de desktops e posições no Rust | Commit desta linha | Bootstrap e hand-off de desktops leem/escrevem o perfil; contagem e movimento reduzido têm fonte nativa, sem settings no start nem reduceMotion nos fatos. Coleta de posições mescla no proprietário e grava mapa/ordem em uma única revisão; windowPlacesOrder preserva recência e limite de 200 após snapshots com chaves ordenadas. Abertura empresta somente a posição solicitada; removidos efeito windowPlaces, memoryMerge e lista de posições nos pedidos JS. Publicações por revisão mantêm consumidores legados; inicialização local LPK preservada. Passaram 627 testes da shell, oito contratos LPK, 24 cenários gráficos e encerramento instalado por timeout/SIGTERM. Integrações usam espelhos antigos, proíbem escrita/transporte removidos e verificam movimento reduzido por pixels sem novos fatos. Captura inspecionada. Compositor/bundles e instalação privada gerados; três amostras de ociosidade passaram: 12,350 poll/s e 104,699 MiB de RSS, com limites impostos. Evidências em build/validation/native-desktop-memory-preferences. Metadados de telas/tema, espelhos e atendimento dos serviços por observadores do root continuam pendentes; medições físicas no encerramento. |
+| 2026-11-22 | Fase 2: serviços de desktops e restauração no loop Rust | Commit desta linha | Contexto compartilhado com registro fraco; revisões e prazos são atendidos sem hosts visuais e sem snapshot alocado por frame. Removido observador invisível de desktops; confirmação só apresenta estado. Catálogo nativo por assinatura e fila de efeitos por contexto, com snapshots agrupados e drenagem silenciosa restrita ao controlador do root. Passaram 631 testes da shell, oito contratos LPK, 44 cenários gráficos e encerramento instalado por timeout/SIGTERM. Regressões exigem confirmação e autosave sem view; vida útil e isolamento cobertos em Rust. Compositor, bundles e instalação privada gerados. Mensagens da shell usam Axia nos três idiomas; captura de confirmação inspecionada. Três amostras de ociosidade do binário final passaram com limites impostos: 12,450 poll/s e 105,016 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Evidências em build/validation/resident-session-services. Relógio, notificações e memória de posições ainda dependem de views; adaptadores JS de efeitos permanecem. Medições físicas no encerramento. |
