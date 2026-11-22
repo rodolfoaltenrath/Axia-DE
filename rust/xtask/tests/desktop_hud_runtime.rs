@@ -34,6 +34,7 @@ fn desktop_indicator_uses_native_state_and_expiry() {
                 "boundary",
                 "nativeCommands",
                 "nativeSwipes",
+                "nativeInputPolicy",
                 "started",
                 "nativeCount",
                 "handoff",
@@ -58,13 +59,14 @@ const DRIVER: &str = r#"
 import {createElement as h,useState} from 'react';
 import {render,View,screen} from '@lordos/runtime';
 import {setDesktops,setActiveDesktop,activeDesktop,desktopList,windows} from '@ROOT@/sdk/windows.js';
-import {DesktopHud,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch,desktopSwipe} from '@ROOT@/sdk/desktops.js';
+import {DesktopHud,nextDesktopBy,addDesktopAndShow,closeActiveDesktop,startDesktops,desktopAt,activeIndex,indexOfDesktop,desktopOfSurface,desktopsForThemeSwitch,desktopSwipe,flowDesktopKeys,ctrlArrowsOn,flowGrabs} from '@ROOT@/sdk/desktops.js';
 import {settings} from '@ROOT@/sdk/settings.js';
 import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
-import {locale} from '@ROOT@/sdk/i18n.js';
+import {locale,direction} from '@ROOT@/sdk/i18n.js';
+import {localeBridge} from '@ROOT@/sdk/nativelocale.js';
 import {media} from '@ROOT@/sdk/media.js';
 locale.set({...locale.get(),lang:'en'});enableShellLayers();
 const originalDisplays=screen.displays;
@@ -96,7 +98,7 @@ async function changeAppearance(){
 const source=lord.windowList,mount=lord.nativeViews.mount,send=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
 let handle=0,bound=false,legacyObservers=0,noWindowTransport=true,unmounted=false,hide,remount,mounts=0;
 const request=lord.nativeApps.request;
-lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='desktopCommand')noWindowTransport&&=!('active'in input)&&!('desktops'in input)&&!('id'in input);if(input.cmd==='desktopSession')noWindowTransport&&=!('settings'in input)&&!('windows'in input)&&!('desktops'in input)&&!('active'in input);return request.call(lord.nativeApps,text);};
+lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='desktopCommand')noWindowTransport&&=!('active'in input)&&!('desktops'in input)&&!('id'in input);if(input.cmd==='desktopSession')noWindowTransport&&=!('settings'in input)&&!('windows'in input)&&!('desktops'in input)&&!('active'in input)&&!('rtl'in input)&&!('locale'in input);return request.call(lord.nativeApps,text);};
 function inspect(text){inspectAppearance(text);const input=JSON.parse(text);noDisplayFacts&&=!('display'in(input.args||{}));noWindowTransport&&=!('windows'in input)&&!('desktops'in(input.args||{}))&&!('active'in(input.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{if(id==='shell:desktops')legacyObservers++;if(id==='shell:desktop-hud'){inspect(text);bound=sources[0]===source;mounts++;handle=mount(node,id,text,...sources);return handle;}return mount(node,id,text,...sources);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);appearanceFacts++;}return send(id,text);};
@@ -147,17 +149,27 @@ async function run(){
  // The mirror still has multiple desktops; native state has one and must cycle windows.
  direct('close','notes#moved');direct('open',{app:'first'});direct('open',{app:'second'});
  const listGet=desktopList.get;desktopList.get=()=>{throw Error('swipe read desktop mirror');};
- let nativeSwipes=false;
+ let nativeSwipes=false,nativeInputPolicy=false;
+ locale.set({...locale.get(),dir:'ltr'});
+ const settingsPerform=settingsBridge.perform,localePerform=localeBridge.perform;
+ settingsBridge.perform=()=>{};localeBridge.perform=()=>{};
  try{
    desktopSwipe('left')();const first=state().windows.at(-1)?.id==='first';
    direct('setDesktops',[10,20],10);desktopSwipe('left')();const switched=state().active===20;
    desktopSwipe('left')();const boundary=state().active===20;
-   locale.set({...locale.get(),dir:'rtl'});desktopSwipe('left')();const rtl=state().active===10;
-   locale.set({...locale.get(),dir:'ltr'});nativeSwipes=first&&switched&&boundary&&rtl;
- }finally{desktopList.get=listGet;}
+   lord.locale.state({cmd:'patch',value:{dir:'rtl'}});desktopSwipe('left')();const rtl=state().active===10&&direction()==='ltr';
+   nativeSwipes=first&&switched&&boundary&&rtl;
+   const arrow=flowDesktopKeys.find(key=>key.id==='switchDesktopCtrl');
+   direct('setDesktops',[10,20,30],20);arrow.run({code:105});const nativeRight=state().active===30;
+   lord.locale.state({cmd:'patch',value:{dir:'ltr'}});direct('setActiveDesktop',20);arrow.run({code:105});const nativeLeft=state().active===10;
+   nativeSettings.call(lord.settings,{cmd:'patch',patch:{desktopArrows:false}});
+   const disabled=!ctrlArrowsOn()&&flowGrabs()==='flow'&&settings.get().desktopArrows!==false;
+   nativeSettings.call(lord.settings,{cmd:'patch',patch:{desktopArrows:true}});
+   nativeInputPolicy=nativeRight&&nativeLeft&&disabled&&ctrlArrowsOn()&&flowGrabs()==='flow-desktops';
+ }finally{desktopList.get=listGet;settingsBridge.perform=settingsPerform;localeBridge.perform=localePerform;}
  direct('setDesktops',[10],10);
  direct('createDesktop');const withoutHud=legacyObservers===0&&await until(()=>settings.get().desktopCount===2);
- console.log('desktop_hud-observation '+JSON.stringify({noAppearanceFacts,noDisplayFacts,staleDisplayMirror,...appearanceUpdate,appearanceRetained,bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok}));
+ console.log('desktop_hud-observation '+JSON.stringify({noAppearanceFacts,noDisplayFacts,staleDisplayMirror,...appearanceUpdate,appearanceRetained,bound,initiallyHidden,started,nativeCount,handoff,positions,remounted,withoutHud,direct:directShown,mirrorStale,extended,expired,boundary,nativeCommands,nativeSwipes,nativeInputPolicy,overviewHidden:overviewHidden&&noReplay,singleHidden,noWindowTransport,unmounted,nativePreferences,noJsPersistence:jsPersistence===0,saved:!!saved?.ok}));
 }
 setTimeout(()=>run().catch(error=>console.error('desktop_hud driver: '+(error.stack||error))),150);
 "#;

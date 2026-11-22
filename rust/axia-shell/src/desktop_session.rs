@@ -97,6 +97,22 @@ impl Service {
     }
     pub fn command(&mut self, session: &mut Session, input: &Value) -> Value {
         let mut reply = match input["action"].as_str() {
+            Some("arrowsEnabled") => {
+                let enabled = self.settings.as_ref().map_or(true, |(_, reader, _)| reader.read()["desktopArrows"] != false);
+                json!({"result":enabled})
+            }
+            Some(action @ ("arrow" | "swipe")) => {
+                let Some(direction @ ("left" | "right")) = input["direction"].as_str() else {
+                    return json!({"error":"app.invalidRequest"});
+                };
+                let rtl = self.locale.as_ref().is_some_and(|(reader, _)| reader.read().dir == "rtl");
+                let command = if action == "swipe" {
+                    AppCommand::SwipeDesktop { left: direction == "left", rtl }
+                } else {
+                    AppCommand::StepDesktop(crate::winmodel::desktops::arrow_step(&input["direction"], rtl) as i64)
+                };
+                session.app_command(command, &[]).unwrap_or_else(|error| json!({"error":error}))
+            }
             Some("start") if !self.started => {
                 let reader = self.settings.as_ref().map(|(_, reader, _)| reader.clone());
                 let borrowed = reader.as_ref().map(Reader::read);

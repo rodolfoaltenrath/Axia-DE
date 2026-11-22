@@ -121,6 +121,12 @@ sem monitor/geometria nos fatos ou assinatura React de tela na sessão. Trocar
 o principal ou conectar/desconectar monitores invalida a apresentação sem
 reiniciar o prazo; não há polling para telas. O mount de compatibilidade mantém
 a geometria explícita, selecionado pela entrada nativa do host, não pelos fatos.
+Gestos horizontais e setas de desktop da sessão enviam somente a direção de
+entrada ao serviço residente. O Rust consulta o locale atual antes de escolher
+o passo; a permissão das setas Ctrl vem do perfil nativo. O espelho JS não
+decide RTL nem desktopArrows nesses caminhos. Com um desktop, o gesto continua
+alternando janelas; limites e apresentação do indicador são preservados. Os
+atalhos do host isolado mantêm suas regras locais.
 A confirmação de restauração também retém a paleta da shell e lê o catálogo
 nativo por empréstimo. O serviço deixa de guardar outra cópia dos metadados;
 o controlador não cria uma cópia por comando, e a view não recebe registry,

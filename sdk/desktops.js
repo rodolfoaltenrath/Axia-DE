@@ -63,7 +63,10 @@ export function nextDesktopBy(step) {
   }
   if (desktopCommand('step', step)?.boundary) showHud();
 }
-const stepArrow = (dir) => nextDesktopBy(arrowStep(dir, direction() === 'rtl'));
+const stepArrow = (dir) => {
+  if (appHost) return nextDesktopBy(arrowStep(dir, direction() === 'rtl'));
+  if (sessionCommand('arrow', { direction: dir })?.boundary) showHud();
+};
 
 export function addDesktopAndShow() {
   if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) return desktopCommand('add');
@@ -88,7 +91,7 @@ export function moveToDesktopItems(id) {
 
 // ---- shortcuts ----
 
-export const ctrlArrowsOn = () => settings.get().desktopArrows !== false;
+export const ctrlArrowsOn = () => appHost ? settings.get().desktopArrows !== false : sessionCommand('arrowsEnabled');
 const arrowDir = (e) => (e.code === 105 ? 'left' : 'right');
 const onStep = (e) => stepArrow(arrowDir(e));
 
@@ -113,7 +116,7 @@ export const linuxDesktopKeys = [
 // Trackpad (registerGestureActions): with one desktop a sideways swipe still switches windows.
 export const desktopSwipe = (dir) => () => {
   if (!appHost) {
-    if (desktopCommand('swipe', undefined, { direction: dir, rtl: direction() === 'rtl' })?.boundary) showHud();
+    if (sessionCommand('swipe', { direction: dir })?.boundary) showHud();
     return;
   }
   if (desktopList.get().length > 1) nextDesktopBy(swipeStep(dir, direction() === 'rtl'));

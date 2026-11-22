@@ -302,3 +302,46 @@ fn native_reduced_motion_overrides_facts_and_restores_animation_immediately() {
     scene::destroy(node);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn input_policy_borrows_current_locale_and_preferences_without_window_mirrors() {
+    let mut session = Session::default();
+    call(&mut session, "setDesktops", &[json!([10,20,30]), json!(20)]);
+    let locale = axia_state::Store::new(crate::locale::State { dir: "ltr", ..Default::default() });
+    let preferences = axia_state::Store::new(json!({"desktopArrows":false}));
+    let service = session.desktop_service();
+    {
+        let mut service = service.borrow_mut();
+        service.locale = Some((locale.reader(), locale.subscribe()));
+        service.settings = Some((String::new(), preferences.reader(), preferences.subscribe()));
+    }
+    let reader = session.reader();
+    let revision = reader.revision();
+    assert_eq!(command(&mut session, json!({"action":"arrowsEnabled","settings":{"desktopArrows":true}}))["result"], false);
+    assert_eq!(reader.revision(), revision);
+    preferences.update(|settings| { settings["desktopArrows"] = json!(true); ((), true) });
+    assert_eq!(command(&mut session, json!({"action":"arrowsEnabled"}))["result"], true);
+    let revision = reader.revision();
+    let reply = command(&mut session, json!({"action":"arrow","direction":"left","rtl":true,"active":30,"desktops":[999]}));
+    assert_eq!(reply["result"]["boundary"], false);
+    assert_eq!(reader.read().active_desktop(), 10);
+    assert_eq!(reader.revision(), revision+1);
+    locale.update(|locale| { locale.dir = "rtl"; ((), true) });
+    command(&mut session, json!({"action":"arrow","direction":"left","rtl":false}));
+    assert_eq!(reader.read().active_desktop(), 20);
+    command(&mut session, json!({"action":"swipe","direction":"left","rtl":false}));
+    assert_eq!(reader.read().active_desktop(), 10);
+    let revision = reader.revision();
+    assert_eq!(command(&mut session, json!({"action":"swipe","direction":"left"}))["result"]["boundary"], true);
+    assert_eq!(reader.revision(), revision);
+    for action in ["arrow","swipe"] {
+        for direction in [json!("up"),json!(""),json!(true),Value::Null] {
+            assert_eq!(command(&mut session, json!({"action":action,"direction":direction}))["error"], "app.invalidRequest");
+        }
+    }
+    assert_eq!(reader.revision(), revision);
+    call(&mut session, "setDesktops", &[json!([10]),json!(10)]);
+    for app in ["first","second"] { call(&mut session,"open",&[json!({"app":app})]); }
+    command(&mut session, json!({"action":"swipe","direction":"left"}));
+    assert_eq!(reader.read().focused_window(), Some("first"));
+}

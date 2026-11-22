@@ -1491,6 +1491,40 @@ Compositor/bundles compilados e instalação privada gerada. Evidências em
 
 Três amostras de ociosidade passaram com limites impostos: 12,450 poll/s e 104,891 MiB de RSS, abaixo de 15 poll/s e 120 MiB.
 
+### Política de entrada dos desktops no serviço residente
+
+O serviço de desktops atende `arrow`, `swipe` e `arrowsEnabled`. Os dois
+primeiros validam a direção e emprestam o locale atual antes de escolher o
+comando do modelo; o último consulta `desktopArrows` no perfil por empréstimo.
+RTL, lista, desktop ativo e preferências enviados pelo chamador não decidem
+esses comandos. Uma leitura de política não altera a revisão de janelas;
+o passo efetivo mantém a transação única e limites do modelo existente.
+
+O SDK da sessão remove o cálculo de RTL no gesto e no atalho de seta, além da
+leitura do espelho de configurações para `ctrlArrowsOn`/`flowGrabs`. O host
+isolado conserva o comportamento anterior. Atalhos ainda são registrados pelo
+JS; o perfil de teclas, roteamento de entrada e montagem continuam no roadmap.
+O comando interno anterior `desktopCommand/swipe` permanece com seu contrato
+explícito para chamadores existentes, sem ser usado pelo gesto da sessão.
+
+Validação em Fedora 44 privado: passaram 674 testes da shell (sete ignorados),
+oito contratos LPK, quatro cenários ampliados de desktops e oito de
+memória/restauração. O teste novo cobre leitura atual das duas fontes, dados
+injetados ignorados, limites sem revisão extra, direção inválida e gesto com
+um desktop. A integração usa locale nativo RTL com espelho JS LTR, executa o
+atalho real registrado e altera desktopArrows apenas no perfil, com a ponte
+de snapshots pausada. Passaram a consulta de habilitação das setas Ctrl, o perfil de grabs e a
+escolha das direções sem consultar o espelho da lista de desktops. As quatro capturas são
+idênticas byte a byte às de `native-desktop-hud-displays`.
+Build completa GPU=1, bundles default/app-host e instalação privada gerados;
+encerramento instalado passou por timeout/SIGTERM. Evidências em
+`build/validation/native-desktop-input-policy/`.
+
+Três amostras de ociosidade passaram com limites impostos: 12,600 poll/s e
+104,391 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Não há prova de ganho causal
+desta entrega; medições físicas seguem para o encerramento e nenhuma caixa
+inteira da fase é concluída.
+
 ### Posicionamento dos banners no proprietário Rust
 
 `Banners::with_displays` é escolhido pelo mount validado da sessão. A view
