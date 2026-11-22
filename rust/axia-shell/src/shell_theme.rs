@@ -26,11 +26,14 @@ fn rgba(color: u32) -> String {
         ((alpha % 255) * 10000 + 127) / 255)
 }
 
+pub(crate) fn accent(name: Option<&str>) -> &'static str {
+    ACCENTS.iter().find(|(key, _)| Some(*key) == name).unwrap_or(&ACCENTS[0]).1
+}
+
 pub(super) fn tokens(source: &Value) -> Value {
     let dark = source["mode"] == "dark";
     let effects = truthy(&source["effects"]);
-    let accent = ACCENTS.iter().find(|(name, _)| source["accent"] == *name)
-        .unwrap_or(&ACCENTS[0]).1;
+    let accent = accent(source["accent"].as_str());
     let mut result = json!({
         "accent":accent,
         // Pairs retain the established order of controls across JSON's sorted maps.

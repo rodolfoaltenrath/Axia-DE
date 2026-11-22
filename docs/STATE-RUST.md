@@ -1555,3 +1555,48 @@ passou. Evidências em `build/validation/native-shell-theme/`; sem instalação
 ou reinício da sessão física.
 
 Três amostras de ociosidade passaram com limites impostos: 12,500 poll/s e 104,590 MiB de RSS, abaixo de 15 poll/s e 120 MiB. São medidas headless do binário atual, sem prova de ganho causal; a medição física permanece para o encerramento.
+
+### Portal de aparência atendido pelo contexto
+
+`session_appearance.rs` é parte do serviço de preferências residente. Uma revisão
+nova resolve um plano de escalares por empréstimo do perfil: modo, RGB, nome
+GNOME do destaque e disposição dos botões. A paleta é a mesma de `shell_theme.rs`,
+sem segunda tabela de cores. O empréstimo termina antes dos efeitos; o plano
+usa strings C estáticas e o backend consome o vetor RGB apenas durante a chamada.
+Não há referência de view, snapshot de perfil, ponteiro JS ou timer no serviço.
+
+O cache do serviço compara os campos relevantes; revisões de outras preferências
+não repetem `portal_set`. Mudança de cor não ressincroniza arquivos de apps
+externos. Um cache de modo/disposição por thread preserva a deduplicação desses
+arquivos entre recriações do contexto, como fazia a antiga ponte C. O backend C
+continua servindo D-Bus, emitindo mudanças e usando a gravação Rust existente do
+keyfile GTK, que preserva outros grupos e chaves.
+
+`syncPortal`, seu mapa de nomes e seu cache JSON foram apagados de `sdk/theme.js`.
+A ponte `lord.portal.set`, seu parser e cache de efeitos foram removidos de
+`js_wm.c`. Um provider com tokens antigos ou locais não pode sobrepor a
+preferência nativa. A seleção de arquivos do portal continua disponível. Apps
+LPK recebem tokens pelo broker; a ponte removida não era exposta pelo host
+isolado. Providers/publicação de tokens e demais consumidores JS seguem pendentes.
+
+O teste Rust `portal_appearance_runtime` foi incluído no workflow GPU=1 com
+capturas próprias. Ele mantém o espelho JS antigo, bloqueia a antiga chamada JS,
+exige ausência da ponte e confere o keyfile real antes de renderizar, com um
+provider antigo e depois de desmontá-lo. Também preserva um grupo customizado.
+O fixture é privado e sem barramento de sessão: testa aplicação/persistência de
+preferências, sem declarar validação de sinais D-Bus ou de apps GTK físicos.
+
+Validação em Fedora 44 privado em 2026-11-22: passaram 648 testes da shell,
+com sete ignorados de integrações específicas, e oito contratos LPK. Os dois
+novos testes unitários verificam paleta/nomes/botões, tipos inválidos, cache de
+campos relevantes e deduplicação da escrita externa na recriação do serviço.
+
+Passaram 36 cenários gráficos de portal, configurações, locale, Dock, Arquivos,
+menus e cabeçalhos, além do encerramento instalado por timeout e SIGTERM.
+Capturas próprias do portal em claro/escuro e 640/1000 px foram geradas;
+as duas variantes mínimas foram inspecionadas. As oito capturas de Arquivos
+são idênticas byte a byte às de `native-shell-theme`. Compositor GPU=1,
+bundles e instalação privada gerados. Evidências em
+`build/validation/resident-portal/`; a sessão física foi preservada.
+
+Três amostras de ociosidade passaram com limites impostos: 12,550 poll/s e 104,840 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem alegação de ganho causal ou medição física; o protocolo físico permanece para o encerramento.

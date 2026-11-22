@@ -2,6 +2,8 @@
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
 use std::time::Instant;
+#[path = "session_appearance.rs"]
+mod appearance;
 pub struct Service {
     assets: String,
     home: String,
@@ -11,6 +13,7 @@ pub struct Service {
     locale: Reader<crate::locale::State>,
     locale_changes: Subscription,
     locale_sent: Option<u64>,
+    appearance: appearance::Service,
 }
 impl Service {
     pub fn new(home: &str, assets: &str) -> Self {
@@ -31,6 +34,7 @@ impl Service {
             locale,
             locale_changes,
             locale_sent: None,
+            appearance: appearance::Service::default(),
         }
     }
     pub(crate) fn matches(&self, home: &str, assets: &str) -> bool {
@@ -45,6 +49,8 @@ impl Service {
         self.locale_changes.take();
         let mut effects = Vec::new();
         if self.sent != Some(revision) {
+            let plan = appearance::Plan::from_profile(&self.reader.read());
+            self.appearance.sync(plan);
             self.sent = Some(revision);
             let reply = crate::settings::with(&self.home, |s| s.snapshot());
             effects.push(json!({"kind":"settingsState","reply":reply}));

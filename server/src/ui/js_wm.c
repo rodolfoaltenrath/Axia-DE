@@ -21,13 +21,10 @@
  * On release: __lordWm('end', { node, edges, dx, dy, dw, dh, zone, detached, links: [{ node, dx, dy, dw, dh }] })
  * with the node's change, the zone it was dropped on, whether it took its detach size and the change
  * of each linked window.
- *
- *   lord.portal.set({ dark, accent: '#rrggbb', accentName, buttons })
- *       what GTK, GNOME and Qt apps read through org.freedesktop.portal.Settings (portal.c). */
+ */
 #include "js_wm.h"
 #include "grab.h"
 #include "portal.h"
-#include "appearance.h"
 #include "ui.h"
 #include "../wl/wl.h"
 #include <time.h>
@@ -160,45 +157,6 @@ static JSValue f_pointer(JSContext *c, JSValueConst t, int argc, JSValueConst *a
     JS_SetPropertyStr(c, o, "active", JS_NewBool(c, active));
     JS_SetPropertyStr(c, o, "edges", JS_NewInt32(c, edges));
     return o;
-}
-
-/* Short text without odd characters (accent name, GTK button order). */
-static int get_word(JSContext *c, JSValueConst o, const char *k, char *out, size_t n, const char *allowed) {
-    JSValue v = JS_GetPropertyStr(c, o, k);
-    const char *s = JS_IsString(v) ? JS_ToCString(c, v) : NULL;
-    int ok = s && strlen(s) < n && strspn(s, allowed) == strlen(s);
-    if (ok) snprintf(out, n, "%s", s);
-    if (s) JS_FreeCString(c, s);
-    JS_FreeValue(c, v);
-    return ok;
-}
-
-static JSValue f_portal_set(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
-    (void)t;
-    if (argc < 1 || !JS_IsObject(argv[0])) return JS_FALSE;
-    JSValue dv = JS_GetPropertyStr(c, argv[0], "dark");
-    int dark = JS_ToBool(c, dv);
-    JS_FreeValue(c, dv);
-    char hex[8] = "", name[16] = "", buttons[64] = "";
-    double rgb[3] = { 0.04, 0.52, 1.0 };
-    if (get_word(c, argv[0], "accent", hex, sizeof hex, "#0123456789abcdefABCDEF") && hex[0] == '#' && strlen(hex) == 7) {
-        unsigned long v = strtoul(hex + 1, NULL, 16);
-        rgb[0] = ((v >> 16) & 255) / 255.0;
-        rgb[1] = ((v >> 8) & 255) / 255.0;
-        rgb[2] = (v & 255) / 255.0;
-    }
-    int has_name = get_word(c, argv[0], "accentName", name, sizeof name, "abcdefghijklmnopqrstuvwxyz");
-    int has_buttons = get_word(c, argv[0], "buttons", buttons, sizeof buttons, "abcdefghijklmnopqrstuvwxyz,:");
-    JSValue ev = JS_GetPropertyStr(c, argv[0], "externalStyle");
-    int external = !JS_IsUndefined(ev) && JS_ToBool(c, ev);
-    JS_FreeValue(c, ev);
-    portal_set(dark, rgb, has_name ? name : NULL, has_buttons ? buttons : NULL, external);
-    static int applied, last_external, last_dark;
-    if (!applied || external != last_external || dark != last_dark) {
-        axia_external_style(external, dark);
-        applied = 1; last_external = external; last_dark = dark;
-    }
-    return JS_TRUE;
 }
 
 static JSValue f_portal_pick_result(JSContext *c, JSValueConst self, int argc, JSValueConst *argv) {
@@ -344,7 +302,6 @@ static JSValue f_thumbnail_surface(JSContext *c,JSValueConst self,int argc,JSVal
 }
 
 static const JSCFunctionListEntry portal_funcs[] = {
-    JS_CFUNC_DEF("set", 1, f_portal_set),
     JS_CFUNC_DEF("pickResult", 2, f_portal_pick_result),
 };
 

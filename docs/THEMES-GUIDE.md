@@ -104,8 +104,10 @@ Every app reads its colors with `useTheme()` (`sdk/theme.js`), so it looks right
 theme passes its tokens to `<ThemeProvider tokens={…}>`; whatever it leaves out falls back to
 `DEFAULT_TOKENS` (Lord Flow's dark colors), and its own extra keys pass through untouched. Isolated
 apps (their own processes) receive the same tokens through the broker, and Linux apps get the mode,
-the accent and the title-bar button order through the settings portal (`publishTokens` and
-`syncPortal` in `sdk/theme.js`). So the tokens must be plain JSON values (no functions).
+the accent and the title-bar button order directly from the native preference service
+(`rust/axia-shell/src/session_appearance.rs`). `publishTokens` in `sdk/theme.js` still serves
+isolated apps; their tokens must be plain JSON values (no functions). The former
+`syncPortal` effect has been removed; providers cannot override the native portal state.
 
 **Base tokens (required in practice: apps use all of them):**
 
@@ -128,8 +130,8 @@ the accent and the title-bar button order through the settings portal (`publishT
 
 - `accents`: a map name → color. Settings → Appearance shows these swatches and stores the chosen
   *name* (`settings.accent`). Use the same names as the bundled themes (`azul`, `violeta`, `rosa`,
-  `naranja`, `verde`, `grafito`) so the user's choice survives a switch; `syncPortal` maps them to
-  the portal's accent names.
+  `naranja`, `verde`, `grafito`); the native shell maps the saved preference to
+  the portal's accent names and shares the palette defined in Rust.
 - `wallpapers`: `[{ id, nameKey, name, src, thumb?, category?, variants? }]` for Settings →
   Wallpaper; `lordosWallpapers` from the SDK is the LordOS collection
   (`assets/wallpapers/README.md`).

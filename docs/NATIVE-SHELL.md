@@ -36,8 +36,11 @@ A paleta da shell e os materiais da Dock são resolvidos por `shell_theme.rs`,
 com as primitivas de vidro do compositor. O adaptador `themes/default/tokens.js`
 envia somente modo, destaque e efeitos quando mudam, preserva a identidade do
 resultado entre renderizações e associa o catálogo compartilhado de papéis de
-parede. Cores e regras de transparência deixaram o JavaScript; montagem do tema,
-publicação para apps isolados e integração do portal ainda usam adaptadores.
+parede. Cores e regras de transparência deixaram o JavaScript. A integração do
+portal também pertence ao serviço residente: lê modo, destaque e disposição
+dos botões por empréstimo e aplica diretamente no backend C, sem provider ou
+snapshot JS. O efeito `syncPortal` e a ponte `lord.portal.set` foram removidos.
+Montagem do tema e publicação para apps isolados ainda usam adaptadores.
 
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena

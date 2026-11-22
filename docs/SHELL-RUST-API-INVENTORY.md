@@ -416,7 +416,7 @@ ocorrências por arquivo, sem repetir cada chamada do mesmo símbolo.
 | `lord.pkg.upgrades` | indisponível no Fedora | não | [server/src/ui/js.c](../server/src/ui/js.c) | [runtime/native_system_services.js](../runtime/native_system_services.js), [sdk/appcontrol.js](../sdk/appcontrol.js), [sdk/updates.js](../sdk/updates.js); literal |
 | `lord.portal` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/theme.js](../sdk/theme.js); literal |
 | `lord.portal.pickResult` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/powerbox.jsx](../sdk/powerbox.jsx); literal |
-| `lord.portal.set` | ativa | não | [server/src/ui/js_wm.c](../server/src/ui/js_wm.c) | [sdk/theme.js](../sdk/theme.js); literal |
+| `lord.portal.set` | retirada em 2026-11-22 | não | [rust/axia-shell/src/session_appearance.rs](../rust/axia-shell/src/session_appearance.rs) | Efeito React e ponte removidos; serviço residente lê o perfil e aplica diretamente. A captura original usava sdk/theme.js. |
 | `lord.power.buttons` | ativa | não | [server/src/ui/js_hw.c](../server/src/ui/js_hw.c) | [runtime/native_system_services.js](../runtime/native_system_services.js); literal |
 | `lord.power.profiles` | ativa | não | [server/src/ui/js_hw.c](../server/src/ui/js_hw.c) | [runtime/native_system_services.js](../runtime/native_system_services.js), [sdk/hardware.jsx](../sdk/hardware.jsx); literal |
 | `lord.power.setProfile` | ativa | não | [server/src/ui/js_hw.c](../server/src/ui/js_hw.c) | [runtime/native_system_services.js](../runtime/native_system_services.js); literal |

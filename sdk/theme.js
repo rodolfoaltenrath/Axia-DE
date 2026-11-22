@@ -52,24 +52,6 @@ function publishTokens(value) {
   } catch (e) { /* non-serializable tokens */ }
 }
 
-// Linux apps (GTK, GNOME, Qt) read the mode, accent and title-bar button order through
-// org.freedesktop.portal.Settings, served by axia-server (ui/portal.c). gtkButtons is the
-// GTK order: traffic lights on the left, or buttons on the right in a taskbar-style theme.
-const GNOME_ACCENTS = { azul: 'blue', violeta: 'purple', rosa: 'pink', naranja: 'orange', verde: 'green', grafito: 'slate',
-  rojo: 'red', amarillo: 'yellow', turquesa: 'teal', celeste: 'blue' };
-let portalSent = '';
-function syncPortal(value) {
-  try {
-    if (typeof lord === 'undefined' || !lord.portal) return;
-    const name = settings.get().accent || '';
-    const msg = { dark: value.mode !== 'light', accent: /^#[0-9a-f]{6}$/i.test(value.accent) ? value.accent : '#0a84ff',
-      accentName: GNOME_ACCENTS[name] || 'blue', buttons: settings.get().externalWindowStyle === true ? (value.gtkButtons || 'close,minimize,maximize:') : ':minimize,maximize,close',
-      externalStyle: settings.get().externalWindowStyle === true };
-    const json = JSON.stringify(msg);
-    if (json !== portalSent) { portalSent = json; lord.portal.set(msg); }
-  } catch (e) { /* no portal */ }
-}
-
 // Settings every app's controls follow, carried with the tokens so isolated apps (which have no
 // settings file of their own) get them too: the scroll bars' mode (Settings → Appearance → Show
 // scroll bars, sdk/scrollbar.js) and reduce motion. Tokens the theme (or, in an isolated app, the
@@ -82,7 +64,7 @@ function settingTokens() {
 export function ThemeProvider({ tokens, children }) {
   const value = { ...DEFAULT_TOKENS, ...settingTokens(), ...tokens };
   const outermost = useContext(ThemeContext) === DEFAULT_TOKENS;
-  useEffect(() => { publishTokens(appAppearance(value).tokens); syncPortal(value); if (outermost) shellTokens.set(value); });
+  useEffect(() => { publishTokens(appAppearance(value).tokens); if (outermost) shellTokens.set(value); });
   return createElement(ThemeContext.Provider, { value }, children);
 }
 

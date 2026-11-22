@@ -285,16 +285,19 @@ What a window with its own bar still gets from LordOS (both themes, `WINDOWS.md`
     explicitly enables the old external style; discovery follows XDG directories.
   - GTK 3 has no accent: its own stays blue.
 - **The buttons** default to the standard right-hand order (`:minimize,maximize,close`).
-  Opting into the old external style restores the shell's `gtkButtons` order,
-  or traffic lights on the left when the shell supplies none. Custom application
+  Opting into the old external style restores traffic lights on the left,
+  as defined by the native shell. Custom application
   title bars may ignore toolkit placement; VS Code keeps its own controls.
   Settings schema 2 disables the managed browser CSS and VS Code icon-theme
   defaults once on upgrade. Personal editor themes, CSS and unrelated settings
   are preserved. Reopen external apps to clear cached styling.
 - **Qt/KDE.** They use the theme's frame (xdg-decoration). Qt 6 also reads `color-scheme` from the
   portal; not tested.
-- **The JS.** The SDK's `ThemeProvider` sends mode, accent and buttons with `lord.portal.set` when
-  they change.
+- **Native preferences.** The resident Rust service (`session_appearance.rs`) reads the
+  profile by reference and applies mode, accent and buttons without a theme provider or JS
+  snapshots. Only relevant changes reach the portal; external application styling is
+  synchronized only when mode or button placement changes. The old `lord.portal.set`
+  bridge and React effect have been removed. The D-Bus implementation remains in C.
 
 ### The switch in Settings (0.8.4)
 

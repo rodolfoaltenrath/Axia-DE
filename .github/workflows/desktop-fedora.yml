@@ -109,6 +109,11 @@ jobs:
         env:
           AXIA_NATIVE_SETTINGS_OUTPUT: ${{ runner.temp }}/axia-native-settings
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test native_settings_runtime -- --ignored --nocapture
+      - name: Native portal appearance without a theme observer
+        if: matrix.gpu == 1
+        env:
+          AXIA_PORTAL_APPEARANCE_OUTPUT: ${{ runner.temp }}/axia-portal-appearance
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test portal_appearance_runtime -- --ignored --nocapture
       - name: Native locale ownership
         if: matrix.gpu == 1
         env:
@@ -294,6 +299,12 @@ jobs:
         with:
           name: axia-native-settings
           path: ${{ runner.temp }}/axia-native-settings
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-portal-appearance
+          path: ${{ runner.temp }}/axia-portal-appearance
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
