@@ -152,7 +152,7 @@ ocorrências por arquivo, sem repetir cada chamada do mesmo símbolo.
 | `lord.broker.openArgs` | ativa | não | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [sdk/dock.js](../sdk/dock.js), [sdk/packages.js](../sdk/packages.js); literal |
 | `lord.broker.pick` | usada pelos .lpk | broker/limitada | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [apps/passwords/index.jsx](../apps/passwords/index.jsx), [runtime/nativeapps.js](../runtime/nativeapps.js), [sdk/mail.js](../sdk/mail.js), [sdk/powerbox.jsx](../sdk/powerbox.jsx); literal |
 | `lord.broker.pickResult` | ativa | não | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [sdk/powerbox.jsx](../sdk/powerbox.jsx); literal |
-| `lord.broker.publish` | ativa | não | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [sdk/privacy.js](../sdk/privacy.js), [sdk/theme.js](../sdk/theme.js); literal |
+| `lord.broker.publish` | retirada em 2026-11-22 | não | [rust/axia-shell/src/session_tokens.rs](../rust/axia-shell/src/session_tokens.rs) | Serviço residente publica tokens/idioma diretamente; funções JS e ponte removidas. A captura original usava sdk/privacy.js e sdk/theme.js. |
 | `lord.broker.quit` | ativa | não | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [sdk/dock.js](../sdk/dock.js); literal |
 | `lord.broker.request` | usada pelos .lpk | broker/limitada | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [sdk/privacy.js](../sdk/privacy.js); literal |
 | `lord.broker.resolve` | ativa | não | [server/src/ui/js_sec.c](../server/src/ui/js_sec.c) | [sdk/privacy.js](../sdk/privacy.js); literal |

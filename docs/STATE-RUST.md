@@ -1600,3 +1600,68 @@ bundles e instalação privada gerados. Evidências em
 `build/validation/resident-portal/`; a sessão física foi preservada.
 
 Três amostras de ociosidade passaram com limites impostos: 12,550 poll/s e 104,840 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Sem alegação de ganho causal ou medição física; o protocolo físico permanece para o encerramento.
+
+### Publicação nativa de aparência e idioma para apps isolados
+
+`session_tokens.rs` pertence ao publicador residente de preferências. Resolve uma
+chave dos campos de aparência do perfil, libera o empréstimo e serializa somente
+quando essa chave muda. Usa a paleta da shell e o plano Adwaita compartilhados,
+incluindo os padrões de controles, efeitos, scrollBars e reduceMotion. O estado
+serializado não é retido pelo publicador: o broker C conserva a cópia limitada
+necessária ao IPC e ao estado de arranque. Revisões de outros campos não repetem
+a publicação. O perfil inteiro não atravessa a chamada.
+
+`theme_catalog.rs` compila o índice de papéis de parede e os quatro gradientes,
+com nomes, caminhos, dimensões e ordem anteriores. O catálogo tem uma única
+alocação compartilhada; o serializador o empresta, sem clonar a lista a cada
+mudança. O mapa de destaques usa serialização ordenada para manter a ordem dos
+controles no JavaScript dos apps. `tokens.js` deixou de importar/montar esse
+catálogo e recebe um snapshot de compatibilidade no carregamento; a migração
+da árvore do tema continua pendente. O SDK ainda mantém seus helpers legados
+de seleção de imagens e os padrões dos providers locais.
+
+A fonte de idioma publica apenas lang, region e dir a partir do leitor nativo;
+revisões exclusivas de catálogos não repetem um pacote idêntico. Os empréstimos
+terminam antes das chamadas ao broker. Ativar locale também invalida assinantes
+quando os valores não mudam; isso atende uma inicialização posterior a um tick
+com a fonte inativa. A primeira publicação do contexto é atendida mesmo quando
+as preferências já estavam carregadas; fonte inativa não gera polling.
+
+Foram apagados publishTokens de `sdk/theme.js`, publishLocale e sua assinatura
+de `sdk/privacy.js`, e a ponte `lord.broker.publish` de `js_sec.c`. O transporte
+e a autoridade do broker permanecem: os apps leem o estado inicial e recebem
+eventos, sem publicar configurações da sessão. O serviço funciona antes de
+renderizar e depois de desmontar o tema, com os espelhos JS antigos. Providers
+locais não sobrepõem o estado do broker. Root React, espelhos e fatos de aparência
+das views continuam no roadmap; o host LPK conserva React/JS por decisão explícita.
+
+O teste Rust `theme_tokens_runtime`, incluído no CI GPU=1 com capturas, prepara
+dois pacotes somente no HOME privado do fixture e inicia processos reais pelo
+host isolado. Um já está aberto quando as preferências mudam; o outro começa
+depois e lê o estado atual de arranque. Ambos escrevem seus resultados pelo
+broker no diretório de dados de cada app. O teste cobre Axia/Adwaita, controles,
+efeitos, redução de movimento, catálogos, idioma/região/RTL, espelhos antigos,
+provider antigo e desmontagem. As guardas e o sandbox de produção são preservados.
+O helper de UI ganhou preparação explícita do HOME; os demais testes usam no-op.
+
+O índice incorporado também é pré-requisito do arquivo Rust no Makefile. Um teste
+de grafo incremental verifica que mudar o índice agenda a recompilação, sem
+executar Cargo; o grafo normal da árvore compilada permanece atualizado.
+
+Validação em Fedora 44 privado em 2026-11-22: passaram 653 testes da shell,
+com sete ignorados de integrações específicas, oito contratos LPK e o novo teste
+do grafo incremental. Cinco testes unitários novos da shell cobrem catálogo compartilhado,
+planos/serialização e limite do broker, cache dos campos relevantes, projeção de
+locale e publicação inicial/ativação tardia sem mudança de valores.
+
+Passaram 48 cenários gráficos de publicação aos apps isolados, configurações,
+locale, portal, Dock, Arquivos, menus, relógio, notificações e cabeçalhos, além
+do encerramento instalado por timeout/SIGTERM. Na execução final, o fixture iniciou oito
+processos isolados, dois por variante claro/escuro e 640/1000 px;
+ambos recebem estado atual e atualizações antes de renderizar e com tema
+antigo/desmontado. Capturas mínimas claro/escuro inspecionadas. As oito capturas
+de Arquivos são idênticas byte a byte às de `resident-portal`. Compositor GPU=1,
+bundles default/app-host e instalação privada gerados. Evidências em
+`build/validation/resident-theme-tokens/`; a sessão física foi preservada.
+
+Três amostras de ociosidade passaram com limites impostos: 12,550 poll/s e 104,672 MiB de RSS, abaixo de 15 poll/s e 120 MiB. Não é prova de ganho causal nem medição de hardware; as medições físicas continuam reservadas ao encerramento.

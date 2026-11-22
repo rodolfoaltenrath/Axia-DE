@@ -120,3 +120,14 @@ fn rpm_platform_checks_do_not_compile_rust_test_profiles() {
     assert!(graph.contains("./build/switcher-ffi-test"));
     assert!(graph.contains("./build/settings-hw-test"));
 }
+
+#[test]
+#[ignore = "requires Make and Fedora build dependencies; incremental native metadata"]
+fn wallpaper_metadata_invalidates_the_native_shell_archive() {
+    let graph = output(Command::new("make").current_dir(repo()).args([
+        "-n", "-C", "server", "-W", "../assets/wallpapers/index.json",
+        "build/rust/release/libaxia_shell.a", "GPU=1", "CARGO=axia-cargo-probe",
+    ]));
+    assert!(cargo_recipes(&graph).iter().any(|args| args.first() == Some(&"build") && !args.contains(&"-p")),
+        "a wallpaper index change must rebuild the shell archive: {graph}");
+}

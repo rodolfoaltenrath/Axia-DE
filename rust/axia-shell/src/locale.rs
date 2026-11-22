@@ -415,9 +415,15 @@ fn request(home: &str, assets: &str, input: &Value) -> Value {
         model.sync();
         match input["cmd"].as_str() {
             Some("initialize") => {
+                let revision = model.state.revision();
                 model.runtime.clear();
                 model.rebuild();
                 model.active = true;
+                // Availability is observable even when activation keeps the same
+                // language. Wake resident publishers that consumed an inactive source.
+                if model.state.revision() == revision {
+                    model.state.update(|_| ((), true));
+                }
                 model.applied = None;
                 model.apply();
                 model.snapshot()

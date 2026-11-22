@@ -4,6 +4,8 @@ use serde_json::{json, Value};
 use std::time::Instant;
 #[path = "session_appearance.rs"]
 mod appearance;
+#[path = "session_tokens.rs"]
+mod tokens;
 pub struct Service {
     assets: String,
     home: String,
@@ -14,6 +16,7 @@ pub struct Service {
     locale_changes: Subscription,
     locale_sent: Option<u64>,
     appearance: appearance::Service,
+    tokens: tokens::Service,
 }
 impl Service {
     pub fn new(home: &str, assets: &str) -> Self {
@@ -35,13 +38,14 @@ impl Service {
             locale_changes,
             locale_sent: None,
             appearance: appearance::Service::default(),
+            tokens: tokens::Service::default(),
         }
     }
     pub(crate) fn matches(&self, home: &str, assets: &str) -> bool {
         self.home == crate::settings::profile(home) && self.assets == assets
     }
     pub(crate) fn invalidated(&self) -> bool {
-        self.changes.pending() || self.locale_changes.pending()
+        self.sent.is_none() || self.changes.pending() || self.locale_changes.pending()
     }
     pub(crate) fn tick(&mut self) -> Vec<Value> {
         self.changes.take();
@@ -51,6 +55,8 @@ impl Service {
         if self.sent != Some(revision) {
             let plan = appearance::Plan::from_profile(&self.reader.read());
             self.appearance.sync(plan);
+            let tokens = tokens::Service::resolve(&self.reader.read());
+            self.tokens.sync(tokens);
             self.sent = Some(revision);
             let reply = crate::settings::with(&self.home, |s| s.snapshot());
             effects.push(json!({"kind":"settingsState","reply":reply}));
@@ -59,6 +65,8 @@ impl Service {
             if let Some(reply) =
                 crate::locale::snapshot_if_active(&self.home, &self.assets)
             {
+                let locale = tokens::Service::resolve_locale(&self.locale.read());
+                self.tokens.sync_locale(locale);
                 self.locale_sent = Some(self.locale.revision());
                 effects.push(json!({"kind":"localeState","reply":reply}));
             }

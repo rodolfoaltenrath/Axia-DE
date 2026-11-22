@@ -289,6 +289,30 @@ fn locale_command(home: &Profile, input: &Value) -> Value {
 }
 
 #[test]
+fn initial_publications_and_delayed_locale_activation_do_not_require_changed_values() {
+    let (home, session, _) = fixture("publisher-activation", "off", Value::Null);
+    let assets = crate::native_view::resource_roots().0;
+    session.bind_preference_publications(&home.0, &assets);
+    let reader = crate::locale::reader(&home.0, &assets);
+    let before = reader.read().clone();
+    let revision = reader.revision();
+    let now = Instant::now();
+    assert_eq!(timeout(now), Some(0.), "first publication must run even for already loaded settings");
+    tick(now);
+    let initial = session.take_service_effects().unwrap();
+    assert!(initial.as_array().unwrap().iter().any(|effect| effect["kind"] == "settingsState"));
+    assert!(timeout(now).is_none(), "an inactive locale must not spin");
+    locale_command(&home, &json!({"cmd":"initialize"}));
+    assert!(*reader.read() == before, "activation preserves locale values");
+    assert!(reader.revision() > revision, "activation must invalidate subscribers");
+    assert_eq!(timeout(now), Some(0.));
+    tick(now);
+    let effects = session.take_service_effects().unwrap();
+    assert!(effects.as_array().unwrap().iter().any(|effect| effect["kind"] == "localeState"));
+    tick(now); assert!(!pending()); assert!(timeout(now).is_none());
+}
+
+#[test]
 fn preference_publications_are_resident_coalesced_and_not_recreated_by_context_reattachment() {
     let (home, session, _) = fixture("preference-publisher", "off", Value::Null);
     let assets = crate::native_view::resource_roots().0;

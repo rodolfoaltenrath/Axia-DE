@@ -2,6 +2,8 @@ use serde_json::{json, Value};
 pub use axia_native::style::*;
 #[path = "shell_theme.rs"]
 pub(crate) mod shell_theme;
+#[path = "theme_catalog.rs"]
+pub(crate) mod catalog;
 // Pure style transport: no filesystem/session initialization, workers or polling.
 // SAFETY: the C bridge supplies a valid NUL-terminated string for this call.
 #[no_mangle]
@@ -16,7 +18,9 @@ pub unsafe extern "C" fn axia_native_style_request(
         if bytes.len() > 128 * 1024 {
             Value::Null
         } else if let Ok(source) = serde_json::from_slice::<Value>(bytes) {
-            if source["op"] == "shellTheme" {
+            if source["op"] == "shellCatalog" {
+                catalog::wallpapers().clone()
+            } else if source["op"] == "shellTheme" {
                 shell_theme::tokens(&source)
             } else if source["op"] == "dockLayout" {
                 crate::dock_layout::request(&source)

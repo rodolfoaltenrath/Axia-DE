@@ -69,6 +69,7 @@ pub fn run_ui_with_capture(
         image_name,
         18,
         check_capture,
+        |_| {},
     )
 }
 
@@ -91,7 +92,16 @@ pub fn run_ui_with_timeout(
         image_name,
         seconds,
         |_| {},
+        |_| {},
     )
+}
+
+#[allow(dead_code)]
+pub fn run_ui_with_home(
+    repo: &Path, kind: &str, driver_source: &str, mode: &str, width: u32,
+    image_name: &str, prepare_home: impl FnOnce(&Path),
+) -> Value {
+    run_ui_config(repo, kind, driver_source, mode, width, image_name, 24, |_| {}, prepare_home)
 }
 
 fn run_ui_config(
@@ -103,6 +113,7 @@ fn run_ui_config(
     image_name: &str,
     seconds: u64,
     check_capture: impl FnOnce(&Path),
+    prepare_home: impl FnOnce(&Path),
 ) -> Value {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -133,6 +144,7 @@ fn run_ui_config(
     )
     .unwrap();
     owned(&permissions);
+    prepare_home(&home);
     let image = home.join(image_name);
     let driver = scratch.0.join("probe.jsx");
     fs::write(

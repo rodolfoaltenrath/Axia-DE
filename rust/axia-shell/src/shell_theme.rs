@@ -1,7 +1,7 @@
 //! The shell's palette and glass materials. No scene, profile copies or timers.
 use serde_json::{json, Value};
 
-const ACCENTS: [(&str, &str); 6] = [
+pub(crate) const ACCENTS: [(&str, &str); 6] = [
     ("azul", "#0a84ff"), ("violeta", "#bf5af2"), ("rosa", "#ff375f"),
     ("naranja", "#ff9f0a"), ("verde", "#30d158"), ("grafito", "#8e8e93"),
 ];
@@ -9,7 +9,7 @@ const ACCENTS: [(&str, &str); 6] = [
 // Preserve the old theme's treatment of optional values, including effects
 // objects accepted by callers. Glass defaults on unless explicitly false;
 // panel opacity/blur follow truthiness, as before.
-fn truthy(value: &Value) -> bool {
+pub(crate) fn truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,
         Value::Bool(value) => *value,
@@ -30,7 +30,7 @@ pub(crate) fn accent(name: Option<&str>) -> &'static str {
     ACCENTS.iter().find(|(key, _)| Some(*key) == name).unwrap_or(&ACCENTS[0]).1
 }
 
-pub(super) fn tokens(source: &Value) -> Value {
+pub(crate) fn tokens(source: &Value) -> Value {
     let dark = source["mode"] == "dark";
     let effects = truthy(&source["effects"]);
     let accent = accent(source["accent"].as_str());

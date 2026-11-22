@@ -41,17 +41,6 @@ const ThemeContext = createContext(DEFAULT_TOKENS);
 // theme's tree, not inside it (startShell's layers), and reads them here so it follows the mode and accent.
 export const shellTokens = createStore(null);
 
-// Isolated .lpk apps (another process) receive these same tokens live through the broker
-// (lord.broker.publish, see docs/PRIVACY.md). Only the theme publishes them, not the app host.
-let published = '';
-function publishTokens(value) {
-  try {
-    if (typeof lord === 'undefined' || !lord.broker || typeof lord.broker.publish !== 'function') return;
-    const json = JSON.stringify(value, (k, v) => (typeof v === 'function' ? undefined : v));
-    if (json !== published) { published = json; lord.broker.publish('theme', json); }
-  } catch (e) { /* non-serializable tokens */ }
-}
-
 // Settings every app's controls follow, carried with the tokens so isolated apps (which have no
 // settings file of their own) get them too: the scroll bars' mode (Settings → Appearance → Show
 // scroll bars, sdk/scrollbar.js) and reduce motion. Tokens the theme (or, in an isolated app, the
@@ -64,7 +53,7 @@ function settingTokens() {
 export function ThemeProvider({ tokens, children }) {
   const value = { ...DEFAULT_TOKENS, ...settingTokens(), ...tokens };
   const outermost = useContext(ThemeContext) === DEFAULT_TOKENS;
-  useEffect(() => { publishTokens(appAppearance(value).tokens); if (outermost) shellTokens.set(value); });
+  useEffect(() => { if (outermost) shellTokens.set(value); });
   return createElement(ThemeContext.Provider, { value }, children);
 }
 

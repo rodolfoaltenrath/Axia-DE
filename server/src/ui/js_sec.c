@@ -168,18 +168,6 @@ static JSValue f_broker_resolve(JSContext *c, JSValueConst t, int argc, JSValueC
     brokersrv_resolve((uint32_t)reqid, JS_ToBool(c, argv[1]));
     return JS_UNDEFINED;
 }
-/* lord.broker.publish(type, json): the theme publishes its tokens ("theme") or the language ("locale") and
- * axia-server forwards them live to the isolated apps. */
-static JSValue f_broker_publish(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
-    (void)t; (void)argc;
-    const char *kind = JS_ToCString(c, argv[0]);
-    size_t len = 0;
-    const char *json = JS_ToCStringLen(c, &len, argv[1]);
-    int ok = kind && json && brokersrv_publish(kind, json, len) == 0;
-    if (kind) JS_FreeCString(c, kind);
-    if (json) JS_FreeCString(c, json);
-    return JS_NewBool(c, ok);
-}
 static JSValue f_broker_pick_result(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     (void)t; (void)argc;
     int64_t reqid = 0;
@@ -230,7 +218,6 @@ static JSValue f_broker_open_args(JSContext *c, JSValueConst t, int argc, JSValu
 static const JSCFunctionListEntry broker_funcs[] = {
     JS_CFUNC_DEF("openArgs", 3, f_broker_open_args),
     JS_CFUNC_DEF("resolve", 2, f_broker_resolve),
-    JS_CFUNC_DEF("publish", 2, f_broker_publish),
     JS_CFUNC_DEF("pickResult", 2, f_broker_pick_result),
     JS_CFUNC_DEF("menus", 1, f_broker_menus),
     JS_CFUNC_DEF("menuClick", 2, f_broker_menu_click),

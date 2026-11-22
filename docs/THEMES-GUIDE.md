@@ -105,9 +105,11 @@ theme passes its tokens to `<ThemeProvider tokens={…}>`; whatever it leaves ou
 `DEFAULT_TOKENS` (Lord Flow's dark colors), and its own extra keys pass through untouched. Isolated
 apps (their own processes) receive the same tokens through the broker, and Linux apps get the mode,
 the accent and the title-bar button order directly from the native preference service
-(`rust/axia-shell/src/session_appearance.rs`). `publishTokens` in `sdk/theme.js` still serves
-isolated apps; their tokens must be plain JSON values (no functions). The former
-`syncPortal` effect has been removed; providers cannot override the native portal state.
+(`rust/axia-shell/src/session_appearance.rs`). The resident `session_tokens.rs` service
+publishes appearance and locale to isolated apps through the broker, including their
+startup state. Tokens remain plain JSON values over IPC; their generation uses native
+profile readers and the compiled wallpaper catalog. `publishTokens`, `syncPortal` and
+the JS broker publisher have been removed; providers cannot override native publication.
 
 **Base tokens (required in practice: apps use all of them):**
 
@@ -145,11 +147,11 @@ isolated apps; their tokens must be plain JSON values (no functions). The former
   buttons on the right; by default `'close,minimize,maximize:'`).
 - `radius`: a general corner radius (default 8).
 
-`ThemeProvider` adds two tokens from the user's settings: `scrollBars` and `reduceMotion`. The
-user's choices that a theme turns into tokens itself are in `settings` (`sdk/settings.js`): `mode`,
-`accent` (a name), `effects` (transparency with blur), `wallpaper`. Both bundled themes do it with a
-`makeTheme({ mode, accent, effects })` in `tokens.js`, called on every render with
-`useSettings()`, so a change in Settings → Appearance applies at once.
+For isolated apps, the resident Rust service derives `scrollBars`, `reduceMotion`, mode,
+accent and effects from the current profile. It applies the same native app style plan as
+the session. `ThemeProvider` retains local defaults for compatibility, and received tokens
+win. The remaining shell JSX uses `makeTheme({ mode, accent, effects })`; its adapter requests
+Rust colors only when these inputs change and obtains the compiled wallpaper catalog once.
 
 ### `index.jsx`: what it does and how the shell starts it
 

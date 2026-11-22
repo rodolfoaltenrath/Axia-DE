@@ -40,7 +40,12 @@ parede. Cores e regras de transparência deixaram o JavaScript. A integração d
 portal também pertence ao serviço residente: lê modo, destaque e disposição
 dos botões por empréstimo e aplica diretamente no backend C, sem provider ou
 snapshot JS. O efeito `syncPortal` e a ponte `lord.portal.set` foram removidos.
-Montagem do tema e publicação para apps isolados ainda usam adaptadores.
+A publicação de aparência e idioma aos apps isolados também pertence ao serviço
+residente Rust: o broker mantém o estado para apps iniciados depois e entrega
+mudanças aos já abertos, sem depender de providers. O catálogo do tema é
+compilado em `theme_catalog.rs` e compartilhado por referência na serialização.
+O publicador JS e `lord.broker.publish` foram retirados. Montagem do tema,
+espelhos e transporte dos fatos de aparência às views ainda usam adaptadores.
 
 O objetivo é retirar QuickJS e React da sessão. Reescrever um interpretador
 JavaScript não faz parte dessa migração: cada interface passa a usar a cena

@@ -12,7 +12,7 @@
 import { createElement as h, Fragment } from 'react';
 import { View, Text, mainBox } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
-import { t, locale, direction } from './i18n.js';
+import { t } from './i18n.js';
 import { appName } from './i18n.js';
 import { getApp } from './windows.js';
 import { osk } from './osk.js';
@@ -194,17 +194,6 @@ export function registerPrivacySection(section) {
   if (!section || !section.id || typeof section.Component !== 'function') return;
   privacySections.set((list) => [...list.filter((s) => s.id !== section.id), section].sort((a, b) => (a.order || 50) - (b.order || 50)));
 }
-
-// Language, region and direction (RTL) also go live to isolated apps.
-function publishLocale() {
-  try {
-    if (typeof lord === 'undefined' || !lord.broker || typeof lord.broker.publish !== 'function') return;
-    const l = locale.get();
-    lord.broker.publish('locale', JSON.stringify({ lang: l.lang, region: l.region || '', dir: direction() }));
-  } catch (e) { /* no broker */ }
-}
-publishLocale();
-locale.subscribe(publishLocale);
 
 // Isolated apps can find out that the user revoked a permission from them (to release the
 // camera or the microphone). In-process nothing happens (revocation is immediate in the broker).

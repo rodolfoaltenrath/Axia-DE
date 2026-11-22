@@ -126,12 +126,14 @@ turned off.
 
 ### Live theme, language and RTL
 
-The theme publishes its tokens with `lord.broker.publish('theme', …)` and the language with
-`publish('locale', …)` (`sdk/theme.js`, `sdk/privacy.js`); axia-server forwards them to every
-isolated app and keeps them for the ones that start later (`lord.broker.state()` at startup). The
-"app host" (`runtime/app-host.js`) applies the tokens and, when the language changes, remounts the
-app (like the theme). Tested: switching to light mode and the accent show up at once in the app,
-and switching the session to Arabic mirrors it (RTL) and retranslates it.
+The resident Rust service (`session_tokens.rs`) derives tokens from the native profile and
+publishes language, region and direction from the native locale owner. The broker forwards
+changes to every isolated app and keeps the startup state (`lord.broker.state()`). The app host
+(`runtime/app-host.js`) applies tokens and remounts on a locale change, preserving the SDK contract.
+No React provider or JS publisher drives this state; `lord.broker.publish` has been removed.
+A Rust integration test starts two actual isolated app processes and verifies startup/live
+updates, Axia/Adwaita styling, scroll bars, reduced motion, catalog order and locale/RTL while
+session JS mirrors are stale and the theme is unmounted. It runs in light/dark modes at 640/1000 px.
 
 ### Powerbox
 
