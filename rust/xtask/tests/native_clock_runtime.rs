@@ -12,15 +12,31 @@ fn clock_deadlines_and_status_read_the_resident_engine() {
         .unwrap();
     for mode in ["light", "dark"] {
         for width in [640, 1000] {
-            let report = ui::run_ui(
+            let report = ui::run_ui_with_capture(
                 repo,
                 "native_clock",
                 DRIVER,
                 mode,
                 width,
                 "native-clock.png",
+                |path| {
+                    let pixels = image::open(path).unwrap().into_rgb8();
+                    let ink = if mode == "light" { [29,29,31] } else { [245,245,247] };
+                    let mut matching = 0;
+                    for y in 30..54 { for x in 30..250 {
+                        // The caption is 12px and the clock uses 1px strokes;
+                        // include near-full antialias coverage of the native ink.
+                        matching += usize::from(pixels.get_pixel(x,y).0.iter().zip(ink)
+                            .all(|(actual, expected)| actual.abs_diff(expected) <= 3));
+                    } }
+                    assert!(matching >= 5, "current native clock indicator ink: {mode}/{width}");
+                },
             );
             for flag in [
+                "noAppearanceFacts",
+                "withoutAppearanceFacts",
+                "staleAppearanceMirror",
+                "appearanceRetained",
                 "bound",
                 "noPayload",
                 "mirrorStale",
@@ -57,6 +73,7 @@ import {clockBridge} from '@ROOT@/sdk/nativeclock.js';
 import {NotificationBanner} from '@ROOT@/sdk/nativebanner.js';
 import {notifyHistory,notifications,dismissNotification} from '@ROOT@/sdk/notify.js';
 import {settings} from '@ROOT@/sdk/settings.js';
+import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
 import {locale} from '@ROOT@/sdk/i18n.js';
 import {configureWindows,wm} from '@ROOT@/sdk/windows.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
@@ -66,26 +83,27 @@ const timeout=globalThis.setTimeout,interval=globalThis.setInterval;
 const sleep=ms=>new Promise(resolve=>timeout(resolve,ms));
 async function until(fn){for(let i=0;i<200&&!fn();i++)await sleep(20);return!!fn();}
 let status=0,bound=true,noPayload=true,remount,toggle,noSchedulerView=true,noJsTimers=true,completions=0;
-let noConfigTransport=true;
+let noConfigTransport=true,noAppearanceFacts=true,statusFacts=0,lastStatusFacts;
+const opposite='@MODE@'==='light'?'dark':'light';
 const request=lord.nativeApps.request;
 lord.nativeApps.request=text=>{const input=JSON.parse(text);if(input.cmd==='clockCommand')noConfigTransport&&=!('config'in input);const reply=request.call(lord.nativeApps,text);if(input.cmd==='clockCommand')noConfigTransport&&=!(reply.effects||[]).some(e=>e.kind==='settings');return reply;};
 const completionIds=new Set();
 const mount=lord.nativeViews.mount,send=lord.nativeViews.facts;
-function inspect(text){const facts=JSON.parse(text);for(const key of ['clock','timer','stopwatch','nextAlarm','config'])noPayload&&=!(key in facts)&&!(key in(facts.args||{}));}
+function inspect(text){const facts=JSON.parse(text);lastStatusFacts=facts;noAppearanceFacts&&=!('color'in(facts.args||{}))&&!('theme'in(facts.context||{}))&&!('scale'in(facts.context||{}));for(const key of ['clock','timer','stopwatch','nextAlarm','config'])noPayload&&=!(key in facts)&&!(key in(facts.args||{}));}
 lord.nativeViews.mount=(node,id,text,...sources)=>{
  if(id==='shell:clock')noSchedulerView=false;
  if(id==='shell:clock-status'){inspect(text);bound&&=sources[0]===lord.windowList;const handle=mount(node,id,text,...sources);status=handle;return handle;}
  return mount(node,id,text,...sources);
 };
-lord.nativeViews.facts=(handle,text)=>{if(handle===status)inspect(text);return send(handle,text);};
+lord.nativeViews.facts=(handle,text)=>{if(handle===status){inspect(text);statusFacts++;}return send(handle,text);};
 const unmount=lord.nativeViews.unmount;lord.nativeViews.unmount=handle=>{if(handle===status)status=0;return unmount(handle);};
 locale.set({lang:'en',region:'',dir:'ltr'});
-settings.set({language:'en',clock:{},notifications:{dnd:false,apps:{clock:{sound:false}}},mode:'@MODE@'});
+settings.set({language:'en',clock:{},notifications:{dnd:false,apps:{clock:{sound:false}}},mode:opposite,accent:'azul',effects:false,nativeAppearance:'axia'});
 configureWindows({apps:[{id:'clock',name:'Clock',Component:()=>null}]});
 const theme=makeTheme({mode:'@MODE@',accent:'azul',effects:false});
 function App(){const[rev,setRev]=useState(0),[on,setOn]=useState(true);remount=()=>setRev(n=>n+1);toggle=setOn;return h(ThemeProvider,{tokens:theme},
  h(View,{style:{width:@WIDTH@,height:700,backgroundColor:theme.windowBg}},
- h(View,{style:{position:'absolute',left:30,top:30,height:24,flexDirection:'row'}},on?h(StatusItems,{key:'status-'+rev,color:theme.text,height:24}):null),on?h(NotificationBanner):null));}
+ h(View,{style:{position:'absolute',left:30,top:30,height:24,flexDirection:'row'}},on?h(StatusItems,{key:'status-'+rev,color:'#ff0000',height:24}):null),on?h(NotificationBanner):null));}
 render(h(App));
 const text=()=>status?lord.nativeViews.text(status)||'':'';
 const direct=(cmd,extra={})=>lord.clock.request({cmd,now:Date.now(),...extra});
@@ -116,6 +134,13 @@ async function run(){
   direct('timerReset');
   for(const n of notifications.get())dismissNotification(n.id);
   direct('timerStart',{seconds:60});direct('timerPause');await until(()=>text().includes('1:00'));
+  await sleep(200);const settingsPerform=settingsBridge.perform;settingsBridge.perform=()=>{};
+  const count=statusFacts;
+  lord.settings.state({cmd:'patch',patch:{mode:'@MODE@',accent:'verde',nativeAppearance:'adwaita'}});await sleep(200);
+  const withoutAppearanceFacts=statusFacts===count,staleAppearanceMirror=settings.get().mode===opposite;
+  send(status,JSON.stringify({...lastStatusFacts,args:{...lastStatusFacts.args,color:'#ff0000'},context:{...lastStatusFacts.context,theme:{menuText:'#ff0000'},scale:{body:200}}}));
+  await sleep(80);const appearanceRetained=text().includes('1:00')&&direct('snapshot').timer.state==='paused';
+  settingsBridge.perform=settingsPerform;
   click(lord.nativeViews.findText(status,'1:00'));
   const opened=await until(()=>wm.get('clock')?.args?.tab==='timer');
   wm.close('clock');direct('timerReset');const hidden=await until(()=>text().trim()==='');
@@ -135,7 +160,7 @@ async function run(){
   const nativeWrite=resident.state.clock.cities[0]==='UTC'&&resident.state.clock.future==='keep'&&resident.state.clock.alarms[0].id==='probe'
     &&settings.get().clock===beforeClock&&resident.dirty;
   const source=lord.media.screenshot('screenshots'),saved=await media.saveImage(source,@IMAGE@);media.close(source);
-  console.log('native_clock-observation '+JSON.stringify({bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,backgroundCompleted,noSchedulerView,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,nativeConfig,nativeWrite,noConfigTransport,completions,saved:!!saved?.ok}));
+  console.log('native_clock-observation '+JSON.stringify({noAppearanceFacts,withoutAppearanceFacts,staleAppearanceMirror,appearanceRetained,bound,noPayload,mirrorStale,nativeStatus,countedDown,remounted,completed,backgroundCompleted,noSchedulerView,opened,hidden,alarm,noJsTimers,nativeActions,nativeTemplates,liveFirewall,nativeConfig,nativeWrite,noConfigTransport,completions,saved:!!saved?.ok}));
  }finally{globalThis.setTimeout=timeout;globalThis.setInterval=interval;}
 }
 timeout(()=>run().catch(error=>console.error('native_clock driver: '+(error.stack||error))),150);

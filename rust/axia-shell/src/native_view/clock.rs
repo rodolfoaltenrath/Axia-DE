@@ -39,6 +39,7 @@ fn clock_mark(timer: bool, color: &Value) -> Value {
     json!({"kind":"view","key":"clock-mark","style":{"width":12,"height":14},"children":children})
 }
 pub struct Status {
+    appearance: Option<std::rc::Rc<Value>>,
     changes: Subscription,
     i18n: I18n,
     until: Option<Instant>,
@@ -47,6 +48,7 @@ pub struct Status {
 impl Default for Status {
     fn default() -> Self {
         Self {
+            appearance: None,
             changes: clock::subscribe(),
             i18n: I18n::default(),
             until: None,
@@ -57,12 +59,17 @@ impl Default for Status {
 impl Status {
     fn sync_at(&mut self, input: &Value, now: i64, mono: Instant) -> Value {
         self.changes.take();
+        let color = self.appearance.as_deref().map(|theme| &theme["menuText"]).unwrap_or(&input["args"]["color"]);
         let tree = clock::with(|s| {
             let next = s.next_alarm(now).map(|(at, _)| at);
             let selected = tab(&s.timer, next, now);
             let running = s.timer["state"] == "running";
             self.until = if running {
-                Some(mono + Duration::from_secs(1))
+                // Ceil(left / 1000) changes at the next remaining-time boundary.
+                // A color/geometry sync between ticks must not shift that boundary.
+                let left = clock::timer_left(&s.timer, now).max(0);
+                let wait = if left > 0 { (left - 1) % 1000 + 1 } else { 1000 };
+                Some(mono + Duration::from_millis(wait as u64))
             } else if selected.is_none() {
                 next.map(|at| {
                     mono + Duration::from_millis(
@@ -100,8 +107,8 @@ impl Status {
                 };
                 let width = text_width.ceil() + 32.;
                 json!({"kind":"view","key":"clock-status","style":{"height":input["args"]["height"].as_f64().unwrap_or(22.),"width":width,
-                "paddingHorizontal":7,"gap":6,"flexDirection":"row","alignItems":"center"},"children":[clock_mark(timer,&input["args"]["color"]),{"kind":"text","key":"caption","label":caption,
-                "style":{"fontSize":12,"fontWeight":weight,"color":input["args"]["color"],"fontFamily":if timer {"monospace"} else {"sans-serif"},"whiteSpace":"nowrap"}}],
+                "paddingHorizontal":7,"gap":6,"flexDirection":"row","alignItems":"center"},"children":[clock_mark(timer,color),{"kind":"text","key":"caption","label":caption,
+                "style":{"fontSize":12,"fontWeight":weight,"color":color,"fontFamily":if timer {"monospace"} else {"sans-serif"},"whiteSpace":"nowrap"}}],
                 "events":{"onClick":["open"]}})
             } else {
                 json!({"kind":"view","key":"clock-status","style":{"width":0,"height":0}})
@@ -116,6 +123,9 @@ impl Status {
     }
 }
 impl NativeApp for Status {
+    fn uses_native_appearance(&self) -> bool { true }
+    fn uses_shell_appearance(&self) -> bool { true }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) { self.appearance = Some(theme); }
     fn resources(&mut self, assets: &str, home: Option<&str>) {
         self.i18n = I18n::new(assets, home);
     }

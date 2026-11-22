@@ -53,3 +53,38 @@ fn alarm_indicator_appears_at_the_24_hour_boundary_without_a_js_tick() {
         .contains(":"));
     assert!(status.refresh_ms().is_none());
 }
+
+#[test]
+fn native_appearance_preserves_timer_phase_state_and_open_action() {
+    reset();
+    let mono = Instant::now();
+    let mut status = Status::default();
+    let stale = json!({"cmd":"sync","lang":"en","args":{"height":24,"color":"#ff0000"},"context":{"theme":{"menuText":"#ff0000"}}});
+    clock::with(|s| s.native(&json!({"cmd":"timerStart","seconds":30}), 1000));
+    let timer = clock::with(|s| s.timer.clone());
+    status.sync_at(&stale, 1000, mono);
+    let first_deadline = status.until;
+    for (mode, elapsed) in [("light",250),("dark",750)] {
+        let colors = std::rc::Rc::new(crate::native_style::shell_theme::tokens(&json!({"mode":mode,"effects":false})));
+        status.set_native_appearance(colors.clone());
+        let tree = status.sync_at(&stale, 1000 + elapsed, mono + Duration::from_millis(elapsed as u64))["tree"].clone();
+        assert_eq!(tree["children"][1]["label"], "0:30");
+        assert_eq!(tree["children"][1]["style"]["color"], colors["menuText"]);
+        assert_eq!(tree["children"][0]["children"][1]["style"]["backgroundColor"], colors["menuText"]);
+        assert_eq!(status.until, first_deadline, "recoloring cannot postpone the next countdown label");
+        assert!(std::rc::Rc::ptr_eq(status.appearance.as_ref().unwrap(), &colors));
+        assert!(!status.invalidated());
+        assert_eq!(clock::with(|s| s.timer.clone()), timer);
+    }
+    assert_eq!(status.sync_at(&stale, 2000, mono + Duration::from_secs(1))["tree"]["children"][1]["label"], "0:29");
+    assert_eq!(status.until, Some(mono + Duration::from_secs(2)));
+    assert_eq!(status.request(&json!({"cmd":"open"}))["effects"][0]["args"]["tab"], "timer");
+    clock::with(|s| s.native(&json!({"cmd":"timerPause"}), 2250));
+    status.sync_at(&stale, 2250, mono + Duration::from_millis(1250));
+    assert!(status.until.is_none());
+    clock::with(|s| s.native(&json!({"cmd":"timerReset"}), 2250));
+    status.sync_at(&stale, 2250, mono + Duration::from_millis(1250));
+    status.set_native_appearance(std::rc::Rc::new(json!({"menuText":"#ffffff"})));
+    assert_eq!(status.sync_at(&stale, 2500, mono + Duration::from_millis(1500))["same"], true);
+    assert!(status.until.is_none());
+}

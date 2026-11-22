@@ -15,7 +15,7 @@ import { notificationBridge } from './nativenotifications.js';
 import { nativeAppRequest } from './nativeappmodel.js';
 import { syncNativeCatalog } from './nativecatalog.js';
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
-const NATIVE_CLOCK_STATUS = { id: 'shell:clock-status', shell: true };
+const NATIVE_CLOCK_STATUS = { id: 'shell:clock-status', shell: true, appearanceSource: 'native' };
 const MIN = 60000, SNOOZE = 9 * MIN, RING_MS = 60000;
 const conf = () => settings.get().clock || {};
 export const clockTimer = createStore({ state: 'idle', duration: 0, endsAt: 0, left: 0 });
@@ -154,7 +154,7 @@ function LegacyClockStatus({ color, height }) {
 }
 function ClockStatus(props) {
   return appHost ? h(LegacyClockStatus, props)
-    : h(NativeView, { manifest: NATIVE_CLOCK_STATUS, stateSource: lord.windowList, args: props });
+    : h(NativeView, { manifest: NATIVE_CLOCK_STATUS, stateSource: lord.windowList, args: { height: props.height } });
 }
 
 

@@ -107,6 +107,13 @@ Trocar aparência conserva seleção e origem do alternador, IDs e prazos das
 notificações e o vencimento do indicador, sem reabrir indicadores ocultos.
 Serviços, seleção, relógios de expiração e roteamento de ações mantêm seus
 proprietários existentes; posição/montagem e callbacks continuam nos adaptadores.
+O indicador de alarmes/temporizador também usa a paleta compartilhada da shell:
+marca e legenda leem menuText diretamente, sem color/theme/scale nos fatos JS.
+O SDK envia somente a altura; o host isolado conserva sua cor local. Durante a
+contagem, a próxima atualização é alinhada à mudança de
+`ceil(tempo restante / 1000)`, em vez de um segundo após cada sync. Trocar cores/geometria entre ticks
+não adia o próximo segundo exibido. Pausado/oculto não cria timer; abertura do
+app e vencimento de alarmes continuam com os proprietários existentes.
 
 Seletores e transferências ainda montam widgets pelo adaptador JS, pendente na
 Fase 3; o proprietário das cores já é Rust.
