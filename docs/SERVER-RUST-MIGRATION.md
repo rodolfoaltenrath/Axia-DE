@@ -797,3 +797,34 @@ Behavior that is deliberately not identical:
 - `--root`, `--config` and `--run` and every request and the status line are as before; the
   `build/fan-test mkfake DIR pi5|pc|none` mode is gone (the fake trees are built by the tests).
 
+## Network state: lord.net (2026-11-22)
+
+`server/src/net/{nl,state}.c` and `netpriv.h` are gone. The new crate `rust/axia-netstate` has our
+own netlink (`netlink.rs`: dumps, attribute tables, bounded walking of replies), the JSON of
+`lord.net` (`state.rs`: interfaces with counters and addresses, routes, the notification socket;
+`config.rs`: saved interface configurations, DNS, VPN and Wi-Fi metadata, the `.ovpn` embedding) and
+the C ABI of the state side of `net.h` (`net_open`, `net_fd`, `net_dispatch`, `net_*_json`,
+`net_ovpn_inline`). The error code line type moved out of `axia-backup` into `rust/axia-errcode`, which
+both crates use. Dropped as dead code: the rtnetlink operations of `nl.c` (create links, addresses,
+routes, rules), the address and file utilities and `managed_by_system`, which nothing called.
+
+Validation:
+
+- `cargo test -p axia-netstate`: the netlink walking with bounds, the files (configurations, DNS from
+  `resolv.conf` or systemd-resolved, VPN metadata, `.ovpn` embedding with every error), this
+  machine's own `lo`, and a real kernel in a private network namespace (the test starts itself again
+  after `unshare(NEWUSER|NEWNET)`; where that is not allowed it says so and stops): a bridge with a
+  member, dummy interfaces with an MTU, IPv4 and IPv6 addresses, routes in two tables, and the
+  notifications for a new link, an address and a route.
+- A temporary differential harness linked the original C beside the crate. It was not committed.
+  On this machine the interfaces (counters aside), the routes, the DNS and the VPN list are the same;
+  in a namespace with five interfaces (bridge, MTU, long name, IPv6) and four routes they are the same;
+  3,000 random `.ovpn` files (named files present, missing, empty, links, absolute paths, odd
+  spacing) give the same text or the same error code line.
+
+Behavior that is deliberately not identical:
+
+- The folders of VPN and Wi-Fi metadata are read in name order (the C used the order `readdir` gave).
+- A `search` or `domain` line of `resolv.conf` that starts with blanks is read properly (the C cut
+  its first characters).
+

@@ -8,9 +8,9 @@ LordOS's networking is its own and runs directly on top of the kernel. It doesn'
 
 | Side | What it does | Files |
 |---|---|---|
-| axia-server (without root) | Reads the state with rtnetlink (interfaces, addresses, routes, counters) and listens for changes. DNS comes from `/run/systemd/resolve/resolv.conf` or `/etc/resolv.conf`. It exposes it to JS as `lord.net`. | `state.c`, `ui/js_net.c` |
+| axia-server (without root) | Reads the state with rtnetlink (interfaces, addresses, routes, counters) and listens for changes. DNS comes from `/run/systemd/resolve/resolv.conf` or `/etc/resolv.conf`. It exposes it to JS as `lord.net`. | `rust/axia-netstate` (C ABI: `server/src/net/net.h`), `ui/js_net.c` |
 | `lord-netd` (root, the system network) | Serves the `net-*` actions of `admin.c`'s closed list and owns the resident processes (DHCP, wpa_supplicant, VPN). `lord-sessiond` starts and supervises it at boot (see "The network belongs to the system"). Without `lord-sessiond`, the session's helper serves them, as before. | `actions.c`, `dhcp.c`, `wifi.c`, `wg.c`, `ovpn.c`, `ipsec.c` + `vici.c`, `vpnproc.c` (PPTP, OpenConnect, Fortinet), `vpn.c` (the common parts), `sys.c` |
-| shared | Our own netlink, minimal cryptography (X25519, SHA-1/PBKDF2, base64), utilities | `nl.c`, `crypto.c`, `netpriv.h` |
+| shared | Our own netlink, minimal cryptography (X25519, SHA-1/PBKDF2, base64), utilities | `rust/axia-netstate/src/netlink.rs`, `crypto.c` |
 
 ## The network belongs to the system: `lord-netd` (M9)
 

@@ -2,6 +2,8 @@
 members = [
     "axia-app-about",
     "axia-backup",
+    "axia-errcode",
+    "axia-netstate",
     "axia-fan",
     "axia-app-appabout",
     "axia-app-backup",

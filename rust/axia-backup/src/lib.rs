@@ -5,7 +5,8 @@
 //! (`ffi`); everything else is Rust. Paths are handled as bytes: a file name need not be UTF-8.
 pub mod crypt;
 pub mod engine;
-pub mod errcode;
+/// The error code lines live in their own crate now (shared with the other crates the server calls).
+pub use axia_errcode as errcode;
 mod ffi;
 pub mod monitor;
 pub mod service;

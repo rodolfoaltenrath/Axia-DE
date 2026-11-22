@@ -1,0 +1,9 @@
+[package]
+name = "axia-errcode"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Stable, translatable error code lines (server/src/errcode.h) for the Rust crates the C server calls into"
+
+[dependencies]
+libc = "0.2"

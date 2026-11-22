@@ -10,6 +10,7 @@ axia-state = { path = "../axia-state" }
 axia-backup = { path = "../axia-backup" }
 axia-print = { path = "../axia-print" }
 axia-fan = { path = "../axia-fan" }
+axia-netstate = { path = "../axia-netstate" }
 axia-app-pdf = { path = "../axia-app-pdf" }
 axia-app-sysprobe = { path = "../axia-app-sysprobe" }
 axia-app-passwords = { path = "../axia-app-passwords" }

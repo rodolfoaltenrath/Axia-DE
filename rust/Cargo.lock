@@ -292,6 +292,7 @@ name = "axia-backup"
 version = "0.1.0"
 dependencies = [
  "axia-crypto",
+ "axia-errcode",
  "axia-fs",
  "libc",
  "serde_json",
@@ -346,6 +347,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-errcode"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "axia-fan"
 version = "0.1.0"
 dependencies = [
@@ -385,6 +393,15 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-netstate"
+version = "0.1.0"
+dependencies = [
+ "axia-errcode",
+ "libc",
  "serde_json",
 ]
 
@@ -441,6 +458,7 @@ dependencies = [
  "axia-codecs",
  "axia-fan",
  "axia-native",
+ "axia-netstate",
  "axia-print",
  "axia-state",
  "image",

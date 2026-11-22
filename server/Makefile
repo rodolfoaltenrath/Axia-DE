@@ -92,7 +92,6 @@ SRC := src/main.c src/kms.c src/gpu/gpu.c src/canvas.c src/users/admin_rescue.c 
        src/ui/paint.c src/ui/js.c src/ui/js_timers.c src/ui/js_anim.c src/ui/js_sys.c src/ui/js_term.c src/ui/js_wasm.c src/ui/js_sound.c src/ui/js_net.c src/sound/snd.c src/sound/pulse.c src/ui/otf.c src/ui/fonts.c \
        src/ui/unicode.c src/ui/bidi.c src/ui/shape.c src/ui/shape_indic.c src/ui/shape_syl.c src/ui/shape_khmer.c src/ui/shape_myanmar.c src/ui/shape_use.c src/ui/textlayout.c \
        src/term/pty.c src/term/term.c src/term/term_paint.c src/term/hold.c \
-       src/net/nl.c src/net/state.c \
        src/pkg/crypto.c src/ui/js_sec.c \
        $(SEC_SRC) $(APP_SRC) $(MON_SRC) $(MEDIA_SRC)
 # Documents and printing (M9): axia-doc helper sessions (src/doc) and lord.print (src/ui/js_print.c over

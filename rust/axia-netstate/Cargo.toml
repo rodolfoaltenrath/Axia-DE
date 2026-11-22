@@ -1,0 +1,13 @@
+[package]
+name = "axia-netstate"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "The network state axia-server shows without root: rtnetlink dumps, DNS, saved configurations and change notifications"
+
+[dependencies]
+axia-errcode = { path = "../axia-errcode" }
+libc = "0.2"
+
+[dev-dependencies]
+serde_json = "1"
