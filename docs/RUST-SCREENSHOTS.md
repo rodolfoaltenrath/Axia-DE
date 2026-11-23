@@ -12,7 +12,9 @@ model. There is no JavaScript geometry or markup-policy fallback.
 `panel.rs` now owns the main scene, preferences, recent-file presentation and
 protection target policy. `session.rs` owns recording generations/identity,
 completion metadata and the bounded recent history independently of mounted
-views. JavaScript retains a revisioned notification mirror of that session
+views. The context's resident `capture::Service` owns that model and the capture
+pipeline deadlines; the private app-model bridge no longer owns session state.
+JavaScript retains a revisioned notification mirror of that session
 snapshot, rather than owning the recording/history stores.
 
 The native geometry preserves reverse drags, exclusive right/bottom window
@@ -257,9 +259,56 @@ enforced limits, with medians of 13.200 poll calls/s and 104.449 MiB RSS (limits
 or replace the physical measurements deferred to the roadmap's end. The earlier
 isolated facts-fixture limitation remains unchanged.
 
-This is still a partial app migration. Global capture pipeline scheduling,
-filename selection, refusal presentation and SDK image/recording operations
-remain in the transport, along with compiled metadata and wrapper removal below.
+## Resident capture controller
+
+`rust/axia-shell/src/capture.rs` is owned by the context's window session. The
+root controller exposes capture/session commands; only its bounded effects are
+drained through the existing resident service bridge. No panel or native-view
+host owns the lifetime of pending work. The old JavaScript `afterHide`,
+`withTimer`, countdown callback map and their capture timeouts have been removed.
+
+Rust chooses capture windows from the authoritative window reader, preserves
+editors, waits 160 ms for images or 220 ms for recording, reads the native timer
+preference, and owns the five/ten-second countdown and 180 ms settling delay.
+Deadlines use the monotonic clock. Countdown placement uses the primary native
+display's geometry. The view supplies presentation, cancellation and focus
+transport; its completion callback is not required to trigger the capture.
+Idle and media-permission waits add no periodic timer.
+
+Each request has a generation. Replacing/cancelling it invalidates queued work
+before the SDK drain and rejects old asynchronous image handles exactly once.
+Old countdown cleanup cannot cancel a newer request or the normal settling
+phase. Recording permissions retain their separate source token. Session state
+is shared by context, with independent histories in independent contexts.
+Capturing during recording hides its badge with the other capture windows, then
+restores it only for the same active recording/current generation. A replacement
+capture inherits restoration ownership; a stopped recording cannot be revived.
+
+Evidence is under `build/validation/screenshots-controller/`. Five new shell
+tests drive the resident scheduler with no scene/JavaScript timer, cancellation
+and replacement, cleanup during settling, queued-effect rejection, recording
+badge restoration ownership and independent context state. All 721 shell tests
+pass (seven ignored), as do 23 app tests, 105 historical geometry cases, GPU=1
+build, platform/ABI, eight LPK contracts and the isolated installed switcher
+check. Thirty-two app GUI scenarios pass, plus eight switcher scenarios. The
+expanded eight-case panel matrix checks an image result arriving after a newer
+selector, single release without saving the old image, and a print taken during
+recording: the badge is absent at raw frame capture and restored afterward.
+Existing selector, thumbnail, countdown, native text input, editor and recording
+checks still pass. Recording is simulated below the SDK; image capture/cropping
+and protected-window PNG checks use the real compositor. Representative panel
+and countdown captures were inspected. Sixteen source/locale files match the
+Fedora execution tree byte for byte, and eight switcher PNGs match the preceding
+panel delivery. Three installed software/offline idle samples pass enforced
+limits: medians 12.500 poll calls/s and 104.117 MiB RSS, below 15 calls/s and
+120 MiB. No causal performance improvement or physical recording is established.
+The previously documented isolated facts fixture still needs maintenance;
+these integration tests exercise the production resident-effect bridge.
+
+This is still a partial app migration. Filename selection, refusal presentation,
+external-app/global shortcut routing and SDK image/recording operations remain
+in the transport, along with compiled metadata and wrapper removal below. The
+thumbnail-to-editor handoff still has its existing short transport timeout.
 
 ## Remaining work
 
@@ -283,10 +332,10 @@ dimensions and display transforms instead of assuming a 100% single display.
 
 - Compiled metadata and removal of the JSX/JSON entry points. All app scenes
   are native, including the panel, selector, editor and auxiliary windows.
-- Capture controller independent of a mounted panel: hide capture windows before
-  taking the frame; preserve editors; countdown and cancellation; permission
-  refusal with a privacy action and toast fallback; chosen external screenshot
-  app and the global shortcuts, including stop-recording priority.
+- Complete the resident controller's I/O and permission presentation: privacy
+  action/toast fallback, chosen external screenshot app and global shortcuts,
+  including stop-recording priority. Window hiding, editor preservation,
+  generation checks, countdown and cancellation are now native.
 - Move the remaining recording event transport and stop/error handling into the
   native controller. Recording identity/generations, matching completion and
   recent results already belong to Rust; preserve SDK device-indicator cleanup.

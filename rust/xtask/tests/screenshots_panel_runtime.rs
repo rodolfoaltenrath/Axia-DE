@@ -60,6 +60,8 @@ fn capture_panel_and_session_state_survive_close_and_late_recording_results() {
                     "persisted",
                     "privacy",
                     "freshPrivacy",
+                    "staleCapture",
+                    "recordingCapture",
                     "full",
                     "window",
                     "area",
@@ -101,11 +103,13 @@ import {perms,indicatorFacts} from '@ROOT@/sdk/privacy.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import * as fs from '@ROOT@/sdk/fs.js';
-const kind='capture_panel_@APPEARANCE@',sleep=ms=>new Promise(r=>setTimeout(r,ms)),handles=new Map(),savedPaths=[],closed=[],stops=[],states=[],crops=[];
-let stage='bootstrap',nativeAppearance=true,next=700000,defer=false,release=null,deferredId=0;
+const kind='capture_panel_@APPEARANCE@',sleep=ms=>new Promise(r=>setTimeout(r,ms)),handles=new Map(),savedPaths=[],closed=[],stops=[],states=[],crops=[],frameBadges=[];
+let stage='bootstrap',nativeAppearance=true,next=700000,defer=false,release=null,deferredId=0,deferImage=false,imageRelease=null,oldImage=0;
 const mount=lord.nativeViews.mount;lord.nativeViews.mount=(node,id,raw,...rest)=>{const facts=JSON.parse(raw),handle=mount(node,id,raw,...rest);if(id==='screenshots'&&!facts.icon){handles.set(facts.args.view||'selector',handle);nativeAppearance&&=!('theme' in(facts.context||{}));}return handle;};
-const create=lord.nativeApps.create;lord.nativeApps.create=id=>{const owner=create(id);return {request(raw){const result=owner.request(raw);if(id==='screenshots'&&JSON.parse(raw).cmd==='session')states.push(result.state);return result;}};};
-const rawSave=media.saveImage,rawClose=lord.media.close,rawRecord=media.screenRecord,rawCrop=media.crop;
+const request=lord.nativeApps.request;lord.nativeApps.request=raw=>{const result=request.call(lord.nativeApps,raw),cmd=JSON.parse(raw).cmd;if(cmd==='captureSession')states.push(result.state);else if(cmd==='captureCommand'&&result.capture)states.push(result.capture);return result;};
+const rawSave=media.saveImage,rawClose=lord.media.close,rawRecord=media.screenRecord,rawCrop=media.crop,rawScreenshot=media.screenshot;
+const rawFrame=lord.media.screenshot;lord.media.screenshot=(...args)=>{frameBadges.push(!!wm.get('screenshots#rec'));return rawFrame(...args);};
+media.screenshot=async(...args)=>{const id=await rawScreenshot(...args);if(deferImage){oldImage=id;return await new Promise(resolve=>{imageRelease=()=>resolve(id);});}return id;};
 media.saveImage=async(...args)=>{const result=await rawSave(...args);savedPaths.push(result);return result;};
 media.crop=(...args)=>{crops.push(args);return rawCrop(...args);};
 lord.media.screenRecord=()=>++next;lord.media.stop=id=>{stops.push(id);return true;};lord.media.close=id=>{closed.push(id);if(id<700000)rawClose(id);};
@@ -134,21 +138,22 @@ async function run(){
  const preferences=settings.get().screenshots.future===7;wm.close('screenshots',true);await sleep(100);await showPane();const persisted=settings.get().screenshots.clipboard===true&&settings.get().screenshots.mic===false;
  settings.set({screenshots:{timer:0,clipboard:false,mic:true,future:7}});await sleep(100);privacy();const privacyOk=await until(()=>wm.get(source).protected,'privacy protects source');
  const fresh=wm.open('notes',{instance:'fresh',frame:{x:450,y:110,w:200,h:160}});wm.focus('screenshots');privacy();const freshPrivacy=await until(()=>wm.get(fresh).protected&&wm.get(source).protected,'fresh privacy target');
+ deferImage=true;capture.full();await until(()=>imageRelease&&oldImage,'delayed image permission result');deferImage=false;capture.area();await until(()=>text('selector').includes('Drag to select an area')&&wm.get('screenshots#overlay'),'replacement selector');imageRelease();await until(()=>closed.filter(id=>id===oldImage).length===1,'old capture released');const staleCapture=!thumb()&&!!wm.get('screenshots#overlay')&&state().recent.length===0;key('Escape');await until(()=>!wm.get('screenshots#overlay'),'replacement selector cancelled');await showPane();
  await click('panel','Entire screen');const full=await until(()=>thumb()?.args.path&&savedPaths.some(r=>r.ok),'panel full capture');await closeCaptures();
  await showPane();await click('panel','Window');await until(()=>text('selector').includes('Select a window'),'panel window selector');await sleep(120);const f=wm.frame(wm.get(fresh));pointer('move',f.x+f.w/2,f.y+f.h/2);pointer('down',f.x+f.w/2,f.y+f.h/2);pointer('up',f.x+f.w/2,f.y+f.h/2);key('Enter');await until(()=>thumb()?.args.path,'window saved');const window=crops.at(-1)?.slice(1).join(',')===[f.x,f.y,f.w,f.h].join(',');
  fs.write(@IMAGE@+'.window.png',fs.read(thumb().args.path,{binary:true}));const masked=!!fs.stat(@IMAGE@+'.window.png');await closeCaptures();
  await showPane();await click('panel','Selection');await until(()=>text('selector').includes('Drag to select an area'),'panel area selector');await sleep(120);pointer('down',80,100);pointer('move',280,260);pointer('up',280,260);key('Enter');await until(()=>thumb()?.args.path,'area saved');const area=crops.at(-1)?.slice(1).join(',')==='80,100,200,160';await closeCaptures();
  await showPane();scrollToRecent();await sleep(100);const photo=state().recent.find(r=>!r.video);await click('panel',photo.path.split('/').pop());const photoWindow=windows.get().find(w=>w.app==='photos'&&w.args?.path===photo.path);const recentPhoto=!!photoWindow;wm.close(photoWindow.id,true);wm.focus('screenshots');await sleep(80);await closeCaptures();
- await showPane();await click('panel','Record screen');await until(()=>badge()&&state().recording,'panel record');const first=state().recording.id;const recording=indicatorFacts().some(d=>d.kind==='microphone');await showPane();await click('panel','Stop');wm.close('screenshots',true);await sleep(80);__lordMedia(first,'done',{ok:true,path:'/recording-one.mp4'});await until(()=>!badge()&&!state().recording,'record completion without mounted panel');await closeCaptures();
+ await showPane();await click('panel','Record screen');await until(()=>badge()&&state().recording,'panel record');const first=state().recording.id;const recording=indicatorFacts().some(d=>d.kind==='microphone');capture.full();await until(()=>thumb()&&!!badge(),'capture during recording');const recordingCapture=state().recording.id===first&&!!badge()&&frameBadges.at(-1)===false;wm.close(thumb().id,true);await showPane();await click('panel','Stop');wm.close('screenshots',true);await sleep(80);__lordMedia(first,'done',{ok:true,path:'/recording-one.mp4'});await until(()=>!badge()&&!state().recording,'record completion without mounted panel');await closeCaptures();
  await showPane();scrollToRecent();await sleep(100);await click('panel','recording-one.mp4');const videoWindow=windows.get().find(w=>w.app==='player'&&w.args?.path==='/recording-one.mp4'),recentVideo=!!videoWindow;wm.close(videoWindow.id,true);wm.focus('screenshots');await closeCaptures();
  defer=true;capture.record();await until(()=>release&&deferredId,'deferred recording');await showPane();await click('panel','Cancel');const cancelledPending=!state().pendingRecord&&!state().recording;
  defer=false;await click('panel','Record screen');await until(()=>badge()&&state().recording,'replacement recording');const current=state().recording.id,old=deferredId;release();await until(()=>closed.filter(id=>id===old).length===1,'late recording discarded');
  const lateDiscarded=state().recording.id===current&&!!badge(),micRetained=indicatorFacts().some(d=>d.kind==='microphone');__lordMedia(old,'done',{ok:true,path:'/must-not-appear.mp4'});await sleep(60);__lordMedia(current,'done',{ok:true,path:'/recording-two.mp4'});await until(()=>!state().recording&&!badge(),'current recording complete');
  settings.set({screenshots:{timer:5,clipboard:false,mic:true,future:7}});const beforeTimer=next;capture.record();await until(()=>wm.get('screenshots#count')&&state().pendingRecord,'recording countdown');key('Escape');const timedCancel=!state().pendingRecord&&!wm.get('screenshots#count')&&next===beforeTimer;
  capture.record();await until(()=>badge()&&state().recording,'timed recording starts after prior cancellation');const timed=state().recording.id,timedRecording=timed>current;capture.record();__lordMedia(timed,'done',{ok:true,path:'/timer.mp4'});await until(()=>!state().recording&&!badge(),'timed recording complete');
- const micCleanup=!indicatorFacts().some(d=>d.kind==='microphone'),singleClose=[first,old,current,timed].every(id=>closed.filter(h=>h===id).length===1),history=state().recent.length===6&&state().recent[0].path==='/timer.mp4'&&!state().recent.some(r=>r.path==='/must-not-appear.mp4');
+ const micCleanup=!indicatorFacts().some(d=>d.kind==='microphone'),singleClose=[first,old,current,timed].every(id=>closed.filter(h=>h===id).length===1),history=state().recent.length===7&&state().recent[0].path==='/timer.mp4'&&!state().recent.some(r=>r.path==='/must-not-appear.mp4');
  await showPane();scrollToRecent();await sleep(100);let saved=await snapshot();const sx=24+@PANELW@-40,sy=50+@PANELH@-40;lord.nativeViews.pointer('wheel',lord.nativeViews.hitTest(sx,sy),sx,sy,100);__lordNativeView();saved&&=await snapshot('.controls.png');
- console.log(kind+'-observation '+JSON.stringify({nativeAppearance,preferences,panelKeys,persisted,privacy:privacyOk,freshPrivacy,full,window,area,recentPhoto,recording,recentVideo,cancelledPending,lateDiscarded,timedCancel,timedRecording,micRetained,micCleanup,singleClose,history,saved,masked}));
+ console.log(kind+'-observation '+JSON.stringify({nativeAppearance,preferences,panelKeys,persisted,privacy:privacyOk,freshPrivacy,staleCapture,recordingCapture,full,window,area,recentPhoto,recording,recentVideo,cancelledPending,lateDiscarded,timedCancel,timedRecording,micRetained,micCleanup,singleClose,history,saved,masked}));
 }
 setTimeout(()=>run().catch(async error=>{await snapshot();console.log(kind+'-observation '+JSON.stringify({error:String(error),stage,states,savedPaths,closed,stops,crops,texts:Object.fromEntries([...handles].map(([k])=>[k,text(k)])),windows:windows.get()}));}),100);
 "#;

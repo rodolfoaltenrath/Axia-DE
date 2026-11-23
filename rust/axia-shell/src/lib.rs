@@ -31,6 +31,7 @@ use axia_app_disks as disks_app;
 use axia_app_calendar as calendar_app;
 mod native_apps_host;
 mod app_control;
+mod capture;
 mod clock_settings;
 mod window_memory;
 mod session_restore;

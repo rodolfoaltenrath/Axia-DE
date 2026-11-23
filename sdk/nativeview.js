@@ -13,6 +13,7 @@ import { launcherBridge } from './nativelauncher.js';
 import { treeOwners } from './nativetree.js';
 import { notificationBridge } from './nativenotifications.js';
 import { clockBridge } from './nativeclock.js';
+import { captureBridge } from './nativecapture.js';
 import { settingsBridge } from './nativesettings.js';
 import { localeBridge } from './nativelocale.js';
 import { textFieldActive, onTextField } from './textfocus.js';
@@ -66,6 +67,7 @@ globalThis.__lordNativeView = () => {
           else if (effect.kind === 'localeState') localeBridge.perform?.(effect);
           else if (effect.kind === 'sessionRestore') restoreBridge.perform?.(effect);
           else if (effect.kind === 'clockReply') clockBridge.perform?.(effect);
+          else if (effect.kind === 'capturePipeline') captureBridge.perform?.(effect);
           else if (effect.kind === 'shellKeyboard') refreshShellKeyboard();
           else if (effect.kind === 'switcher') { if (effect.reply) applyNativeWindowState(effect.reply); }
           else if (effect.kind === 'windowModel') applyNativeWindowState(effect.reply);

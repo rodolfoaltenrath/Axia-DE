@@ -16,17 +16,16 @@ import {
 import { useEffect, useRef } from 'react';
 import { screen, onScreenChange, displayFor } from '@lordos/runtime';
 import { clearTextFocus, focusToken, restoreFocus } from '../../sdk/components.jsx';
+import { captureBridge } from '../../sdk/nativecapture.js';
 
 const APP = 'screenshots';
 const session = createStore({ revision: 0, recording: null, pendingRecord: false, recent: [] });
-let sessionOwner;
 function sessionRequest(input) {
-  const reply = (sessionOwner ||= lord.nativeApps.create(APP)).request(JSON.stringify({ cmd: 'session', ...input }));
+  const reply = lord.nativeApps.request(JSON.stringify({ cmd: 'captureSession', ...input }));
   if (reply.state.revision !== session.get().revision) session.set(reply.state);
   return reply;
 }
 const recordCurrent = token => sessionRequest({ op: 'recordCurrent', token }).valid;
-const countdowns = new Map();        // pending transport callbacks, scoped to their window
 
 export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} icon={size} />; }
 
@@ -72,24 +71,17 @@ function showThumb(handle, path, thumbnail) {
   wm.setPip(id, thumbnail || { x: lord.screen.width - w - 20, y: lord.screen.height - h - 90, w, h });
 }
 
-// takes the screen once a frame without our windows was drawn (it closes them first)
-function afterHide(fn, delay = 160) {
-  for (const w of windows.get()) if (w.app === APP && w.id !== `${APP}#edit` && !String(w.id).startsWith(`${APP}#edit`)) wm.close(w.id, true);
-  setTimeout(fn, delay);
-}
-
-function withTimer(fn, recordToken = null) {
-  const secs = opts().timer;
-  if (!secs) { fn(); return; }
-  const start = Date.now();
-  const id = wm.open(APP, { instance: 'count', args: { secs, start, returnWindow: wm.focused() } });
-  countdowns.set(id, { start, run: fn, recordToken });
-  wm.setPip(id, { x: Math.round(lord.screen.width / 2 - 60), y: Math.round(lord.screen.height / 2 - 60), w: 120, h: 120 });
+// The resident Rust service owns generations and every capture/countdown deadline.
+function captureRequest(input) {
+  const reply = lord.nativeApps.request(JSON.stringify({ cmd: 'captureCommand', ...input }));
+  if (reply.capture && reply.capture.revision !== session.get().revision) session.set(reply.capture);
+  for (const effect of reply.effects || []) captureBridge.perform(effect);
+  return reply.result;
 }
 function cancelCountdown() {
-  const entry = countdowns.get(`${APP}#count`);
-  if (entry?.recordToken != null) sessionRequest({ op: 'recordFailed', token: entry.recordToken });
-  wm.close(`${APP}#count`, true);
+  const win = wm.get(`${APP}#count`);
+  if (win?.args.captureTicket != null) captureRequest({ action: 'cancel', ticket: win.args.captureTicket });
+  else wm.close(`${APP}#count`, true);
 }
 
 // The screen permission is denied (no answer here means that) or the app is restricted (an exception):
@@ -108,47 +100,66 @@ async function allowed(ask, current = () => true) {
     return got;
   } catch (e) { if (current()) refused(e); return null; }
 }
-const grab = () => allowed(() => media.screenshot(APP));
-
 export const capture = {
-  full: () => afterHide(() => withTimer(async () => finish(await grab()))),
-  area: (mode = 'area') => afterHide(() => withTimer(async () => {
-    const signature = displaySignature();
-    const h = await allowed(() => media.screenshot(APP, { x: 0, y: 0, w: screen.width, h: screen.height }));
-    if (!h) return;
-    const info = media.info(h);
-    if (displaySignature() !== signature || info?.width !== screen.width || info?.height !== screen.height) {
-      media.close(h); toast.set(tr('screenshots.selector.changed')); return;
-    }
-    const id = wm.open(APP, { instance: 'overlay', args: { handle: h, mode, selectionFacts: selectionFacts() } });
+  full: () => captureRequest({ action: 'start', mode: 'full' }),
+  area: (mode = 'area') => captureRequest({ action: 'start', mode }),
+  record: () => captureRequest({ action: 'start', mode: 'record' }),
+};
+async function runCaptureWork(effect) {
+  const { ticket, mode, recordToken: token } = effect;
+  const current = () => !!captureRequest({ action: 'valid', ticket })?.valid;
+  if (!current()) return;
+  if (mode === 'record') {
+    const path = freeName(captureDir(), tr('screenshots.recName', { date: stamp() }), 'mp4');
+    const id = await allowed(() => media.screenRecord(APP, path, { mic: opts().mic, appName: tr('apps.screenshots') }), () => recordCurrent(token));
+    if (!id) { sessionRequest({ op: 'recordFailed', token }); return; }
+    if (!sessionRequest({ op: 'recordReady', token, id, path }).accepted) { media.stop(id); media.close(id); return; }
+    const off = media.on(id, (type, d) => {
+      if (type === 'done' || type === 'closed') {
+        off();
+        const result = sessionRequest({ op: 'recordDone', id, ok: type === 'done' && !!d?.ok, path: d?.path });
+        if (result.completed) wm.close(`${APP}#rec`, true);
+        media.close(id);
+      }
+    });
+    const rid = wm.open(APP, { instance: 'rec' });
+    wm.setPip(rid, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
+    return;
+  }
+  const signature = displaySignature();
+  const handle = await allowed(() => media.screenshot(APP, mode === 'full' ? undefined : { x: 0, y: 0, w: screen.width, h: screen.height }), current);
+  if (!handle) { captureRequest({ action: 'cancel', ticket }); return; }
+  if (!captureRequest({ action: 'accept', ticket })?.valid) { media.close(handle); return; }
+  if (mode === 'full') {
+    try { await finish(handle); } catch (error) { media.close(handle); throw error; }
+    return;
+  }
+  const info = media.info(handle);
+  if (displaySignature() !== signature || info?.width !== screen.width || info?.height !== screen.height) {
+    media.close(handle); toast.set(tr('screenshots.selector.changed')); return;
+  }
+  try {
+    const id = wm.open(APP, { instance: 'overlay', args: { handle, mode, selectionFacts: selectionFacts() } });
     wm.setFullscreen(id, true);
-  })),
-  async record() {
-    const action = sessionRequest({ op: 'recordAction' });
-    if (action.action === 'stop') { media.stop(action.id); return; }
-    if (action.action === 'cancel') { wm.close(`${APP}#count`, true); return; }
-    const token = action.token;
-    afterHide(() => {
-      if (!recordCurrent(token)) return;
-      withTimer(async () => {
-        if (!recordCurrent(token)) return;
-        const path = freeName(captureDir(), tr('screenshots.recName', { date: stamp() }), 'mp4');
-        const id = await allowed(() => media.screenRecord(APP, path, { mic: opts().mic, appName: tr('apps.screenshots') }), () => recordCurrent(token));
-        if (!id) { sessionRequest({ op: 'recordFailed', token }); return; }
-        if (!sessionRequest({ op: 'recordReady', token, id, path }).accepted) { media.stop(id); media.close(id); return; }
-        const off = media.on(id, (type, d) => {
-          if (type === 'done' || type === 'closed') {
-            off();
-            const result = sessionRequest({ op: 'recordDone', id, ok: type === 'done' && !!d?.ok, path: d?.path });
-            if (result.completed) wm.close(`${APP}#rec`, true);
-            media.close(id);
-          }
-        });
-        const rid = wm.open(APP, { instance: 'rec' });
-        wm.setPip(rid, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
-      }, token);
-    }, 220);
-  },
+  } catch (error) { media.close(handle); throw error; }
+}
+captureBridge.perform = effect => {
+  if (effect.op === 'hide') { for (const id of effect.ids) wm.close(id, true); }
+  else if (effect.op === 'closeCountdown') {
+    if (wm.get(`${APP}#count`)?.args.captureTicket === effect.ticket) wm.close(`${APP}#count`, true);
+  } else if (effect.op === 'countdown') {
+    const id = wm.open(APP, { instance: 'count', args: { secs: effect.secs, start: effect.start, returnWindow: effect.returnWindow, captureTicket: effect.ticket } });
+    wm.setPip(id, effect.frame);
+  } else if (effect.op === 'stop') media.stop(effect.id);
+  else if (effect.op === 'restoreRecording') {
+    if (captureRequest({ action: 'restoreRecording', ticket: effect.ticket, id: effect.id })?.valid && !wm.get(`${APP}#rec`)) {
+      const id = wm.open(APP, { instance: 'rec' });
+      wm.setPip(id, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
+    }
+  }
+  else if (effect.op === 'work') runCaptureWork(effect).catch(error => {
+    captureRequest({ action: 'cancel', ticket: effect.ticket }); toast.set(errorText(error));
+  });
 };
 
 // global shortcuts
@@ -251,25 +262,20 @@ function Thumb({ handle, path }) {
 
 function Countdown({ secs, start }) {
   const win = useAppWindow();
-  const entry = countdowns.get(win.id);
+  const ticket = win.args.captureTicket;
   const returnFocus = useRef(focusToken());
   useEffect(() => {
     clearTextFocus();
     return () => {
-      if (countdowns.get(win.id) === entry) {
-        countdowns.delete(win.id);
-        if (entry?.recordToken != null) sessionRequest({ op: 'recordFailed', token: entry.recordToken });
-      }
+      if (ticket != null) captureRequest({ action: 'countClosed', ticket });
       if (wm.focused() === win.args.returnWindow) restoreFocus(returnFocus.current);
     };
-  }, [entry]);
+  }, [ticket]);
   return <NativeView manifest={OVERLAY_MANIFEST} args={{ view: 'countdown', secs, start }} onEffect={effect => {
     if (effect.kind !== 'captureAuxiliary') return false;
     if (effect.view !== 'countdown' || effect.source !== start) return true;
-    const pending = countdowns.get(win.id);
-    countdowns.delete(win.id); wm.close(win.id, true);
-    if (effect.op !== 'complete' && pending?.recordToken != null) sessionRequest({ op: 'recordFailed', token: pending.recordToken });
-    if (effect.op === 'complete' && pending?.start === start) setTimeout(pending.run, 180);
+    if (ticket == null) wm.close(win.id, true);
+    else if (effect.op !== 'complete') captureRequest({ action: 'cancel', ticket });
     return true;
   }} />;
 }

@@ -15,13 +15,10 @@ pub mod session;
 #[derive(Default)]
 pub struct Model {
     pub editor: markup::Editor,
-    pub session: session::State,
 }
 impl Model {
     pub fn request(&mut self, input: &serde_json::Value) -> serde_json::Value {
-        if input["cmd"] == "session" {
-            self.session.request(input, axia_native::clock::now())
-        } else if input["cmd"] == "markup" {
+        if input["cmd"] == "markup" {
             self.editor.request(input)
         } else {
             geometry::request(input)

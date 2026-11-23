@@ -719,8 +719,9 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
 - [ ] `screenshots`: geometria de seleção, janela sob o ponteiro, coordenadas,
       ferramentas e histórico do editor, ícone, seletor PrintScreen e janelas
       auxiliares, painel, interface do editor e estado/histórico da gravação em
-      Rust. Pipeline global de captura/gravação, atalhos, metadados compilados
-      e seus transportes ainda em migração.
+      Rust. Controlador residente com prazos, cancelamento e gerações em Rust;
+      I/O de captura/gravação, permissões, atalhos, metadados compilados e seus
+      transportes ainda em migração.
       Ver [RUST-SCREENSHOTS.md](RUST-SCREENSHOTS.md).
 - [ ] `pdf`
 - [ ] `player`

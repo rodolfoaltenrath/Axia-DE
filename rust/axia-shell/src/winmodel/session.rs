@@ -902,6 +902,7 @@ struct SessionCore {
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
+    capture: std::rc::Rc<std::cell::RefCell<crate::capture::Service>>,
     preference_publications: std::cell::RefCell<Option<crate::native_view::services::preferences::Service>>,
     memory: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::window_memory::Memory>>>>,
     clock: std::cell::RefCell<Option<crate::native_view::services::clock::Scheduler>>,
@@ -1026,6 +1027,8 @@ impl Session {
     pub(crate) fn downgrade(&self) -> WeakSession { WeakSession(std::rc::Rc::downgrade(&self.core)) }
     pub(crate) fn resident(&self) -> bool { self.core.resident.get() }
     pub(crate) fn service_tick(&mut self, now: std::time::Instant) {
+        let capture = self.core.capture.borrow_mut().tick(self, axia_clock::now(), now);
+        self.queue_service_effects(capture);
         let scene = self.core.shell_scene.borrow().clone();
         if let Some(scene) = scene { scene.borrow_mut().tick(self); }
         let desktops = self.core.desktops.borrow().clone();
@@ -1081,7 +1084,8 @@ impl Session {
         if self.core.shell_scene.borrow().as_ref().is_some_and(|scene|scene.borrow().pending()) { return Some(0.); }
         if self.core.preference_publications.borrow().as_ref().is_some_and(|service| service.invalidated()) { return Some(0.); }
         if self.core.desktops.borrow().as_ref().is_some_and(|service| service.borrow().invalidated()) { return Some(0.); }
-        [self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now)),
+        [self.core.capture.borrow().wait_ms(now),
+         self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now)),
          self.core.clock.borrow().as_ref().and_then(|clock| clock.wait_ms(now)),
          self.core.notifications.borrow().background_wait(now),
          self.core.memory.borrow().as_ref().and_then(|memory| memory.borrow().wait_ms(now))]
@@ -1090,6 +1094,7 @@ impl Session {
     pub(crate) fn service_pending(&self) -> bool { !self.core.effects.borrow().is_empty() }
     pub(crate) fn take_service_effects(&self) -> Option<Value> {
         let mut effects = self.core.effects.borrow_mut();
+        effects.retain(|effect|effect["kind"]!="capturePipeline" || self.core.capture.borrow().allows(effect));
         // A completion can wait in the bridge while another opening starts.
         // Identity validation belongs here, before JS can apply its snapshot.
         let nonce = self.core.switcher_nonce.get();
@@ -1107,6 +1112,7 @@ impl Session {
     pub(crate) fn notification_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::notifications::Service>> {
         self.core.notifications.clone()
     }
+    pub(crate) fn capture_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::capture::Service>> { self.core.capture.clone() }
     pub(crate) fn desktop_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>> {
         self.core.desktops.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(crate::desktop_session::Service::new(self.reader())))).clone()
     }
