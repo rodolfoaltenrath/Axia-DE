@@ -25,13 +25,59 @@ pub(crate) struct Service {
     preferences: Option<axia_state::Reader<Value>>,
     pending: Option<Pending>,
     generation: u64,
+    home: String,
+    assets: String,
+    output_i18n: axia_native::i18n::I18n,
+    output_revision: Option<u64>,
+    outputs: axia_app_screenshots::output::Outputs,
 }
 impl Service {
     pub(crate) fn bind_settings(&mut self, home: &str) {
+        self.home = crate::settings::profile(home);
+        self.assets = crate::native_view::resource_roots().0;
+        self.output_i18n = axia_native::i18n::I18n::new(&self.assets, Some(&self.home));
+        self.output_revision = None;
         self.preferences = Some(crate::settings::with(
             &crate::settings::profile(home),
             |s| s.reader(),
         ));
+    }
+    pub(crate) fn output(&mut self, input: &Value, wall: i64) -> Value {
+        match input["op"].as_str() {
+            Some("begin") => {
+                let locale = crate::locale::reader(&self.home, &self.assets);
+                let locale = locale.read();
+                if self.output_revision != Some(locale.revision) {
+                    self.output_i18n.invalidate();
+                    self.output_revision = Some(locale.revision);
+                }
+                self.output_i18n.lang = locale.lang.clone();
+                let prefs = self
+                    .preferences
+                    .as_ref()
+                    .map(|p| p.read()["screenshots"].clone())
+                    .unwrap_or(Value::Null);
+                self.outputs
+                    .begin(input, &prefs, &mut self.output_i18n, wall)
+            }
+            Some("next") => self.outputs.next(input),
+            Some("complete") => {
+                let mut reply = self.outputs.complete(input);
+                if reply["kind"] == "image" && reply["ok"] == true && reply["path"].is_string() {
+                    self.state
+                        .request(&json!({"op":"recentAdd","path":reply["path"]}), wall);
+                }
+                reply["capture"] = self.state.snapshot();
+                reply
+            }
+            Some("release") => {
+                if let Some(id) = input["id"].as_u64() {
+                    self.outputs.release(id);
+                }
+                json!({"ok":true})
+            }
+            _ => json!({"error":"app.invalidRequest"}),
+        }
     }
     pub(crate) fn session(&mut self, input: &Value, wall: i64) -> Value {
         if input["op"] == "recordReady"

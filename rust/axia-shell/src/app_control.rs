@@ -46,11 +46,12 @@ impl Controller {
         self.windows.as_ref().and_then(Session::take_service_effects)
     }
     pub fn request(&mut self, input: &Value) -> Value {
-        if matches!(input["cmd"].as_str(),Some("captureCommand" | "captureSession")) {
+        if matches!(input["cmd"].as_str(),Some("captureCommand" | "captureSession" | "captureOutput")) {
             let Some(windows)=&self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.capture_service();
             let mut service=service.borrow_mut();
-            return if input["cmd"]=="captureSession" { service.session(input,axia_clock::now()) }
+            return if input["cmd"]=="captureOutput" {service.output(input,axia_clock::now())}
+                else if input["cmd"]=="captureSession" { service.session(input,axia_clock::now()) }
                 else { service.command(windows,input,axia_clock::now(),std::time::Instant::now()) };
         }
         if matches!(input["cmd"].as_str(),Some("shellRoot" | "shellLayer" | "shellKeyboard" | "switcherStatus" | "desktopHudStatus")) {

@@ -11,7 +11,7 @@
 import {
   View, NativeView, Layer,
   useAppWindow, useStore, useWindows, wm, windows,
-  t as tr, media, userDirs, fs, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, notify, toast, errorText, dndActive, appNotifyPrefs,
+  t as tr, media, userDirs, fs, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, notify, toast, errorText, dndActive, appNotifyPrefs,
 } from '@lordos/sdk';
 import { useEffect, useRef } from 'react';
 import { screen, onScreenChange, displayFor } from '@lordos/runtime';
@@ -31,42 +31,49 @@ export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} 
 
 // ---- files ----
 
-const pad = (n) => String(n).padStart(2, '0');
-function stamp() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}.${pad(d.getSeconds())}`;
+function outputRequest(input) {
+  const reply = lord.nativeApps.request(JSON.stringify({ cmd: 'captureOutput', ...input }));
+  if (reply.capture && reply.capture.revision !== session.get().revision) session.set(reply.capture);
+  if (reply.error) throw new Error(reply.error);
+  return reply;
 }
-function captureDir() {
-  const dir = `${userDirs().pictures}/${tr('screenshots.folder')}`;
-  try { fs.mkdir(userDirs().pictures); } catch (e) { /* already there */ }
-  try { fs.mkdir(dir); } catch (e) { /* already there */ }
-  return dir;
+function outputTarget(kind, source) {
+  let reply = outputRequest({ op: 'begin', kind, source });
+  const id = reply.id;
+  try {
+    while (reply.effect) {
+      const effect = reply.effect;
+      let result;
+      try {
+        if (effect.op === 'dirs') result = userDirs();
+        else if (effect.op === 'mkdir') result = fs.mkdir(effect.path);
+        else if (effect.op === 'stat') { fs.stat(effect.path); result = { exists: true }; }
+      } catch (error) { result = { error: error?.code || error?.message || 'app.invalidRequest' }; }
+      reply = outputRequest({ op: 'next', id, step: reply.step, result });
+    }
+    return { ...reply.target, id };
+  } catch (error) { outputRequest({ op: 'release', id }); throw error; }
 }
-function freeName(dir, base, ext) {
-  for (let n = 1; n < 1000; n++) {
-    const p = `${dir}/${base}${n > 1 ? ` (${n})` : ''}.${ext}`;
-    try { fs.stat(p); } catch (e) { return p; }
-  }
-  return `${dir}/${base} ${Date.now()}.${ext}`;
-}
-const opts = () => ({ timer: 0, clipboard: false, mic: false, ...(settings.get().screenshots || {}) });
+const releaseOutput = target => outputRequest({ op: 'release', id: target.id });
 
 // ---- capture ----
 
 async function finish(handle, thumbnail) {
   if (!handle) return;
-  const o = opts();
-  let path = null;
-  if (o.clipboard) await media.copyImage(handle);
-  else {
-    const r = await media.saveImage(handle, freeName(captureDir(), tr('screenshots.fileName', { date: stamp() }), 'png'));
-    if (r.ok) { path = r.path; sessionRequest({ op: 'recentAdd', path }); }
-  }
-  showThumb(handle, path, thumbnail);
+  let target, output;
+  try {
+    target = outputTarget('image');
+    const result = await (target.clipboard ? media.copyImage(handle) : media.saveImage(handle, target.path));
+    output = outputRequest({ op: 'complete', id: target.id, result });
+  } catch (error) {
+    output = target ? outputRequest({ op: 'complete', id: target.id, result: { ok: false } }) : { ok: false };
+    toast.set(errorText(error));
+  } finally { if (target) releaseOutput(target); }
+  showThumb(handle, output.path || null, thumbnail, { ok: output.ok, clipboard: output.clipboard });
 }
 
-function showThumb(handle, path, thumbnail) {
-  const id = wm.open(APP, { instance: 'thumb', args: { handle, path } });
+function showThumb(handle, path, thumbnail, output) {
+  const id = wm.open(APP, { instance: 'thumb', args: { handle, path, output } });
   const w = 240, h = 150;
   wm.setPip(id, thumbnail || { x: lord.screen.width - w - 20, y: lord.screen.height - h - 90, w, h });
 }
@@ -110,16 +117,17 @@ async function runCaptureWork(effect) {
   const current = () => !!captureRequest({ action: 'valid', ticket })?.valid;
   if (!current()) return;
   if (mode === 'record') {
-    const path = freeName(captureDir(), tr('screenshots.recName', { date: stamp() }), 'mp4');
-    const id = await allowed(() => media.screenRecord(APP, path, { mic: opts().mic, appName: tr('apps.screenshots') }), () => recordCurrent(token));
-    if (!id) { sessionRequest({ op: 'recordFailed', token }); return; }
-    if (!sessionRequest({ op: 'recordReady', token, id, path }).accepted) { media.stop(id); media.close(id); return; }
+    const target = outputTarget('record');
+    const path = target.path;
+    const id = await allowed(() => media.screenRecord(APP, path, { mic: target.mic, appName: target.appName }), () => recordCurrent(token));
+    if (!id) { releaseOutput(target); sessionRequest({ op: 'recordFailed', token }); return; }
+    if (!sessionRequest({ op: 'recordReady', token, id, path }).accepted) { media.stop(id); media.close(id); releaseOutput(target); return; }
     const off = media.on(id, (type, d) => {
       if (type === 'done' || type === 'closed') {
         off();
         const result = sessionRequest({ op: 'recordDone', id, ok: type === 'done' && !!d?.ok, path: d?.path });
         if (result.completed) wm.close(`${APP}#rec`, true);
-        media.close(id);
+        media.close(id); releaseOutput(target);
       }
     });
     const rid = wm.open(APP, { instance: 'rec' });
@@ -243,7 +251,7 @@ function Thumb({ handle, path }) {
     media.view(handle, { fit: 'cover', background: 0xff222222 });
     return () => { if (!windows.get().some(w => w.args?.handle === handle && w.id !== win.id)) media.close(handle); };
   }, [handle]);
-  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'thumbnail', handle, path }} onEffect={effect => {
+  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'thumbnail', handle, path, output: win.args.output }} onEffect={effect => {
     if (effect.kind !== 'captureAuxiliary') return false;
     if (effect.view !== 'thumbnail' || effect.source !== handle) return true;
     if (effect.op === 'edit') {
@@ -324,8 +332,11 @@ function Editor({ handle, path }) {
       let result;
       if (effect.op === 'copy') result = await media.copyImage(effect.image);
       else {
-        const base = path ? path.split('/').pop().replace(/\.png$/i, '') : tr('screenshots.fileName', { date: stamp() });
-        result = await media.saveImage(effect.image, freeName(captureDir(), `${base} (${tr('screenshots.annotated')})`, 'png'));
+        const target = outputTarget('annotated', path);
+        try {
+          const saved = await media.saveImage(effect.image, target.path);
+          result = outputRequest({ op: 'complete', id: target.id, result: saved });
+        } finally { releaseOutput(target); }
       }
       report({ op: effect.op, token: effect.token, ok: !!result?.ok });
     } catch (error) {

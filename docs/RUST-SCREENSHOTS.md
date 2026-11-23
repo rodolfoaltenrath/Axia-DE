@@ -305,7 +305,51 @@ limits: medians 12.500 poll calls/s and 104.117 MiB RSS, below 15 calls/s and
 The previously documented isolated facts fixture still needs maintenance;
 these integration tests exercise the production resident-effect bridge.
 
-This is still a partial app migration. Filename selection, refusal presentation,
+## Native output policy
+
+`apps/screenshots/output.rs` owns image/recording/annotation destinations,
+translated folder/base names, local timestamps, extensions, numbered collisions,
+clipboard choice and recording microphone/app-name options. The resident capture
+service reads native preferences and locale; caller preference/time overrides
+are not used. `stamp`, `captureDir`, `freeName` and `opts` are removed from JSX.
+Directory/stat operations still execute through the existing filesystem adapter,
+which also supplies the generic user-directory facts. The server's path/access
+checks and media backend's refusal to replace existing files remain authoritative.
+
+Output jobs have unique identities and ordered replies. Candidate paths stay
+reserved in the context until completion/release, including recording permission
+waits and exports that overlap. A second missing-file response cannot adopt a
+path another export just reserved; abandoning a pending stat cannot release
+another job's name. After the historical 999 numbered candidates, timestamp
+fallbacks remain bounded. Unicode source names and case-insensitive `.png`
+suffixes are preserved, and annotations always choose a separate destination.
+
+Rust folds output completion and adds only successfully saved new captures to
+recent history. Duplicate/stale completion cannot append it twice. A failed save
+or copy has no saved path; its thumbnail displays the native failure caption and
+stays available for editing instead of claiming the image was copied. Successful
+clipboard captures retain their existing thumbnail and caption. Recording event
+transport/terminal-state handling remains pending below.
+
+Evidence is under `build/validation/screenshots-output/`: 28 app tests, 722 shell
+tests (seven ignored), 105 historical geometry cases, GPU=1 build, platform/ABI,
+eight LPK contracts, private installation and the installed switcher check pass.
+New tests cover translated/Unicode names, concurrent missing-file responses,
+reservation ownership, release, duplicate/stale callbacks, the collision limit,
+clipboard/recording/annotation choices and native preferences/completion history.
+All 32 app GUI scenarios and eight switcher scenarios pass. The eight-case panel
+matrix additionally injects a failed save, checks the native failure caption and
+unchanged history, and opens the same image for editing through its thumbnail.
+Failure captures were inspected in Axia light and Adwaita dark. Eighteen
+source/locale files match the Fedora execution tree byte for byte; all eight
+switcher PNGs match the preceding controller delivery. Three installed
+software/offline idle samples pass enforced limits: medians 12.300 poll calls/s
+and 104.713 MiB RSS, below 15 calls/s and 120 MiB. Recording remains simulated
+below the SDK; image/crop/protected-window PNG checks use the real compositor.
+These results do not establish a causal performance improvement or physical
+recording. The previously documented isolated facts-fixture limitation remains.
+
+This is still a partial app migration. Refusal presentation,
 external-app/global shortcut routing and SDK image/recording operations remain
 in the transport, along with compiled metadata and wrapper removal below. The
 thumbnail-to-editor handoff still has its existing short transport timeout.
@@ -339,9 +383,10 @@ dimensions and display transforms instead of assuming a 100% single display.
 - Move the remaining recording event transport and stop/error handling into the
   native controller. Recording identity/generations, matching completion and
   recent results already belong to Rust; preserve SDK device-indicator cleanup.
-- Native image/file services and filename policy: the markup scene, input,
-  tools, colors, thickness, preview operations, undo and result deadlines are
-  native. Migrate the SDK image transport together with the capture controller,
+- Native image/file services: filename policy, output reservations and result
+  folding are native, along with the markup scene, input, tools, colors,
+  thickness, preview operations, undo and result deadlines. Migrate the remaining
+  SDK filesystem/image transport together with the capture controller,
   preserving original files and exact resource ownership across async replies.
 - Required graphical coverage of the complete flows at minimum/default sizes,
   light/dark and Axia/Adwaita; source comparison, build, platform/ABI and LPK

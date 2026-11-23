@@ -6,6 +6,8 @@ pub mod editor_view;
 pub mod geometry;
 #[path = "../../../apps/screenshots/markup.rs"]
 pub mod markup;
+#[path = "../../../apps/screenshots/output.rs"]
+pub mod output;
 #[path = "../../../apps/screenshots/panel.rs"]
 pub mod panel;
 #[path = "../../../apps/screenshots/selector.rs"]

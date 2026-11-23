@@ -243,3 +243,56 @@ fn queued_work_is_fenced_before_the_sdk_can_execute_a_superseded_generation() {
         "window"
     );
 }
+
+#[test]
+fn output_completion_uses_native_preferences_and_records_only_successful_new_images_once() {
+    let (_home, session) = fixture("output", 0);
+    let service = session.capture_service();
+    let mut service = service.borrow_mut();
+    let plan = |service: &mut Service, kind: &str| {
+        let mut reply = service.output(
+            &json!({"op":"begin","kind":kind,"prefs":{"clipboard":true}}),
+            1000,
+        );
+        assert_eq!(reply["effect"]["op"], "dirs"); // Caller preferences do not override the native profile.
+        while reply.get("effect").is_some() {
+            let result = match reply["effect"]["op"].as_str().unwrap() {
+                "dirs" => json!({"pictures":"/home/test/Pictures"}),
+                "stat" => json!({"exists":false}),
+                _ => Value::Null,
+            };
+            reply = service.output(
+                &json!({"op":"next","id":reply["id"],"step":reply["step"],"result":result}),
+                1000,
+            );
+        }
+        reply
+    };
+    let failed = plan(&mut service, "image");
+    let result = service.output(
+        &json!({"op":"complete","id":failed["id"],"result":{"ok":false}}),
+        2000,
+    );
+    assert_eq!(result["capture"]["recent"], json!([]));
+    assert!(result["path"].is_null());
+    let success = plan(&mut service, "image");
+    let result = service.output(
+        &json!({"op":"complete","id":success["id"],"result":{"ok":true,"path":"/saved.png"}}),
+        3000,
+    );
+    assert_eq!(result["capture"]["recent"][0]["path"], "/saved.png");
+    assert_eq!(result["capture"]["recent"][0]["time"], 3000);
+    let revision = result["capture"]["revision"].clone();
+    let duplicate = service.output(
+        &json!({"op":"complete","id":success["id"],"result":{"ok":true}}),
+        4000,
+    );
+    assert!(duplicate.get("error").is_some());
+    assert_eq!(duplicate["capture"]["revision"], revision);
+    let annotated = plan(&mut service, "annotated");
+    let result = service.output(
+        &json!({"op":"complete","id":annotated["id"],"result":{"ok":true}}),
+        5000,
+    );
+    assert_eq!(result["capture"]["recent"].as_array().unwrap().len(), 1);
+}

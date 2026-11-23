@@ -156,7 +156,7 @@ impl Auxiliary {
                 json!({"kind":"view","key":"thumbnail","events":{"onClick":["edit"],"onMouseEnter":["enter"],"onMouseLeave":["leave"]},"style":{"flex":1},"children":[
                     {"kind":"media","key":"image","media":self.args["handle"],"style":{"flex":1,"pointerEvents":"none"}},
                     {"kind":"view","key":"caption","style":{"position":"absolute","left":0,"right":0,"bottom":0,"paddingHorizontal":10,"paddingVertical":5,"backgroundColor":"rgba(0,0,0,0.55)","pointerEvents":"none"},"children":[
-                        {"kind":"text","label":if self.args["path"].as_str().is_some_and(|s| !s.is_empty()) {json!({"key":"screenshots.savedTo","params":{"folder":{"key":"screenshots.folder"}}})} else {json!({"key":"screenshots.copied"})},"style":{"fontSize":11,"color":"#fff"}}
+                        {"kind":"text","label":if self.args["output"]["ok"]==false {json!({"key":"screenshots.saveError"})} else if self.args["path"].as_str().is_some_and(|s| !s.is_empty()) {json!({"key":"screenshots.savedTo","params":{"folder":{"key":"screenshots.folder"}}})} else {json!({"key":"screenshots.copied"})},"style":{"fontSize":11,"color":"#fff"}}
                     ]}
                 ]})
             }
@@ -296,6 +296,21 @@ impl NativeApp for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_output_keeps_the_thumbnail_editable_without_claiming_it_was_copied() {
+        let mut app = App::default();
+        let reply = app.request_at(
+            &json!({"cmd":"sync","args":{"view":"thumbnail","handle":7,"output":{"ok":false}}}),
+            0,
+        );
+        let tree = reply["tree"].to_string();
+        assert!(tree.contains("screenshots.saveError"));
+        assert!(!tree.contains("screenshots.copied"));
+        assert_eq!(
+            app.request_at(&json!({"cmd":"edit"}), 1)["effects"][0]["source"],
+            7
+        );
+    }
     #[test]
     fn thumbnail_hover_replacement_and_terminal_delivery() {
         let mut app = App::default();
