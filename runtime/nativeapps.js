@@ -32,6 +32,15 @@ import { isolatedApp } from '../sdk/packages.js';
 import { mailRequest, onMailEvent } from '../sdk/mail.js';
 import { pimServices } from './native_pim_services.js';
 import { windows } from '../sdk/windows.js';
+import { workArea } from '../sdk/windows.js';
+import { sysinfoServices } from './native_sysinfo_services.js';
+import { systemInfo } from '../sdk/system.js';
+import { admin } from '../sdk/admin.js';
+import { canPower, askPower } from '../sdk/power.jsx';
+import { bluetooth } from '../sdk/hardware.jsx';
+import { useStore } from '../sdk/store.js';
+import { launchApp } from '../sdk/apps.js';
+import { codeStatus } from '../sdk/codesig.js';
 
 // Opaque per-window snapshots chosen by Rust, with the lifetime of useWindowState.
 const nativeWindowStates = new Map();
@@ -49,6 +58,7 @@ function stopWatch(id) {
   if (--followers === 0) logs.follow(false);
 }
 const methods = {
+  ...sysinfoServices({ systemInfo, codeStatus, admin, session: { canPower, restart: () => askPower('reboot') }, fs, userDirs, wm, workArea, launchApp, bluetooth }),
   'files.pick': { run: ([options], owner) => pickFile(options, owner) },
   ...pimServices({ request: mailRequest, onEvent: onMailEvent, pick: () => lord.broker?.pick(false, ''),
     close: fd => lord.broker.fdClose(fd), releaseImage: image => lord.mail.release(image),
@@ -103,7 +113,9 @@ function localNativeApp(manifest) {
     return h(NativeAsyncMount, { manifest, args, window: id });
   } };
 }
+const noHardwareFacts = { get: () => null, subscribe: () => () => {} };
 function NativeAsyncMount({ manifest, args, window }) {
+  const bt = useStore(manifest.id === 'sysinfo' ? bluetooth : noHardwareFacts);
   // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
   // each mounted window gets a fresh one even when the WM reuses its name.
   const [owner] = useState(() => ++ownerSequence);
@@ -114,6 +126,7 @@ function NativeAsyncMount({ manifest, args, window }) {
     return () => bridge.close(owner);
   }, [owner]);
   return ready ? h(Fragment, null, h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window,
+    ...(manifest.id === 'sysinfo' ? { __nativeBluetooth: bt } : {}),
     ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }),
     manifest.asyncServices.includes('files.pick') ? h(NativeFilePicker, { owner }) : null) : h(View, { style: { flex: 1 } });
 }

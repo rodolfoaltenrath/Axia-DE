@@ -1,22 +1,22 @@
 // hwreport_test.mjs — community hardware reports (0.8.7, docs/BENCHMARK.md "0.8.7 — Community hardware reports"):
-// the schema with good and bad reports, the report System Information builds (apps/sysinfo/share.js: only the
+// the schema with good and bad reports, the report System Information builds (tools/hwreport/share.js: only the
 // schema's fields, the summary and the issue link, the page), the workflow's checks (tools/hwreport/lib.mjs:
 // attachment links, the download's limits with a fake fetch, parsing limits, privacy, plausibility, labels, the
 // comment), the catalogue and its snapshot (tools/hwreport/catalog.mjs) and the Compatibility panel's community
-// data (apps/sysinfo/community.js). Run by tests/run_suites.sh (needs node).
+// data (tools/hwreport/community.js). Run by tests/run_suites.sh (needs node).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validate } from '../../tools/hwreport/jsonschema.mjs';
-import { pick, buildShareReport, summaryRows, summaryText, issueTitle, issueUrl, shareFileNames, sharePage, reportKind, gpuVendor, cpuVendor, TITLE_MAX } from '../../apps/sysinfo/share.js';
-import { deviceKeys, communityFor, communitySummary } from '../../apps/sysinfo/community.js';
-import { compatibility } from '../../apps/sysinfo/model.js';
+import { pick, buildShareReport, summaryRows, summaryText, issueTitle, issueUrl, shareFileNames, sharePage, reportKind, gpuVendor, cpuVendor, TITLE_MAX } from '../../tools/hwreport/share.js';
+import { deviceKeys, communityFor, communitySummary } from '../../tools/hwreport/community.js';
+import { compatibility } from './support/sysinfo/model.js';
 import { findAttachments, allowedUrl, fetchAttachment, parseLimited, privacyScan, plausibility, checkReport, labelsFor, commentBody, code, MARKER, ALL_LABELS } from '../../tools/hwreport/lib.mjs';
 import { readReports, buildSnapshot, snapshotText, buildModel, renderSections, SNAPSHOT_FILE, REPORTS_DIR } from '../../tools/hwreport/catalog.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const schema = JSON.parse(fs.readFileSync(path.join(ROOT, 'apps/sysinfo/hwreport.schema.json'), 'utf8'));
+const schema = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/hwreport/hwreport.schema.json'), 'utf8'));
 const readJson = (p) => JSON.parse(fs.readFileSync(path.join(ROOT, p), 'utf8'));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 

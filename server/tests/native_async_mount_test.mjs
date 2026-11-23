@@ -11,6 +11,9 @@ globalThis.lord={screen:{width:960,height:620},version:'test',now:()=>0,stats:()
   css:text=>JSON.parse(text),fonts:{list:()=>[]}};
 globalThis.__nativeMountRecords=[];
 globalThis.__nativePickerRecords=[];
+globalThis.__nativeBluetoothRecords=[];
+const btListeners=new Set();let btState={devices:[]};
+globalThis.__btFixture={get:()=>btState,subscribe:fn=>{btListeners.add(fn);return()=>btListeners.delete(fn);}};
 const stubs={
   'rustfiles.js':'export function RustFileDialog(props){globalThis.__nativePickerRecords.push(props);return null;}',
   'passwords-sdk':`export const View=()=>null,NativeView=()=>null,useAppWindow=()=>({}),useStore=()=>({}),locale={},wm={},vaultAvailable=()=>false,vaultRequest=()=>null,onVaultEvent=()=>()=>{},requestPermission=()=>false,clipboard={};`,
@@ -21,6 +24,7 @@ const stubs={
   'components.jsx':`import {useContext} from 'react'; export const useAppWindow=()=>useContext(globalThis.__nativeWindowContext);`,
   'nativeview.js':`import React from 'react'; export function NativeView({args}) {
     const win=React.useContext(globalThis.__nativeWindowContext);
+    React.useLayoutEffect(()=>{if(args.__nativeBluetooth)globalThis.__nativeBluetoothRecords.push(args.__nativeBluetooth);},[args.__nativeBluetooth]);
     React.useLayoutEffect(()=>{const token=lord.nativeAsync.start(args.__nativeOwner,'logs.sources');
       globalThis.__nativeMountRecords.push({id:win.id,owner:args.__nativeOwner,token});},[]);
     return React.createElement('view');
@@ -33,7 +37,13 @@ const stubs={
   'settings.js':`export const settings={get:()=>({}),set(){}};export const useSettings=()=>[{},()=>{}];`,
   'sound.js':`export const soundState={get:()=>({sources:[]}),subscribe:()=>()=>{}};`,
   'backup.js':`export const backup={};export const backupStatus={get:()=>null,subscribe:()=>()=>{}};`,
-  'windows.js':`export const wm={open:()=>null};export const windows={get:()=>[],subscribe:()=>()=>{}};`,
+  'windows.js':`export const wm={open:()=>null};export const workArea=()=>({x:0,y:0,w:960,h:620});export const windows={get:()=>[],subscribe:()=>()=>{}};`,
+  'system.js':`export const systemInfo=()=>({admin:false});`,
+  'codesig.js':`export const codeStatus=()=>({});`,
+  'admin.js':`export const admin={available:()=>false};`,
+  'power.jsx':`export const canPower=()=>false,askPower=()=>false;`,
+  'hardware.jsx':`export const bluetooth=globalThis.__btFixture;`,
+  'apps.js':`export const launchApp=()=>false;`,
   'packages.js':`export const isolatedApp=(id,App)=>App;`,
   'mail.js':`export const mailRequest=()=>null;export const onMailEvent=()=>()=>{};`,
   'native_system_services.js':`export const systemServices=()=>({});`,
@@ -45,8 +55,9 @@ const result=await build({stdin:{resolveDir:root,contents:`
   import './apps/passwords/index.jsx';
   const Context=React.createContext(null);globalThis.__nativeWindowContext=Context;
   const App=nativeApp({id:'logs',asyncServices:['logs.sources','files.pick']}).Component;
+  const Sysinfo=nativeApp({id:'sysinfo',asyncServices:['logs.sources']}).Component;
   let update;
-  function Root(){const [ids,set]=React.useState([]);update=set;return React.createElement(React.Fragment,null,...ids.map(id=>React.createElement(Context.Provider,{key:id,value:{id,args:{}}},React.createElement(App))));}
+  function Root(){const [ids,set]=React.useState([]);update=set;return React.createElement(React.Fragment,null,...ids.map(id=>React.createElement(Context.Provider,{key:id,value:{id,args:{}}},React.createElement(id==='sysinfo'?Sysinfo:App))));}
   render(React.createElement(Root));
   const flush=async()=>{for(let i=0;i<20;i++)await new Promise(resolve=>setImmediate(resolve));};
   export async function windows(ids){await flush();update(ids);await flush();}
@@ -54,13 +65,14 @@ const result=await build({stdin:{resolveDir:root,contents:`
   name:'native-endpoints',setup(b){
     b.onResolve({filter:/^@lordos\/sdk$/},()=>({path:'passwords-sdk',namespace:'fake-sdk'}));
     b.onResolve({filter:/native_system_services\.js$/},()=>({path:'native_system_services.js',namespace:'fake-sdk'}));
-    b.onResolve({filter:/sdk\/(packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
+    b.onResolve({filter:/sdk\/(system\.js|codesig\.js|admin\.js|power\.jsx|hardware\.jsx|apps\.js|packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
   },
 }]});
 const {windows}=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
 await windows(['logs','logs#2']);
 const [first,second]=globalThis.__nativeMountRecords;
+assert.equal(btListeners.size,0,'unrelated windows do not subscribe to Bluetooth');
 assert.equal(first.id,'logs');assert.equal(second.id,'logs#2');
 assert.ok(Number.isSafeInteger(first.owner)&&first.owner>0);assert.notEqual(first.owner,second.owner);
 assert.equal(lord.nativeAsync.take(first.owner,[first.token])[0].value.user,1);
@@ -89,4 +101,8 @@ assert.deepEqual(lord.nativeAsync.take(second.owner,[alive]),[]);
 await windows(['logs']);
 const reopened=globalThis.__nativeMountRecords.at(-1);assert.notEqual(reopened.owner,first.owner);
 await windows([]);
+await windows(['sysinfo']);assert.equal(btListeners.size,1);
+btState={devices:[{name:'live Bluetooth update'}]};for(const fn of btListeners)fn();
+await windows(['sysinfo']);assert.equal(globalThis.__nativeBluetoothRecords.at(-1).devices[0].name,'live Bluetooth update');
+await windows([]);assert.equal(btListeners.size,0,'closing Sysinfo releases its hardware subscription');
 console.log('native-async-mount-test: Passwords import preserves shell services; picker selection/cancel, leases and window lifecycle passed');

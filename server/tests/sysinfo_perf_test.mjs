@@ -1,7 +1,7 @@
-// sysinfo_perf_test.mjs — LordBench's model (apps/sysinfo/perf.js, 0.8.6): ratios against the reference
+// sysinfo_perf_test.mjs — LordBench's model (apps/sysinfo/perf.rs, 0.8.6): ratios against the reference
 // machines, category means, the stability and compatibility verdicts, comparisons with the previous
 // result and the conditions that differ. Run by tests/run_suites.sh (needs node).
-import { CATEGORIES, DESKTOP_CATEGORIES, SANDBOX_TRIES, ENGINE_IDS, desktopVerdict, REFERENCES, ratio, categoryRatios, comparableReferences, stability, compatibilityVerdict, conditionDiffs, changes, sustainedSeries, refreshBudget, fileName, piFirmware } from '../../apps/sysinfo/perf.js';
+import { CATEGORIES, DESKTOP_CATEGORIES, SANDBOX_TRIES, ENGINE_IDS, desktopVerdict, REFERENCES, ratio, categoryRatios, comparableReferences, stability, compatibilityVerdict, conditionDiffs, changes, sustainedSeries, refreshBudget, fileName, piFirmware } from './support/sysinfo/perf.js';
 import { isDeepStrictEqual } from 'node:util';
 
 let n = 0, bad = 0;

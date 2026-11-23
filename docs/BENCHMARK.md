@@ -90,7 +90,7 @@ window is protected while they show (`wm.setProtected`), so screenshots, recordi
 `rust/axia-sysreport/src/periph.rs`), plus BlueZ's paired or connected devices (`lord.bt`, with Battery1 where BlueZ has it, which for
 an LE device usually means only while it is connected). This list is not in the report: a device names itself and
 that name can carry a person's, so `SysReport` has no place for these strings, `axia-sysreport` and `axia-fetch`
-don't link `periph.rs`, and `apps/sysinfo/model.js` builds each row field by field, so no address or D-Bus path can come
+don't link `periph.rs`, and `apps/sysinfo/model.rs` builds each row field by field, so no address or D-Bus path can come
 along. USB `serial`, an input device's `uniq` and `phys` and a power supply's `serial_number` are never read.
 
 **Audio** cards now have names in the report too, not ALSA's ids: a USB card by its `usb.ids` entry
@@ -144,7 +144,7 @@ the test:
 | `gpu.used` | §7.3 | hardware renderer exists | GPU path on, or a warning with the reason |
 | `sys.time`, `sys.firmware`, `sys.fans`, `sys.memcg`, `sys.pi-bootloader`, `sys.updates` | various | as listed in the Hardware tree | — |
 
-Thresholds are constants in `apps/sysinfo/checks.js`, signed with the theme bundle (the separate
+Thresholds are constants in `apps/sysinfo/checks.rs`, signed with the theme bundle (the separate
 `checks.json` first planned was not needed). A failed check offers **Report a problem** with the bug template.
 
 ### Compatibility
@@ -307,7 +307,7 @@ development package.
       static data.
     - **They measure LordOS's engine together with the machine.** An optimisation of `paint.c`, the Rust layout or the
       shaper changes these four numbers on the same hardware. So a reference value of one of them carries the
-      LordOS version it was measured with (`"lordos"` in `apps/sysinfo/references.js`; `ENGINE_IDS` in
+      LordOS version it was measured with (`"lordos"` in `tools/hwreport/references.js`; `ENGINE_IDS` in
       `perf.js`) and gives a "×N" only to a result of that same version; a release re-measures them on the
       reference machines.
   - Memory: copy and triad bandwidth on all cores (32 MB arrays in Quick, 128 MB in Full) and the
@@ -466,7 +466,7 @@ development package.
   names, vendors or identities), every measurement with its unit, what was skipped and why, and the
   sustained samples. `lord.sysinfo.bench.boots()` groups lord-sessiond's boot history by version
   (median, range, the first boot after an update apart).
-- **System Information → Performance** (`apps/sysinfo/performance.jsx`, model in `perf.js`, tested in
+- **System Information → Performance** (`apps/sysinfo/native_ui.rs`, model in `perf.js`, tested in
   `server/tests/sysinfo_perf_test.mjs`): Quick and Full, progress by measurement, then the three verdicts
   (performance as "×N" per category against each reference measured with the same LordBench version;
   compatibility counted from the Compatibility tab; stability from the status, failed measurements,
@@ -474,7 +474,7 @@ development package.
   every measurement with its
   "×N" and its change against the previous run, the conditions that differ from the previous run, the
   conditions, the boot times per version, and **Save to Documents** (the JSON). Nothing is sent.
-- **Reference machines** (`apps/sysinfo/references.js`): VM 116 and the Raspberry Pi 5 16 GB, each a Full run
+- **Reference machines** (`tools/hwreport/references.js`): VM 116 and the Raspberry Pi 5 16 GB, each a Full run
   copied from the `lordbench.json` it wrote (numbers below). A measurement added after a machine's run is listed in
   its `notMeasured` until it is measured again: the layout, paint and shaping numbers of both come from a later Full
   run (VM 116 on 2026-10-28, the Pi 5 on 2026-10-30, below), each with the LordOS version it reported. The modest x86
@@ -888,7 +888,7 @@ composed per frame, what slows V3D under an all-core load, optionally a 1000 Hz 
 
 ### Built so far (released in 0.8.7-beta, 2026-11-01)
 
-- **The report format**: `apps/sysinfo/hwreport.schema.json`, a JSON Schema (`format: "lordos-hwreport"`,
+- **The report format**: `tools/hwreport/hwreport.schema.json`, a JSON Schema (`format: "lordos-hwreport"`,
   `version: 1`) that is an allow-list: every object closes its properties, and there is no field for serials,
   UUIDs, MAC or IP addresses, host or user names, Wi-Fi network names or paths. It holds a subset of System
   Information's report (machine, CPU, memory, GPUs, displays, storage, PCI and USB devices, network, audio,
@@ -918,7 +918,7 @@ composed per frame, what slows V3D under an all-core load, optionally a 1000 Hz 
   workflow's comment and a `boot:<class>` label show it; a copy to memory on an installed system, or a link speed on
   anything but USB, is flagged as implausible. System Information shows it in Software (*Started from*) and
   `axia-sysreport report` in the Overview (*Started*). VM 116 (ext4 on a SCSI disk) reports `internal`.
-- **Share on GitHub** (Report → *Share on GitHub…*, `apps/sysinfo/share.js`): a preview of the summary and of the
+- **Share on GitHub** (Report → *Share on GitHub…*, `tools/hwreport/share.js`): a preview of the summary and of the
   exact JSON first, then on every click (nothing remembered) the app writes `lordos-hwreport-<date>.json` and
   `.html` to Documents (never over an existing file) and opens the page with `lord.apps.launchWith('', path)`. The
   page is self-contained (no scripts, a CSP of `default-src 'none'`, light and dark, right to left for RTL
@@ -1175,7 +1175,7 @@ the launcher. The app takes only that one value and starts no measurement. No ro
 ## New interfaces, all under the rules of `AGENTS.md`
 
 - `lord.sysinfo` in `server/src/ui/js_hw.c`: `report()`, `markdown()`, `facts()`, `probe()` (built in
-  0.8.5; the checks are evaluated in `apps/sysinfo/checks.js`); in 0.8.6
+  0.8.5; the checks are evaluated in `apps/sysinfo/checks.rs`); in 0.8.6
   `bench.start(mode, sustainedSeconds)`, `bench.poll()`, `bench.cancel()`, `bench.saved(which)`,
   `bench.boots()`, `bench.bootTest()`.
 - `axia-sysreport`, a user command (not started by `axia-server`).
@@ -1205,7 +1205,7 @@ Compatibility, from `lord.sysinfo.report()` (`ui/js_hw.c`): the same report plus
 session composes the screen now (`lord_composition()` in `main.c`: `gpu`, `headless`, `no-display`,
 `rotated`, `capture` or `gpu-off`) and the GPU context (`gpu_info()`: the last `gpu_init` outcome as a
 fixed code, the renderer, render node, dmabuf import and direct scanouts since start). The layers and
-the Compatibility panel are worked out in `apps/sysinfo/model.js` (`server/tests/sysinfo_model_test.mjs`).
+the Compatibility panel are worked out in `apps/sysinfo/model.rs` (`server/tests/sysinfo_model_test.mjs`).
 Checked on VM 116 in an isolated headless session (own home, runtime folder and bus):
 
 ![Overview](sysinfo-overview.png)
@@ -1230,7 +1230,7 @@ so it shows disabled):
 
 ![Hardware → Memory](sysinfo-memory.png)
 
-**Checks, part 1 (2026-10-26):** what `axia-server` can see itself, evaluated in `apps/sysinfo/checks.js`
+**Checks, part 1 (2026-10-26):** what `axia-server` can see itself, evaluated in `apps/sysinfo/checks.rs`
 (the thresholds are constants there, so they are signed with the theme bundle instead of a separate
 `checks.json`), from `lord.sysinfo.facts()` (`rust/axia-sysreport/src/facts.rs`: axia-server's uid/euid from
 `/proc/self/status`, its cgroup and who owns it, the app scopes beside it, and whether anything
@@ -1263,7 +1263,7 @@ package only, `app/probe.c` runs instead of the app's code:
 4. It sends the result as `BOP_PROBE` and exits, without a window. `brokersrv.c` takes `BOP_PROBE` only
    from that system package, validates the JSON (≤ 8 KB) and adds what only it can read: the process's
    `NoNewPrivs`, `Seccomp` and `CapEff` and its cgroup with `memory.max`. `lord.sysinfo.probe()` returns
-   the last result; `apps/sysinfo/checks.js` (`evaluateProbe`) turns it into four rows: the app sandbox
+   the last result; `apps/sysinfo/checks.rs` (`evaluateProbe`) turns it into four rows: the app sandbox
    (§6.4), the helper sandbox (§6.7), the broker (§6.5) and the app's own capped scope (§6.4).
 
 On VM 116, in the isolated headless session, every try was refused (9 + 4 + 4) and the process reported
@@ -1281,7 +1281,7 @@ temporary rule), video decode and encode and Vulkan (shown as *Not checked*).
    (AMD desktop, Intel laptop, Nvidia desktop, Raspberry Pi 5, VM), the anonymization test,
    `hw-memory-modules`, `axia-sysreport report`.
 2. The app: Overview, Hardware, Compatibility; About's button; en, es, pt; right to left.
-3. Checks, configured and effective, the probe app, thresholds signed in `apps/sysinfo/checks.js` (built); `axia-sysreport checks` (not built yet).
+3. Checks, configured and effective, the probe app, thresholds signed in `apps/sysinfo/checks.rs` (built); `axia-sysreport checks` (not built yet).
 4. Reports with preview; docs; screenshots on VMs; the first real reports: the Raspberry Pi 5 with a
    monitor and the maintainer's PC (Core i9-10900, Radeon RX 580), the first real AMD data in the
    project.

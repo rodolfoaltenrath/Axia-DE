@@ -76,12 +76,14 @@ sandbox do helper. Mantém os limites de 5%/25% de quadros atrasados e três
 períodos de atualização para o alerta de latência. Os eventos de firmware
 observados durante o teste têm precedência sobre bits de throttling antigos.
 
-`perf_data.rs` contém os dados compilados das referências. `references.js`
+`perf_data.rs` contém os dados compilados das referências. `tools/hwreport/references.js`
 continua como entrada dos utilitários de build em `tools/hwreport`, sem entrar
 no bundle do aplicativo; o teste da ponte compara os dois catálogos completos.
-Datas locais, colisão de nomes de arquivos e serialização JSON continuam pelo
-host. O coletor, compartilhamento, controle dos testes e interface ainda
-precisam migrar.
+A interface, os comandos, os prazos, as datas locais, o compartilhamento e a
+seleção de nomes de exportação usam Rust. Coletores e efeitos de plataforma
+continuam no adaptador da sessão. Os adaptadores JavaScript da API histórica
+ficam somente em `server/tests/support/sysinfo`. Detalhes e validação em
+[RUST-SYSINFO.md](RUST-SYSINFO.md).
 
 ## Comparação com a implementação anterior
 

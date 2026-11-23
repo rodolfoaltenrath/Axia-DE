@@ -1,9 +1,9 @@
-// sysinfo_model_test.mjs — System Information's model (apps/sysinfo/model.js, 0.8.5): the GPU layers,
+// sysinfo_model_test.mjs — System Information's model (apps/sysinfo/model.rs, 0.8.5): the GPU layers,
 // the reasons for CPU composition, the Compatibility panel and the Hardware sections. Run by
 // tests/run_suites.sh (needs node).
-import { evaluate, evaluateProbe, evaluateBench, LIMITS } from '../../apps/sysinfo/checks.js';
+import { evaluate, evaluateProbe, evaluateBench, LIMITS } from './support/sysinfo/checks.js';
 import { isDeepStrictEqual } from 'node:util';
-import { compositionReason, cardLayers, sessionLayers, compatibility, hardwareSections, piBoard, throttleFlags, piStatus, machineName, reportFileName, reportJson, parseMemoryLines, parseSerialLines, peripherals, firmwareDate } from '../../apps/sysinfo/model.js';
+import { compositionReason, cardLayers, sessionLayers, compatibility, hardwareSections, piBoard, throttleFlags, piStatus, machineName, reportFileName, reportJson, parseMemoryLines, parseSerialLines, peripherals, firmwareDate } from './support/sysinfo/model.js';
 
 let n = 0, bad = 0;
 const eq = (what, got, want) => {

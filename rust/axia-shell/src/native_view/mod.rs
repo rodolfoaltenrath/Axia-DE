@@ -112,6 +112,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::about::ID => Some(Box::new(crate::about::App::default())),
         crate::native_apps::monitor::ID => Some(Box::new(crate::monitor::App::default())),
         crate::native_apps::calculator::ID => Some(Box::new(crate::calculator::App::default())),
+        crate::native_apps::sysinfo::ID => Some(Box::new(crate::sysinfo_model::App::default())),
         crate::native_apps::store::ID => Some(Box::new(crate::store::App::default())),
         crate::native_apps::logs::ID => Some(Box::new(crate::logs_app::App::default())),
         crate::native_apps::fonts::ID => Some(Box::new(crate::fonts_app::App::default())),

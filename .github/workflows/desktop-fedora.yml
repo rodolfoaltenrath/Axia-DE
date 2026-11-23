@@ -298,6 +298,18 @@ jobs:
           name: axia-window-commands
           path: ${{ runner.temp }}/axia-window-commands/
           if-no-files-found: warn
+      - name: Native Sysinfo pages, protected captures and exact exports
+        if: matrix.gpu == 1
+        env:
+          AXIA_SYSINFO_AXIA_OUTPUT: ${{ runner.temp }}/axia-sysinfo/axia
+          AXIA_SYSINFO_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-sysinfo/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test sysinfo_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-sysinfo
+          path: ${{ runner.temp }}/axia-sysinfo/
+          if-no-files-found: warn
       - name: Rust native switcher integration and captures
         if: matrix.gpu == 1
         env:

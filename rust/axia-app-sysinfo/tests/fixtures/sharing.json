@@ -1,0 +1,4797 @@
+[
+  {
+    "report": {
+      "machine": {
+        "vendor": "QEMU",
+        "product": "Standard PC (Q35 + ICH9, 2009)",
+        "version": "pc-q35-11.0",
+        "boardVendor": "",
+        "boardName": "",
+        "chassis": "vm",
+        "model": "",
+        "biosVendor": "SeaBIOS",
+        "biosVersion": "rel-1.17.0-0-gb52ca86e094d-prebuilt.qemu.org",
+        "biosDate": "04/01/2014",
+        "firmware": "bios",
+        "secureBoot": null,
+        "virtualization": "kvm"
+      },
+      "cpu": {
+        "model": "Intel(R) Xeon(R) Silver 4108 CPU @ 1.80GHz",
+        "vendor": "GenuineIntel",
+        "arch": "x86_64",
+        "sockets": 1,
+        "cores": 8,
+        "threads": 8,
+        "minMHz": 0,
+        "maxMHz": 0,
+        "governor": "",
+        "l1dKB": 32,
+        "l1iKB": 32,
+        "l2KB": 4096,
+        "l3KB": 16384
+      },
+      "memory": {
+        "totalKB": 4014284,
+        "swapKB": 0,
+        "zram": []
+      },
+      "gpus": [
+        {
+          "bus": "pci",
+          "vendorId": "1af4",
+          "deviceId": "1050",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio 1.0 GPU",
+          "driver": "virtio-pci",
+          "bootVga": true,
+          "renderNode": true,
+          "connectors": 1,
+          "connected": 1
+        }
+      ],
+      "displays": [
+        {
+          "connector": "Virtual-1",
+          "enabled": true,
+          "name": "QEMU Monitor",
+          "manufacturer": "RHT",
+          "product": "1234",
+          "year": 2014,
+          "widthCm": 32,
+          "heightCm": 20,
+          "diagonalTenths": 149,
+          "nativeWidth": 1280,
+          "nativeHeight": 800,
+          "mode": "1280x800"
+        }
+      ],
+      "storage": [
+        {
+          "model": "QEMU HARDDISK",
+          "vendor": "QEMU",
+          "bytes": 34359738368,
+          "rotational": true,
+          "removable": false,
+          "transport": "scsi",
+          "link": ""
+        },
+        {
+          "model": "QEMU DVD-ROM",
+          "vendor": "QEMU",
+          "bytes": 4194304,
+          "rotational": true,
+          "removable": true,
+          "transport": "sata",
+          "link": ""
+        }
+      ],
+      "pci": [
+        {
+          "class": "060000",
+          "className": "Host bridge",
+          "vendorId": "8086",
+          "deviceId": "29c0",
+          "vendor": "Intel Corporation",
+          "device": "82G33/G31/P35/P31 Express DRAM Controller",
+          "driver": ""
+        },
+        {
+          "class": "030000",
+          "className": "VGA compatible controller",
+          "vendorId": "1af4",
+          "deviceId": "1050",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio 1.0 GPU",
+          "driver": "virtio-pci"
+        },
+        {
+          "class": "0c0300",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "2937",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB UHCI Controller #4",
+          "driver": "uhci_hcd"
+        },
+        {
+          "class": "0c0300",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "2938",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB UHCI Controller #5",
+          "driver": "uhci_hcd"
+        },
+        {
+          "class": "0c0300",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "2939",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB UHCI Controller #6",
+          "driver": "uhci_hcd"
+        },
+        {
+          "class": "0c0320",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "293c",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB2 EHCI Controller #2",
+          "driver": "ehci-pci"
+        },
+        {
+          "class": "040300",
+          "className": "Audio device",
+          "vendorId": "8086",
+          "deviceId": "293e",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) HD Audio Controller",
+          "driver": "snd_hda_intel"
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "000c",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCIe Root port",
+          "driver": "pcieport"
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "000c",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCIe Root port",
+          "driver": "pcieport"
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "000c",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCIe Root port",
+          "driver": "pcieport"
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "000c",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCIe Root port",
+          "driver": "pcieport"
+        },
+        {
+          "class": "0c0300",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "2934",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB UHCI Controller #1",
+          "driver": "uhci_hcd"
+        },
+        {
+          "class": "0c0300",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "2935",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB UHCI Controller #2",
+          "driver": "uhci_hcd"
+        },
+        {
+          "class": "0c0300",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "2936",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB UHCI Controller #3",
+          "driver": "uhci_hcd"
+        },
+        {
+          "class": "0c0320",
+          "className": "USB controller",
+          "vendorId": "8086",
+          "deviceId": "293a",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) USB2 EHCI Controller #1",
+          "driver": "ehci-pci"
+        },
+        {
+          "class": "060401",
+          "className": "PCI bridge",
+          "vendorId": "8086",
+          "deviceId": "244e",
+          "vendor": "Intel Corporation",
+          "device": "82801 PCI Bridge",
+          "driver": ""
+        },
+        {
+          "class": "060100",
+          "className": "ISA bridge",
+          "vendorId": "8086",
+          "deviceId": "2918",
+          "vendor": "Intel Corporation",
+          "device": "82801IB (ICH9) LPC Interface Controller",
+          "driver": "lpc_ich"
+        },
+        {
+          "class": "010601",
+          "className": "SATA controller",
+          "vendorId": "8086",
+          "deviceId": "2922",
+          "vendor": "Intel Corporation",
+          "device": "82801IR/IO/IH (ICH9R/DO/DH) 6 port SATA Controller [AHCI mode]",
+          "driver": "ahci"
+        },
+        {
+          "class": "0c0500",
+          "className": "SMBus",
+          "vendorId": "8086",
+          "deviceId": "2930",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) SMBus Controller",
+          "driver": "i801_smbus"
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "0001",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCI-PCI bridge",
+          "driver": ""
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "0001",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCI-PCI bridge",
+          "driver": ""
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "0001",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCI-PCI bridge",
+          "driver": ""
+        },
+        {
+          "class": "060400",
+          "className": "PCI bridge",
+          "vendorId": "1b36",
+          "deviceId": "0001",
+          "vendor": "Red Hat, Inc.",
+          "device": "QEMU PCI-PCI bridge",
+          "driver": ""
+        },
+        {
+          "class": "00ff00",
+          "className": "Unclassified device",
+          "vendorId": "1af4",
+          "deviceId": "1002",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio memory balloon",
+          "driver": "virtio-pci"
+        },
+        {
+          "class": "010000",
+          "className": "SCSI storage controller",
+          "vendorId": "1af4",
+          "deviceId": "1004",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio SCSI",
+          "driver": "virtio-pci"
+        },
+        {
+          "class": "078000",
+          "className": "Communication controller",
+          "vendorId": "1af4",
+          "deviceId": "1003",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio console",
+          "driver": "virtio-pci"
+        },
+        {
+          "class": "078000",
+          "className": "Communication controller",
+          "vendorId": "1af4",
+          "deviceId": "1003",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio console",
+          "driver": "virtio-pci"
+        },
+        {
+          "class": "020000",
+          "className": "Ethernet controller",
+          "vendorId": "1af4",
+          "deviceId": "1000",
+          "vendor": "Red Hat, Inc.",
+          "device": "Virtio network device",
+          "driver": "virtio-pci"
+        },
+        {
+          "class": "040300",
+          "className": "Audio device",
+          "vendorId": "8086",
+          "deviceId": "293e",
+          "vendor": "Intel Corporation",
+          "device": "82801I (ICH9 Family) HD Audio Controller",
+          "driver": "snd_hda_intel"
+        }
+      ],
+      "usb": [
+        {
+          "vendorId": "0627",
+          "productId": "0001",
+          "vendor": "Adomax Technology Co., Ltd",
+          "product": "QEMU Tablet",
+          "class": "00",
+          "speedMbps": 480,
+          "driver": "usbhid"
+        }
+      ],
+      "network": [
+        {
+          "kind": "ethernet",
+          "driver": "virtio_net",
+          "up": true,
+          "speedMbps": null
+        }
+      ],
+      "audio": [
+        "HDA Intel",
+        "HDA Intel"
+      ],
+      "bluetooth": [],
+      "power": [],
+      "thermal": [],
+      "software": {
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "osId": "debian",
+        "osVersion": "13",
+        "kernel": "6.12.113+deb13-amd64",
+        "lordos": "0.8.5-beta",
+        "lsm": "lockdown,capability,landlock,yama,apparmor,tomoyo,bpf,ipe,ima,evm",
+        "landlockAbi": 6,
+        "bpfLsm": true,
+        "cgroup2": true,
+        "kernelConfig": {
+          "CONFIG_SECURITY_LANDLOCK": "y",
+          "CONFIG_SECCOMP_FILTER": "y",
+          "CONFIG_USER_NS": "y",
+          "CONFIG_BPF_SYSCALL": "y",
+          "CONFIG_BPF_JIT": "y",
+          "CONFIG_CGROUP_BPF": "y",
+          "CONFIG_BPF_LSM": "y",
+          "CONFIG_INET_DIAG_DESTROY": "y",
+          "CONFIG_INET_UDP_DIAG": "m",
+          "CONFIG_MEMCG": "y",
+          "CONFIG_PSI": "y",
+          "CONFIG_ZRAM": "m",
+          "CONFIG_DRM": "m",
+          "CONFIG_UHID": "m"
+        },
+        "services": {
+          "lord-sessiond": true,
+          "lord-netd": true,
+          "axia-netperm": true,
+          "axia-fand": false
+        },
+        "live": false
+      },
+      "session": {
+        "composition": "gpu-off",
+        "gpuInit": "software",
+        "renderer": "llvmpipe"
+      },
+      "date": "2026-10-27"
+    },
+    "bench": {
+      "lordbench": 1,
+      "mode": "full",
+      "status": "done",
+      "stopReason": "",
+      "lordos": "0.8.5-beta",
+      "live": false,
+      "results": {
+        "cpu.sha256.1": {
+          "value": 165.951
+        },
+        "cpu.sha256.n": {
+          "value": 984.265
+        },
+        "cpu.matmul.1": {
+          "value": 3.31858
+        },
+        "cpu.matmul.n": {
+          "value": 19.9376
+        },
+        "cpu.xz.1": {
+          "value": 60.2491
+        },
+        "cpu.xz.n": {
+          "value": 362.977
+        },
+        "cpu.js.1": {
+          "value": 56.6665
+        },
+        "cpu.js.n": {
+          "value": 335.945
+        },
+        "mem.copy": {
+          "value": 20.0074
+        },
+        "mem.triad": {
+          "value": 22.8006
+        },
+        "mem.latency": {
+          "value": 90.9222
+        },
+        "gpu.scene": {
+          "value": 802.066
+        },
+        "gpu.fill": {
+          "value": 406.961
+        },
+        "gpu.upload": {
+          "value": 9456.65
+        },
+        "gpu.layers": {
+          "value": 22.925
+        },
+        "disk.seqwrite": {
+          "value": 378.126
+        },
+        "disk.seqread": {
+          "value": 516.647
+        },
+        "disk.random4k": {
+          "value": 6256.32
+        },
+        "sustained.start": {
+          "value": 19.5814
+        },
+        "sustained.end": {
+          "value": 19.77
+        },
+        "video.h264.1080": {
+          "value": 399.438
+        },
+        "video.hevc.1080": {
+          "value": 385.477
+        },
+        "video.vp9.1080": {
+          "value": 215.005
+        },
+        "video.av1.1080": {
+          "value": 200.887
+        },
+        "video.h264.2160": {
+          "value": 75.624
+        },
+        "video.hevc.2160": {
+          "value": 102.252
+        },
+        "video.enc.h264": {
+          "value": 106.12
+        },
+        "video.enc.vp8": {
+          "value": 54.175
+        },
+        "cpu.ui.1": {
+          "value": 36.9702
+        },
+        "cpu.ui.n": {
+          "value": 39.9302
+        },
+        "cpu.shape.1": {
+          "value": 618.791
+        },
+        "cpu.shape.n": {
+          "value": 3595.11
+        }
+      },
+      "kernel": "6.12.113+deb13-amd64",
+      "arch": "x86_64",
+      "threads": 8,
+      "cpus": 8,
+      "gpuKind": "software"
+    },
+    "desktop": null,
+    "expected": {
+      "format": "lordos-hwreport",
+      "version": 1,
+      "createdAt": "2026-10-27",
+      "source": "community",
+      "lordos": "0.8.5-beta",
+      "live": false,
+      "system": {
+        "machine": {
+          "vendor": "QEMU",
+          "product": "Standard PC (Q35 + ICH9, 2009)",
+          "version": "pc-q35-11.0",
+          "boardVendor": "",
+          "boardName": "",
+          "chassis": "vm",
+          "model": "",
+          "biosVendor": "SeaBIOS",
+          "biosVersion": "rel-1.17.0-0-gb52ca86e094d-prebuilt.qemu.org",
+          "biosDate": "04/01/2014",
+          "firmware": "bios",
+          "secureBoot": null,
+          "virtualization": "kvm"
+        },
+        "cpu": {
+          "model": "Intel(R) Xeon(R) Silver 4108 CPU @ 1.80GHz",
+          "vendor": "GenuineIntel",
+          "arch": "x86_64",
+          "sockets": 1,
+          "cores": 8,
+          "threads": 8,
+          "minMHz": 0,
+          "maxMHz": 0,
+          "governor": "",
+          "l1dKB": 32,
+          "l1iKB": 32,
+          "l2KB": 4096,
+          "l3KB": 16384
+        },
+        "memory": {
+          "totalKB": 4014284,
+          "swapKB": 0,
+          "zram": []
+        },
+        "gpus": [
+          {
+            "bus": "pci",
+            "vendorId": "1af4",
+            "deviceId": "1050",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio 1.0 GPU",
+            "driver": "virtio-pci",
+            "bootVga": true,
+            "renderNode": true,
+            "connectors": 1,
+            "connected": 1
+          }
+        ],
+        "displays": [
+          {
+            "connector": "Virtual-1",
+            "enabled": true,
+            "name": "QEMU Monitor",
+            "manufacturer": "RHT",
+            "product": "1234",
+            "year": 2014,
+            "widthCm": 32,
+            "heightCm": 20,
+            "diagonalTenths": 149,
+            "nativeWidth": 1280,
+            "nativeHeight": 800,
+            "mode": "1280x800"
+          }
+        ],
+        "storage": [
+          {
+            "model": "QEMU HARDDISK",
+            "vendor": "QEMU",
+            "bytes": 34359738368,
+            "rotational": true,
+            "removable": false,
+            "transport": "scsi",
+            "link": ""
+          },
+          {
+            "model": "QEMU DVD-ROM",
+            "vendor": "QEMU",
+            "bytes": 4194304,
+            "rotational": true,
+            "removable": true,
+            "transport": "sata",
+            "link": ""
+          }
+        ],
+        "pci": [
+          {
+            "class": "060000",
+            "className": "Host bridge",
+            "vendorId": "8086",
+            "deviceId": "29c0",
+            "vendor": "Intel Corporation",
+            "device": "82G33/G31/P35/P31 Express DRAM Controller",
+            "driver": ""
+          },
+          {
+            "class": "030000",
+            "className": "VGA compatible controller",
+            "vendorId": "1af4",
+            "deviceId": "1050",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio 1.0 GPU",
+            "driver": "virtio-pci"
+          },
+          {
+            "class": "0c0300",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "2937",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB UHCI Controller #4",
+            "driver": "uhci_hcd"
+          },
+          {
+            "class": "0c0300",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "2938",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB UHCI Controller #5",
+            "driver": "uhci_hcd"
+          },
+          {
+            "class": "0c0300",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "2939",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB UHCI Controller #6",
+            "driver": "uhci_hcd"
+          },
+          {
+            "class": "0c0320",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "293c",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB2 EHCI Controller #2",
+            "driver": "ehci-pci"
+          },
+          {
+            "class": "040300",
+            "className": "Audio device",
+            "vendorId": "8086",
+            "deviceId": "293e",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) HD Audio Controller",
+            "driver": "snd_hda_intel"
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "000c",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCIe Root port",
+            "driver": "pcieport"
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "000c",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCIe Root port",
+            "driver": "pcieport"
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "000c",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCIe Root port",
+            "driver": "pcieport"
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "000c",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCIe Root port",
+            "driver": "pcieport"
+          },
+          {
+            "class": "0c0300",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "2934",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB UHCI Controller #1",
+            "driver": "uhci_hcd"
+          },
+          {
+            "class": "0c0300",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "2935",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB UHCI Controller #2",
+            "driver": "uhci_hcd"
+          },
+          {
+            "class": "0c0300",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "2936",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB UHCI Controller #3",
+            "driver": "uhci_hcd"
+          },
+          {
+            "class": "0c0320",
+            "className": "USB controller",
+            "vendorId": "8086",
+            "deviceId": "293a",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) USB2 EHCI Controller #1",
+            "driver": "ehci-pci"
+          },
+          {
+            "class": "060401",
+            "className": "PCI bridge",
+            "vendorId": "8086",
+            "deviceId": "244e",
+            "vendor": "Intel Corporation",
+            "device": "82801 PCI Bridge",
+            "driver": ""
+          },
+          {
+            "class": "060100",
+            "className": "ISA bridge",
+            "vendorId": "8086",
+            "deviceId": "2918",
+            "vendor": "Intel Corporation",
+            "device": "82801IB (ICH9) LPC Interface Controller",
+            "driver": "lpc_ich"
+          },
+          {
+            "class": "010601",
+            "className": "SATA controller",
+            "vendorId": "8086",
+            "deviceId": "2922",
+            "vendor": "Intel Corporation",
+            "device": "82801IR/IO/IH (ICH9R/DO/DH) 6 port SATA Controller [AHCI mode]",
+            "driver": "ahci"
+          },
+          {
+            "class": "0c0500",
+            "className": "SMBus",
+            "vendorId": "8086",
+            "deviceId": "2930",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) SMBus Controller",
+            "driver": "i801_smbus"
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "0001",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCI-PCI bridge",
+            "driver": ""
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "0001",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCI-PCI bridge",
+            "driver": ""
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "0001",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCI-PCI bridge",
+            "driver": ""
+          },
+          {
+            "class": "060400",
+            "className": "PCI bridge",
+            "vendorId": "1b36",
+            "deviceId": "0001",
+            "vendor": "Red Hat, Inc.",
+            "device": "QEMU PCI-PCI bridge",
+            "driver": ""
+          },
+          {
+            "class": "00ff00",
+            "className": "Unclassified device",
+            "vendorId": "1af4",
+            "deviceId": "1002",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio memory balloon",
+            "driver": "virtio-pci"
+          },
+          {
+            "class": "010000",
+            "className": "SCSI storage controller",
+            "vendorId": "1af4",
+            "deviceId": "1004",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio SCSI",
+            "driver": "virtio-pci"
+          },
+          {
+            "class": "078000",
+            "className": "Communication controller",
+            "vendorId": "1af4",
+            "deviceId": "1003",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio console",
+            "driver": "virtio-pci"
+          },
+          {
+            "class": "078000",
+            "className": "Communication controller",
+            "vendorId": "1af4",
+            "deviceId": "1003",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio console",
+            "driver": "virtio-pci"
+          },
+          {
+            "class": "020000",
+            "className": "Ethernet controller",
+            "vendorId": "1af4",
+            "deviceId": "1000",
+            "vendor": "Red Hat, Inc.",
+            "device": "Virtio network device",
+            "driver": "virtio-pci"
+          },
+          {
+            "class": "040300",
+            "className": "Audio device",
+            "vendorId": "8086",
+            "deviceId": "293e",
+            "vendor": "Intel Corporation",
+            "device": "82801I (ICH9 Family) HD Audio Controller",
+            "driver": "snd_hda_intel"
+          }
+        ],
+        "usb": [
+          {
+            "vendorId": "0627",
+            "productId": "0001",
+            "vendor": "Adomax Technology Co., Ltd",
+            "product": "QEMU Tablet",
+            "class": "00",
+            "speedMbps": 480,
+            "driver": "usbhid"
+          }
+        ],
+        "network": [
+          {
+            "kind": "ethernet",
+            "driver": "virtio_net",
+            "up": true,
+            "speedMbps": null
+          }
+        ],
+        "audio": [
+          "HDA Intel",
+          "HDA Intel"
+        ],
+        "bluetooth": [],
+        "power": [],
+        "thermal": [],
+        "software": {
+          "os": "Debian GNU/Linux 13 (trixie)",
+          "osId": "debian",
+          "osVersion": "13",
+          "kernel": "6.12.113+deb13-amd64",
+          "lordos": "0.8.5-beta",
+          "lsm": "lockdown,capability,landlock,yama,apparmor,tomoyo,bpf,ipe,ima,evm",
+          "landlockAbi": 6,
+          "bpfLsm": true,
+          "cgroup2": true,
+          "kernelConfig": {
+            "CONFIG_SECURITY_LANDLOCK": "y",
+            "CONFIG_SECCOMP_FILTER": "y",
+            "CONFIG_USER_NS": "y",
+            "CONFIG_BPF_SYSCALL": "y",
+            "CONFIG_BPF_JIT": "y",
+            "CONFIG_CGROUP_BPF": "y",
+            "CONFIG_BPF_LSM": "y",
+            "CONFIG_INET_DIAG_DESTROY": "y",
+            "CONFIG_INET_UDP_DIAG": "m",
+            "CONFIG_MEMCG": "y",
+            "CONFIG_PSI": "y",
+            "CONFIG_ZRAM": "m",
+            "CONFIG_DRM": "m",
+            "CONFIG_UHID": "m"
+          },
+          "services": {
+            "lord-sessiond": true,
+            "lord-netd": true,
+            "axia-netperm": true,
+            "axia-fand": false
+          },
+          "live": false
+        },
+        "session": {
+          "composition": "gpu-off",
+          "gpuInit": "software",
+          "renderer": "llvmpipe"
+        }
+      },
+      "compatibility": [
+        {
+          "id": "gpu",
+          "state": "limits",
+          "note": "cpu.software"
+        },
+        {
+          "id": "display",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "storage",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "network",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "wifi",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "bluetooth",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "audio",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "power",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "isolation",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "suspend",
+          "state": "unchecked",
+          "note": null
+        }
+      ],
+      "bench": {
+        "lordbench": 1,
+        "mode": "full",
+        "status": "done",
+        "stopReason": "",
+        "lordos": "0.8.5-beta",
+        "live": false,
+        "results": {
+          "cpu.sha256.1": {
+            "value": 165.951
+          },
+          "cpu.sha256.n": {
+            "value": 984.265
+          },
+          "cpu.matmul.1": {
+            "value": 3.31858
+          },
+          "cpu.matmul.n": {
+            "value": 19.9376
+          },
+          "cpu.xz.1": {
+            "value": 60.2491
+          },
+          "cpu.xz.n": {
+            "value": 362.977
+          },
+          "cpu.js.1": {
+            "value": 56.6665
+          },
+          "cpu.js.n": {
+            "value": 335.945
+          },
+          "mem.copy": {
+            "value": 20.0074
+          },
+          "mem.triad": {
+            "value": 22.8006
+          },
+          "mem.latency": {
+            "value": 90.9222
+          },
+          "gpu.scene": {
+            "value": 802.066
+          },
+          "gpu.fill": {
+            "value": 406.961
+          },
+          "gpu.upload": {
+            "value": 9456.65
+          },
+          "gpu.layers": {
+            "value": 22.925
+          },
+          "disk.seqwrite": {
+            "value": 378.126
+          },
+          "disk.seqread": {
+            "value": 516.647
+          },
+          "disk.random4k": {
+            "value": 6256.32
+          },
+          "sustained.start": {
+            "value": 19.5814
+          },
+          "sustained.end": {
+            "value": 19.77
+          },
+          "video.h264.1080": {
+            "value": 399.438
+          },
+          "video.hevc.1080": {
+            "value": 385.477
+          },
+          "video.vp9.1080": {
+            "value": 215.005
+          },
+          "video.av1.1080": {
+            "value": 200.887
+          },
+          "video.h264.2160": {
+            "value": 75.624
+          },
+          "video.hevc.2160": {
+            "value": 102.252
+          },
+          "video.enc.h264": {
+            "value": 106.12
+          },
+          "video.enc.vp8": {
+            "value": 54.175
+          },
+          "cpu.ui.1": {
+            "value": 36.9702
+          },
+          "cpu.ui.n": {
+            "value": 39.9302
+          },
+          "cpu.shape.1": {
+            "value": 618.791
+          },
+          "cpu.shape.n": {
+            "value": 3595.11
+          }
+        },
+        "kernel": "6.12.113+deb13-amd64",
+        "arch": "x86_64",
+        "threads": 8,
+        "cpus": 8,
+        "gpuKind": "software"
+      },
+      "desktop": null
+    }
+  },
+  {
+    "report": {
+      "machine": {
+        "vendor": "",
+        "product": "",
+        "version": "",
+        "boardVendor": "",
+        "boardName": "",
+        "chassis": "",
+        "model": "Raspberry Pi 5 Model B Rev 1.1",
+        "biosVendor": "",
+        "biosVersion": "",
+        "biosDate": "",
+        "firmware": "dt",
+        "secureBoot": null,
+        "virtualization": ""
+      },
+      "cpu": {
+        "model": "Cortex-A76",
+        "vendor": "ARM",
+        "arch": "aarch64",
+        "sockets": 1,
+        "cores": 4,
+        "threads": 4
+      },
+      "memory": {
+        "totalKB": 16777216,
+        "swapKB": 0,
+        "zram": []
+      },
+      "gpus": [
+        {
+          "bus": "platform",
+          "vendorId": "",
+          "deviceId": "",
+          "vendor": "Broadcom",
+          "device": "V3D 7.1",
+          "driver": "v3d",
+          "bootVga": false,
+          "renderNode": true,
+          "connectors": 0,
+          "connected": 0
+        },
+        {
+          "bus": "platform",
+          "vendorId": "",
+          "deviceId": "",
+          "vendor": "Broadcom",
+          "device": "VideoCore VII display",
+          "driver": "vc4",
+          "bootVga": true,
+          "renderNode": false,
+          "connectors": 2,
+          "connected": 1
+        }
+      ],
+      "displays": [],
+      "storage": [
+        {
+          "model": "SD card",
+          "vendor": "",
+          "bytes": 32000000000,
+          "rotational": false,
+          "removable": true,
+          "transport": "sd",
+          "link": ""
+        }
+      ],
+      "network": [
+        {
+          "kind": "ethernet",
+          "driver": "macb",
+          "up": true,
+          "speedMbps": 1000
+        }
+      ],
+      "audio": [],
+      "bluetooth": [],
+      "power": [],
+      "thermal": [
+        {
+          "sensor": "cpu-thermal",
+          "milliC": null,
+          "fans": 1
+        }
+      ],
+      "raspberryPi": {
+        "model": "Raspberry Pi 5 Model B Rev 1.1",
+        "revision": "",
+        "throttled": null,
+        "underVoltageAlarm": false
+      },
+      "software": {
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "osId": "debian",
+        "osVersion": "13",
+        "kernel": "6.18.57-lordos.3",
+        "lordos": "0.8.5-beta",
+        "lsm": "landlock,lockdown,yama,integrity,bpf",
+        "landlockAbi": null,
+        "bpfLsm": true,
+        "cgroup2": true,
+        "live": false
+      },
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "V3D 7.1",
+        "dmabuf": true,
+        "scanouts": 0
+      },
+      "date": "2026-10-27"
+    },
+    "bench": {
+      "lordbench": 1,
+      "mode": "full",
+      "status": "done",
+      "stopReason": "",
+      "lordos": "0.8.5-beta",
+      "live": false,
+      "results": {
+        "cpu.sha256.1": {
+          "value": 933.43
+        },
+        "cpu.sha256.n": {
+          "value": 3692.78
+        },
+        "cpu.matmul.1": {
+          "value": 2.26049
+        },
+        "cpu.matmul.n": {
+          "value": 5.98807
+        },
+        "cpu.xz.1": {
+          "value": 66.9597
+        },
+        "cpu.xz.n": {
+          "value": 254.003
+        },
+        "cpu.js.1": {
+          "value": 54.342
+        },
+        "cpu.js.n": {
+          "value": 181.428
+        },
+        "mem.copy": {
+          "value": 7.61055
+        },
+        "mem.triad": {
+          "value": 7.29512
+        },
+        "mem.latency": {
+          "value": 114.505
+        },
+        "gpu.scene": {
+          "value": 795.282
+        },
+        "gpu.fill": {
+          "value": 2454.68
+        },
+        "gpu.upload": {
+          "value": 3897.05
+        },
+        "gpu.layers": {
+          "value": 115.042
+        },
+        "disk.seqwrite": {
+          "value": 65.9909
+        },
+        "disk.seqread": {
+          "value": 90.5924
+        },
+        "disk.random4k": {
+          "value": 2692.31
+        },
+        "sustained.start": {
+          "value": 5.85622
+        },
+        "sustained.end": {
+          "value": 5.87865
+        },
+        "video.h264.1080": {
+          "value": 257.551
+        },
+        "video.hevc.1080": {
+          "value": 246.029
+        },
+        "video.vp9.1080": {
+          "value": 204.453
+        },
+        "video.av1.1080": {
+          "value": 159.402
+        },
+        "video.h264.2160": {
+          "value": 55.007
+        },
+        "video.hevc.2160": {
+          "value": 57.213
+        },
+        "video.enc.h264": {
+          "value": 75.332
+        },
+        "video.enc.vp8": {
+          "value": 54.526
+        }
+      },
+      "kernel": "6.18.57-lordos.3",
+      "arch": "aarch64",
+      "threads": 4,
+      "cpus": 4,
+      "gpuKind": "hardware",
+      "piFirmware": {
+        "flags": false,
+        "voltageAlarm": true,
+        "underVoltage": false,
+        "tempLimit": false,
+        "tempLimitC": 80
+      }
+    },
+    "desktop": null,
+    "expected": {
+      "format": "lordos-hwreport",
+      "version": 1,
+      "createdAt": "2026-10-27",
+      "source": "community",
+      "lordos": "0.8.5-beta",
+      "live": false,
+      "system": {
+        "machine": {
+          "vendor": "",
+          "product": "",
+          "version": "",
+          "boardVendor": "",
+          "boardName": "",
+          "chassis": "",
+          "model": "Raspberry Pi 5 Model B Rev 1.1",
+          "biosVendor": "",
+          "biosVersion": "",
+          "biosDate": "",
+          "firmware": "dt",
+          "secureBoot": null,
+          "virtualization": ""
+        },
+        "cpu": {
+          "model": "Cortex-A76",
+          "vendor": "ARM",
+          "arch": "aarch64",
+          "sockets": 1,
+          "cores": 4,
+          "threads": 4
+        },
+        "memory": {
+          "totalKB": 16777216,
+          "swapKB": 0,
+          "zram": []
+        },
+        "gpus": [
+          {
+            "bus": "platform",
+            "vendorId": "",
+            "deviceId": "",
+            "vendor": "Broadcom",
+            "device": "V3D 7.1",
+            "driver": "v3d",
+            "bootVga": false,
+            "renderNode": true,
+            "connectors": 0,
+            "connected": 0
+          },
+          {
+            "bus": "platform",
+            "vendorId": "",
+            "deviceId": "",
+            "vendor": "Broadcom",
+            "device": "VideoCore VII display",
+            "driver": "vc4",
+            "bootVga": true,
+            "renderNode": false,
+            "connectors": 2,
+            "connected": 1
+          }
+        ],
+        "displays": [],
+        "storage": [
+          {
+            "model": "SD card",
+            "vendor": "",
+            "bytes": 32000000000,
+            "rotational": false,
+            "removable": true,
+            "transport": "sd",
+            "link": ""
+          }
+        ],
+        "network": [
+          {
+            "kind": "ethernet",
+            "driver": "macb",
+            "up": true,
+            "speedMbps": 1000
+          }
+        ],
+        "audio": [],
+        "bluetooth": [],
+        "power": [],
+        "thermal": [
+          {
+            "sensor": "cpu-thermal",
+            "milliC": null,
+            "fans": 1
+          }
+        ],
+        "raspberryPi": {
+          "model": "Raspberry Pi 5 Model B Rev 1.1",
+          "revision": "",
+          "throttled": null,
+          "underVoltageAlarm": false
+        },
+        "software": {
+          "os": "Debian GNU/Linux 13 (trixie)",
+          "osId": "debian",
+          "osVersion": "13",
+          "kernel": "6.18.57-lordos.3",
+          "lordos": "0.8.5-beta",
+          "lsm": "landlock,lockdown,yama,integrity,bpf",
+          "landlockAbi": null,
+          "bpfLsm": true,
+          "cgroup2": true,
+          "live": false
+        },
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "V3D 7.1",
+          "dmabuf": true,
+          "scanouts": 0
+        }
+      },
+      "compatibility": [
+        {
+          "id": "gpu",
+          "state": "works",
+          "note": "gpuComposes"
+        },
+        {
+          "id": "display",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "storage",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "network",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "wifi",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "bluetooth",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "audio",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "power",
+          "state": "absent",
+          "note": null
+        },
+        {
+          "id": "isolation",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "suspend",
+          "state": "unchecked",
+          "note": null
+        }
+      ],
+      "bench": {
+        "lordbench": 1,
+        "mode": "full",
+        "status": "done",
+        "stopReason": "",
+        "lordos": "0.8.5-beta",
+        "live": false,
+        "results": {
+          "cpu.sha256.1": {
+            "value": 933.43
+          },
+          "cpu.sha256.n": {
+            "value": 3692.78
+          },
+          "cpu.matmul.1": {
+            "value": 2.26049
+          },
+          "cpu.matmul.n": {
+            "value": 5.98807
+          },
+          "cpu.xz.1": {
+            "value": 66.9597
+          },
+          "cpu.xz.n": {
+            "value": 254.003
+          },
+          "cpu.js.1": {
+            "value": 54.342
+          },
+          "cpu.js.n": {
+            "value": 181.428
+          },
+          "mem.copy": {
+            "value": 7.61055
+          },
+          "mem.triad": {
+            "value": 7.29512
+          },
+          "mem.latency": {
+            "value": 114.505
+          },
+          "gpu.scene": {
+            "value": 795.282
+          },
+          "gpu.fill": {
+            "value": 2454.68
+          },
+          "gpu.upload": {
+            "value": 3897.05
+          },
+          "gpu.layers": {
+            "value": 115.042
+          },
+          "disk.seqwrite": {
+            "value": 65.9909
+          },
+          "disk.seqread": {
+            "value": 90.5924
+          },
+          "disk.random4k": {
+            "value": 2692.31
+          },
+          "sustained.start": {
+            "value": 5.85622
+          },
+          "sustained.end": {
+            "value": 5.87865
+          },
+          "video.h264.1080": {
+            "value": 257.551
+          },
+          "video.hevc.1080": {
+            "value": 246.029
+          },
+          "video.vp9.1080": {
+            "value": 204.453
+          },
+          "video.av1.1080": {
+            "value": 159.402
+          },
+          "video.h264.2160": {
+            "value": 55.007
+          },
+          "video.hevc.2160": {
+            "value": 57.213
+          },
+          "video.enc.h264": {
+            "value": 75.332
+          },
+          "video.enc.vp8": {
+            "value": 54.526
+          }
+        },
+        "kernel": "6.18.57-lordos.3",
+        "arch": "aarch64",
+        "threads": 4,
+        "cpus": 4,
+        "gpuKind": "hardware",
+        "piFirmware": {
+          "flags": false,
+          "voltageAlarm": true,
+          "underVoltage": false,
+          "tempLimit": false,
+          "tempLimitC": 80
+        }
+      },
+      "desktop": null
+    }
+  },
+  {
+    "report": {
+      "machine": {
+        "vendor": "LENOVO",
+        "product": "21CB",
+        "version": "ThinkPad T14 Gen 3",
+        "boardVendor": "LENOVO",
+        "boardName": "21CB",
+        "chassis": "laptop",
+        "model": "",
+        "biosVendor": "LENOVO",
+        "biosVersion": "R23ET70W (1.46 )",
+        "biosDate": "06/14/2026",
+        "firmware": "uefi",
+        "secureBoot": false,
+        "virtualization": ""
+      },
+      "cpu": {
+        "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+        "vendor": "GenuineIntel",
+        "arch": "x86_64",
+        "sockets": 1,
+        "cores": 10,
+        "threads": 12,
+        "minMHz": 400,
+        "maxMHz": 4400,
+        "governor": "powersave"
+      },
+      "memory": {
+        "totalKB": 16073328,
+        "swapKB": 8388604,
+        "zram": [
+          {
+            "sizeKB": 8038400,
+            "algorithm": "zstd"
+          }
+        ]
+      },
+      "gpus": [
+        {
+          "bus": "pci",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915",
+          "bootVga": true,
+          "renderNode": true,
+          "connectors": 4,
+          "connected": 1
+        }
+      ],
+      "displays": [
+        {
+          "connector": "eDP-1",
+          "enabled": true,
+          "name": "",
+          "manufacturer": "AUO",
+          "product": "403d",
+          "year": 2021,
+          "widthCm": 31,
+          "heightCm": 17,
+          "diagonalTenths": 140,
+          "nativeWidth": 1920,
+          "nativeHeight": 1200,
+          "mode": "1920x1200"
+        }
+      ],
+      "storage": [
+        {
+          "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+          "vendor": "",
+          "bytes": 512110190592,
+          "rotational": false,
+          "removable": false,
+          "transport": "nvme",
+          "link": "PCIe 4.0 x4"
+        }
+      ],
+      "pci": [
+        {
+          "class": "030000",
+          "className": "VGA compatible controller",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915"
+        },
+        {
+          "class": "028000",
+          "className": "Network controller",
+          "vendorId": "8086",
+          "deviceId": "51f0",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-P PCH CNVi WiFi",
+          "driver": "iwlwifi"
+        }
+      ],
+      "usb": [
+        {
+          "vendorId": "04f2",
+          "productId": "b7b6",
+          "vendor": "Chicony Electronics Co., Ltd",
+          "product": "Integrated Camera",
+          "class": "ef",
+          "speedMbps": 480,
+          "driver": "uvcvideo"
+        }
+      ],
+      "network": [
+        {
+          "kind": "wifi",
+          "driver": "iwlwifi",
+          "up": true,
+          "speedMbps": null
+        },
+        {
+          "kind": "ethernet",
+          "driver": "e1000e",
+          "up": false,
+          "speedMbps": null
+        }
+      ],
+      "audio": [
+        "HDA Intel PCH"
+      ],
+      "bluetooth": [
+        {
+          "driver": "btusb"
+        }
+      ],
+      "power": [
+        {
+          "kind": "battery",
+          "vendor": "SMP",
+          "model": "5B10W51867",
+          "technology": "Li-poly",
+          "status": "Discharging",
+          "capacity": 87,
+          "health": 91,
+          "online": -1
+        },
+        {
+          "kind": "ac",
+          "vendor": "",
+          "model": "",
+          "technology": "",
+          "status": "",
+          "capacity": -1,
+          "health": -1,
+          "online": 0
+        }
+      ],
+      "thermal": [
+        {
+          "sensor": "x86_pkg_temp",
+          "milliC": 48000,
+          "fans": 1
+        }
+      ],
+      "software": {
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "osId": "debian",
+        "osVersion": "13",
+        "kernel": "6.12.57+deb13-amd64",
+        "lordos": "0.8.7-beta",
+        "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+        "landlockAbi": 6,
+        "bpfLsm": true,
+        "cgroup2": true,
+        "live": true,
+        "bootMedium": "usb",
+        "bootLinkMbps": 5000,
+        "bootToRam": false,
+        "kernelConfig": {
+          "CONFIG_SECURITY_LANDLOCK": "y",
+          "CONFIG_BPF_LSM": "y"
+        },
+        "services": {
+          "lord-sessiond": true,
+          "lord-netd": true,
+          "axia-netperm": true,
+          "axia-fand": false
+        }
+      },
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+        "dmabuf": true,
+        "scanouts": 3
+      },
+      "date": "2026-10-28"
+    },
+    "bench": {
+      "lordbench": 1,
+      "mode": "quick",
+      "seconds": 52,
+      "status": "done",
+      "stopReason": "",
+      "lordos": "0.8.7-beta",
+      "kernel": "6.12.57+deb13-amd64",
+      "arch": "x86_64",
+      "live": true,
+      "threads": 12,
+      "cpus": 12,
+      "quiet": {
+        "quiet": true,
+        "busyPct": 2.1,
+        "waitedS": 10
+      },
+      "before": {
+        "tempC": 47,
+        "zone": "x86_pkg_temp",
+        "power": "mains",
+        "governor": "powersave"
+      },
+      "after": {
+        "tempC": 71,
+        "zone": "x86_pkg_temp",
+        "power": "mains"
+      },
+      "storage": {
+        "kind": "none",
+        "mb": 0
+      },
+      "gpuKind": "hardware",
+      "sandbox": 62,
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+        "displays": [
+          {
+            "connector": "eDP-1",
+            "builtin": true,
+            "mode": {
+              "w": 1920,
+              "h": 1200,
+              "refresh": 60000
+            },
+            "scale": 125,
+            "rotation": 0
+          }
+        ]
+      },
+      "results": {
+        "cpu.sha256.1": {
+          "value": 1950.2,
+          "spread": 12,
+          "unit": "MB/s"
+        },
+        "cpu.sha256.n": {
+          "value": 9100.4,
+          "spread": 80,
+          "unit": "MB/s"
+        },
+        "cpu.matmul.n": {
+          "value": 61.2,
+          "spread": 2,
+          "unit": "GFLOP/s"
+        },
+        "mem.copy": {
+          "value": 31.5,
+          "spread": 0.5,
+          "unit": "GB/s"
+        },
+        "mem.latency": {
+          "value": 96.1,
+          "spread": 2,
+          "unit": "ns",
+          "lowerBetter": true
+        },
+        "gpu.scene": {
+          "value": 1450,
+          "spread": 30,
+          "unit": "fps"
+        }
+      },
+      "skipped": {
+        "disk.seqwrite": "mode"
+      }
+    },
+    "desktop": null,
+    "expected": {
+      "format": "lordos-hwreport",
+      "version": 1,
+      "createdAt": "2026-10-28",
+      "source": "community",
+      "lordos": "0.8.7-beta",
+      "live": true,
+      "system": {
+        "machine": {
+          "vendor": "LENOVO",
+          "product": "21CB",
+          "version": "ThinkPad T14 Gen 3",
+          "boardVendor": "LENOVO",
+          "boardName": "21CB",
+          "chassis": "laptop",
+          "model": "",
+          "biosVendor": "LENOVO",
+          "biosVersion": "R23ET70W (1.46 )",
+          "biosDate": "06/14/2026",
+          "firmware": "uefi",
+          "secureBoot": false,
+          "virtualization": ""
+        },
+        "cpu": {
+          "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+          "vendor": "GenuineIntel",
+          "arch": "x86_64",
+          "sockets": 1,
+          "cores": 10,
+          "threads": 12,
+          "minMHz": 400,
+          "maxMHz": 4400,
+          "governor": "powersave"
+        },
+        "memory": {
+          "totalKB": 16073328,
+          "swapKB": 8388604,
+          "zram": [
+            {
+              "sizeKB": 8038400,
+              "algorithm": "zstd"
+            }
+          ]
+        },
+        "gpus": [
+          {
+            "bus": "pci",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915",
+            "bootVga": true,
+            "renderNode": true,
+            "connectors": 4,
+            "connected": 1
+          }
+        ],
+        "displays": [
+          {
+            "connector": "eDP-1",
+            "enabled": true,
+            "name": "",
+            "manufacturer": "AUO",
+            "product": "403d",
+            "year": 2021,
+            "widthCm": 31,
+            "heightCm": 17,
+            "diagonalTenths": 140,
+            "nativeWidth": 1920,
+            "nativeHeight": 1200,
+            "mode": "1920x1200"
+          }
+        ],
+        "storage": [
+          {
+            "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+            "vendor": "",
+            "bytes": 512110190592,
+            "rotational": false,
+            "removable": false,
+            "transport": "nvme",
+            "link": "PCIe 4.0 x4"
+          }
+        ],
+        "pci": [
+          {
+            "class": "030000",
+            "className": "VGA compatible controller",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915"
+          },
+          {
+            "class": "028000",
+            "className": "Network controller",
+            "vendorId": "8086",
+            "deviceId": "51f0",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-P PCH CNVi WiFi",
+            "driver": "iwlwifi"
+          }
+        ],
+        "usb": [
+          {
+            "vendorId": "04f2",
+            "productId": "b7b6",
+            "vendor": "Chicony Electronics Co., Ltd",
+            "product": "Integrated Camera",
+            "class": "ef",
+            "speedMbps": 480,
+            "driver": "uvcvideo"
+          }
+        ],
+        "network": [
+          {
+            "kind": "wifi",
+            "driver": "iwlwifi",
+            "up": true,
+            "speedMbps": null
+          },
+          {
+            "kind": "ethernet",
+            "driver": "e1000e",
+            "up": false,
+            "speedMbps": null
+          }
+        ],
+        "audio": [
+          "HDA Intel PCH"
+        ],
+        "bluetooth": [
+          {
+            "driver": "btusb"
+          }
+        ],
+        "power": [
+          {
+            "kind": "battery",
+            "vendor": "SMP",
+            "model": "5B10W51867",
+            "technology": "Li-poly",
+            "status": "Discharging",
+            "capacity": 87,
+            "health": 91,
+            "online": -1
+          },
+          {
+            "kind": "ac",
+            "vendor": "",
+            "model": "",
+            "technology": "",
+            "status": "",
+            "capacity": -1,
+            "health": -1,
+            "online": 0
+          }
+        ],
+        "thermal": [
+          {
+            "sensor": "x86_pkg_temp",
+            "milliC": 48000,
+            "fans": 1
+          }
+        ],
+        "software": {
+          "os": "Debian GNU/Linux 13 (trixie)",
+          "osId": "debian",
+          "osVersion": "13",
+          "kernel": "6.12.57+deb13-amd64",
+          "lordos": "0.8.7-beta",
+          "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+          "landlockAbi": 6,
+          "bpfLsm": true,
+          "cgroup2": true,
+          "live": true,
+          "bootMedium": "usb",
+          "bootLinkMbps": 5000,
+          "bootToRam": false,
+          "kernelConfig": {
+            "CONFIG_SECURITY_LANDLOCK": "y",
+            "CONFIG_BPF_LSM": "y"
+          },
+          "services": {
+            "lord-sessiond": true,
+            "lord-netd": true,
+            "axia-netperm": true,
+            "axia-fand": false
+          }
+        },
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+          "dmabuf": true,
+          "scanouts": 3
+        }
+      },
+      "compatibility": [
+        {
+          "id": "gpu",
+          "state": "works",
+          "note": "gpuComposes"
+        },
+        {
+          "id": "display",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "storage",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "network",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "wifi",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "bluetooth",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "audio",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "power",
+          "state": "works",
+          "note": "batteryHealth"
+        },
+        {
+          "id": "isolation",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "suspend",
+          "state": "unchecked",
+          "note": null
+        }
+      ],
+      "bench": {
+        "lordbench": 1,
+        "mode": "quick",
+        "seconds": 52,
+        "status": "done",
+        "stopReason": "",
+        "lordos": "0.8.7-beta",
+        "kernel": "6.12.57+deb13-amd64",
+        "arch": "x86_64",
+        "live": true,
+        "threads": 12,
+        "cpus": 12,
+        "quiet": {
+          "quiet": true,
+          "busyPct": 2.1,
+          "waitedS": 10
+        },
+        "before": {
+          "tempC": 47,
+          "zone": "x86_pkg_temp",
+          "power": "mains",
+          "governor": "powersave"
+        },
+        "after": {
+          "tempC": 71,
+          "zone": "x86_pkg_temp",
+          "power": "mains"
+        },
+        "storage": {
+          "kind": "none",
+          "mb": 0
+        },
+        "gpuKind": "hardware",
+        "sandbox": 62,
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+          "displays": [
+            {
+              "connector": "eDP-1",
+              "builtin": true,
+              "mode": {
+                "w": 1920,
+                "h": 1200,
+                "refresh": 60000
+              },
+              "scale": 125,
+              "rotation": 0
+            }
+          ]
+        },
+        "results": {
+          "cpu.sha256.1": {
+            "value": 1950.2,
+            "spread": 12,
+            "unit": "MB/s"
+          },
+          "cpu.sha256.n": {
+            "value": 9100.4,
+            "spread": 80,
+            "unit": "MB/s"
+          },
+          "cpu.matmul.n": {
+            "value": 61.2,
+            "spread": 2,
+            "unit": "GFLOP/s"
+          },
+          "mem.copy": {
+            "value": 31.5,
+            "spread": 0.5,
+            "unit": "GB/s"
+          },
+          "mem.latency": {
+            "value": 96.1,
+            "spread": 2,
+            "unit": "ns",
+            "lowerBetter": true
+          },
+          "gpu.scene": {
+            "value": 1450,
+            "spread": 30,
+            "unit": "fps"
+          }
+        },
+        "skipped": {
+          "disk.seqwrite": "mode"
+        }
+      },
+      "desktop": null
+    }
+  },
+  {
+    "report": {
+      "machine": {
+        "vendor": "LENOVO",
+        "product": "21CB",
+        "version": "ThinkPad T14 Gen 3",
+        "boardVendor": "LENOVO",
+        "boardName": "21CB",
+        "chassis": "laptop",
+        "model": "",
+        "biosVendor": "LENOVO",
+        "biosVersion": "R23ET70W (1.46 )",
+        "biosDate": "06/14/2026",
+        "firmware": "uefi",
+        "secureBoot": false,
+        "virtualization": "",
+        "serial": "PRIVATE-SERIAL"
+      },
+      "cpu": {
+        "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+        "vendor": "GenuineIntel",
+        "arch": "x86_64",
+        "sockets": 1,
+        "cores": 10,
+        "threads": 12,
+        "minMHz": 400,
+        "maxMHz": 4400,
+        "governor": "powersave"
+      },
+      "memory": {
+        "totalKB": 16073328,
+        "swapKB": 8388604,
+        "zram": [
+          {
+            "sizeKB": 8038400,
+            "algorithm": "zstd"
+          }
+        ]
+      },
+      "gpus": [
+        {
+          "bus": "pci",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915",
+          "bootVga": true,
+          "renderNode": true,
+          "connectors": 4,
+          "connected": 1
+        }
+      ],
+      "displays": [
+        {
+          "connector": "eDP-1",
+          "enabled": true,
+          "name": "",
+          "manufacturer": "AUO",
+          "product": "403d",
+          "year": 2021,
+          "widthCm": 31,
+          "heightCm": 17,
+          "diagonalTenths": 140,
+          "nativeWidth": 1920,
+          "nativeHeight": 1200,
+          "mode": "1920x1200"
+        }
+      ],
+      "storage": [
+        {
+          "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+          "vendor": "",
+          "bytes": 512110190592,
+          "rotational": false,
+          "removable": false,
+          "transport": "nvme",
+          "link": "PCIe 4.0 x4"
+        }
+      ],
+      "pci": [
+        {
+          "class": "030000",
+          "className": "VGA compatible controller",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915"
+        },
+        {
+          "class": "028000",
+          "className": "Network controller",
+          "vendorId": "8086",
+          "deviceId": "51f0",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-P PCH CNVi WiFi",
+          "driver": "iwlwifi"
+        }
+      ],
+      "usb": [
+        {
+          "vendorId": "04f2",
+          "productId": "b7b6",
+          "vendor": "Chicony Electronics Co., Ltd",
+          "product": "Integrated Camera",
+          "class": "ef",
+          "speedMbps": 480,
+          "driver": "uvcvideo"
+        }
+      ],
+      "network": [
+        {
+          "kind": "wifi",
+          "driver": "iwlwifi",
+          "up": true,
+          "speedMbps": null
+        },
+        {
+          "kind": "ethernet",
+          "driver": "e1000e",
+          "up": false,
+          "speedMbps": null
+        }
+      ],
+      "audio": [
+        "HDA Intel PCH"
+      ],
+      "bluetooth": [
+        {
+          "driver": "btusb"
+        }
+      ],
+      "power": [
+        {
+          "kind": "battery",
+          "vendor": "SMP",
+          "model": "5B10W51867",
+          "technology": "Li-poly",
+          "status": "Discharging",
+          "capacity": 87,
+          "health": 91,
+          "online": -1
+        },
+        {
+          "kind": "ac",
+          "vendor": "",
+          "model": "",
+          "technology": "",
+          "status": "",
+          "capacity": -1,
+          "health": -1,
+          "online": 0
+        }
+      ],
+      "thermal": [
+        {
+          "sensor": "x86_pkg_temp",
+          "milliC": 48000,
+          "fans": 1
+        }
+      ],
+      "software": {
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "osId": "debian",
+        "osVersion": "13",
+        "kernel": "6.12.57+deb13-amd64",
+        "lordos": "0.8.7-beta",
+        "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+        "landlockAbi": 6,
+        "bpfLsm": true,
+        "cgroup2": true,
+        "live": true,
+        "bootMedium": "usb",
+        "bootLinkMbps": 5000,
+        "bootToRam": false,
+        "kernelConfig": {
+          "CONFIG_SECCOMP": "y",
+          "PRIVATE-OWNER": "y"
+        },
+        "services": {
+          "lord-sessiond": true,
+          "lord-netd": true,
+          "axia-netperm": true,
+          "axia-fand": false
+        }
+      },
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+        "dmabuf": true,
+        "scanouts": 3
+      },
+      "date": "2026-10-28",
+      "extra": "PRIVATE-USER"
+    },
+    "bench": {
+      "lordbench": 1,
+      "lordos": "0.8.7-beta",
+      "mode": "full",
+      "status": "done",
+      "results": {
+        "cpu.sha256.1": {
+          "value": 123,
+          "unit": "MB/s"
+        },
+        "PRIVATE-OWNER": {
+          "value": 12,
+          "unit": "MB/s"
+        }
+      },
+      "skipped": {
+        "PRIVATE-PATH": "secret",
+        "gpu.fill": "unavailable"
+      }
+    },
+    "desktop": null,
+    "expected": {
+      "format": "lordos-hwreport",
+      "version": 1,
+      "createdAt": "2026-10-28",
+      "source": "community",
+      "lordos": "0.8.7-beta",
+      "live": true,
+      "system": {
+        "machine": {
+          "vendor": "LENOVO",
+          "product": "21CB",
+          "version": "ThinkPad T14 Gen 3",
+          "boardVendor": "LENOVO",
+          "boardName": "21CB",
+          "chassis": "laptop",
+          "model": "",
+          "biosVendor": "LENOVO",
+          "biosVersion": "R23ET70W (1.46 )",
+          "biosDate": "06/14/2026",
+          "firmware": "uefi",
+          "secureBoot": false,
+          "virtualization": ""
+        },
+        "cpu": {
+          "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+          "vendor": "GenuineIntel",
+          "arch": "x86_64",
+          "sockets": 1,
+          "cores": 10,
+          "threads": 12,
+          "minMHz": 400,
+          "maxMHz": 4400,
+          "governor": "powersave"
+        },
+        "memory": {
+          "totalKB": 16073328,
+          "swapKB": 8388604,
+          "zram": [
+            {
+              "sizeKB": 8038400,
+              "algorithm": "zstd"
+            }
+          ]
+        },
+        "gpus": [
+          {
+            "bus": "pci",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915",
+            "bootVga": true,
+            "renderNode": true,
+            "connectors": 4,
+            "connected": 1
+          }
+        ],
+        "displays": [
+          {
+            "connector": "eDP-1",
+            "enabled": true,
+            "name": "",
+            "manufacturer": "AUO",
+            "product": "403d",
+            "year": 2021,
+            "widthCm": 31,
+            "heightCm": 17,
+            "diagonalTenths": 140,
+            "nativeWidth": 1920,
+            "nativeHeight": 1200,
+            "mode": "1920x1200"
+          }
+        ],
+        "storage": [
+          {
+            "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+            "vendor": "",
+            "bytes": 512110190592,
+            "rotational": false,
+            "removable": false,
+            "transport": "nvme",
+            "link": "PCIe 4.0 x4"
+          }
+        ],
+        "pci": [
+          {
+            "class": "030000",
+            "className": "VGA compatible controller",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915"
+          },
+          {
+            "class": "028000",
+            "className": "Network controller",
+            "vendorId": "8086",
+            "deviceId": "51f0",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-P PCH CNVi WiFi",
+            "driver": "iwlwifi"
+          }
+        ],
+        "usb": [
+          {
+            "vendorId": "04f2",
+            "productId": "b7b6",
+            "vendor": "Chicony Electronics Co., Ltd",
+            "product": "Integrated Camera",
+            "class": "ef",
+            "speedMbps": 480,
+            "driver": "uvcvideo"
+          }
+        ],
+        "network": [
+          {
+            "kind": "wifi",
+            "driver": "iwlwifi",
+            "up": true,
+            "speedMbps": null
+          },
+          {
+            "kind": "ethernet",
+            "driver": "e1000e",
+            "up": false,
+            "speedMbps": null
+          }
+        ],
+        "audio": [
+          "HDA Intel PCH"
+        ],
+        "bluetooth": [
+          {
+            "driver": "btusb"
+          }
+        ],
+        "power": [
+          {
+            "kind": "battery",
+            "vendor": "SMP",
+            "model": "5B10W51867",
+            "technology": "Li-poly",
+            "status": "Discharging",
+            "capacity": 87,
+            "health": 91,
+            "online": -1
+          },
+          {
+            "kind": "ac",
+            "vendor": "",
+            "model": "",
+            "technology": "",
+            "status": "",
+            "capacity": -1,
+            "health": -1,
+            "online": 0
+          }
+        ],
+        "thermal": [
+          {
+            "sensor": "x86_pkg_temp",
+            "milliC": 48000,
+            "fans": 1
+          }
+        ],
+        "software": {
+          "os": "Debian GNU/Linux 13 (trixie)",
+          "osId": "debian",
+          "osVersion": "13",
+          "kernel": "6.12.57+deb13-amd64",
+          "lordos": "0.8.7-beta",
+          "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+          "landlockAbi": 6,
+          "bpfLsm": true,
+          "cgroup2": true,
+          "live": true,
+          "bootMedium": "usb",
+          "bootLinkMbps": 5000,
+          "bootToRam": false,
+          "kernelConfig": {
+            "CONFIG_SECCOMP": "y"
+          },
+          "services": {
+            "lord-sessiond": true,
+            "lord-netd": true,
+            "axia-netperm": true,
+            "axia-fand": false
+          }
+        },
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+          "dmabuf": true,
+          "scanouts": 3
+        }
+      },
+      "compatibility": [
+        {
+          "id": "gpu",
+          "state": "works",
+          "note": "gpuComposes"
+        },
+        {
+          "id": "display",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "storage",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "network",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "wifi",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "bluetooth",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "audio",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "power",
+          "state": "works",
+          "note": "batteryHealth"
+        },
+        {
+          "id": "isolation",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "suspend",
+          "state": "unchecked",
+          "note": null
+        }
+      ],
+      "bench": {
+        "lordbench": 1,
+        "lordos": "0.8.7-beta",
+        "mode": "full",
+        "status": "done",
+        "results": {
+          "cpu.sha256.1": {
+            "value": 123,
+            "unit": "MB/s"
+          }
+        },
+        "skipped": {}
+      },
+      "desktop": null
+    }
+  },
+  {
+    "report": {
+      "machine": {
+        "vendor": "LENOVO",
+        "product": "21CB",
+        "version": "ThinkPad T14 Gen 3",
+        "boardVendor": "LENOVO",
+        "boardName": "21CB",
+        "chassis": "laptop",
+        "model": "",
+        "biosVendor": "LENOVO",
+        "biosVersion": "R23ET70W (1.46 )",
+        "biosDate": "06/14/2026",
+        "firmware": "uefi",
+        "secureBoot": false,
+        "virtualization": "",
+        "serial": "PRIVATE-SERIAL"
+      },
+      "cpu": {
+        "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+        "vendor": "GenuineIntel",
+        "arch": "x86_64",
+        "sockets": 1,
+        "cores": 10,
+        "threads": 12,
+        "minMHz": 400,
+        "maxMHz": 4400,
+        "governor": "powersave"
+      },
+      "memory": {
+        "totalKB": 16073328,
+        "swapKB": 8388604,
+        "zram": [
+          {
+            "sizeKB": 8038400,
+            "algorithm": "zstd"
+          }
+        ]
+      },
+      "gpus": [
+        {
+          "bus": "pci",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915",
+          "bootVga": true,
+          "renderNode": true,
+          "connectors": 4,
+          "connected": 1
+        }
+      ],
+      "displays": [
+        {
+          "connector": "eDP-1",
+          "enabled": true,
+          "name": "",
+          "manufacturer": "AUO",
+          "product": "403d",
+          "year": 2021,
+          "widthCm": 31,
+          "heightCm": 17,
+          "diagonalTenths": 140,
+          "nativeWidth": 1920,
+          "nativeHeight": 1200,
+          "mode": "1920x1200"
+        }
+      ],
+      "storage": [
+        {
+          "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+          "vendor": "",
+          "bytes": 512110190592,
+          "rotational": false,
+          "removable": false,
+          "transport": "nvme",
+          "link": "PCIe 4.0 x4"
+        }
+      ],
+      "pci": [
+        {
+          "class": "030000",
+          "className": "VGA compatible controller",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915"
+        },
+        {
+          "class": "028000",
+          "className": "Network controller",
+          "vendorId": "8086",
+          "deviceId": "51f0",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-P PCH CNVi WiFi",
+          "driver": "iwlwifi"
+        }
+      ],
+      "usb": [
+        {
+          "vendorId": "04f2",
+          "productId": "b7b6",
+          "vendor": "Chicony Electronics Co., Ltd",
+          "product": "Integrated Camera",
+          "class": "ef",
+          "speedMbps": 480,
+          "driver": "uvcvideo"
+        }
+      ],
+      "network": [
+        {
+          "kind": "wifi",
+          "driver": "iwlwifi",
+          "up": true,
+          "speedMbps": null
+        },
+        {
+          "kind": "ethernet",
+          "driver": "e1000e",
+          "up": false,
+          "speedMbps": null
+        }
+      ],
+      "audio": [
+        "HDA Intel PCH"
+      ],
+      "bluetooth": [
+        {
+          "driver": "btusb"
+        }
+      ],
+      "power": [
+        {
+          "kind": "battery",
+          "vendor": "SMP",
+          "model": "5B10W51867",
+          "technology": "Li-poly",
+          "status": "Discharging",
+          "capacity": 87,
+          "health": 91,
+          "online": -1
+        },
+        {
+          "kind": "ac",
+          "vendor": "",
+          "model": "",
+          "technology": "",
+          "status": "",
+          "capacity": -1,
+          "health": -1,
+          "online": 0
+        }
+      ],
+      "thermal": [
+        {
+          "sensor": "x86_pkg_temp",
+          "milliC": 48000,
+          "fans": 1
+        }
+      ],
+      "software": {
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "osId": "debian",
+        "osVersion": "13",
+        "kernel": "6.12.57+deb13-amd64",
+        "lordos": "0.8.7-beta",
+        "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+        "landlockAbi": 6,
+        "bpfLsm": true,
+        "cgroup2": true,
+        "live": true,
+        "bootMedium": "usb",
+        "bootLinkMbps": 5000,
+        "bootToRam": false,
+        "kernelConfig": {
+          "CONFIG_SECCOMP": "y",
+          "PRIVATE-OWNER": "y"
+        },
+        "services": {
+          "lord-sessiond": true,
+          "lord-netd": true,
+          "axia-netperm": true,
+          "axia-fand": false
+        }
+      },
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+        "dmabuf": true,
+        "scanouts": 3
+      },
+      "date": "2026-10-28",
+      "extra": "PRIVATE-USER"
+    },
+    "bench": {
+      "lordbench": 1,
+      "lordos": "0.1.0",
+      "mode": "full",
+      "status": "done",
+      "results": {
+        "cpu.sha256.1": {
+          "value": 123,
+          "unit": "MB/s"
+        },
+        "PRIVATE-OWNER": {
+          "value": 12,
+          "unit": "MB/s"
+        }
+      },
+      "skipped": {
+        "PRIVATE-PATH": "secret",
+        "gpu.fill": "unavailable"
+      }
+    },
+    "desktop": null,
+    "expected": {
+      "format": "lordos-hwreport",
+      "version": 1,
+      "createdAt": "2026-10-28",
+      "source": "community",
+      "lordos": "0.8.7-beta",
+      "live": true,
+      "system": {
+        "machine": {
+          "vendor": "LENOVO",
+          "product": "21CB",
+          "version": "ThinkPad T14 Gen 3",
+          "boardVendor": "LENOVO",
+          "boardName": "21CB",
+          "chassis": "laptop",
+          "model": "",
+          "biosVendor": "LENOVO",
+          "biosVersion": "R23ET70W (1.46 )",
+          "biosDate": "06/14/2026",
+          "firmware": "uefi",
+          "secureBoot": false,
+          "virtualization": ""
+        },
+        "cpu": {
+          "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+          "vendor": "GenuineIntel",
+          "arch": "x86_64",
+          "sockets": 1,
+          "cores": 10,
+          "threads": 12,
+          "minMHz": 400,
+          "maxMHz": 4400,
+          "governor": "powersave"
+        },
+        "memory": {
+          "totalKB": 16073328,
+          "swapKB": 8388604,
+          "zram": [
+            {
+              "sizeKB": 8038400,
+              "algorithm": "zstd"
+            }
+          ]
+        },
+        "gpus": [
+          {
+            "bus": "pci",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915",
+            "bootVga": true,
+            "renderNode": true,
+            "connectors": 4,
+            "connected": 1
+          }
+        ],
+        "displays": [
+          {
+            "connector": "eDP-1",
+            "enabled": true,
+            "name": "",
+            "manufacturer": "AUO",
+            "product": "403d",
+            "year": 2021,
+            "widthCm": 31,
+            "heightCm": 17,
+            "diagonalTenths": 140,
+            "nativeWidth": 1920,
+            "nativeHeight": 1200,
+            "mode": "1920x1200"
+          }
+        ],
+        "storage": [
+          {
+            "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+            "vendor": "",
+            "bytes": 512110190592,
+            "rotational": false,
+            "removable": false,
+            "transport": "nvme",
+            "link": "PCIe 4.0 x4"
+          }
+        ],
+        "pci": [
+          {
+            "class": "030000",
+            "className": "VGA compatible controller",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915"
+          },
+          {
+            "class": "028000",
+            "className": "Network controller",
+            "vendorId": "8086",
+            "deviceId": "51f0",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-P PCH CNVi WiFi",
+            "driver": "iwlwifi"
+          }
+        ],
+        "usb": [
+          {
+            "vendorId": "04f2",
+            "productId": "b7b6",
+            "vendor": "Chicony Electronics Co., Ltd",
+            "product": "Integrated Camera",
+            "class": "ef",
+            "speedMbps": 480,
+            "driver": "uvcvideo"
+          }
+        ],
+        "network": [
+          {
+            "kind": "wifi",
+            "driver": "iwlwifi",
+            "up": true,
+            "speedMbps": null
+          },
+          {
+            "kind": "ethernet",
+            "driver": "e1000e",
+            "up": false,
+            "speedMbps": null
+          }
+        ],
+        "audio": [
+          "HDA Intel PCH"
+        ],
+        "bluetooth": [
+          {
+            "driver": "btusb"
+          }
+        ],
+        "power": [
+          {
+            "kind": "battery",
+            "vendor": "SMP",
+            "model": "5B10W51867",
+            "technology": "Li-poly",
+            "status": "Discharging",
+            "capacity": 87,
+            "health": 91,
+            "online": -1
+          },
+          {
+            "kind": "ac",
+            "vendor": "",
+            "model": "",
+            "technology": "",
+            "status": "",
+            "capacity": -1,
+            "health": -1,
+            "online": 0
+          }
+        ],
+        "thermal": [
+          {
+            "sensor": "x86_pkg_temp",
+            "milliC": 48000,
+            "fans": 1
+          }
+        ],
+        "software": {
+          "os": "Debian GNU/Linux 13 (trixie)",
+          "osId": "debian",
+          "osVersion": "13",
+          "kernel": "6.12.57+deb13-amd64",
+          "lordos": "0.8.7-beta",
+          "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+          "landlockAbi": 6,
+          "bpfLsm": true,
+          "cgroup2": true,
+          "live": true,
+          "bootMedium": "usb",
+          "bootLinkMbps": 5000,
+          "bootToRam": false,
+          "kernelConfig": {
+            "CONFIG_SECCOMP": "y"
+          },
+          "services": {
+            "lord-sessiond": true,
+            "lord-netd": true,
+            "axia-netperm": true,
+            "axia-fand": false
+          }
+        },
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+          "dmabuf": true,
+          "scanouts": 3
+        }
+      },
+      "compatibility": [
+        {
+          "id": "gpu",
+          "state": "works",
+          "note": "gpuComposes"
+        },
+        {
+          "id": "display",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "storage",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "network",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "wifi",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "bluetooth",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "audio",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "power",
+          "state": "works",
+          "note": "batteryHealth"
+        },
+        {
+          "id": "isolation",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "suspend",
+          "state": "unchecked",
+          "note": null
+        }
+      ],
+      "bench": null,
+      "desktop": null
+    }
+  },
+  {
+    "report": {
+      "machine": {
+        "vendor": "LENOVO",
+        "product": "21CB",
+        "version": "ThinkPad T14 Gen 3",
+        "boardVendor": "LENOVO",
+        "boardName": "21CB",
+        "chassis": "laptop",
+        "model": "",
+        "biosVendor": "LENOVO",
+        "biosVersion": "R23ET70W (1.46 )",
+        "biosDate": "06/14/2026",
+        "firmware": "uefi",
+        "secureBoot": false,
+        "virtualization": ""
+      },
+      "cpu": {
+        "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+        "vendor": "GenuineIntel",
+        "arch": "x86_64",
+        "sockets": 1,
+        "cores": 10,
+        "threads": 12,
+        "minMHz": 400,
+        "maxMHz": 4400,
+        "governor": "powersave"
+      },
+      "memory": {
+        "totalKB": 16073328,
+        "swapKB": 8388604,
+        "zram": [
+          {
+            "sizeKB": 8038400,
+            "algorithm": "zstd"
+          }
+        ]
+      },
+      "gpus": [
+        {
+          "bus": "pci",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915",
+          "bootVga": true,
+          "renderNode": true,
+          "connectors": 4,
+          "connected": 1
+        }
+      ],
+      "displays": [
+        {
+          "connector": "eDP-1",
+          "enabled": true,
+          "name": "",
+          "manufacturer": "AUO",
+          "product": "403d",
+          "year": 2021,
+          "widthCm": 31,
+          "heightCm": 17,
+          "diagonalTenths": 140,
+          "nativeWidth": 1920,
+          "nativeHeight": 1200,
+          "mode": "1920x1200"
+        }
+      ],
+      "storage": [
+        {
+          "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+          "vendor": "",
+          "bytes": 512110190592,
+          "rotational": false,
+          "removable": false,
+          "transport": "nvme",
+          "link": "PCIe 4.0 x4"
+        }
+      ],
+      "pci": [
+        {
+          "class": "030000",
+          "className": "VGA compatible controller",
+          "vendorId": "8086",
+          "deviceId": "46a8",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+          "driver": "i915"
+        },
+        {
+          "class": "028000",
+          "className": "Network controller",
+          "vendorId": "8086",
+          "deviceId": "51f0",
+          "vendor": "Intel Corporation",
+          "device": "Alder Lake-P PCH CNVi WiFi",
+          "driver": "iwlwifi"
+        }
+      ],
+      "usb": [
+        null,
+        {
+          "vendor": "Example 0",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 1",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 2",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 3",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 4",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 5",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 6",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 7",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 8",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 9",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 10",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 11",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 12",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 13",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 14",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 15",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 16",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 17",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 18",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 19",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 20",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 21",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 22",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 23",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 24",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 25",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 26",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 27",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 28",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 29",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 30",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 31",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 32",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 33",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 34",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 35",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 36",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 37",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 38",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 39",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 40",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 41",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 42",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 43",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 44",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 45",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 46",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 47",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 48",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 49",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 50",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 51",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 52",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 53",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 54",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 55",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 56",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 57",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 58",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 59",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 60",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 61",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 62",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 63",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 64",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 65",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 66",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 67",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 68",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        },
+        {
+          "vendor": "Example 69",
+          "product": "USB",
+          "vendorId": "8086",
+          "productId": "1234",
+          "driver": "usb"
+        }
+      ],
+      "network": [
+        {
+          "kind": "wifi",
+          "driver": "iwlwifi",
+          "up": true,
+          "speedMbps": null
+        },
+        {
+          "kind": "ethernet",
+          "driver": "e1000e",
+          "up": false,
+          "speedMbps": null
+        }
+      ],
+      "audio": [
+        "HDA Intel PCH"
+      ],
+      "bluetooth": [
+        {
+          "driver": "btusb"
+        }
+      ],
+      "power": [
+        {
+          "kind": "battery",
+          "vendor": "SMP",
+          "model": "5B10W51867",
+          "technology": "Li-poly",
+          "status": "Discharging",
+          "capacity": 87,
+          "health": 91,
+          "online": -1
+        },
+        {
+          "kind": "ac",
+          "vendor": "",
+          "model": "",
+          "technology": "",
+          "status": "",
+          "capacity": -1,
+          "health": -1,
+          "online": 0
+        }
+      ],
+      "thermal": [
+        {
+          "sensor": "x86_pkg_temp",
+          "milliC": 48000,
+          "fans": 1
+        }
+      ],
+      "software": {
+        "os": "Debian GNU/Linux 13 (trixie)",
+        "osId": "debian",
+        "osVersion": "13",
+        "kernel": "6.12.57+deb13-amd64",
+        "lordos": "0.8.7-beta",
+        "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+        "landlockAbi": 6,
+        "bpfLsm": true,
+        "cgroup2": true,
+        "live": true,
+        "bootMedium": "usb",
+        "bootLinkMbps": 5000,
+        "bootToRam": false,
+        "kernelConfig": {
+          "CONFIG_SECURITY_LANDLOCK": "y",
+          "CONFIG_BPF_LSM": "y"
+        },
+        "services": {
+          "lord-sessiond": true,
+          "lord-netd": true,
+          "axia-netperm": true,
+          "axia-fand": false
+        }
+      },
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+        "dmabuf": true,
+        "scanouts": 3
+      },
+      "date": "2026-10-28"
+    },
+    "bench": {
+      "lordbench": 1,
+      "mode": "quick",
+      "seconds": 52,
+      "status": "done",
+      "stopReason": "",
+      "lordos": "0.8.7-beta",
+      "kernel": "6.12.57+deb13-amd64",
+      "arch": "x86_64",
+      "live": true,
+      "threads": 12,
+      "cpus": 12,
+      "quiet": {
+        "quiet": true,
+        "busyPct": 2.1,
+        "waitedS": 10
+      },
+      "before": {
+        "tempC": 47,
+        "zone": "x86_pkg_temp",
+        "power": "mains",
+        "governor": "powersave"
+      },
+      "after": {
+        "tempC": 71,
+        "zone": "x86_pkg_temp",
+        "power": "mains"
+      },
+      "storage": {
+        "kind": "none",
+        "mb": 0
+      },
+      "gpuKind": "hardware",
+      "sandbox": 62,
+      "session": {
+        "composition": "gpu",
+        "gpuInit": "on",
+        "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+        "displays": [
+          {
+            "connector": "eDP-1",
+            "builtin": true,
+            "mode": {
+              "w": 1920,
+              "h": 1200,
+              "refresh": 60000
+            },
+            "scale": 125,
+            "rotation": 0
+          }
+        ]
+      },
+      "results": {
+        "cpu.sha256.1": {
+          "value": 1950.2,
+          "spread": 12,
+          "unit": "MB/s"
+        },
+        "cpu.sha256.n": {
+          "value": 9100.4,
+          "spread": 80,
+          "unit": "MB/s"
+        },
+        "cpu.matmul.n": {
+          "value": 61.2,
+          "spread": 2,
+          "unit": "GFLOP/s"
+        },
+        "mem.copy": {
+          "value": 31.5,
+          "spread": 0.5,
+          "unit": "GB/s"
+        },
+        "mem.latency": {
+          "value": 96.1,
+          "spread": 2,
+          "unit": "ns",
+          "lowerBetter": true
+        },
+        "gpu.scene": {
+          "value": 1450,
+          "spread": 30,
+          "unit": "fps"
+        }
+      },
+      "skipped": {
+        "disk.seqwrite": "mode"
+      }
+    },
+    "desktop": null,
+    "expected": {
+      "format": "lordos-hwreport",
+      "version": 1,
+      "createdAt": "2026-10-28",
+      "source": "community",
+      "lordos": "0.8.7-beta",
+      "live": true,
+      "system": {
+        "machine": {
+          "vendor": "LENOVO",
+          "product": "21CB",
+          "version": "ThinkPad T14 Gen 3",
+          "boardVendor": "LENOVO",
+          "boardName": "21CB",
+          "chassis": "laptop",
+          "model": "",
+          "biosVendor": "LENOVO",
+          "biosVersion": "R23ET70W (1.46 )",
+          "biosDate": "06/14/2026",
+          "firmware": "uefi",
+          "secureBoot": false,
+          "virtualization": ""
+        },
+        "cpu": {
+          "model": "12th Gen Intel(R) Core(TM) i5-1235U",
+          "vendor": "GenuineIntel",
+          "arch": "x86_64",
+          "sockets": 1,
+          "cores": 10,
+          "threads": 12,
+          "minMHz": 400,
+          "maxMHz": 4400,
+          "governor": "powersave"
+        },
+        "memory": {
+          "totalKB": 16073328,
+          "swapKB": 8388604,
+          "zram": [
+            {
+              "sizeKB": 8038400,
+              "algorithm": "zstd"
+            }
+          ]
+        },
+        "gpus": [
+          {
+            "bus": "pci",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915",
+            "bootVga": true,
+            "renderNode": true,
+            "connectors": 4,
+            "connected": 1
+          }
+        ],
+        "displays": [
+          {
+            "connector": "eDP-1",
+            "enabled": true,
+            "name": "",
+            "manufacturer": "AUO",
+            "product": "403d",
+            "year": 2021,
+            "widthCm": 31,
+            "heightCm": 17,
+            "diagonalTenths": 140,
+            "nativeWidth": 1920,
+            "nativeHeight": 1200,
+            "mode": "1920x1200"
+          }
+        ],
+        "storage": [
+          {
+            "model": "SAMSUNG MZVL2512HCJQ-00BL7",
+            "vendor": "",
+            "bytes": 512110190592,
+            "rotational": false,
+            "removable": false,
+            "transport": "nvme",
+            "link": "PCIe 4.0 x4"
+          }
+        ],
+        "pci": [
+          {
+            "class": "030000",
+            "className": "VGA compatible controller",
+            "vendorId": "8086",
+            "deviceId": "46a8",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-UP3 GT2 [Iris Xe Graphics]",
+            "driver": "i915"
+          },
+          {
+            "class": "028000",
+            "className": "Network controller",
+            "vendorId": "8086",
+            "deviceId": "51f0",
+            "vendor": "Intel Corporation",
+            "device": "Alder Lake-P PCH CNVi WiFi",
+            "driver": "iwlwifi"
+          }
+        ],
+        "usb": [
+          {
+            "vendor": "Example 0",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 1",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 2",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 3",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 4",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 5",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 6",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 7",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 8",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 9",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 10",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 11",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 12",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 13",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 14",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 15",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 16",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 17",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 18",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 19",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 20",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 21",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 22",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 23",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 24",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 25",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 26",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 27",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 28",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 29",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 30",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 31",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 32",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 33",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 34",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 35",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 36",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 37",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 38",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 39",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 40",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 41",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 42",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 43",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 44",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 45",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 46",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 47",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 48",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 49",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 50",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 51",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 52",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 53",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 54",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 55",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 56",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 57",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 58",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 59",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 60",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 61",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 62",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 63",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 64",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 65",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 66",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 67",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 68",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          },
+          {
+            "vendor": "Example 69",
+            "product": "USB",
+            "vendorId": "8086",
+            "productId": "1234",
+            "driver": "usb"
+          }
+        ],
+        "network": [
+          {
+            "kind": "wifi",
+            "driver": "iwlwifi",
+            "up": true,
+            "speedMbps": null
+          },
+          {
+            "kind": "ethernet",
+            "driver": "e1000e",
+            "up": false,
+            "speedMbps": null
+          }
+        ],
+        "audio": [
+          "HDA Intel PCH"
+        ],
+        "bluetooth": [
+          {
+            "driver": "btusb"
+          }
+        ],
+        "power": [
+          {
+            "kind": "battery",
+            "vendor": "SMP",
+            "model": "5B10W51867",
+            "technology": "Li-poly",
+            "status": "Discharging",
+            "capacity": 87,
+            "health": 91,
+            "online": -1
+          },
+          {
+            "kind": "ac",
+            "vendor": "",
+            "model": "",
+            "technology": "",
+            "status": "",
+            "capacity": -1,
+            "health": -1,
+            "online": 0
+          }
+        ],
+        "thermal": [
+          {
+            "sensor": "x86_pkg_temp",
+            "milliC": 48000,
+            "fans": 1
+          }
+        ],
+        "software": {
+          "os": "Debian GNU/Linux 13 (trixie)",
+          "osId": "debian",
+          "osVersion": "13",
+          "kernel": "6.12.57+deb13-amd64",
+          "lordos": "0.8.7-beta",
+          "lsm": "lockdown,capability,landlock,yama,apparmor,bpf",
+          "landlockAbi": 6,
+          "bpfLsm": true,
+          "cgroup2": true,
+          "live": true,
+          "bootMedium": "usb",
+          "bootLinkMbps": 5000,
+          "bootToRam": false,
+          "kernelConfig": {
+            "CONFIG_SECURITY_LANDLOCK": "y",
+            "CONFIG_BPF_LSM": "y"
+          },
+          "services": {
+            "lord-sessiond": true,
+            "lord-netd": true,
+            "axia-netperm": true,
+            "axia-fand": false
+          }
+        },
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+          "dmabuf": true,
+          "scanouts": 3
+        }
+      },
+      "compatibility": [
+        {
+          "id": "gpu",
+          "state": "works",
+          "note": "gpuComposes"
+        },
+        {
+          "id": "display",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "storage",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "network",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "wifi",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "bluetooth",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "audio",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "power",
+          "state": "works",
+          "note": "batteryHealth"
+        },
+        {
+          "id": "isolation",
+          "state": "works",
+          "note": null
+        },
+        {
+          "id": "suspend",
+          "state": "unchecked",
+          "note": null
+        }
+      ],
+      "bench": {
+        "lordbench": 1,
+        "mode": "quick",
+        "seconds": 52,
+        "status": "done",
+        "stopReason": "",
+        "lordos": "0.8.7-beta",
+        "kernel": "6.12.57+deb13-amd64",
+        "arch": "x86_64",
+        "live": true,
+        "threads": 12,
+        "cpus": 12,
+        "quiet": {
+          "quiet": true,
+          "busyPct": 2.1,
+          "waitedS": 10
+        },
+        "before": {
+          "tempC": 47,
+          "zone": "x86_pkg_temp",
+          "power": "mains",
+          "governor": "powersave"
+        },
+        "after": {
+          "tempC": 71,
+          "zone": "x86_pkg_temp",
+          "power": "mains"
+        },
+        "storage": {
+          "kind": "none",
+          "mb": 0
+        },
+        "gpuKind": "hardware",
+        "sandbox": 62,
+        "session": {
+          "composition": "gpu",
+          "gpuInit": "on",
+          "renderer": "Mesa Intel(R) Graphics (ADL GT2)",
+          "displays": [
+            {
+              "connector": "eDP-1",
+              "builtin": true,
+              "mode": {
+                "w": 1920,
+                "h": 1200,
+                "refresh": 60000
+              },
+              "scale": 125,
+              "rotation": 0
+            }
+          ]
+        },
+        "results": {
+          "cpu.sha256.1": {
+            "value": 1950.2,
+            "spread": 12,
+            "unit": "MB/s"
+          },
+          "cpu.sha256.n": {
+            "value": 9100.4,
+            "spread": 80,
+            "unit": "MB/s"
+          },
+          "cpu.matmul.n": {
+            "value": 61.2,
+            "spread": 2,
+            "unit": "GFLOP/s"
+          },
+          "mem.copy": {
+            "value": 31.5,
+            "spread": 0.5,
+            "unit": "GB/s"
+          },
+          "mem.latency": {
+            "value": 96.1,
+            "spread": 2,
+            "unit": "ns",
+            "lowerBetter": true
+          },
+          "gpu.scene": {
+            "value": 1450,
+            "spread": 30,
+            "unit": "fps"
+          }
+        },
+        "skipped": {
+          "disk.seqwrite": "mode"
+        }
+      },
+      "desktop": null
+    }
+  }
+]

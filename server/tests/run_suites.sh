@@ -179,20 +179,21 @@ EOF
         run "native-notes-test (native clipboard, menus, input and desktop startup)" node tests/native_notes_test.mjs
         run "native-media-test (native session ownership and permissions)" node tests/native_media_test.mjs
         run "native-backup-test (status ownership and backup operations)" node tests/native_backup_test.mjs
+        run "native-sysinfo-test (private-query lifetime and exact exports)" node tests/native_sysinfo_services_test.mjs
     else skip "pdf-model-test" "node, cargo and node_modules/esbuild"; fi
-    # (0.8.5) System Information's model (apps/sysinfo/model.js): GPU layers, CPU reasons, Compatibility
+    # (0.8.5) System Information's model (apps/sysinfo/model.rs): GPU layers, CPU reasons, Compatibility
     if have node && have cargo; then
         run "app-model-test-adapter" cargo build --manifest-path ../rust/Cargo.toml --locked --offline --example app-model
-        run "sysinfo-model-test (Rust checks and apps/sysinfo/model.js)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_model_test.mjs
+        run "sysinfo-model-test (Rust checks and apps/sysinfo/model.rs)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_model_test.mjs
         if [ -d ../node_modules/esbuild ]; then run "app-model-bridge-test" node tests/app_model_bridge_test.mjs
         else skip "app-model-bridge-test" "node_modules/esbuild"; fi
     else skip "sysinfo-model-test" "node and cargo"; fi
-    # (0.8.6) LordBench's model (apps/sysinfo/perf.js): references, verdicts, comparisons
+    # (0.8.6) LordBench's model (apps/sysinfo/perf.rs): references, verdicts, comparisons
     if have node && have cargo; then run "sysinfo-perf-test (Rust benchmark model)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_perf_test.mjs
     else skip "sysinfo-perf-test" "node and cargo"; fi
-    # (0.8.7) community hardware reports: the schema, Share on GitHub (apps/sysinfo/share.js), the workflow's
+    # (0.8.7) community hardware reports: the schema, Share on GitHub (tools/hwreport/share.js), the workflow's
     # checks (tools/hwreport/lib.mjs), the catalogue and its snapshot, the Compatibility panel's community data
-    if have node && have cargo; then run "hwreport-test (tools/hwreport, apps/sysinfo/share.js)" node --import ./tests/native_app_model_node.mjs tests/hwreport_test.mjs
+    if have node && have cargo; then run "hwreport-test (tools/hwreport, tools/hwreport/share.js)" node --import ./tests/native_app_model_node.mjs tests/hwreport_test.mjs
     else skip "hwreport-test" "node and cargo"; fi
     # (0.8.6) runtime/index.js's skip of unchanged styles sends the same lord.* calls as without it
     if have node && [ -d ../node_modules/esbuild ] && [ -d ../node_modules/react-reconciler ]; then

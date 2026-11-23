@@ -55,7 +55,8 @@ independentes da forma como o app executa.
 
 **Já em Rust, sem React:** Monitor, Calculadora, Axia Store, Sobre, Ajuda, Relógio,
 Caracteres, Notas, Lembretes, Contatos, Calendário, Câmera, Fotos, Gravador,
-Scanner, Backup, Registros, Fontes, Force Quit, Configurações e Arquivos. Host em `rust/axia-shell/src/native_view/`.
+Scanner, Backup, Registros, Fontes, Force Quit, Configurações, Arquivos e
+Informações do Sistema. Host em `rust/axia-shell/src/native_view/`.
 
 **Menus definitivos em Rust:** barra de menus e menus de contexto da sessão;
 as chaves `menuBarNativeView` e `menuNativeView` não selecionam mais caminhos.
@@ -86,7 +87,7 @@ Fase 3. Efeitos e serviços seguem no adaptador JS até as fases seguintes.
 
 **Fase 1 concluída:** as chaves listadas foram retiradas dos caminhos ativos.
 O item `lordNativeView` foi auditado e documentado abaixo: não existe como
-preferência no código atual. O trabalho atual é a Fase 2; validação física
+preferência no código atual. O trabalho atual abrange as Fases 2 e 5; validação física
 e medições continuam reservadas ao encerramento.
 
 **Já em Rust no lado dos modelos:** lista de janelas, desktops e encaixe
@@ -95,8 +96,8 @@ brilho e energia, método de entrada, aparência.
 
 **Ainda em JavaScript:**
 
-- 9 apps: `disks`, `editor`, `mail`, `passwords`, `pdf`, `player`,
-  `screenshots`, `sysinfo`, `terminal`.
+- 8 apps: `disks`, `editor`, `mail`, `passwords`, `pdf`, `player`,
+  `screenshots`, `terminal`.
 - `sdk/`: 122 arquivos JS/JSX na árvore de 2026-11-23. A divisão histórica da Fase 0 está em
   `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
 - `themes/default/` (a montagem da shell) e `runtime/` (reconciler React e eventos).
@@ -704,7 +705,12 @@ Fatias de interface (cada uma completa, com seus chamadores):
 
 Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
 
-- [ ] `sysinfo`
+- [x] `sysinfo`: seis abas, ícone, comandos, consultas privadas, testes de
+      sandbox/benchmark, relatórios e prévia de compartilhamento no host Rust.
+      JSX e manifesto JSON retirados; ferramentas de relatório ficam em
+      `tools/hwreport` e adaptadores históricos somente nos testes. Coletores,
+      efeitos e montagem geral da janela continuam nos transportes da sessão.
+      Ver [RUST-SYSINFO.md](RUST-SYSINFO.md).
 - [ ] `disks`
 - [ ] `screenshots`
 - [ ] `pdf`
@@ -879,3 +885,4 @@ mostraram.
 | 2026-11-23 | Fase 2: indicador e entrada física dos desktops no Session Rust | `c40694e6` | Serviço da cena cria o indicador na camada compartilhada 80, sem componente/handle/show JS na sessão; export mantém somente host isolado. Raiz/geração/proprietário fraco preservam portais e nós reciclados; remontar ou retirar o componente React não reinicia o prazo. Ctrl+setas macOS respeita desktopArrows, Meta+Ctrl+setas funciona nos dois perfis e Linux cria/fecha por Meta+Ctrl+D/F4 antes do Wayland/IME/JS. Perfil, RTL, repetição, soltura tardia e limites são nativos; pedidos explícitos e gestos mostram limites no Rust. Passaram 711 testes da shell (sete ignorados), oito contratos LPK, quatro cenários do indicador, oito do alternador e dezesseis de animação/foco/comandos/menu Janela. Prova física com espelhos parados exige zero pedidos JSON de desktop e nenhum Super tap. Build GPU=1, bundles, plataforma/ABI, instalação privada e switcher-check instalado passaram. Oito capturas do alternador idênticas às de native-window-input; indicadores mínimos inspecionados e pixels verificados. A regressão de animação amostra y=240 para testar posição/opacidade/transformação fora da sombra do indicador que agora aparece no fixture. Ociosidade, três amostras por rodada e limites mantidos: inicial 15,100 poll/s e 104,949 MiB (poll excedido); referência anterior 13,450 poll/s e 105,430 MiB; confirmação nova 12,550 poll/s e 104,922 MiB aprovada. Relatórios preservados; sem prova de ganho causal. Fontes comparadas byte a byte. Evidências em build/validation/native-desktop-keys. Overview, outros gestos/atalhos, raiz/portais, espelhos e demais consumidores continuam no escopo; nenhuma fase inteira concluída. Medições físicas no encerramento. |
 | 2026-11-23 | Fase 2: reconhecimento e execução dos swipes de sistema no Session Rust | `e2b7840f` | Rota real de touch preserva reserva sistema/app; js_gesture entrega o swipe reservado ao Rust antes de __lordGesture. Session acumula updates, aplica limiar de 60 px/eixo dominante, cancela e conclui uma vez, sem polling. Horizontais executam com modelo/locale atuais e mostram o limite no indicador; verticais publicam somente direção reconhecida para as telas JS restantes. Raiz/geração descartam conclusões antigas; alternador aberto tem prioridade. Retirados a acumulação JS da sessão e os callbacks horizontais do tema; host isolado conserva compatibilidade. Passaram 715 testes da shell (sete ignorados), oito contratos LPK e 32 cenários gráficos/funcionais: quatro swipes novos, quatro indicador, oito alternador e dezesseis animação/foco/comandos/menu Janela. Prova pelo roteamento real confirma zero eventos JS brutos de sistema, zero pedidos JSON de comando, fluxo de apps preservado, RTL durante o gesto, threeDrag e espelhos parados. Teste exigido no CI GPU=1 com capturas. Build GPU=1, bundles, plataforma/ABI, instalação privada e switcher-check instalado passaram. Oito capturas do alternador idênticas às de native-desktop-keys; mínimos claro/escuro do novo fluxo inspecionados, com pixels nativos exigidos. Três amostras ociosas e limites impostos: 13,400 poll/s e 105,102 MiB; sem prova de ganho causal. Evidências em build/validation/native-system-swipes. Configuração do driver, vigilância de dispositivos, ações verticais, demais consumidores e interfaces JS continuam no escopo; nenhuma fase inteira concluída. Medições físicas no encerramento. |
 | 2026-11-23 | Fase 2: atalhos físicos de Arquivos, Configurações e Monitor em Rust | Commit desta linha | Perfil Linux e layout nativos reconhecem Meta+E, Meta+I e Ctrl+Shift+Escape antes de Wayland/IME/JS. Repetições e solturas pertencem ao Rust; alternador tem prioridade. shellLaunch publica app e geração, com descarte na drenagem para raiz antiga. SDK mantém rótulos e a abertura por wm.open; catálogo, carregamento e montagem geral continuam pendentes. Passaram 719 testes da shell (sete ignorados), oito contratos LPK e 28 cenários gráficos/funcionais, incluindo quatro novos com perfil JS macOS congelado e uma abertura por tecla. Consultas shellKeyboard de compatibilidade permanecem; nenhum evento de tecla ou pedido de seleção de comando pelo JS. Build GPU=1, bundles, plataforma/ABI, instalação privada e switcher-check instalado passaram. Doze fontes comparadas byte a byte; oito PNGs do alternador idênticos aos da correção do vidro. Três amostras ociosas: medianas 14,500 poll/s e 105,027 MiB, dentro dos limites impostos; poll variou de 12,200 a 16,850 nas amostras, com relatório integral preservado e sem prova de ganho causal. Evidências em build/validation/native-launch-input. Nenhuma fase inteira concluída; medições físicas no encerramento. |
+| 2026-11-23 | Fase 5: Informações do Sistema no host Rust | Commit desta linha | Seis abas, ícone, comandos, consultas privadas, controle dos testes, exportação e prévia de compartilhamento nativos; JSX e manifesto JSON apagados. Host protege capturas antes da árvore privada; ocultar/fechar descarta respostas antigas e respeita nós reciclados. Ferramentas puras em tools/hwreport, adaptadores históricos somente nos testes. Passaram 15 testes do app, 17 do suporte, 720 da shell (sete ignorados), oito contratos LPK e 16 cenários gráficos (oito Sysinfo, oito alternador); seis referências do construtor anterior conferem o compartilhamento. JSON/Markdown salvos iguais à prévia, exportação do resultado recente e proteção por pixels verificados. CI publica capturas; inspeção em 760/960 px, claro/escuro, Axia/Adwaita. Build GPU=1, plataforma/ABI e instalação privada passaram; oito PNGs do alternador idênticos. Três amostras ociosas finais: 12,400 poll/s e 104,102 MiB, dentro dos limites; rodada inicial preservada, sem prova de ganho causal. Fontes validadas byte a byte. Evidências em build/validation/native-sysinfo e detalhes em RUST-SYSINFO.md. Restam oito apps da fase; coletores, efeitos e montagem da sessão ainda usam transportes JS. Medições físicas no encerramento. |

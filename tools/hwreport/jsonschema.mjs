@@ -1,4 +1,4 @@
-// jsonschema.mjs — the small subset of JSON Schema (2020-12) that apps/sysinfo/hwreport.schema.json uses,
+// jsonschema.mjs — the small subset of JSON Schema (2020-12) that tools/hwreport/hwreport.schema.json uses,
 // with no dependencies (the repository has no JSON Schema validator and the workflow installs nothing).
 //
 //   validate(schema, value, { maxErrors }) → [{ path, message }]   (empty when the value is valid)

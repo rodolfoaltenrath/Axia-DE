@@ -9,8 +9,8 @@
 // (never evaluated) with depth and size limits, and only values that passed the schema reach the comment,
 // inside code spans. Labels come from fixed lists, never from the report's text.
 import { validate } from './jsonschema.mjs';
-import { REFERENCES } from '../../apps/sysinfo/references.js';
-import { reportKind, gpuVendor, cpuVendor, machineLabel, sameVersion, mainGpu, bootInfo, BOOT_MEDIA, FORMAT } from '../../apps/sysinfo/share.js';
+import { REFERENCES } from './references.js';
+import { reportKind, gpuVendor, cpuVendor, machineLabel, sameVersion, mainGpu, bootInfo, BOOT_MEDIA, FORMAT } from './share.js';
 
 export const MAX_BYTES = 512 * 1024;
 export const MAX_DEPTH = 12;

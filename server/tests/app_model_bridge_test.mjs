@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { REFERENCES as sourceReferences } from '../../apps/sysinfo/references.js';
+import { REFERENCES as sourceReferences } from '../../tools/hwreport/references.js';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const sent = [];
 const create = lord.nativeApps.create;
@@ -14,9 +14,9 @@ lord.nativeApps.create = app => {
 };
 const result = await build({ stdin: { contents: `
   export * as terminal from './apps/terminal/profiles.js';
-  export * as checks from './apps/sysinfo/checks.js';
-  export * as hardware from './apps/sysinfo/model.js';
-  export * as perf from './apps/sysinfo/perf.js';
+  export * as checks from './server/tests/support/sysinfo/checks.js';
+  export * as hardware from './server/tests/support/sysinfo/model.js';
+  export * as perf from './server/tests/support/sysinfo/perf.js';
   export * as keys from './apps/terminal/keys.js';
   export { settings } from '@lordos/sdk';
 `, resolveDir: root }, bundle: true, write: false, format: 'esm', platform: 'node', plugins: [{

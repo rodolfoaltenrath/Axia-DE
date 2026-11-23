@@ -257,7 +257,7 @@ keyboard test can't light them; the bench should list them as taken by the syste
 **Phase 4 (2026-10-26): the report in System Information.** The bench writes its last report to
 `~/.local/state/axia/testbench.json` (atomically, after its checklist and on exit); System Information →
 Checks shows it (Wayland protocols, the 3D renderer, whether frames reach the screen, input-to-screen
-latency; `evaluateBench` in `apps/sysinfo/checks.js`, tested) with **Open Test Bench**, which launches it like any
+latency; `evaluateBench` in `apps/sysinfo/checks.rs`, tested) with **Open Test Bench**, which launches it like any
 Linux app.
 
 ![The Test Bench in System Information](sysinfo-bench.png)

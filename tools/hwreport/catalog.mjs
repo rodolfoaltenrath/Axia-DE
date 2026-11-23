@@ -20,11 +20,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validate } from './jsonschema.mjs';
-import { deviceKeys, SNAPSHOT_FORMAT, COMPONENTS } from '../../apps/sysinfo/community.js';
-import { reportKind, machineLabel, gpuVendor, mainGpu } from '../../apps/sysinfo/share.js';
+import { deviceKeys, SNAPSHOT_FORMAT, COMPONENTS } from './community.js';
+import { reportKind, machineLabel, gpuVendor, mainGpu } from './share.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-export const SCHEMA_FILE = path.join(REPO, 'apps/sysinfo/hwreport.schema.json');
+export const SCHEMA_FILE = path.join(REPO, 'tools/hwreport/hwreport.schema.json');
 export const REPORTS_DIR = path.join(REPO, 'tools/hwreport/reports');
 export const SNAPSHOT_FILE = path.join(REPO, 'assets/hwreport/snapshot.json');
 export const loadSchema = () => JSON.parse(fs.readFileSync(SCHEMA_FILE, 'utf8'));
