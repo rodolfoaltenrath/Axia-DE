@@ -32,6 +32,7 @@ pub(crate) struct Service {
     mounted: Option<Mount>,
     pending: VecDeque<(u64, Value)>,
     input: super::shell_input::Input,
+    commands: crate::forcequit::App,
 }
 impl Service {
     pub(crate) fn new(owner: &Session) -> Self {
@@ -40,7 +41,7 @@ impl Service {
         let home = super::resource_roots().1.unwrap_or_default();
         Self { owner: owner.downgrade(), root: None, layers: BTreeMap::new(),
             opening, changes, mounted: None, pending: VecDeque::new(), input: super::shell_input::Input::new(&home),
-        }
+            commands: crate::forcequit::App::with_window_metadata(std::rc::Rc::new(crate::winmodel::WindowReader(owner.reader())),owner.catalog_store()) }
     }
     fn root_live(&self) -> bool {
         self.root.is_some_and(|root| scene::root() == Some((root.0,root.1)))
@@ -105,6 +106,10 @@ impl Service {
         match self.input.claim(nonce.is_some(),code,value,key,flags,enabled) {
             Claim::Pass => return 0,
             Claim::Consumed => {},
+            Claim::Window(command) => {
+                let reply = crate::app_control::window_command(owner,&self.commands,command,None,&Value::Null);
+                if reply["state"].is_object() { owner.queue_service_effects(vec![json!({"kind":"windowModel","reply":reply})]); }
+            },
             Claim::Open { hold,back } => {
                 let (fullscreen,surface) = crate::app_control::switcher_source::current();
                 if let Ok(reply) = owner.prepare_switcher(fullscreen,surface,hold,back) {

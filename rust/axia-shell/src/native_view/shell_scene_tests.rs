@@ -1,6 +1,8 @@
 use super::*;
 use crate::app_control::Controller;
 use std::time::Instant;
+#[path = "shell_window_input_tests.rs"]
+mod window_input;
 
 fn fixture() -> (Session,Controller,i32) {
     fixture_home(None)

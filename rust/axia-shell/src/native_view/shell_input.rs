@@ -3,7 +3,7 @@ use axia_state::{Reader, Subscription};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
-pub(super) enum Claim { Pass, Consumed, Active, Open { hold: i32, back: bool } }
+pub(super) enum Claim { Pass, Consumed, Active, Open { hold: i32, back: bool }, Window(crate::winmodel::AppCommand) }
 pub(super) struct Input {
     preferences: Reader<Value>,
     changes: Subscription,
@@ -33,6 +33,28 @@ impl Input {
     pub(super) fn modifier(code: i32) -> bool { Self::modifier_mask(code) != 0 }
     fn modifier_mask(code: i32) -> i32 {
         match code { 42 | 54 => 1, 29 | 97 => 2, 56 => 4, 100 => 4 | 8, 125 | 126 => 16, _ => 0 }
+    }
+    fn window_command(&self, code: i32, key: &str, flags: i32) -> Option<crate::winmodel::AppCommand> {
+        use crate::winmodel::{AppCommand as Command, WindowMenuAction};
+        let letter = crate::keygrab::letter(code,key.as_bytes());
+        if !self.linux {
+            match (letter,flags) {
+                (b'm',16) => return Some(Command::WindowAction(WindowMenuAction::Minimize)),
+                (b'h',16) => return Some(Command::Hide),
+                (b'h',20) => return Some(Command::HideOthers),
+                _ => {},
+            }
+            if code==87 && flags==16 { return Some(Command::ToggleDesktop); }
+        } else {
+            match (letter,flags) {
+                (b'h',16) => return Some(Command::WindowAction(WindowMenuAction::Minimize)),
+                (b'd',16) => return Some(Command::ToggleDesktop),
+                _ => {},
+            }
+        }
+        let modifier = if self.linux { 4 } else { 16 };
+        if code==41 && letter==0 && flags & !1==modifier { return Some(Command::Cycle(flags & 1!=0)); }
+        None
     }
     pub(super) fn claim(&mut self, active: bool, code: i32, value: i32, key: &str, flags: i32, enabled: bool) -> Claim {
         let mask = Self::modifier_mask(code);
@@ -65,6 +87,13 @@ impl Input {
                 self.taken.insert(code);
                 self.held_modifiers |= mods;
                 return Claim::Open { hold, back: mods & 1 != 0 };
+            }
+        }
+        if enabled && value==1 {
+            if let Some(command) = self.window_command(code,key,mods) {
+                self.taken.insert(code);
+                self.held_modifiers |= mods;
+                return Claim::Window(command);
             }
         }
         Claim::Pass

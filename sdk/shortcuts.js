@@ -30,12 +30,12 @@ import { toggleEmojiPanel } from './emoji.jsx';
 import { quitFrontApp } from './dock.js';
 import { hasNowPlaying, mediaToggle, mediaNext, mediaPrev, mediaStop } from './media.js';
 import { wm } from './windows.js';
-import { cancelSwitcher, cycleAppWindows } from './appswitcher.jsx';
+import { cancelSwitcher } from './appswitcher.jsx';
 import { syncNativeCatalog } from './nativecatalog.js';
 import { useSettings } from './settings.js';
 import { shortcutProfile, profileEntry } from './shortcutprofile.js';
 import { flowDesktopKeys, linuxDesktopKeys } from './desktops.js';
-import { hideApp, hideOthers, toggleShowDesktop, appSettingsItem } from './appcontrol.js';
+import { appSettingsItem } from './appcontrol.js';
 
 const MOD_BITS = { Shift: 1, Alt: 2, Ctrl: 4, Meta: 8 };
 const NAMED = {
@@ -105,12 +105,12 @@ const front = (fn) => () => { const id = wm.focused(); if (id) fn(id); };
 const SNAP_CODES = { 103: 'up', 105: 'left', 106: 'right', 108: 'down' };
 const COMMON = [
   { id: 'switchApps', native: true },
-  { id: 'cycleWindows', run: (e) => cycleAppWindows(e.shift) },
-  { id: 'minimize', run: front(wm.minimize) },
-  { id: 'hide', run: () => hideApp() },
-  { id: 'hideOthers', run: () => hideOthers() },
+  { id: 'cycleWindows', native: true },
+  { id: 'minimize', native: true },
+  { id: 'hide', native: true },
+  { id: 'hideOthers', native: true },
   { id: 'closeWindow', run: front(wm.close) },
-  { id: 'showDesktop', run: toggleShowDesktop },
+  { id: 'showDesktop', native: true },
   { id: 'files', run: () => wm.open('files'), group: 'apps' },
   { id: 'settings', run: () => wm.open('settings'), group: 'apps' },
   { id: 'monitor', run: () => wm.open('monitor'), group: 'apps' },
