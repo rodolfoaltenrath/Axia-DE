@@ -220,7 +220,7 @@ impl Memory {
         }
         let mut updates = Vec::new();
         for w in state.windows() {
-            if !crate::window_policy::remembers(crate::winmodel::truthy(&w.args()["dialog"]))
+            if !crate::window_policy::remembers(crate::winmodel::truthy(&w.args()["dialog"]), crate::winmodel::truthy(&w.args()["auxiliary"]))
                 || (!w.id().starts_with("linux#")
                     && registry
                         .iter()

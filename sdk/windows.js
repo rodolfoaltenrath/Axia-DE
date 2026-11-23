@@ -68,9 +68,9 @@ let linuxPlacement = null;
 export function setLinuxPlacement(fn) { linuxPlacement = fn; }
 export const placeLinuxWindow = (dockId) => (linuxPlacement ? linuxPlacement(dockId) : null);
 // Where a Linux app's new window opens and which windows the session remembers: Rust decides
-// (lord.wm.policy, rust/axia-shell/src/window_policy.rs); dialogs never take or leave a saved frame.
+// (lord.wm.policy, rust/axia-shell/src/window_policy.rs); dialogs and auxiliary windows never take or leave a saved frame.
 export const windowPolicy = (input) => (typeof lord !== 'undefined' && lord.wm?.policy ? lord.wm.policy(JSON.stringify(input)) : null);
-export const remembersWindow = (w) => windowPolicy({ op: 'remembers', dialog: !!w.args?.dialog })?.remembers === true;
+export const remembersWindow = (w) => windowPolicy({ op: 'remembers', dialog: !!w.args?.dialog, auxiliary: !!w.args?.auxiliary })?.remembers === true;
 const guards = new Map();
 
 // ---- the window list, in Rust (lord.windowList: rust/axia-shell/src/winmodel/session.rs) ----

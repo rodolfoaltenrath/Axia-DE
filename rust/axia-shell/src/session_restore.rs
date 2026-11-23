@@ -250,7 +250,7 @@ impl Service {
         let mut list = Vec::new();
         for w in state.windows() {
             if w.pip()
-                || !crate::window_policy::remembers(crate::winmodel::truthy(&w.args()["dialog"]))
+                || !crate::window_policy::remembers(crate::winmodel::truthy(&w.args()["dialog"]), crate::winmodel::truthy(&w.args()["auxiliary"]))
             {
                 continue;
             }

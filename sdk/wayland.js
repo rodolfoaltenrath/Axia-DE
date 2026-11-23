@@ -77,11 +77,15 @@ globalThis.__lordWayland = (sid, type, d = {}) => {
       if (d.fixed) args.fixedLinux = true;
       // Rust decides (window_policy.rs): a dialog never takes, nor uses up, a frame saved for its app
       const dockId = dockIdOfWindow({ id, args });
-      const remembered = windowPolicy({ op: 'remembers', dialog: !!d.dialog })?.remembers === true;
+      // the app's windows already open that are neither dialogs nor auxiliary: Rust treats a new window opening
+      // beside them (Steam's friends list, a sign-in pop-up) as auxiliary: its own size, nothing remembered
+      const siblings = windows.get().filter((w) => dockIdOfWindow(w) === dockId && !w.args?.dialog && !w.args?.auxiliary).length;
+      const remembered = windowPolicy({ op: 'remembers', dialog: !!d.dialog, siblings })?.remembers === true;
       const saved = remembered ? placeLinuxWindow(dockId) : null;     // session restore: the place it had
       const kept = remembered && !saved ? rememberedFrame(dockId, { fixed: !!d.fixed, size: [d.width + c.w, d.height + c.h] }) : null;
       const plan = windowPolicy({ op: 'placeLinux', area, chrome: windowChrome(), csd: !!d.csd, width: d.width, height: d.height,
-        count: windows.get().length, dialog: !!d.dialog, saved: saved?.frame || null, kept: kept || null });
+        count: windows.get().length, dialog: !!d.dialog, siblings, saved: saved?.frame || null, kept: kept || null });
+      if (plan.auxiliary) args.auxiliary = true;
       wm.open('linux', {
         instance: String(sid),
         frame: plan.frame,

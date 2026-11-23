@@ -5,6 +5,12 @@
 //! never saved itself. Before this lived in Rust, a VS Code dialog shared the Dock id of the editor,
 //! took the editor's restored frame (1595×570 for a two-button question) and also used up that slot, so
 //! the editor's own window lost its place. sdk/wayland.js only gathers the facts and applies the frame.
+//!
+//! The same goes for an app's *auxiliary* window: one that opens while another window of the app is
+//! already open and is not that window's dialog (Steam's friends list or its "sign in with Google"
+//! popup, a browser's pop-up). It keeps the size it asked for: the app's remembered place belongs to
+//! its main window, and taking it made every auxiliary window open as large as the main one, maximized
+//! when the main one was.
 use serde_json::{json, Value};
 use std::ffi::{c_char, CStr, CString};
 
@@ -27,24 +33,32 @@ impl Rect {
     }
 }
 
-/// Whether session restore and the per-app window memory keep this window.
-pub fn remembers(dialog: bool) -> bool {
-    !dialog
+/// Whether session restore and the per-app window memory keep this window: neither a dialog nor an
+/// auxiliary window of its app.
+pub fn remembers(dialog: bool, auxiliary: bool) -> bool {
+    !dialog && !auxiliary
+}
+
+/// An auxiliary window: a window that is not a dialog opening while the app has a main window open.
+/// `siblings` counts the app's open windows that are neither dialogs nor auxiliary.
+pub fn is_auxiliary(dialog: bool, siblings: u64) -> bool {
+    !dialog && siblings > 0
 }
 
 /// The new window's frame. `saved` (session restore) wins over `kept` (the app's remembered place),
 /// which wins over the computed one: its own size, centred in the work area, cascaded by `count`.
-/// A dialog only ever gets the computed one.
+/// A dialog, or an auxiliary window, only ever gets the computed one.
 pub fn place(
     area: Rect,
     chrome: (f64, f64),
     size: (f64, f64),
     count: u32,
     dialog: bool,
+    auxiliary: bool,
     saved: Option<Rect>,
     kept: Option<(Rect, bool)>,
 ) -> (Rect, &'static str, bool) {
-    if remembers(dialog) {
+    if remembers(dialog, auxiliary) {
         if let Some(f) = saved {
             return (f, "saved", false);
         }
@@ -64,7 +78,10 @@ pub fn place(
 
 pub fn request(input: &Value) -> Value {
     match input["op"].as_str().unwrap_or("") {
-        "remembers" => json!({"remembers": remembers(input["dialog"] == true)}),
+        "remembers" => {
+            let dialog = input["dialog"] == true;
+            json!({"remembers": remembers(dialog, is_auxiliary(dialog, input["siblings"].as_u64().unwrap_or(0)) || input["auxiliary"] == true)})
+        }
         "placeLinux" => {
             let Some(area) = Rect::from(&input["area"]) else {
                 return json!({"error":"app.invalidRequest"});
@@ -72,16 +89,19 @@ pub fn request(input: &Value) -> Value {
             let n = |v: &Value| v.as_f64().filter(|n| n.is_finite() && *n >= 0.).unwrap_or(0.);
             let chrome = if input["csd"] == true { (0., 0.) } else { (n(&input["chrome"]["w"]), n(&input["chrome"]["h"])) };
             let kept = Rect::from(&input["kept"]).map(|r| (r, input["kept"]["maximized"] == true));
+            let dialog = input["dialog"] == true;
+            let auxiliary = is_auxiliary(dialog, input["siblings"].as_u64().unwrap_or(0)) || input["auxiliary"] == true;
             let (frame, source, maximize) = place(
                 area,
                 chrome,
                 (n(&input["width"]), n(&input["height"])),
                 input["count"].as_u64().unwrap_or(0).min(u64::from(u32::MAX)) as u32,
-                input["dialog"] == true,
+                dialog,
+                auxiliary,
                 Rect::from(&input["saved"]),
                 kept,
             );
-            json!({"frame":frame.json(),"source":source,"maximize":maximize})
+            json!({"frame":frame.json(),"source":source,"maximize":maximize,"auxiliary":auxiliary})
         }
         _ => json!({"error":"app.invalidRequest"}),
     }
@@ -117,11 +137,11 @@ mod tests {
     #[test]
     fn a_dialog_never_takes_a_saved_or_remembered_frame() {
         // VS Code's "Open this website?" (an 400 × 160 GTK dialog) while the editor's frame is saved
-        let (f, source, max) = place(AREA, (2., 43.), (400., 160.), 1, true, Some(EDITOR), Some((EDITOR, true)));
+        let (f, source, max) = place(AREA, (2., 43.), (400., 160.), 1, true, false, Some(EDITOR), Some((EDITOR, true)));
         assert_eq!(source, "computed");
         assert!(!max);
         assert_eq!((f.w, f.h), (402., 203.), "its own size, not the editor's");
-        assert!(!remembers(true) && remembers(false));
+        assert!(!remembers(true, false) && remembers(false, false) && !remembers(false, true));
         // the request tells the shell the slot wasn't used: the editor still finds it
         let r = request(&json!({"op":"placeLinux","area":AREA.json(),"chrome":{"w":2,"h":43},"width":400,"height":160,
             "count":1,"dialog":true,"saved":EDITOR.json(),"kept":{"x":1,"y":40,"w":900,"h":700,"maximized":true}}));
@@ -132,19 +152,19 @@ mod tests {
     #[test]
     fn an_app_window_prefers_session_restore_then_its_remembered_place() {
         let kept = Rect { x: 10., y: 40., w: 900., h: 700. };
-        assert_eq!(place(AREA, (2., 43.), (800., 600.), 0, false, Some(EDITOR), Some((kept, true))), (EDITOR, "saved", false));
-        assert_eq!(place(AREA, (2., 43.), (800., 600.), 0, false, None, Some((kept, true))), (kept, "kept", true));
-        assert_eq!(place(AREA, (2., 43.), (800., 600.), 0, false, None, None).1, "computed");
+        assert_eq!(place(AREA, (2., 43.), (800., 600.), 0, false, false, Some(EDITOR), Some((kept, true))), (EDITOR, "saved", false));
+        assert_eq!(place(AREA, (2., 43.), (800., 600.), 0, false, false, None, Some((kept, true))), (kept, "kept", true));
+        assert_eq!(place(AREA, (2., 43.), (800., 600.), 0, false, false, None, None).1, "computed");
     }
 
     #[test]
     fn computed_frames_cascade_and_stay_in_the_work_area() {
-        let (a, ..) = place(AREA, (2., 43.), (800., 600.), 0, false, None, None);
-        let (b, ..) = place(AREA, (2., 43.), (800., 600.), 1, false, None, None);
+        let (a, ..) = place(AREA, (2., 43.), (800., 600.), 0, false, false, None, None);
+        let (b, ..) = place(AREA, (2., 43.), (800., 600.), 1, false, false, None, None);
         assert_eq!((b.x - a.x, b.y - a.y), (24., 24.));
-        assert_eq!(place(AREA, (2., 43.), (800., 600.), 5, false, None, None).0, a, "the cascade wraps every 5");
+        assert_eq!(place(AREA, (2., 43.), (800., 600.), 5, false, false, None, None).0, a, "the cascade wraps every 5");
         // bigger than the area: it fits, never under the menu bar or off screen
-        let (big, ..) = place(AREA, (2., 43.), (4000., 3000.), 3, false, None, None);
+        let (big, ..) = place(AREA, (2., 43.), (4000., 3000.), 3, false, false, None, None);
         assert_eq!(big, AREA);
         // a CSD window (the app draws its frame) takes no chrome
         let r = request(&json!({"op":"placeLinux","area":AREA.json(),"chrome":{"w":2,"h":43},"csd":true,"width":800,"height":600}));
@@ -159,5 +179,29 @@ mod tests {
         // a non-finite or negative size is never trusted
         let r = request(&json!({"op":"placeLinux","area":AREA.json(),"width":-5,"height":"x"}));
         assert!(r["frame"]["w"].as_f64().unwrap() >= 1.);
+    }
+
+    #[test]
+    fn an_auxiliary_window_opens_at_its_own_size_not_the_main_windows_place() {
+        // Steam: the main window was maximized, then the friends list (300 × 700) opens beside it
+        let kept = (Rect { x: 0., y: 32., w: 1920., h: 980. }, true);
+        let (f, source, max) = place(AREA, (2., 43.), (300., 700.), 1, false, true, None, Some(kept));
+        assert_eq!((source, max), ("computed", false));
+        assert_eq!((f.w, f.h), (302., 743.));
+        // the same request as the first window of the app still gets the remembered place
+        assert_eq!(place(AREA, (2., 43.), (300., 700.), 0, false, false, None, Some(kept)), (kept.0, "kept", true));
+        // JS gathers only the count of siblings; Rust decides, and says so in the reply
+        let ask = |siblings: u64, dialog: bool| request(&json!({"op":"placeLinux","area":AREA.json(),"chrome":{"w":2,"h":43},
+            "width":300,"height":700,"count":1,"dialog":dialog,"siblings":siblings,"kept":{"x":0,"y":32,"w":1920,"h":980,"maximized":true}}));
+        let (first, second, dialog) = (ask(0, false), ask(1, false), ask(1, true));
+        assert_eq!((first["source"].as_str(), first["maximize"].as_bool(), first["auxiliary"].as_bool()), (Some("kept"), Some(true), Some(false)));
+        assert_eq!((second["source"].as_str(), second["maximize"].as_bool(), second["auxiliary"].as_bool()), (Some("computed"), Some(false), Some(true)));
+        assert_eq!(dialog["auxiliary"], false, "a dialog is already handled as a dialog");
+        assert_eq!(dialog["source"], "computed");
+        // such a window is not remembered, nor restored with the session
+        assert_eq!(request(&json!({"op":"remembers","siblings":1}))["remembers"], false);
+        assert_eq!(request(&json!({"op":"remembers","siblings":0}))["remembers"], true);
+        assert_eq!(request(&json!({"op":"remembers","auxiliary":true}))["remembers"], false);
+        assert!(is_auxiliary(false, 2) && !is_auxiliary(true, 2) && !is_auxiliary(false, 0));
     }
 }
