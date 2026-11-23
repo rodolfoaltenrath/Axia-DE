@@ -1,6 +1,6 @@
 // smartparse.js — smartctl's JSON (smartmontools, `smartctl -j`) turned into one model the Disks
 // app and the Monitor can show (see docs/SYSTEM.md, "SMART with smartmontools"). The parsing is Rust
-// (rust/axia-shell/src/launcher/smart_model.rs, reached through the launcher bridge); this adapter
+// (rust/axia-hw/src/smart.rs, reached through the launcher bridge); this adapter
 // keeps the public API. No React; tests/smart_parse_test.mjs runs it under node with real smartctl output.
 //
 //   const m = parseSmartctl(json, exitStatus)

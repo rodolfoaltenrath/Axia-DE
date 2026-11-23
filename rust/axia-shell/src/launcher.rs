@@ -4,7 +4,7 @@ mod session;
 pub(crate) mod dock_model;
 mod osk_model;
 pub(crate) mod session_model;
-mod smart_model;
+use axia_hw::smart as smart_model;
 mod ui;
 mod unicode;
 use serde_json::{json, Value};

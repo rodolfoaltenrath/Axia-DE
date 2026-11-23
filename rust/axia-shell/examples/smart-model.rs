@@ -1,6 +1,5 @@
 //! Node test transport using the exact production SMART model.
-#[path = "../src/launcher/smart_model.rs"]
-mod smart_model;
+use axia_hw::smart as smart_model;
 use std::io::{self, BufRead};
 fn main() {
     for line in io::stdin().lock().lines() {

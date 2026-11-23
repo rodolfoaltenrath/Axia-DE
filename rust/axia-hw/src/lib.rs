@@ -14,6 +14,7 @@ pub mod brframe;
 mod ffi;
 pub mod hwscan;
 pub mod power;
+pub mod smart;
 pub mod uevent;
 
 /// `"text"` with `"` and `\` escaped and control characters as `\u00xx` (what `json_quote` does).

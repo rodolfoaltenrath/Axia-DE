@@ -507,7 +507,7 @@ fn summary_from_own(s: &Value, t: &Value) -> Value {
     })
 }
 
-pub(super) fn request(input: &Value) -> Result<Value, &'static str> {
+pub fn request(input: &Value) -> Result<Value, &'static str> {
     Ok(match input["cmd"].as_str().unwrap_or("") {
         "constants" => json!({"attrKeys": attr_keys()}),
         "pretty" => json!(pretty_attr_name(&input["name"])),

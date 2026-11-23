@@ -11,6 +11,7 @@ there is no C fallback.
 | Disks, partitions and mounts without root: `/sys/block`, the udev database, `/proc/self/mountinfo`, `/proc/swaps`; the system-disk set; the JSON of `lord.disks.list()`; `tools()`; the change notifications (epoll over mountinfo and a udev netlink socket) | `disk.rs` | Rust |
 | Which names `smartctl` may be pointed at, the compaction of its JSON, the LOG pieces | `smartctl.rs` | Rust |
 | ATA SMART and NVMe health log parsers | `smart.rs` | Rust (already) |
+| smartctl JSON interpreted for Disks/Monitor: health, reasons, attributes, history and self-tests | `rust/axia-hw/src/smart.rs` | Shared Rust model; launcher/SDK API preserved |
 | `lord.disks` binding for QuickJS | `server/src/ui/js_disk.c` | C |
 | `diskkinds.h` | `server/src/disk/` | C (used by `tests/lan_test.c`) |
 
