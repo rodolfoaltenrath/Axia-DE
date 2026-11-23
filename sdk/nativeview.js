@@ -81,7 +81,7 @@ globalThis.__lordNativeView = () => {
   }
 };
 
-function runner(handle, manifest, winId, node = () => 0) {
+function runner(handle, manifest, winId, node = () => 0, onEffect) {
   const act = (action, extra = {}) => lord.nativeViews.action(handle, { action, extra });
   return (effect) => {
     // a Files window: its own effects (apps/files/native_app.rs), host ones too
@@ -121,6 +121,7 @@ function runner(handle, manifest, winId, node = () => 0) {
     }
     let result = '';
     try {
+      if (onEffect?.(effect) === true) return;
       switch (effect.kind) {
         case 'settings': settings.set(effect.patch); break;
         case 'settingsState': settingsBridge.perform?.(effect); return;
@@ -211,7 +212,9 @@ function NativeInputs(props) {
     region: props.region || '', winId: win.id, windowSource,
     focused: windowSource ? undefined : win.focused !== false, windowMode: win.mode });
 }
-const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, handleRef, stateSource, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode }) {
+const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRef, handleRef, stateSource, theme, lang, region, dir, localeRevision, winId, windowSource, focused, windowMode, onEffect }) {
+  const effectHandler = useRef(onEffect);
+  effectHandler.current = onEffect;
   const preferences = useStore(appHost && manifest.settings ? preferenceFacts : emptyFactsStore);
   const nativeCatalog = !appHost && manifest.catalogSource === 'native';
   const apps = useStore(nativeCatalog ? emptyFactsStore : manifest.id === 'forcequit' || manifest.facts === 'appcontrol' ? nativeCatalogFacts(true) : manifest.facts === 'apps' ? nativeCatalogFacts() : emptyFactsStore);
@@ -267,7 +270,7 @@ const NativeBridge = memo(function NativeBridge({ manifest, args, style, mountRe
       : lord.nativeViews.mount(ref.current.id, manifest.id, json)) : 0;
     m.sent = json;
     if (!m.handle) return undefined;
-    runners.set(m.handle, runner(m.handle, manifest, winId, () => ref.current?.id || 0));
+    runners.set(m.handle, runner(m.handle, manifest, winId, () => ref.current?.id || 0, effect => effectHandler.current?.(effect)));
     const sendDisks = () => lord.nativeViews.action(m.handle, { action: ['disks'], extra: { disks: disks.list() } });
     const stopDisks = manifest.id === 'files' ? disks.watch(sendDisks) : null;
     if (stopDisks) sendDisks();

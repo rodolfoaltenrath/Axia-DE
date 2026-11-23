@@ -253,6 +253,7 @@
   "shortcuts.snap": "Acoplar la ventana",
   "shortcuts.closeWindow": "Cerrar la ventana",
   "shortcuts.taskbarItem": "Abrir la app de ese lugar de la barra",
+  "shortcuts.captureSelector": "Selector visual de captura de pantalla",
   "shortcuts.captureFull": "Captura de toda la pantalla",
   "shortcuts.captureArea": "Captura de un área",
   "shortcuts.capturePanel": "Panel de capturas y grabación de pantalla",

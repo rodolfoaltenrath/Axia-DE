@@ -1,7 +1,8 @@
 # Screenshots migration
 
-The app is still in migration. `apps/screenshots/index.jsx` remains the
-presentation and capture/recording controller. Selection and annotation
+The app is still in migration. `apps/screenshots/index.jsx` retains the panel,
+markup presentation, auxiliary windows and capture/recording transport. The icon
+and visual selector are native Rust views in `selector.rs`. Selection and annotation
 coordinate calculations call `axia-app-screenshots::geometry` through the
 compiled native model bridge. `markup::Editor` owns the tool, color, operation
 history, draft stroke, text input and undo. Each editor has a separate native
@@ -50,36 +51,89 @@ The following markup-state delivery has its own evidence under
   identical. Six changed sources match the Fedora tree byte for byte. Editor
   captures were inspected in both modes.
 
-Remaining work before removing JSX and marking the app complete:
+## Native selector
 
-User requirement (2026-11-23): **PrintScreen opens the visual capture selector**,
+PrintScreen opens the Rust scene with area, window, monitor and all-screen modes.
+Dragging or choosing a target does not save an image. Enter or Capture confirms;
+Escape or Cancel discards it. Space switches area/window mode. Direct captures
+remain separate: Meta+Shift+3 in the macOS profile and Ctrl+PrintScreen in the
+Linux profile; the chosen external screenshot app still overrides these actions.
+
+The snapshot explicitly covers the entire logical desktop, independent of the
+primary-display/capture-all backend setting. The view mounts in the shell overlay
+layer, spans all displays and owns its modal keyboard scope. Window frames and
+display geometry are frozen with the image; invisible windows and other desktops
+are excluded; picture-in-picture windows remain eligible across desktops.
+Fullscreen and floating targets use their actual displayed rectangles. A
+display-layout change cancels the selection. Scaling is not
+multiplied into logical coordinates. Controls stay on the main display and wrap
+at small widths, so a gap between differently sized displays cannot hide them.
+
+The saved thumbnail remains at the bottom-right corner of the display containing
+most of the selected region (main display for all-screen captures). Its size,
+saved/copied caption, hover-aware expiry and click-to-edit behavior are preserved.
+The transport uses image-specific leases, ignores results for replaced sources,
+and releases each adopted snapshot on confirm/cancel/unmount. Cropped images are
+transferred to the thumbnail/editor. Legacy text focus is released while selecting
+and restored if its source window is still active on return.
+
+The view emits a terminal `captureSelection` effect. `NativeView.onEffect` routes
+it only to the mounted transport; unrelated effects keep their existing runner.
+The handler uses its latest props, and the source handle prevents an old selection
+from being applied to a replacement image. This callback remains a temporary
+transport until the capture controller itself migrates.
+
+Validation is recorded in `build/validation/screenshots-selector/`: thirteen app
+tests, 716 shell tests (seven ignored), shortcut-profile checks, and ten graphical
+scenarios (eight selector, two markup). The selector matrix covers Axia/Adwaita,
+light/dark, 760/1000 px and both keyboard profiles, with synthetic monitors at
+different heights and 150/200% scales. Actual scene input exercises PrintScreen,
+Enter/Escape, all four modes, file saving, thumbnail click, focused source text,
+image replacement and layout-change cancellation. It checks control positions,
+crop coordinates, single release of the source and focus restoration. Captures
+are inspected; this is not a physical multi-monitor test.
+
+The GPU=1 shipping build, platform/ABI checks, 105 historical geometry cases,
+eight LPK checks and eight switcher scenarios pass. The private installation also
+passes the switcher check. Seventeen executed source files match the workspace
+byte for byte; all eight switcher captures match the preceding markup delivery.
+The installed software/offline idle check reports medians of 13.950 poll calls/s
+and 104.148 MiB RSS, within the existing 15 calls/s and 120 MiB limits.
+
+`native_view_facts_test.mjs` remains unable to bundle: its isolated mocks lack
+`applyNativeWindowState`, `settingsRevision` and `gestureBridge`. The same failure
+was reproduced against the HEAD bridge before this delivery
+(`facts-baseline.log`, compared with `facts.log`). This is a pre-existing fixture
+limitation; the selector, markup and switcher GUI runs use the production bridge.
+
+## Remaining work
+
+User requirement (2026-11-23), implemented above: **PrintScreen opens the visual capture selector**,
 with area, specific window, monitor and full desktop options. It must not save a
 full-screen image immediately. The selection highlights the target, Enter
 confirms and Escape cancels. Keep direct capture shortcuts separately. Monitor
 selection must use actual display geometry and respect scaling and negative
 desktop origins; synthetic display fixtures do not prove physical multi-monitor
-behavior. The older PrintScreen-to-full-capture binding is to be replaced during
-this migration.
+behavior. The older PrintScreen-to-full-capture binding has been replaced.
 
-User requirement (2026-11-23): retain the existing saved-capture thumbnail in the
+User requirement (2026-11-23), preserved: retain the existing saved-capture thumbnail in the
 bottom-right corner, including click-to-edit, hover-aware expiry and clipboard
 captures. The new selector must not replace or remove that feedback.
 
-The initial selector snapshot must explicitly cover the logical desktop. The
-current no-rectangle backend screenshot follows the primary-display/capture-all
+The selector snapshot now explicitly covers the logical desktop. The
+no-rectangle backend screenshot follows the primary-display/capture-all
 setting and can return physical primary-display dimensions; it cannot be treated
 as a logical full-desktop image for multi-monitor selection. Check actual source
 dimensions and display transforms instead of assuming a 100% single display.
 
-- Native icon, compiled metadata and complete panel: four capture modes,
+- Compiled metadata and native panel: four capture modes,
   persisted timer/clipboard/microphone options, protected-window indication,
   recent files and the menu to protect the front window.
 - Capture controller independent of a mounted panel: hide capture windows before
   taking the frame; preserve editors; countdown and cancellation; permission
   refusal with a privacy action and toast fallback; chosen external screenshot
   app and the global shortcuts, including stop-recording priority.
-- Native area/window overlay with Space/Escape, topmost window hover, dimensional
-  hint and rejected tiny selections. Native thumbnail with hover-aware expiry
+- Native thumbnail presentation with hover-aware expiry
   and explicit image ownership transfer into the editor.
 - Native countdown and recording indicator, elapsed time, stop and completion,
   recent recording results, SDK microphone indicator cleanup and late completion

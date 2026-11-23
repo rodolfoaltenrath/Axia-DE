@@ -2,6 +2,8 @@
 pub mod geometry;
 #[path = "../../../apps/screenshots/markup.rs"]
 pub mod markup;
+#[path = "../../../apps/screenshots/selector.rs"]
+pub mod selector;
 #[derive(Default)]
 pub struct Model {
     pub editor: markup::Editor,

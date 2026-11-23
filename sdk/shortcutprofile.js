@@ -20,7 +20,7 @@ const LINUX = {
   files: ['Meta+E'], settings: ['Meta+I'], monitor: ['Ctrl+Shift+Escape'],
   snap: ['Meta+ArrowLeft', 'Meta+ArrowRight', 'Meta+ArrowUp', 'Meta+ArrowDown'],
   dockAutohide: [], forceQuit: [], appSettings: [], captureArea: [],
-  'capture.full': ['PrintScreen'], 'capture.area': ['Meta+Shift+S'], 'capture.panel': [],
+  'capture.full': ['Ctrl+PrintScreen'], 'capture.area': ['Meta+Shift+S'], 'capture.panel': [],
   searchCtrl: [], lock: ['Meta+L'], quit: [],
 };
 

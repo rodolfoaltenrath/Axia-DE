@@ -2,44 +2,30 @@
 // with our own design).
 //
 // Shortcuts (global, also with a Linux app in front):
-//   ❖⇧3 / Print Screen  entire screen        ❖⇧4  area (or window, with Space)
+//   Print Screen: visual selector       ❖⇧3: direct screen       ❖⇧4: selection
 //   ❖⇧5                 the Screenshots panel (and stop a recording in progress)
 // With another screenshot app chosen in Settings → Default Apps, these keys open that app instead.
 // Protected windows (wm.setProtected) come out black: the server does that, not this app.
 // After each capture a floating thumbnail shows up; a click opens the markup editor (arrow, box,
 // text, blur). They are saved in ~/Pictures/Screenshots or to the clipboard.
 import {
-  View, Text, MediaView, Button, Toggle, Segmented, TextInput, Toolbar, ToolbarButton, ToolbarGroup, ToolbarDivider, ToolbarSpacer, GroupBox, FormRow,
-  useTheme, useAppWindow, useKeyboard, useStore, useWindows, wm, windows, typeScale,
+  View, Text, MediaView, NativeView, Layer, Button, Toggle, Segmented, TextInput, Toolbar, ToolbarButton, ToolbarGroup, ToolbarDivider, ToolbarSpacer, GroupBox, FormRow,
+  useTheme, useAppWindow, useKeyboard, useStore, wm, windows, typeScale,
   t as tr, media, userDirs, fs, addListener, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, useSettings, notify, toast, errorText, dndActive, appNotifyPrefs,
 } from '@lordos/sdk';
 import { useEffect, useRef, useState } from 'react';
+import { screen, onScreenChange, displayFor } from '@lordos/runtime';
+import { clearTextFocus, focusToken, restoreFocus } from '../../sdk/components.jsx';
 
 const APP = 'screenshots';
 // Transitional presentation only: selection and image coordinates belong to Rust.
 let geometryOwner;
 const geometry = input => (geometryOwner ||= lord.nativeApps.create(APP)).request(JSON.stringify(input));
 const point = ({ x, y }) => ({ x, y });
-const selection = (start, end) => geometry({ cmd: 'selection', start: point(start), end: point(end) });
 const recording = createStore(null);   // { id, path, start }
 const recent = createStore([]);       // [{ path, time }]
 
-export function Icon({ size: s }) {
-  const corner = (l, tp, w, hh) => <View style={{ position: 'absolute', left: s * l, top: s * tp, width: s * w, height: s * hh, backgroundColor: '#fff', borderRadius: s * 0.02 }} />;
-  return (
-    <View style={{ width: s, height: s, borderRadius: s * 0.225, background: 'linear-gradient(160deg, #5e6b7a, #2c333d)',
-      boxShadow: `0 ${s * 0.04}px ${s * 0.12}px rgba(0,0,0,0.35)`, overflow: 'hidden' }}>
-      {/* the selection frame: four corners and a lens */}
-      {corner(0.18, 0.2, 0.18, 0.05)}{corner(0.18, 0.2, 0.05, 0.18)}
-      {corner(0.64, 0.2, 0.18, 0.05)}{corner(0.77, 0.2, 0.05, 0.18)}
-      {corner(0.18, 0.75, 0.18, 0.05)}{corner(0.18, 0.62, 0.05, 0.18)}
-      {corner(0.64, 0.75, 0.18, 0.05)}{corner(0.77, 0.62, 0.05, 0.18)}
-      <View style={{ position: 'absolute', left: s * 0.36, top: s * 0.38, width: s * 0.28, height: s * 0.24, borderRadius: s * 0.05, backgroundColor: 'rgba(255,255,255,0.9)' }} />
-      <View style={{ position: 'absolute', left: s * 0.44, top: s * 0.43, width: s * 0.12, height: s * 0.12, borderRadius: s * 0.06, backgroundColor: '#2c333d' }} />
-      <View style={{ position: 'absolute', left: s * 0.47, top: s * 0.46, width: s * 0.06, height: s * 0.06, borderRadius: s * 0.03, backgroundColor: '#ff5f57' }} />
-    </View>
-  );
-}
+export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} icon={size} />; }
 
 // ---- files ----
 
@@ -65,7 +51,7 @@ const opts = () => ({ timer: 0, clipboard: false, mic: false, ...(settings.get()
 
 // ---- capture ----
 
-async function finish(handle) {
+async function finish(handle, thumbnail) {
   if (!handle) return;
   const o = opts();
   let path = null;
@@ -74,13 +60,13 @@ async function finish(handle) {
     const r = await media.saveImage(handle, freeName(captureDir(), tr('screenshots.fileName', { date: stamp() }), 'png'));
     if (r.ok) { path = r.path; recent.set((l) => [{ path, time: Date.now() }, ...l].slice(0, 20)); }
   }
-  showThumb(handle, path);
+  showThumb(handle, path, thumbnail);
 }
 
-function showThumb(handle, path) {
+function showThumb(handle, path, thumbnail) {
   const id = wm.open(APP, { instance: 'thumb', args: { handle, path } });
   const w = 240, h = 150;
-  wm.setPip(id, { x: lord.screen.width - w - 20, y: lord.screen.height - h - 90, w, h });
+  wm.setPip(id, thumbnail || { x: lord.screen.width - w - 20, y: lord.screen.height - h - 90, w, h });
 }
 
 // takes the screen once a frame without our windows was drawn (it closes them first)
@@ -118,9 +104,14 @@ const grab = () => allowed(() => media.screenshot(APP));
 export const capture = {
   full: () => afterHide(() => withTimer(async () => finish(await grab()))),
   area: (mode = 'area') => afterHide(() => withTimer(async () => {
-    const h = await grab();
+    const signature = displaySignature();
+    const h = await allowed(() => media.screenshot(APP, { x: 0, y: 0, w: screen.width, h: screen.height }));
     if (!h) return;
-    const id = wm.open(APP, { instance: 'overlay', args: { handle: h, mode } });
+    const info = media.info(h);
+    if (displaySignature() !== signature || info?.width !== screen.width || info?.height !== screen.height) {
+      media.close(h); toast.set(tr('screenshots.selector.changed')); return;
+    }
+    const id = wm.open(APP, { instance: 'overlay', args: { handle: h, mode, selectionFacts: selectionFacts() } });
     wm.setFullscreen(id, true);
   })),
   async record() {
@@ -157,74 +148,65 @@ const captureArea = orOther(() => capture.area('area'));
 // a recording in progress is this app's, whatever is chosen now: the key still stops it
 const openPanelOrStop = () => { if (recording.get()) capture.record(); else orOther(() => wm.open(APP))(); };
 addShortcuts([
-  { id: 'capture.full', keys: ['Meta+Shift+3', 'PrintScreen'], when: usable, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
+  { id: 'capture.full', keys: ['Meta+Shift+3'], when: usable, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
+  { id: 'capture.selector', keys: ['PrintScreen'], when: usable, run: captureArea, label: 'shell.shortcuts.captureSelector', group: 'system' },
   { id: 'capture.area', keys: ['Meta+Shift+4'], when: usable, run: captureArea, label: 'shell.shortcuts.captureArea', group: 'system' },
   { id: 'capture.panel', keys: ['Meta+Shift+5'], when: usable, run: openPanelOrStop, label: 'shell.shortcuts.capturePanel', group: 'system' },
 ]);
 
 // ---- the app's windows ----
 
-function Overlay({ handle, mode: initial }) {
-  const win = useAppWindow();
-  const { windows: list } = useWindows();
-  const [mode, setMode] = useState(initial);
-  const [rect, setRect] = useState(null);
-  const [hover, setHover] = useState(null);
-  const drag = useRef(null);
-  useEffect(() => { media.view(handle, { zoom: 1, cx: 0.5, cy: 0.5, background: 0xff000000 }); }, [handle]);
-  const done = async (r) => {
-    wm.close(win.id, true);
-    if (!r || r.w < 3 || r.h < 3) { media.close(handle); return; }
-    const c = media.crop(handle, r.x, r.y, r.w, r.h);
-    media.close(handle);
-    await finish(c);
-  };
-  useKeyboard((e) => {
-    if (e.key === 'Escape') { wm.close(win.id, true); media.close(handle); }
-    if (e.key === ' ') setMode((m) => (m === 'area' ? 'window' : 'area'));
-  });
-  useEffect(() => {
-    const offMove = addListener('pointermove', (e) => {
-      if (drag.current) { setRect(selection(drag.current, e)); return; }
-      // window under the pointer (the topmost one)
-      setHover(geometry({ cmd: 'window', point: point(e), windows: list.map(w => ({ app: w.app,
-        minimized: w.minimized, title: windowTitle(w), frame: wm.frame(w) })) }));
-    });
-    const offUp = addListener('pointerup', (e) => {
-      if (!drag.current) return;
-      const d = drag.current;
-      drag.current = null;
-      done(selection(d, e));
-    });
-    return () => { offMove(); offUp(); };
-  }, [list, mode]);
-  const dim = 'rgba(0,0,0,0.35)';
-  const r = mode === 'window' ? hover : rect;
-  return (
-    <View style={{ flex: 1, direction: 'ltr' }} onMouseDown={(e) => { if (mode === 'area') drag.current = { x: e.x, y: e.y }; else done(hover); }}>
-      <MediaView media={handle} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} />
-      {r ? (
-        <>
-          <View style={{ position: 'absolute', left: 0, top: 0, right: 0, height: r.y, backgroundColor: dim }} />
-          <View style={{ position: 'absolute', left: 0, top: r.y + r.h, right: 0, bottom: 0, backgroundColor: dim }} />
-          <View style={{ position: 'absolute', left: 0, top: r.y, width: r.x, height: r.h, backgroundColor: dim }} />
-          <View style={{ position: 'absolute', left: r.x + r.w, top: r.y, right: 0, height: r.h, backgroundColor: dim }} />
-          <View style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, border: `1px solid ${mode === 'window' ? '#4c8dff' : '#fff'}`,
-            backgroundColor: mode === 'window' ? 'rgba(76,141,255,0.15)' : 'transparent' }} />
-          <View style={{ position: 'absolute', left: r.x + r.w + 6, top: r.y + r.h + 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.7)' }}>
-            <Text style={{ fontSize: 11, color: '#fff' }}>{mode === 'window' ? r.title : `${Math.round(r.w)} × ${Math.round(r.h)}`}</Text>
-          </View>
-        </>
-      ) : <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: dim }} />}
-      <View style={{ position: 'absolute', left: 0, right: 0, top: 18, alignItems: 'center', pointerEvents: 'none' }}>
-        <View style={{ paddingHorizontal: 14, height: 30, justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.7)' }}>
-          <Text style={{ fontSize: 12, color: '#fff' }}>{tr(mode === 'window' ? 'screenshots.hintWindow' : 'screenshots.hintArea')}</Text>
-        </View>
-      </View>
-    </View>
-  );
+const OVERLAY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true, shell: true };
+const displaySignature = () => JSON.stringify([screen.width, screen.height, screen.displays]);
+function selectionFacts() {
+  return { screen: { width: screen.width, height: screen.height }, displays: screen.displays, returnWindow: wm.focused(),
+    desktop: wm.desktop(), windows: windows.get().map(w => {
+      const { x, y, w: width, h } = w.pip || (w.fullscreen ? displayFor(w) : wm.frame(w));
+      return { app: w.app, desktop: w.desktop, minimized: w.minimized, hidden: w.hidden,
+        sticky: w.sticky, pip: !!w.pip, title: windowTitle(w), frame: { x, y, w: width, h } };
+    }) };
 }
-
+// Mount and resource transport only. Rust owns selection, input, controls and the scene.
+function Overlay({ handle, mode }) {
+  const win = useAppWindow();
+  const snapshot = useRef(null);
+  if (!snapshot.current || snapshot.current.handle !== handle) snapshot.current = {
+    handle, facts: win.args.selectionFacts || selectionFacts(), signature: displaySignature(),
+  };
+  const { facts, signature } = snapshot.current;
+  const returnFocus = useRef(focusToken());
+  const lease = useRef(null);
+  if (!lease.current || lease.current.handle !== handle) lease.current = { handle, consumed: false };
+  const owner = lease.current;
+  const done = async (rect, thumbnail) => {
+    if (owner.consumed) return;
+    owner.consumed = true;
+    let cropped = null;
+    try { cropped = rect ? media.crop(handle, rect.x, rect.y, rect.w, rect.h) : null; }
+    catch (error) { toast.set(errorText(error)); }
+    finally { wm.close(win.id, true); media.close(handle); }
+    if (cropped) {
+      try { await finish(cropped, thumbnail); }
+      catch (error) { media.close(cropped); toast.set(errorText(error)); }
+    }
+  };
+  useEffect(() => {
+    clearTextFocus();
+    media.view(handle, { zoom: 1, cx: 0.5, cy: 0.5, background: 0xff000000 });
+    const off = onScreenChange(() => { if (displaySignature() !== signature) { done(null); toast.set(tr('screenshots.selector.changed')); } });
+    return () => {
+      off(); if (!owner.consumed) { owner.consumed = true; media.close(handle); }
+      if (wm.focused() === facts.returnWindow) restoreFocus(returnFocus.current);
+    };
+  }, [handle]);
+  return <Layer name="overlay"><View style={{ position: 'absolute', left: 0, top: 0, width: facts.screen.width, height: facts.screen.height }}>
+    <NativeView manifest={OVERLAY_MANIFEST} args={{ ...facts, handle, mode }} onEffect={effect => {
+      if (effect.kind !== 'captureSelection') return false;
+      if (effect.source !== handle) return true;
+      done(effect.rect, effect.thumbnail); return true;
+    }} />
+  </View></Layer>;
+}
 function Thumb({ handle, path }) {
   const win = useAppWindow();
   const [hover, setHover] = useState(false);

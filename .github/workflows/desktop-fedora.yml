@@ -309,6 +309,18 @@ jobs:
         env:
           AXIA_SCREENSHOTS_GEOMETRY_OUTPUT: ${{ runner.temp }}/axia-screenshots-geometry
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_geometry_runtime -- --ignored --nocapture
+      - name: Native PrintScreen selector and saved thumbnail
+        if: matrix.gpu == 1
+        env:
+          AXIA_CAPTURE_SELECTOR_AXIA_OUTPUT: ${{ runner.temp }}/axia-capture-selector/axia
+          AXIA_CAPTURE_SELECTOR_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-capture-selector/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_selector_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-capture-selector
+          path: ${{ runner.temp }}/axia-capture-selector/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:

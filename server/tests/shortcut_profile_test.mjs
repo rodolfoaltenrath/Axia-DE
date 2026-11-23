@@ -20,6 +20,8 @@ assert.deepEqual(keys('quit', 'linux', ['Meta+Q']), []);
 assert.deepEqual(keys('searchCtrl', 'linux', ['Ctrl+Space']), []);
 assert.deepEqual(keys('quick', 'macos', ['Meta+A']), []); // leaves select-all available
 assert.deepEqual(keys('capture.area', 'linux'), ['Meta+Shift+S']);
+assert.deepEqual(keys('capture.full', 'linux'), ['Ctrl+PrintScreen']);
+for (const profile of ['linux', 'macos']) assert.deepEqual(keys('capture.selector', profile, ['PrintScreen']), ['PrintScreen']);
 assert.deepEqual(keys('terminalDropdown', 'linux', ['F12']), ['F12']);
 assert.equal(profileEntry({ id: 'switchApps', keys: [], show: ['old'] }, 'linux').show, undefined);
 // Native material policy is tested through the real Rust bridge in switcher_smoke.

@@ -28,7 +28,8 @@ import {settings} from '@ROOT@/sdk/settings.js';
 import {locale} from '@ROOT@/sdk/i18n.js';
 import {media} from '@ROOT@/sdk/media.js';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),requests=[],crops=[],annotations=[],markup=[];
-let current,stage='bootstrap';
+let current,selector=0,stage='bootstrap';
+const mount=lord.nativeViews.mount;lord.nativeViews.mount=(node,id,...args)=>{const handle=mount(node,id,...args);if(id==='screenshots')selector=handle;return handle;};
 locale.set({...locale.get(),lang:'en'});settings.set({mode:'@MODE@',effects:false,screenshots:{clipboard:true}});
 const create=lord.nativeApps.create;
 lord.nativeApps.create=id=>{const model=create(id);return{request(raw){const input=JSON.parse(raw);if(id==='screenshots')requests.push(input);const reply=model.request(raw);if(id==='screenshots'&&input.cmd==='markup')markup.push({input,reply});return reply;}};};
@@ -39,12 +40,13 @@ configureWindows({apps:[{id:'screenshots',name:'Screenshots',Component:Screensho
 function Harness(){useWindows();return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',effects:false})},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#222':'#eee'}},current&&wm.get(current)?h(AppHost,{key:current,id:current,focused:true}):null));}
 render(h(Harness));
 async function until(fn,label){stage=label;for(let n=0;n<120&&!fn();n++)await sleep(20);if(!fn())throw Error('timeout '+label);return true;}
-function pointer(type,x,y){const target=lord.nativeViews.hitTest(x,y);__lordEvent(type,target,x,y,0);}
+function pointer(type,x,y){const target=lord.nativeViews.pointer(type,lord.nativeViews.hitTest(x,y),x,y,0);__lordEvent(type,target,x,y,0);__lordNativeView();}
 function key(name,char='',flags=0){__lordKey(0,1,name,char,name,flags);__lordKey(0,0,name,'',name,flags);__lordNativeView();}
 async function run(){
  await sleep(120);let image=lord.media.screenshot('screenshots');current=wm.open('screenshots',{instance:'overlay',args:{handle:image,mode:'area'}});await sleep(180);
  pointer('down',300,300);pointer('move',100,120);await sleep(100);pointer('up',100,120);
- const selection=await until(()=>requests.some(r=>r.cmd==='selection'),'selection input');
+ const selection=await until(()=>selector&&lord.nativeViews.text(selector).includes('Capture'),'native selector');
+ if(crops.length)throw Error('capture happened before confirmation');key('Enter');
  const cropped=await until(()=>crops.length>0,'crop');const crop=cropped&&crops[0].slice(1).join(',')==='100,120,200,180';
  await sleep(180);for(const w of windows.get())wm.close(w.id,true);
  image=lord.media.screenshot('screenshots');current=wm.open('screenshots',{instance:'edit-test',args:{handle:image,path:null}});await sleep(200);
