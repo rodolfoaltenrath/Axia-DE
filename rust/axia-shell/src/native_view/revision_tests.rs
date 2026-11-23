@@ -4,6 +4,36 @@ use serde_json::{json, Value};
 use std::{cell::RefCell, rc::Rc};
 
 struct Rows(Rc<RefCell<Value>>);
+
+#[test]
+fn private_native_content_protects_its_mount_and_releases_only_its_own_node() {
+    struct Private(Rc<std::cell::Cell<bool>>);
+    impl NativeApp for Private {
+        fn capture_protected(&self)->bool {self.0.get()}
+        fn request(&mut self,input:&Value)->Value {
+            if input["cmd"]=="sync" {json!({"tree":{"kind":"text","label":if self.0.get(){"private"}else{"public"}}})} else {json!({})}
+        }
+    }
+    let private=Rc::new(std::cell::Cell::new(false));
+    let mount=scene::create(scene::VIEW);
+    let mut host=Host::new(mount,Box::new(Private(private.clone())),"",None);
+    host.facts(json!({"args":{}}));
+    assert_eq!(unsafe {(*runtime::node_get(mount)).protect},0);
+    private.set(true);host.result(Value::Null);
+    assert_ne!(host.find_text("private"),0);
+    assert_eq!(unsafe {(*runtime::node_get(mount)).protect},1,"no React update is needed before capturing private content");
+    private.set(false);host.result(Value::Null);
+    assert_eq!(unsafe {(*runtime::node_get(mount)).protect},0);
+    private.set(true);host.result(Value::Null);drop(host);
+    assert_eq!(unsafe {(*runtime::node_get(mount)).protect},0);
+    let stale=Host::new(mount,Box::new(Private(private)),"",None);
+    scene::destroy(mount);
+    let recycled=scene::create(scene::VIEW);
+    assert_eq!(recycled,mount);scene::set_capture_protected(recycled,true);
+    drop(stale);
+    assert_eq!(unsafe {(*runtime::node_get(recycled)).protect},1,"a stale host cannot unprotect a recycled mount");
+    scene::destroy(recycled);
+}
 impl NativeApp for Rows {
     fn request(&mut self, input: &Value) -> Value {
         if input["cmd"] == "sync" {

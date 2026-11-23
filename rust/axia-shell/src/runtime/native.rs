@@ -72,6 +72,14 @@ pub fn create(kind: i32) -> i32 {
 pub fn exists(id: i32) -> bool {
     id > 0 && unsafe { with_scene(|s, _| s.node(id as usize).is_some()) }
 }
+/// Native content can protect its mount synchronously, without a React commit.
+pub(crate) fn set_capture_protected(id: i32, protected: bool) {
+    unsafe { with_scene(|s, ui| {
+        let Some(node)=s.node_mut(id as usize) else {return;};
+        let value=u8::from(protected);
+        if node.protect!=value {node.protect=value;s.damage_subtree(id as usize,ui);}
+    }); }
+}
 /// Destroys the node and its subtree (their images are released by the scene).
 pub fn destroy(id: i32) {
     if exists(id) {

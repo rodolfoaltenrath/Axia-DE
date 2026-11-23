@@ -287,6 +287,7 @@ impl Drop for Host {
         if !live {
             return;
         }
+        scene::set_capture_protected(self.mount, false);
         for m in self.tip_view.drain(..) {
             m.destroy();
         }
@@ -636,6 +637,7 @@ impl Host {
             reply
         };
         self.next_sync = self.refresh_ms().map(|ms| now + ms);
+        scene::set_capture_protected(self.mount, self.icon_mode().is_none() && self.app.capture_protected());
         self.queue(&reply);
         if reply["same"] == true || reply["tree"].is_null() {
             return;

@@ -2,6 +2,8 @@ use serde_json::Value;
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
 pub trait NativeApp {
+    /// Protect sensitive native content before its tree is reconciled or painted.
+    fn capture_protected(&self) -> bool { false }
     /// Migrated session models share an immutable native appearance plan.
     /// Legacy/isolated requests still accept their own context facts.
     fn uses_native_appearance(&self) -> bool { false }
