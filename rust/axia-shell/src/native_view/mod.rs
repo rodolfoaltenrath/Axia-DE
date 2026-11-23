@@ -102,6 +102,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         crate::native_apps::sysprobe::ID => Some(Box::new(crate::sysprobe_app::App::default())),
         crate::native_apps::reminders::ID => Some(Box::new(crate::reminders_app::App::default())),
         crate::native_apps::contacts::ID => Some(Box::new(crate::contacts_app::App::default())),
+        crate::native_apps::disks::ID => Some(Box::new(crate::disks_app::App::default())),
         crate::native_apps::calendar::ID => Some(Box::new(crate::calendar_app::App::default())),
         crate::native_apps::forcequit::ID => Some(Box::new(crate::forcequit::App::default())),
         crate::native_apps::files::ID => Some(Box::new(crate::files::FilesView::default())),

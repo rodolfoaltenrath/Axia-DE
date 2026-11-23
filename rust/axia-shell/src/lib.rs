@@ -27,6 +27,7 @@ use axia_app_sysinfo as sysinfo_model;
 use axia_app_sysprobe as sysprobe_app;
 use axia_app_reminders as reminders_app;
 use axia_app_contacts as contacts_app;
+use axia_app_disks as disks_app;
 use axia_app_calendar as calendar_app;
 mod native_apps_host;
 mod app_control;

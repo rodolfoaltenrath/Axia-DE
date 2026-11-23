@@ -15,6 +15,7 @@ members = [
     "axia-app-characters",
     "axia-app-clock",
     "axia-app-contacts",
+    "axia-app-disks",
     "axia-app-files",
     "axia-app-fonts",
     "axia-app-forcequit",

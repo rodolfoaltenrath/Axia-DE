@@ -2,6 +2,7 @@
   "title": "Disks",
   "unavailable": "This server does not provide the disk list.",
   "none": "No disks.",
+  "changed": "The selected disk changed or is now protected. Close this dialog and review the current device.",
   "internal": "Internal",
   "external": "External",
   "images": "Images",

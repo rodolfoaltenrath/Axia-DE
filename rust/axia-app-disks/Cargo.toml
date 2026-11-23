@@ -1,0 +1,11 @@
+[package]
+name = "axia-app-disks"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+axia-native = { path = "../axia-native" }
+axia-hw = { path = "../axia-hw" }
+serde_json = "1"
+regex = "1"

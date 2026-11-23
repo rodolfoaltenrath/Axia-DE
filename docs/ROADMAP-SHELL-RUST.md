@@ -56,7 +56,7 @@ independentes da forma como o app executa.
 **Já em Rust, sem React:** Monitor, Calculadora, Axia Store, Sobre, Ajuda, Relógio,
 Caracteres, Notas, Lembretes, Contatos, Calendário, Câmera, Fotos, Gravador,
 Scanner, Backup, Registros, Fontes, Force Quit, Configurações, Arquivos e
-Informações do Sistema. Host em `rust/axia-shell/src/native_view/`.
+Informações do Sistema e Discos. Host em `rust/axia-shell/src/native_view/`.
 
 **Menus definitivos em Rust:** barra de menus e menus de contexto da sessão;
 as chaves `menuBarNativeView` e `menuNativeView` não selecionam mais caminhos.
@@ -96,7 +96,7 @@ brilho e energia, método de entrada, aparência.
 
 **Ainda em JavaScript:**
 
-- 8 apps: `disks`, `editor`, `mail`, `passwords`, `pdf`, `player`,
+- 7 apps: `editor`, `mail`, `passwords`, `pdf`, `player`,
   `screenshots`, `terminal`.
 - `sdk/`: 122 arquivos JS/JSX na árvore de 2026-11-23. A divisão histórica da Fase 0 está em
   `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
@@ -711,7 +711,11 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       `tools/hwreport` e adaptadores históricos somente nos testes. Coletores,
       efeitos e montagem geral da janela continuam nos transportes da sessão.
       Ver [RUST-SYSINFO.md](RUST-SYSINFO.md).
-- [ ] `disks`
+- [x] `disks`: lista, seleção, políticas, confirmações, progresso e SMART no
+      host Rust; JSX e manifesto JSON retirados. Modelo SMART compartilhado em
+      `axia-hw`; efeitos e eventos passam pelo adaptador da sessão. O helper
+      privilegiado ausente no desktop continua pendente, sem restaurar o código
+      antigo. Ver [RUST-DISK.md](RUST-DISK.md).
 - [ ] `screenshots`
 - [ ] `pdf`
 - [ ] `player`
@@ -886,3 +890,4 @@ mostraram.
 | 2026-11-23 | Fase 2: reconhecimento e execução dos swipes de sistema no Session Rust | `e2b7840f` | Rota real de touch preserva reserva sistema/app; js_gesture entrega o swipe reservado ao Rust antes de __lordGesture. Session acumula updates, aplica limiar de 60 px/eixo dominante, cancela e conclui uma vez, sem polling. Horizontais executam com modelo/locale atuais e mostram o limite no indicador; verticais publicam somente direção reconhecida para as telas JS restantes. Raiz/geração descartam conclusões antigas; alternador aberto tem prioridade. Retirados a acumulação JS da sessão e os callbacks horizontais do tema; host isolado conserva compatibilidade. Passaram 715 testes da shell (sete ignorados), oito contratos LPK e 32 cenários gráficos/funcionais: quatro swipes novos, quatro indicador, oito alternador e dezesseis animação/foco/comandos/menu Janela. Prova pelo roteamento real confirma zero eventos JS brutos de sistema, zero pedidos JSON de comando, fluxo de apps preservado, RTL durante o gesto, threeDrag e espelhos parados. Teste exigido no CI GPU=1 com capturas. Build GPU=1, bundles, plataforma/ABI, instalação privada e switcher-check instalado passaram. Oito capturas do alternador idênticas às de native-desktop-keys; mínimos claro/escuro do novo fluxo inspecionados, com pixels nativos exigidos. Três amostras ociosas e limites impostos: 13,400 poll/s e 105,102 MiB; sem prova de ganho causal. Evidências em build/validation/native-system-swipes. Configuração do driver, vigilância de dispositivos, ações verticais, demais consumidores e interfaces JS continuam no escopo; nenhuma fase inteira concluída. Medições físicas no encerramento. |
 | 2026-11-23 | Fase 2: atalhos físicos de Arquivos, Configurações e Monitor em Rust | Commit desta linha | Perfil Linux e layout nativos reconhecem Meta+E, Meta+I e Ctrl+Shift+Escape antes de Wayland/IME/JS. Repetições e solturas pertencem ao Rust; alternador tem prioridade. shellLaunch publica app e geração, com descarte na drenagem para raiz antiga. SDK mantém rótulos e a abertura por wm.open; catálogo, carregamento e montagem geral continuam pendentes. Passaram 719 testes da shell (sete ignorados), oito contratos LPK e 28 cenários gráficos/funcionais, incluindo quatro novos com perfil JS macOS congelado e uma abertura por tecla. Consultas shellKeyboard de compatibilidade permanecem; nenhum evento de tecla ou pedido de seleção de comando pelo JS. Build GPU=1, bundles, plataforma/ABI, instalação privada e switcher-check instalado passaram. Doze fontes comparadas byte a byte; oito PNGs do alternador idênticos aos da correção do vidro. Três amostras ociosas: medianas 14,500 poll/s e 105,027 MiB, dentro dos limites impostos; poll variou de 12,200 a 16,850 nas amostras, com relatório integral preservado e sem prova de ganho causal. Evidências em build/validation/native-launch-input. Nenhuma fase inteira concluída; medições físicas no encerramento. |
 | 2026-11-23 | Fase 5: Informações do Sistema no host Rust | Commit desta linha | Seis abas, ícone, comandos, consultas privadas, controle dos testes, exportação e prévia de compartilhamento nativos; JSX e manifesto JSON apagados. Host protege capturas antes da árvore privada; ocultar/fechar descarta respostas antigas e respeita nós reciclados. Ferramentas puras em tools/hwreport, adaptadores históricos somente nos testes. Passaram 15 testes do app, 17 do suporte, 720 da shell (sete ignorados), oito contratos LPK e 16 cenários gráficos (oito Sysinfo, oito alternador); seis referências do construtor anterior conferem o compartilhamento. JSON/Markdown salvos iguais à prévia, exportação do resultado recente e proteção por pixels verificados. CI publica capturas; inspeção em 760/960 px, claro/escuro, Axia/Adwaita. Build GPU=1, plataforma/ABI e instalação privada passaram; oito PNGs do alternador idênticos. Três amostras ociosas finais: 12,400 poll/s e 104,102 MiB, dentro dos limites; rodada inicial preservada, sem prova de ganho causal. Fontes validadas byte a byte. Evidências em build/validation/native-sysinfo e detalhes em RUST-SYSINFO.md. Restam oito apps da fase; coletores, efeitos e montagem da sessão ainda usam transportes JS. Medições físicas no encerramento. |
+| 2026-11-23 | Fase 5: Discos no host Rust | Commit desta linha | Lista, seleção, ícone, políticas, diálogos, progresso e SMART nativos; JSX e manifesto JSON apagados. Modelo SMART compartilhado em axia-hw. Snapshot fresco e identidade/layout congelados impedem operar em dispositivo substituído; confirmação digitada pelo input real. Gerações descartam progresso/SMART antigos; só autoteste ativo consulta a cada 15 s. Passaram 14 testes do app, oito de hardware, 716 da shell (sete ignorados), 92 verificações SMART, transportes/lifecycle, oito contratos LPK e 24 cenários gráficos (oito Discos, oito Sysinfo, oito alternador). Build GPU=1, plataforma/ABI, instalação privada e switcher instalado passaram. Capturas inspecionadas; oito PNGs do alternador idênticos. 22 fontes comparadas byte a byte. Três amostras ociosas: medianas 12,350 poll/s e 104,344 MiB, dentro dos limites; sem prova de ganho causal. Evidências em build/validation/native-disks e RUST-DISK.md. Testes usam dispositivos e ações administrativas simulados; helper privilegiado ausente continua pendente. Restam sete apps da fase; transportes JS e medições físicas no encerramento permanecem no escopo. |

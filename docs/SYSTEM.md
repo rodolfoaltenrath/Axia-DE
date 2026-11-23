@@ -36,14 +36,15 @@ The LordOS disk utility, like GNOME Disks.
 | `rust/axia-codecs/src/disk.rs` (C ABI in `server/src/disk/disk.h`; [RUST-DISK.md](RUST-DISK.md)) | The list, without root, from three sources. **`/sys/block`:** size, removable, read-only, rotational, model. **The udev database** (`/run/udev/data/b<major>:<minor>`): file system, label, UUID, partition table and bus; udev already probed them, so the device is never opened. **`/proc/self/mountinfo`:** where each one is mounted. It also recognizes the system disk and watches for changes. |
 | `rust/axia-codecs/src/smart.rs` | ATA SMART and NVMe health log parsers: pure functions, no I/O |
 | `rust/axia-codecs/src/smartctl.rs` | Pure checks for the `smart-*` actions: which device names smartctl accepts, JSON compaction, LOG pieces. The actions themselves (smartmontools, root) have no helper to run in, see below |
-| `sdk/smart.js`, `sdk/smartparse.js` | `smart.info/health/test/abort/install`, the summaries the Monitor shows, and smartctl's JSON turned into one model |
+| `rust/axia-hw/src/smart.rs`, `sdk/smart.js`, `sdk/smartparse.js` | Shared Rust interpretation of smartctl JSON; SDK service compatibility and the summaries the Monitor shows |
 | `server/src/ui/js_disk.c`, `sdk/disks.js` | `lord.disks.list()`, `tools()`, `watch(on)`; in the SDK, `useDisks()` and `disks` |
-| `apps/disks/` | The app: `index.jsx`, `health.jsx` (SMART), `dialogs.jsx` (format, rename, erase, bootable USB), `icons.jsx` |
+| `apps/disks/native.rs`, `native_ui.rs`, `policy.rs`, `manifest.rs` | Native Rust controller, view/icon, target validation and app metadata; no JSX or JSON manifest |
+| `runtime/native_disk_services.js` | Closed asynchronous transport for disk actions, image discovery, SMART and progress; the Rust controller owns decisions and presentation |
 
-**Notifications without polling.** While the app is open (`useDisks`), `lord.disks.watch(true)`
+**Notifications without polling.** While the native app is open, its scoped SDK subscription calls `lord.disks.watch(true)`, which
 opens an epoll with two things. That single fd goes into the `axia-server` main loop (`main.c`),
 and JS gets `__lordDisks('change')`, coalesced into one every 150 ms. Closing the app closes
-everything.
+everything. Raw list changes are delivered to the Rust controller; other native apps do not subscribe or read this list through this adapter. SMART polling runs only during an active self-test.
 
 - `/proc/self/mountinfo`, which signals `POLLPRI` when mounts change.
 - A `NETLINK_KOBJECT_UEVENT` socket on the udev group (2). When the event arrives, udev has

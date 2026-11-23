@@ -298,6 +298,18 @@ jobs:
           name: axia-window-commands
           path: ${{ runner.temp }}/axia-window-commands/
           if-no-files-found: warn
+      - name: Native Disks confirmations, SMART and device changes
+        if: matrix.gpu == 1
+        env:
+          AXIA_DISKS_AXIA_OUTPUT: ${{ runner.temp }}/axia-disks/axia
+          AXIA_DISKS_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-disks/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test disks_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-disks
+          path: ${{ runner.temp }}/axia-disks/
+          if-no-files-found: warn
       - name: Native Sysinfo pages, protected captures and exact exports
         if: matrix.gpu == 1
         env:

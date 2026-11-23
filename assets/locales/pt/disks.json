@@ -2,6 +2,7 @@
   "title": "Discos",
   "unavailable": "Este servidor não oferece a lista de discos.",
   "none": "Nenhum disco.",
+  "changed": "O disco selecionado mudou ou está protegido. Feche este diálogo e confira o dispositivo atual.",
   "internal": "Internos",
   "external": "Externos",
   "images": "Imagens",

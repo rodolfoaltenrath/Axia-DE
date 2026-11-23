@@ -24,7 +24,48 @@ answer `admin.unavailable`. Nothing outside the folder referenced the files or t
 declarations only they used were removed from `disk.h`. They are in the git history (before commit
 "Remove the dead disk helper actions") if a replacement for the helper ever needs them.
 
-## Boundary
+## Native Disks app (2026-11-23)
+
+`axia-app-disks` includes the controller, view, icon and policy from `apps/disks/`.
+The JSX implementation and JSON manifest are removed. The native app presents the
+disk/partition list, usage, details, format/rename/erase/image dialogs, progress,
+SMART attributes, ATA/NVMe history and self-tests. SMART interpretation is shared
+with the launcher through `axia-hw::smart`.
+
+Every action obtains a fresh snapshot before issuing the closed service request.
+The controller compares physical identity and the selected partition/layout,
+checks system/read-only/admin restrictions, and retains the confirmed operands.
+Replacing a device during confirmation refuses the action. Whole-disk operations
+require the device name, entered through the native text input. Request generations
+discard stale progress and SMART replies. The event subscription belongs to the
+mounted app; an idle app does not poll SMART. Active self-tests poll at 15-second
+deadlines, including after a failed read.
+
+`runtime/native_disk_services.js` carries bounded raw results, closed action calls,
+cancellation and shared SMART summaries. It does not restore the missing privileged
+helper described above. The GUI tests use fake devices and mocked administrative
+actions: they prove UI/transport/policy behavior, not physical formatting, SMART
+access or image writing on the standalone desktop.
+
+Validation in the Fedora native tree, with source files compared byte for byte:
+
+- 14 app tests, eight shared hardware tests and 716 shell tests passed (seven
+  ignored). Four former shell SMART tests now belong to the hardware crate.
+- Closed transport/lifecycle tests and 92 SMART corpus checks passed.
+- Eight GUI scenarios passed: Axia/Adwaita, light/dark, minimum/default widths.
+  They exercise actual pointer/keyboard input, typed confirmation, renaming,
+  mount/unmount/eject, image selection, progress/cancel, replacement of a device,
+  SMART self-tests, attributes and deep links. Captures were inspected.
+- Eight LPK contracts and eight scenarios each for Sysinfo and the switcher passed.
+  The eight switcher PNGs match the preceding Sysinfo delivery byte for byte.
+- GPU=1 build, platform/ABI checks, private installation and installed switcher
+  check passed. Three idle samples stayed within enforced limits: medians
+  12.350 poll calls/s and 104.344 MiB RSS. This is not evidence of a causal gain.
+
+Evidence is in `build/validation/native-disks/`, with 22 source comparisons in
+`comparison.json`. Physical measurements remain scheduled for the roadmap's end.
+
+## Codec boundary
 
 `server/src/disk/disk.h` is unchanged in substance and remains the contract: every function keeps
 its name, arguments and ownership. Returned strings come from `malloc` and C releases them with

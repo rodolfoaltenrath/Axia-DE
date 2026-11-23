@@ -41,6 +41,9 @@ import { bluetooth } from '../sdk/hardware.jsx';
 import { useStore } from '../sdk/store.js';
 import { launchApp } from '../sdk/apps.js';
 import { codeStatus } from '../sdk/codesig.js';
+import { disks } from '../sdk/disks.js';
+import { smart, smartSummaries } from '../sdk/smart.js';
+import { diskServices } from './native_disk_services.js';
 
 // Opaque per-window snapshots chosen by Rust, with the lifetime of useWindowState.
 const nativeWindowStates = new Map();
@@ -58,6 +61,7 @@ function stopWatch(id) {
   if (--followers === 0) logs.follow(false);
 }
 const methods = {
+  ...diskServices({ disks, admin, fs, systemInfo, smart, smartSummaries, events: owner => bridge.events(owner) }),
   ...sysinfoServices({ systemInfo, codeStatus, admin, session: { canPower, restart: () => askPower('reboot') }, fs, userDirs, wm, workArea, launchApp, bluetooth }),
   'files.pick': { run: ([options], owner) => pickFile(options, owner) },
   ...pimServices({ request: mailRequest, onEvent: onMailEvent, pick: () => lord.broker?.pick(false, ''),
@@ -114,8 +118,17 @@ function localNativeApp(manifest) {
   } };
 }
 const noHardwareFacts = { get: () => null, subscribe: () => () => {} };
+let diskSnapshot=null;
+const nativeDiskFacts={
+  get:()=>diskSnapshot??(diskSnapshot=disks.list()),
+  subscribe(fn) {
+    diskSnapshot=disks.list();
+    return disks.watch(()=>{diskSnapshot=disks.list();fn();});
+  },
+};
 function NativeAsyncMount({ manifest, args, window }) {
   const bt = useStore(manifest.id === 'sysinfo' ? bluetooth : noHardwareFacts);
+  const diskList = useStore(manifest.id === 'disks' ? nativeDiskFacts : noHardwareFacts);
   // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
   // each mounted window gets a fresh one even when the WM reuses its name.
   const [owner] = useState(() => ++ownerSequence);
@@ -127,6 +140,7 @@ function NativeAsyncMount({ manifest, args, window }) {
   }, [owner]);
   return ready ? h(Fragment, null, h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window,
     ...(manifest.id === 'sysinfo' ? { __nativeBluetooth: bt } : {}),
+    ...(manifest.id === 'disks' ? { __nativeDisks: diskList } : {}),
     ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }),
     manifest.asyncServices.includes('files.pick') ? h(NativeFilePicker, { owner }) : null) : h(View, { style: { flex: 1 } });
 }

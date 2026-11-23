@@ -180,6 +180,7 @@ EOF
         run "native-media-test (native session ownership and permissions)" node tests/native_media_test.mjs
         run "native-backup-test (status ownership and backup operations)" node tests/native_backup_test.mjs
         run "native-sysinfo-test (private-query lifetime and exact exports)" node tests/native_sysinfo_services_test.mjs
+        run "native-disks-test (closed actions and operation lifetime)" node tests/native_disk_services_test.mjs
     else skip "pdf-model-test" "node, cargo and node_modules/esbuild"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.rs): GPU layers, CPU reasons, Compatibility
     if have node && have cargo; then

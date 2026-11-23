@@ -123,6 +123,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-app-disks"
+version = "0.1.0"
+dependencies = [
+ "axia-hw",
+ "axia-native",
+ "regex",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-app-files"
 version = "0.1.0"
 dependencies = [
@@ -445,6 +455,7 @@ dependencies = [
  "axia-app-characters",
  "axia-app-clock",
  "axia-app-contacts",
+ "axia-app-disks",
  "axia-app-files",
  "axia-app-fonts",
  "axia-app-forcequit",

@@ -23,6 +23,7 @@ axia-app-photos = { path = "../axia-app-photos" }
 axia-app-notes = { path = "../axia-app-notes" }
 axia-app-calendar = { path = "../axia-app-calendar" }
 axia-app-contacts = { path = "../axia-app-contacts" }
+axia-app-disks = { path = "../axia-app-disks" }
 axia-app-reminders = { path = "../axia-app-reminders" }
 axia-app-backup = { path = "../axia-app-backup" }
 axia-app-recorder = { path = "../axia-app-recorder" }
