@@ -1,5 +1,5 @@
-//! Pixel-identical port of the backdrop renderer. C supplies only the canvas and
-//! its existing synchronous worker pool. All glass math and pixel loops live here.
+//! Backdrop renderer. C supplies only the canvas and its existing synchronous
+//! worker pool. All glass math and pixel loops live here.
 use crate::glass::{
     axia_glass_commit, axia_glass_prepare, axia_glass_reuse, axia_glass_scratch, GlassBuffers,
 };
@@ -245,7 +245,9 @@ fn over(p: u32, d: u32, a: u32) -> u32 {
     } else {
         (
             ((p >> 24) * a + 127) / 255,
-            (((p & 0xff00ff) * a) / 255) & 0xff00ff,
+            // Division by 255 cannot operate on packed red/blue lanes: the
+            // red remainder spills into blue, tinting antialiased glass edges.
+            ((((p >> 16) & 255) * a / 255) << 16) | ((p & 255) * a / 255),
             (((p & 0xff00) * a) / 255) & 0xff00,
         )
     };
@@ -568,4 +570,49 @@ pub unsafe extern "C" fn axia_glass_render(
         b.in1 = x1;
     }
     phase(&b, y1 - y0, cw as u64 * (y1 - y0) as u64, up, parallel);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A rounded edge has fractional coverage even over an entirely gray backdrop.
+    // Its channels must remain independent when premultiplied pixels are scaled.
+    #[test]
+    fn partial_coverage_does_not_leak_red_into_blue() {
+        for alpha in [0u32, 1, 32, 96, 128, 254, 255] {
+            for color in [0u32, 1, 17, 32, 127, 254, 255] {
+                let channel = color * alpha / 255;
+                let source = alpha << 24 | channel * 0x010101;
+                for coverage in 0..=255 {
+                    let actual = over(source, 0xff202020, coverage);
+                    let scaled_alpha = (alpha * coverage + 127) / 255;
+                    let expected = channel * coverage / 255 + (32 * (255 - scaled_alpha) >> 8);
+                    assert_eq!(actual, 0xff000000 | expected * 0x010101,
+                        "alpha={alpha}, gray={color}, coverage={coverage}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn covered_premultiplied_colors_match_independent_channels() {
+        for source in [0u32, 0xff000000, 0xffff0000, 0xff00ff00, 0xff0000ff,
+            0xffededed, 0x80402010, 0x01010000, 0x7f007f7f] {
+            for destination in [0u32, 0xff222222, 0xffeeeeee, 0x80503010] {
+                for coverage in 0..=255 {
+                    let alpha = (source >> 24) * coverage;
+                    let alpha = (alpha + 127) / 255;
+                    let mut expected = over_alpha(alpha, destination >> 24) << 24;
+                    for shift in [0, 8, 16] {
+                        let src = ((source >> shift) & 255) * coverage / 255;
+                        let dst = ((destination >> shift) & 255) * (255 - alpha) >> 8;
+                        expected |= (src + dst) << shift;
+                    }
+                    assert_eq!(over(source, destination, coverage), expected,
+                        "source={source:08x}, destination={destination:08x}, coverage={coverage}");
+                }
+            }
+        }
+    }
 }

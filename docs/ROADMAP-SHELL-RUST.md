@@ -21,6 +21,19 @@ a migração; não declarar medições físicas concluídas sem executá-las.
 
 ## Objetivo e decisões
 
+Correção prévia à retomada em 2026-11-23: franjas azuis no contorno de vidro da
+Dock/alternador vinham da divisão conjunta dos canais vermelho/azul ao aplicar
+cobertura parcial. O erro já existia no C e foi preservado na migração. Canais
+agora são escalados separadamente, sem alterar o material. Falhas unitária e
+gráfica reproduzidas antes da correção; passaram 717 testes da shell (sete
+ignorados), 160 verificações de referência C/bordas neutras, plataforma/ABI,
+build GPU=1 e 16 cenários gráficos (quatro materiais, oito alternador e quatro
+comandos de janela). Referências atualizadas por C histórico corrigido, após
+confirmar os 32 hashes antigos com o C original. Captura equivalente à enviada
+pelo usuário inspecionada sem os traços azuis. Evidências em
+`build/validation/glass-border`; detalhes em `RUST-DESKTOP-MATERIALS.md`.
+Nenhuma fase inteira concluída por esta correção; sessão física não reinstalada.
+
 **Objetivo:** a sessão principal (`axia-server`) roda sem QuickJS, sem React e sem
 timers JavaScript. Ganho esperado: menos memória residente (o heap JS e o código
 parseado no arranque), menos despertares em ociosidade e menos conversões JSON na

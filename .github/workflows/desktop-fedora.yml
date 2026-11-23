@@ -310,6 +310,17 @@ jobs:
           name: axia-switcher
           path: ${{ runner.temp }}/axia-switcher/
           if-no-files-found: warn
+      - name: Rust Dock glass border integration and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_GLASS_BORDER_OUTPUT: ${{ runner.temp }}/axia-glass-border
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test glass_border_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-glass-border
+          path: ${{ runner.temp }}/axia-glass-border/
+          if-no-files-found: warn
       - name: Rust Force Quit integration and captures
         if: matrix.gpu == 1
         env:

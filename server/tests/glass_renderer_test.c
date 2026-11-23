@@ -1,4 +1,4 @@
-/* Frozen legacy-C pixel hashes: odd sizes, padding, alpha, fractional corners,
+/* Frozen independent C-reference pixel hashes: odd sizes, padding, alpha, fractional corners,
  * clip margins and changing content. Both cold and cached Rust paths must match,
  * including real worker threads. No C blur implementation is shipped here. */
 #include "canvas.h"
@@ -19,6 +19,27 @@ int main(void) {
     par_init(4);int checks=0;
     for(int threaded=0;threaded<2;threaded++) {
         canvas_parallel(threaded?par_rows:NULL);
+        /* A neutral backdrop stays neutral at fractional rounded edges. Packed
+         * red/blue division used to add colored fringes here, before the tint
+         * and border were even painted. Exercise all reduction factors and
+         * both the cold and cached paths with the real worker pool. */
+        for(int light=0;light<2;light++)for(int radius=0;radius<4;radius++) {
+            const int w=647,h=401,stride=w+7;
+            uint32_t *px=malloc((size_t)stride*h*4);assert(px);
+            Canvas c;canvas_init(&c,px,w,h,stride);
+            c.clip=(Rect){5,3,w-8,h-5};
+            axia_glass_reset();
+            for(int warm=0;warm<2;warm++) {
+                for(int i=0;i<stride*h;i++)px[i]=light?0xffeeeeeeu:0xff222222u;
+                canvas_backdrop_blur(&c,10.25f,10.5f,w-30.5f,h-30.25f,20.0f,(int[]){2,7,12,24}[radius]);
+                for(int i=0;i<stride*h;i++) {
+                    unsigned r=(px[i]>>16)&255,g=(px[i]>>8)&255,b=px[i]&255;
+                    assert(r==g&&g==b);
+                }
+                checks++;
+            }
+            free(px);
+        }
         for(int k=0;k<32;k++) {
             int w=k<16?67:647,h=k<16?49:401,stride=w+7;
             size_t n=(size_t)stride*h;
@@ -43,7 +64,7 @@ int main(void) {
         }
     }
 #ifndef GLASS_REFERENCE
-    printf("glass renderer: %d frozen C pixel checks passed (serial, threaded, cold, cached)\n",checks);
+    printf("glass renderer: %d C-reference/neutral-edge checks passed (serial, threaded, cold, cached)\n",checks);
 #endif
     return 0;
 }
