@@ -30,7 +30,7 @@ import { settings, settingsRevision } from './settings.js';
 import { arm, clockState } from './alarms.js';
 import { useStore } from './store.js';
 import { forceQuit } from './appcontrol.js';
-import { executeNativeEffect } from './nativeappmodel.js';
+import { executeNativeEffect, gestureBridge } from './nativeappmodel.js';
 import { disks } from './disks.js';
 import { createFactsStore, createFactsEncoder, emptyFactsStore, sameFacts, sameRecord, nativeTheme } from './nativeviewfacts.js';
 // The nodes of the shell layers a native view may put its menus and popovers in ("layer": "popover").
@@ -69,6 +69,7 @@ globalThis.__lordNativeView = () => {
           else if (effect.kind === 'shellKeyboard') refreshShellKeyboard();
           else if (effect.kind === 'switcher') { if (effect.reply) applyNativeWindowState(effect.reply); }
           else if (effect.kind === 'windowModel') applyNativeWindowState(effect.reply);
+          else if (effect.kind === 'shellGesture') gestureBridge.perform?.(effect);
           else notificationBridge.perform?.(effect);
         }
     } finally { drainingServices = false; }

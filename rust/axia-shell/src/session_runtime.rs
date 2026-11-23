@@ -52,6 +52,11 @@ pub(crate) fn timeout(now: Instant) -> Option<f64> {
     });
     wait
 }
+pub(crate) fn swipe(phase: i32, fingers: i32, dx: f64, dy: f64) -> bool {
+    let mut used = false;
+    each(|mut session| { if !used { used = session.physical_swipe(phase,fingers,dx,dy); } });
+    used
+}
 pub(crate) fn pending() -> bool {
     let mut pending = false;
     each(|session| pending |= session.service_pending());

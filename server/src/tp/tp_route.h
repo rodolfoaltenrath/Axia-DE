@@ -20,6 +20,7 @@ enum { TPR_FINGER = 0, TPR_WHEEL = 1, TPR_CONTINUOUS = 2 };
 void tp_route_scroll(int phase, double dx, double dy, int source);
 /* Pinch: scale relative to the start and accumulated rotation (degrees). */
 void tp_route_pinch(int phase, int fingers, double dx, double dy, double scale, double rotation);
+void tp_route_swipe(int phase, int fingers, double dx, double dy);
 
 /* Mouse wheels (main.c): REL_WHEEL_HI_RES / REL_HWHEEL[_HI_RES] in units of 1/120 of a notch
  * (+ up / + right). They're accumulated until the SYN (tp_route_wheel_flush) and go as fine scroll:

@@ -10,6 +10,7 @@ import { addListener } from '@lordos/runtime';
 import { createStore, useStore } from './store.js';
 import { settings } from './settings.js';
 import { wm } from './windows.js';
+import { gestureBridge } from './nativeappmodel.js';
 
 export const TRACKPAD_DEFAULTS = {
   speed: 0.5,               // pointer speed (0..1)
@@ -68,9 +69,14 @@ const DEFAULTS = { left: () => cycleWindows('left'), right: () => cycleWindows('
 
 // Last recognized swipe (for the interface or tests).
 export const lastSwipe = createStore(null);
+gestureBridge.perform = (effect) => {
+  const dir = effect.direction, fingers = effect.fingers;
+  lastSwipe.set({ dir, fingers, at: effect.at });
+  if (dir === 'up' || dir === 'down') actions[dir]?.({ dir, fingers });
+};
 
 let acc = null;
-addListener('swipe', (e) => {
+if (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__) addListener('swipe', (e) => {
   if (!e.system) return;
   if (e.phase === 'begin') acc = { x: 0, y: 0, fingers: e.fingers };
   else if (e.phase === 'update' && acc) { acc.x += e.dx; acc.y += e.dy; }

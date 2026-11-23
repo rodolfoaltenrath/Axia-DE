@@ -32,6 +32,7 @@ void     axia_view_set_modifiers(int flags);
 int      axia_view_get_modifiers(void);
 /* Typed pre-dispatch: bit 0 consumed, bit 1 forward modifier state to the client. */
 int      axia_session_key(int code, int value, const char *key, int flags);
+int      axia_session_swipe(int phase, int fingers, double dx, double dy);
 /* An action for the view's app, from the shell's glue: {"action": [cmd, key], "extra": {…}}. */
 void     axia_view_action(unsigned handle, const char *json);
 void     axia_view_tick(double now);

@@ -5,6 +5,8 @@ use crate::{runtime::native as scene, winmodel::{Session, WeakSession, SwitcherO
 use axia_state::{Reader, Subscription};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, VecDeque};
+#[path = "shell_swipe.rs"]
+mod swipe;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Node(i32, u64);
@@ -31,6 +33,7 @@ pub(crate) struct Service {
     changes: Subscription,
     mounted: Option<Mount>,
     hud: Option<Mount>,
+    swipe: swipe::Swipe,
     pending: VecDeque<(u64, Value)>,
     input: super::shell_input::Input,
     commands: crate::forcequit::App,
@@ -41,7 +44,7 @@ impl Service {
         let changes = opening.subscribe();
         let home = super::resource_roots().1.unwrap_or_default();
         Self { owner: owner.downgrade(), root: None, layers: BTreeMap::new(),
-            opening, changes, mounted: None, hud: None, pending: VecDeque::new(), input: super::shell_input::Input::new(&home),
+            opening, changes, mounted: None, hud: None, swipe: Default::default(), pending: VecDeque::new(), input: super::shell_input::Input::new(&home),
             commands: crate::forcequit::App::with_window_metadata(std::rc::Rc::new(crate::winmodel::WindowReader(owner.reader())),owner.catalog_store()) }
     }
     fn root_live(&self) -> bool {
@@ -53,6 +56,7 @@ impl Service {
         if self.root == Some(next) { return true; }
         if self.root.is_some() { self.cancel(owner); }
         self.hud = None;
+        self.swipe.reset();
         self.layers.clear();
         self.root = Some(next);
         self.ensure_hud(owner);
@@ -95,6 +99,20 @@ impl Service {
         self.mounted = None;
         self.pending.clear();
         self.changes.take();
+    }
+    pub(crate) fn generation(&self) -> Option<u64> { self.root.filter(|_|self.root_live()).map(|root|root.1) }
+    pub(crate) fn swipe(&mut self, owner: &mut Session, phase: i32, fingers: i32, dx: f64, dy: f64) -> bool {
+        let Some(generation) = self.generation() else { self.swipe.reset(); return false; };
+        if self.opening.read().is_some() { self.swipe.reset(); return true; }
+        if let Some(gesture) = self.swipe.event(phase,fingers,dx,dy) {
+            if matches!(gesture.direction,"left"|"right") {
+                let reply = owner.desktop_service().borrow().swipe(owner,gesture.direction=="left");
+                if reply["result"]["boundary"]==true { self.show_desktop_hud(owner); }
+                if reply["state"].is_object() { owner.queue_service_effects(vec![json!({"kind":"windowModel","reply":reply})]); }
+            }
+            owner.queue_service_effects(vec![json!({"kind":"shellGesture","scene":generation,"direction":gesture.direction,"fingers":gesture.fingers,"at":super::now_ms()})]);
+        }
+        true
     }
     /// Layers remain scene children until the root is destroyed. They may also
     /// contain React portals; tearing down a service must never delete siblings.
@@ -175,6 +193,7 @@ impl Service {
         if !self.root_live() {
             self.cancel(owner);
             self.hud = None;
+            self.swipe.reset();
             self.root = None;
             self.layers.clear();
             return;

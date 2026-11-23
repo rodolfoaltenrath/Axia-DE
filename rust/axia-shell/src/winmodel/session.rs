@@ -916,6 +916,10 @@ impl WeakSession {
 }
 
 impl Session {
+    pub(crate) fn physical_swipe(&mut self, phase: i32, fingers: i32, dx: f64, dy: f64) -> bool {
+        let scene = self.core.shell_scene.borrow().clone();
+        scene.is_some_and(|scene|scene.borrow_mut().swipe(self,phase,fingers,dx,dy))
+    }
     pub(crate) fn physical_key(&mut self, code: i32, value: i32, key: &str, flags: i32, enabled: bool) -> i32 {
         let scene = self.core.shell_scene.borrow().clone();
         scene.map_or(0,|scene|scene.borrow_mut().key(self,code,value,key,flags,enabled))
@@ -1089,6 +1093,8 @@ impl Session {
         // A completion can wait in the bridge while another opening starts.
         // Identity validation belongs here, before JS can apply its snapshot.
         let nonce = self.core.switcher_nonce.get();
+        let generation = self.core.shell_scene.borrow().as_ref().and_then(|scene|scene.borrow().generation());
+        effects.retain(|effect|effect["kind"]!="shellGesture" || effect["scene"].as_u64()==generation);
         effects.retain(|effect| !matches!(effect["kind"].as_str(),Some("switcher" | "windowModel"))
             || effect.get("nonce").is_none() || effect["nonce"].as_u64() == Some(nonce));
         (!effects.is_empty()).then(|| Value::Array(std::mem::take(&mut *effects)))

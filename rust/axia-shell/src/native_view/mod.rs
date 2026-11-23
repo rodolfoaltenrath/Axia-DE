@@ -166,6 +166,10 @@ pub unsafe extern "C" fn axia_session_key(code: i32, value: i32, key: *const c_c
     if !(1..256).contains(&code) || !(0..=2).contains(&value) { return 0; }
     services::key(code,value,text(key),flags & 31)
 }
+#[no_mangle]
+pub extern "C" fn axia_session_swipe(phase: i32, fingers: i32, dx: f64, dy: f64) -> i32 {
+    i32::from(services::swipe(phase,fingers,dx,dy))
+}
 fn with<T>(f: impl FnOnce(&mut Registry) -> T) -> T {
     VIEWS.with(|r| f(&mut r.borrow_mut()))
 }

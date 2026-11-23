@@ -240,6 +240,12 @@ unsafe fn swipe(phase: i32, n: i32, dx: f64, dy: f64) {
     }
 }
 #[no_mangle]
+/// # Safety
+/// Input-thread only; the installed host callbacks and Wayland state must be live.
+pub unsafe extern "C" fn tp_route_swipe(phase: i32, fingers: i32, dx: f64, dy: f64) {
+    swipe(phase,fingers,dx,dy);
+}
+#[no_mangle]
 pub extern "C" fn tp_route_wheel120(vertical: i32, horizontal: i32) {
     let mut state = routing();
     state.wheel_vertical = state.wheel_vertical.wrapping_add(vertical);

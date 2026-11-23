@@ -5,6 +5,8 @@
 #include "js.h"
 #include "js_winmodel.h"
 #include "ui.h"
+#include "../tp/tp_route.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,8 +171,18 @@ static JSValue f_modifiers(JSContext *c, JSValueConst t, int argc, JSValueConst 
     (void)t; (void)argc; (void)argv;
     return JS_NewInt32(c, axia_view_get_modifiers());
 }
+static JSValue f_input_swipe(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    int32_t phase=0, fingers=0; double dx=0, dy=0;
+    if (only_app[0] || argc<4 || JS_ToInt32(c,&phase,argv[0]) || JS_ToInt32(c,&fingers,argv[1]) ||
+        JS_ToFloat64(c,&dx,argv[2]) || JS_ToFloat64(c,&dy,argv[3]) || phase<1 || phase>4 ||
+        fingers<2 || fingers>5 || !isfinite(dx) || !isfinite(dy)) return JS_FALSE;
+    tp_route_swipe(phase,fingers,dx,dy);
+    return JS_TRUE;
+}
 static const JSCFunctionListEntry funcs[] = {
     JS_CFUNC_DEF("inputKey", 2, f_input_key),
+    JS_CFUNC_DEF("inputSwipe", 4, f_input_swipe),
     JS_CFUNC_DEF("modifiers", 0, f_modifiers),
     JS_CFUNC_DEF("mount", 3, f_mount),
     JS_CFUNC_DEF("unmount", 1, f_unmount),

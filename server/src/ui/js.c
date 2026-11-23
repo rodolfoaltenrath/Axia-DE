@@ -752,6 +752,10 @@ void js_pointer(const char *type, int target, float x, float y, int button) {
 
 void js_gesture(const char *kind, const char *phase, int target, float x, float y, double a, double b, double c, double d) {
     if (!ctx) return;
+    if (!strcmp(kind, "swipe") && d != 0) {
+        int p = !strcmp(phase,"begin") ? 1 : !strcmp(phase,"update") ? 2 : !strcmp(phase,"end") ? 3 : 4;
+        if (axia_session_swipe(p, (int)c, a, b)) { js_native_view_notify(); drain_jobs(); return; }
+    }
     target = axia_view_gesture(kind, phase, target, a, b);
     JSValueConst args[9] = {
         JS_NewString(ctx, kind), JS_NewString(ctx, phase), JS_NewInt32(ctx, target), JS_NewFloat64(ctx, x), JS_NewFloat64(ctx, y),

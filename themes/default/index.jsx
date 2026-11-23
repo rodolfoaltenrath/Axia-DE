@@ -131,7 +131,6 @@ function App() {
   useEffect(() => registerGestureActions({
     up: (g) => { if (g.fingers >= 4) { setLaunchpad(false); openOverview(); } else setLaunchpad(true); },
     down: () => { setLaunchpad(false); closeOverview(); },
-    left: desktopSwipe('left'), right: desktopSwipe('right'),
   }), []);
 
   const wallpaper = findWallpaper(t.wallpapers, s.wallpaper, s.wallpaperUser);

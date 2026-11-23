@@ -5,6 +5,8 @@ use std::time::Instant;
 mod window_input;
 #[path = "shell_desktop_input_tests.rs"]
 mod desktop_input;
+#[path = "shell_swipe_tests.rs"]
+mod swipe_input;
 
 fn fixture() -> (Session,Controller,i32) {
     fixture_home(None)

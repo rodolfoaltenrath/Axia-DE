@@ -243,6 +243,17 @@ jobs:
           name: axia-desktop-hud
           path: ${{ runner.temp }}/axia-desktop-hud/
           if-no-files-found: warn
+      - name: Rust system swipe recognition and captures
+        if: matrix.gpu == 1
+        env:
+          AXIA_SYSTEM_SWIPES_OUTPUT: ${{ runner.temp }}/axia-system-swipes
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test system_swipes_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-system-swipes
+          path: ${{ runner.temp }}/axia-system-swipes/
+          if-no-files-found: warn
       - name: Rust native Window menu and captures
         if: matrix.gpu == 1
         env:
