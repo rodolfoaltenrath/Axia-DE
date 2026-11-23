@@ -283,16 +283,20 @@ const COLORS = ['#ff3b30', '#ffcc00', '#34c759', '#0a84ff', '#ffffff', '#1c1c1e'
 function Editor({ handle, path }) {
   const th = useTheme();
   const win = useAppWindow();
-  const [tool, setTool] = useState('arrow');
-  const [color, setColor] = useState(COLORS[0]);
-  const [ops, setOps] = useState([]);
-  const [draft, setDraft] = useState(null);
-  const [text, setText] = useState(null);        // { x, y, value } (image coordinates)
+  const info = media.info(handle) || { width: 1, height: 1 };
+  const owner = useRef(null);
+  if (!owner.current) owner.current = lord.nativeApps.create(APP);
+  const request = input => owner.current.request(JSON.stringify({ cmd: 'markup', ...input }));
+  const [state, setState] = useState(() => request({ op: 'open', image: info }));
+  const latest = useRef(state);
+  const { tool, color, ops, draft, text } = state;
+  const send = (op, facts = {}) => {
+    const reply = request({ op, ...facts });
+    if (reply.revision !== latest.current.revision) { latest.current = reply; setState(reply); }
+  };
   const [preview, setPreview] = useState(0);
   const [msg, setMsg] = useState(null);
   const box = useRef(null);
-  const drag = useRef(null);
-  const info = media.info(handle) || { width: 1, height: 1 };
   useEffect(() => () => { media.close(handle); }, []);
   useEffect(() => () => { if (preview) media.close(preview); }, [preview]);
   useEffect(() => {
@@ -300,39 +304,27 @@ function Editor({ handle, path }) {
     const id = media.annotate(handle, all, preview);
     if (id && id !== preview) setPreview(id);
     if (id) media.view(id, { fit: 'contain', background: 0 });
-  }, [ops, draft, handle]);
+  }, [state.drawingRevision, handle]);
   const imageGeometry = (cmd, point) => {
     const [x, y, w, h] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1];
     return geometry({ cmd, point, viewport: { x, y, w, h }, image: info });
   };
-  const map = (x, y) => imageGeometry('map', { x, y });
+  const pointerFacts = e => {
+    const [x, y, w, h] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1];
+    return { point: point(e), viewport: { x, y, w, h } };
+  };
   useEffect(() => {
     const offMove = addListener('pointermove', (e) => {
-      if (!drag.current) return;
-      const p = map(e.x, e.y);
-      if (!p) return;
-      setDraft((d) => d && { ...d, x2: p.x, y2: p.y });
+      if (latest.current.dragging) send('move', pointerFacts(e));
     });
     const offUp = addListener('pointerup', () => {
-      if (!drag.current) return;
-      drag.current = null;
-      setDraft((d) => { if (d && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > 3) setOps((o) => [...o, d]); return null; });
+      if (latest.current.dragging) send('up');
     });
     return () => { offMove(); offUp(); };
   });
-  const width = Math.max(3, Math.round(Math.min(info.width, info.height) / 220));
-  const down = (e) => {
-    const p = map(e.x, e.y);
-    if (!p) return;
-    if (tool === 'text') { setText({ x: p.x, y: p.y, value: '' }); return; }
-    drag.current = true;
-    setDraft({ type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, color, width: tool === 'blur' ? 6 : width });
-  };
-  const addText = () => {
-    if (text && text.value.trim()) setOps((o) => [...o, { type: 'text', x1: text.x, y1: text.y, text: text.value, color, size: Math.max(18, width * 7) }]);
-    setText(null);
-  };
-  useKeyboard((e) => { if ((e.ctrl || e.meta) && String(e.base).toLowerCase() === 'z') setOps((o) => o.slice(0, -1)); });
+  const down = e => send('down', pointerFacts(e));
+  const addText = () => send('textSubmit');
+  useKeyboard((e) => { if ((e.ctrl || e.meta) && String(e.base).toLowerCase() === 'z') send('undo'); });
   const save = async () => {
     const base = path ? path.split('/').pop().replace(/\.png$/i, '') : tr('screenshots.fileName', { date: stamp() });
     const r = await media.saveImage(preview || handle, freeName(captureDir(), `${base} (${tr('screenshots.annotated')})`, 'png'));
@@ -347,19 +339,19 @@ function Editor({ handle, path }) {
     <View style={{ flex: 1 }}>
       <Toolbar>
         <ToolbarGroup>
-          {tools.map(([k, g, key]) => <ToolbarButton key={k} icon={g} title={tr(key)} active={tool === k} onClick={() => setTool(k)} />)}
+          {tools.map(([k, g, key]) => <ToolbarButton key={k} icon={g} title={tr(key)} active={tool === k} onClick={() => send('tool', { value: k })} />)}
         </ToolbarGroup>
         <ToolbarDivider />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {COLORS.map((c) => (
-            <View key={c} onClick={() => setColor(c)} style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+            <View key={c} onClick={() => send('color', { value: c })} style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
               border: `2px solid ${color === c ? th.accent : 'transparent'}` }}>
               <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: c, border: `1px solid ${th.separator}` }} />
             </View>
           ))}
         </View>
         <ToolbarSpacer />
-        <ToolbarButton icon="⟲" title={tr('screenshots.undo')} onClick={() => setOps((o) => o.slice(0, -1))} />
+        <ToolbarButton icon="⟲" title={tr('screenshots.undo')} onClick={() => send('undo')} />
         <ToolbarButton icon="⧉" title={tr('screenshots.copy')} onClick={copy} />
         <Button label={tr('screenshots.done')} onClick={() => wm.close(win.id)} />
         <Button primary label={tr('screenshots.save')} onClick={save} />
@@ -368,7 +360,7 @@ function Editor({ handle, path }) {
         <MediaView media={preview || handle} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} />
         {text && tp && (
           <View style={{ position: 'absolute', left: tp.left, top: tp.top, width: 260 }}>
-            <TextInput value={text.value} autoFocus onChange={(v) => setText({ ...text, value: v })} onSubmit={addText} onCancel={() => setText(null)}
+            <TextInput value={text.value} autoFocus onChange={(value) => send('text', { value })} onSubmit={addText} onCancel={() => send('textCancel')}
               placeholder={tr('screenshots.textHint')} />
           </View>
         )}

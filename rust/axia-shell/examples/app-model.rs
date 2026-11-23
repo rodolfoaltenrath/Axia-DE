@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use std::io::{self, BufRead};
 fn main() {
     let mut settings = settings_model::Model::default();
+    let mut screenshots = axia_app_screenshots::Model::default();
     for line in io::stdin().lock().lines() {
         let line = line.expect("read model request");
         let input: Value = serde_json::from_str(&line).expect("model request JSON");
@@ -20,7 +21,7 @@ fn main() {
             "terminal" => terminal_model::request(&input["input"]),
             "passwords" => passwords_model::request(&input["input"]),
             "sysinfo" => sysinfo_model::request(&input["input"]),
-            "screenshots" => axia_app_screenshots::geometry::request(&input["input"]),
+            "screenshots" => screenshots.request(&input["input"]),
             _ => json!({"error":"app.invalidRequest"}),
         };
         println!("{reply}");
