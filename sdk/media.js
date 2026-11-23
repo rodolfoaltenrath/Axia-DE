@@ -128,7 +128,12 @@ function trackDevice(id, app, kind) {
 }
 function untrack(id) {
   const d = devices.get(id);
-  if (d) { devices.delete(id); markDeviceUse(d.app, d.kind, false); }
+  if (d) {
+    devices.delete(id);
+    // A rejected/finished source may overlap another source of this app.
+    if (![...devices.values()].some(other => other.app === d.app && other.kind === d.kind))
+      markDeviceUse(d.app, d.kind, false);
+  }
 }
 
 // State of a player (or camera, or recording) for React. It is built here even if no
