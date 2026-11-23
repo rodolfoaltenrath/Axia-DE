@@ -7,7 +7,7 @@ mod clock_tests;
 #[cfg(test)]
 mod desktop_tests;
 mod quit;
-mod switcher_source;
+pub(crate) mod switcher_source;
 #[cfg(test)]
 mod quit_tests;
 #[cfg(test)]
@@ -45,6 +45,27 @@ impl Controller {
         self.windows.as_ref().and_then(Session::take_service_effects)
     }
     pub fn request(&mut self, input: &Value) -> Value {
+        if matches!(input["cmd"].as_str(),Some("shellRoot" | "shellLayer" | "shellKeyboard" | "switcherStatus")) {
+            let Some(windows) = &mut self.windows else { return json!({"error":"app.invalidRequest"}); };
+            match input["cmd"].as_str().unwrap() {
+                "switcherStatus" => return windows.switcher_status(),
+                "shellKeyboard" => return json!({"busy":windows.switcher_reader().read().is_some()}),
+                "shellRoot" => {
+                    let Some(node) = input["node"].as_i64().and_then(|id|i32::try_from(id).ok()).filter(|_|windows.resident()) else {
+                        return json!({"error":"app.invalidRequest"});
+                    };
+                    let scene = windows.shell_scene();
+                    return json!({"bound":scene.borrow_mut().bind_root(windows,node)});
+                },
+                "shellLayer" => {
+                    let Some(z) = input["z"].as_i64().and_then(|z|i32::try_from(z).ok()).filter(|_|windows.resident()) else {
+                        return json!({"error":"app.invalidRequest"});
+                    };
+                    return json!({"node":windows.shell_scene().borrow_mut().layer(z).unwrap_or(0)});
+                },
+                _ => unreachable!(),
+            }
+        }
         if input["cmd"] == "switcherPrepare" {
             let Some(windows) = &mut self.windows else {
                 return json!({"error":"app.invalidRequest"});
@@ -58,12 +79,36 @@ impl Controller {
                 },
             };
             let back = match input.get("back") { None => false, Some(Value::Bool(value)) => *value, _ => return json!({"error":"app.invalidRequest"}) };
+            // Settle the previous profile before creating a new opening. A later
+            // scene tick must not cancel it for a preference that already changed.
+            if windows.resident() { windows.shell_scene().borrow_mut().sync_input(windows); }
             return windows.prepare_switcher(fullscreen,surface,hold,back)
                 .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
         }
+        if input["cmd"] == "switcherKey" {
+            let nonce = match input.get("nonce") {
+                Some(value) => value.as_u64(),
+                None => self.windows.as_ref().and_then(|windows|windows.switcher_reader().read().as_ref().map(|opening|opening.nonce)),
+            };
+            let (Some(windows), Some(key), Some(mods), Some(down), Some(shift)) = (
+                &mut self.windows, input["key"].as_str(),
+                input["mods"].as_i64().and_then(|value|i32::try_from(value).ok()).filter(|value|*value>=0),
+                input["down"].as_bool(), input["shift"].as_bool(),
+            ) else { return json!({"error":"app.invalidRequest"}); };
+            let Some(nonce) = nonce else {
+                return if input.get("nonce").is_some() { json!({"error":"app.invalidRequest"}) } else { json!({"consumed":false}) };
+            };
+            let reply = windows.switcher_key(nonce,key,mods,down,shift);
+            if reply["action"].is_array() { windows.switcher_action(nonce,reply["action"].clone()); }
+            return reply;
+        }
         if input["cmd"] == "switcherCancel" {
-            let (Some(windows),Some(nonce)) = (&mut self.windows,input["nonce"].as_u64()) else {
+            let Some(windows) = &mut self.windows else {
                 return json!({"error":"app.invalidRequest"});
+            };
+            let nonce = match input.get("nonce") {
+                Some(value) => match value.as_u64() { Some(nonce)=>nonce,None=>return json!({"error":"app.invalidRequest"}) },
+                None => match windows.switcher_reader().read().as_ref() { Some(opening)=>opening.nonce,None=>return json!({"result":false}) },
             };
             return windows.cancel_switcher(nonce)
                 .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
@@ -84,7 +129,8 @@ impl Controller {
         if input["cmd"] == "desktopSession" {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.desktop_service();
-            return service.borrow_mut().command(windows,input);
+            let reply = service.borrow_mut().command(windows,input);
+            return reply;
         }
         if input["cmd"] == "sessionRestore" {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
@@ -124,11 +170,9 @@ impl Controller {
                 },
                 _ => return json!({"error":"app.invalidRequest"}),
             };
-            return self
-                .windows
-                .as_mut()
-                .and_then(|windows| windows.app_command(command, &[]).ok())
-                .unwrap_or_else(|| json!({"error":"app.invalidRequest"}));
+            let Some(windows) = &mut self.windows else { return json!({"error":"app.invalidRequest"}); };
+            let reply = windows.app_command(command,&[]).unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
+            return reply;
         }
         match input["cmd"].as_str() {
             Some("groupInfo" | "group" | "quitApp" | "quitAppNext") => {
@@ -179,75 +223,87 @@ impl Controller {
         let Some(windows) = &mut self.windows else {
             return json!({"error":"app.invalidRequest"});
         };
-        let reader = windows.reader();
-        let state = reader.read();
-        let id = if matches!(command, AppCommand::Cycle(_)) {
-            state.focused_window()
-        } else {
-            input["id"].as_str().or_else(|| state.focused_window())
-        };
-        let groups = self.app.command_groups();
-        let selected = groups
-            .iter()
-            .find(|group| group.windows.iter().any(|w| Some(w.id.as_str()) == id));
-        if matches!(
-            command,
-            AppCommand::Cycle(_) | AppCommand::Hide | AppCommand::HideOthers
-        ) && selected.is_none()
+        window_command(windows, &self.app, command, input["id"].as_str(), &input["facts"])
+    }
+}
+
+pub(crate) fn window_command(
+    windows: &mut Session, app: &crate::forcequit::App, command: AppCommand,
+    target: Option<&str>, facts: &Value,
+) -> Value {
+    let reader = windows.reader();
+    let state = reader.read();
+    if matches!(command, AppCommand::WindowAction(_)) {
+        let id = target.or_else(|| state.focused_window()).map(str::to_owned);
+        drop(state);
+        return id.as_deref().map_or_else(|| json!({"result":null,"state":null}), |id|
+            windows.app_command(command,&[id]).unwrap_or_else(|_|json!({"error":"app.invalidRequest"})));
+    }
+    let id = if matches!(command, AppCommand::Cycle(_)) {
+        state.focused_window()
+    } else {
+        target.or_else(|| state.focused_window())
+    };
+    let groups = app.command_groups();
+    let selected = groups
+        .iter()
+        .find(|group| group.windows.iter().any(|w| Some(w.id.as_str()) == id));
+    if matches!(
+        command,
+        AppCommand::Cycle(_) | AppCommand::Hide | AppCommand::HideOthers
+    ) && selected.is_none()
+    {
+        return json!({"result":null,"state":null});
+    }
+    let ids: Vec<_> = groups
+        .iter()
+        .filter(|group| match command {
+            AppCommand::Cycle(_) | AppCommand::Hide => {
+                selected.is_some_and(|selected| selected.key == group.key)
+            }
+            AppCommand::HideOthers => {
+                selected.is_some_and(|selected| selected.key != group.key)
+            }
+            _ => true,
+        })
+        .flat_map(|group| group.windows.iter().map(|w| w.id.as_str()))
+        .collect();
+    if matches!(command, AppCommand::BringAll | AppCommand::Arrange(_)) {
+        let mut stack: Vec<_> = state
+            .windows()
+            .filter(|w| {
+                ids.contains(&w.id())
+                    && !w.minimized()
+                    && (w.pip() || w.desktop() == state.active_desktop())
+            })
+            .map(|w| w.id().to_owned())
+            .collect();
+        if let Some(anchor) = target
+            .filter(|id| stack.iter().any(|w| w == id))
         {
+            stack.retain(|id| id != anchor);
+            if matches!(command, AppCommand::Arrange(_)) {
+                stack.reverse();
+                stack.insert(0, anchor.to_owned());
+            } else {
+                stack.push(anchor.to_owned());
+            }
+        } else if matches!(command, AppCommand::Arrange(_)) {
             return json!({"result":null,"state":null});
         }
-        let ids: Vec<_> = groups
-            .iter()
-            .filter(|group| match command {
-                AppCommand::Cycle(_) | AppCommand::Hide => {
-                    selected.is_some_and(|selected| selected.key == group.key)
-                }
-                AppCommand::HideOthers => {
-                    selected.is_some_and(|selected| selected.key != group.key)
-                }
-                _ => true,
-            })
-            .flat_map(|group| group.windows.iter().map(|w| w.id.as_str()))
-            .collect();
-        if matches!(command, AppCommand::BringAll | AppCommand::Arrange(_)) {
-            let mut stack: Vec<_> = state
-                .windows()
-                .filter(|w| {
-                    ids.contains(&w.id())
-                        && !w.minimized()
-                        && (w.pip() || w.desktop() == state.active_desktop())
-                })
-                .map(|w| w.id().to_owned())
-                .collect();
-            if let Some(anchor) = input["id"]
-                .as_str()
-                .filter(|id| stack.iter().any(|w| w == id))
-            {
-                stack.retain(|id| id != anchor);
-                if matches!(command, AppCommand::Arrange(_)) {
-                    stack.reverse();
-                    stack.insert(0, anchor.to_owned());
-                } else {
-                    stack.push(anchor.to_owned());
-                }
-            } else if matches!(command, AppCommand::Arrange(_)) {
-                return json!({"result":null,"state":null});
-            }
-            drop(state);
-            return windows
-                .app_command_with_facts(
-                    command,
-                    &stack.iter().map(String::as_str).collect::<Vec<_>>(),
-                    &input["facts"],
-                )
-                .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}));
-        }
         drop(state);
-        windows
-            .app_command(command, &ids)
-            .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}))
+        return windows
+            .app_command_with_facts(
+                command,
+                &stack.iter().map(String::as_str).collect::<Vec<_>>(),
+                facts,
+            )
+            .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}));
     }
+    drop(state);
+    windows
+        .app_command(command, &ids)
+        .unwrap_or_else(|_| json!({"error":"app.invalidRequest"}))
 }
 
 fn selected_group<'a>(

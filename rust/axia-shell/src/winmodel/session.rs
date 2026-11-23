@@ -898,6 +898,7 @@ struct SessionCore {
     active_switcher: std::cell::Cell<Option<u64>>,
     switcher_nonce: std::cell::Cell<u64>,
     switcher_opening: Store<Option<SwitcherOpening>>,
+    shell_scene: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::native_view::shell_scene::Service>>>>,
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
@@ -915,8 +916,31 @@ impl WeakSession {
 }
 
 impl Session {
+    pub(crate) fn physical_key(&mut self, code: i32, value: i32, key: &str, flags: i32, enabled: bool) -> i32 {
+        let scene = self.core.shell_scene.borrow().clone();
+        scene.map_or(0,|scene|scene.borrow_mut().key(self,code,value,key,flags,enabled))
+    }
+    pub(crate) fn sync_key_grabs(&self) {
+        if let Some(scene) = self.core.shell_scene.borrow().as_ref() { scene.borrow().sync_grabs(); }
+    }
+    pub(crate) fn shell_scene(&self) -> std::rc::Rc<std::cell::RefCell<crate::native_view::shell_scene::Service>> {
+        self.core.shell_scene.borrow_mut().get_or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(
+            crate::native_view::shell_scene::Service::new(self)))).clone()
+    }
+    pub(crate) fn switcher_status(&self) -> Value {
+        if let Some(scene) = self.core.shell_scene.borrow().as_ref() { return scene.borrow().status(); }
+        let opening = self.core.switcher_opening.read();
+        json!({"opened":opening.is_some(),"nonce":opening.as_ref().map(|opening|opening.nonce),"handle":0,"node":0})
+    }
+    fn switcher_keyboard_changed(&self) {
+        if self.core.shell_scene.borrow().is_some() { self.queue_service_effects(vec![json!({"kind":"shellKeyboard"})]); }
+    }
+    pub(crate) fn switcher_action(&mut self, nonce: u64, action: Value) {
+        let scene = self.core.shell_scene.borrow().clone();
+        if let Some(scene) = scene { scene.borrow_mut().action(self,nonce,action); }
+    }
     pub(crate) fn switcher_reader(&self) -> Reader<Option<SwitcherOpening>> { self.core.switcher_opening.reader() }
-    // The adapter mirrors only identity/held modifiers; origin and direction stay here.
+    // The adapter mirrors only identity; held modifiers, origin and direction stay here.
     pub(crate) fn prepare_switcher(&mut self, fullscreen: bool, surface: i64, hold: i32, back: bool) -> Result<Value,String> {
         if self.core.switcher_opening.read().is_some() { return Ok(json!({"result":{"opened":false}})); }
         // Never reuse an identity or round it when it crosses the JS boundary.
@@ -929,14 +953,36 @@ impl Session {
         self.core.switcher_nonce.set(nonce);
         self.core.active_switcher.set(None);
         self.core.switcher_opening.set(Some(SwitcherOpening { nonce,hold,back,origin }));
-        reply["result"] = json!({"opened":true,"nonce":nonce,"hold":hold});
+        self.switcher_keyboard_changed();
+        reply["result"] = json!({"opened":true,"nonce":nonce});
         Ok(reply)
     }
+    pub(crate) fn switcher_key(&self, nonce: u64, key: &str, mods: i32, down: bool, shift: bool) -> Value {
+        let opening = self.core.switcher_opening.read();
+        let Some(opening) = opening.as_ref().filter(|opening| opening.nonce == nonce) else {
+            return json!({"consumed":false});
+        };
+        // A release may arrive before the scene mounts. The adapter queues this
+        // native intent, just like moves; it never decides against a local hold.
+        let action = if mods & opening.hold == 0 { json!(["commit"]) }
+            else if !down { Value::Null }
+            else { match key {
+                "Tab" => json!(["move",if shift { -1 } else { 1 }]),
+                "ArrowRight" => json!(["move",1]),
+                "ArrowLeft" => json!(["move",-1]),
+                "Enter" => json!(["commit"]),
+                "Escape" => json!(["cancel"]),
+                _ => Value::Null,
+            }};
+        json!({"consumed":true,"action":action})
+    }
     pub(crate) fn close_switcher_opening(&self, nonce: u64) -> Option<SwitcherOpening> {
-        self.core.switcher_opening.update(|opening| {
+        let closed = self.core.switcher_opening.update(|opening| {
             if opening.as_ref().is_some_and(|opening| opening.nonce == nonce) { (opening.take(),true) }
             else { (None,false) }
-        })
+        });
+        if closed.is_some() { self.switcher_keyboard_changed(); }
+        closed
     }
     pub(crate) fn cancel_switcher(&mut self, nonce: u64) -> Result<Value,String> {
         let Some(opening) = self.close_switcher_opening(nonce) else { return Ok(json!({"result":false})); };
@@ -976,6 +1022,8 @@ impl Session {
     pub(crate) fn downgrade(&self) -> WeakSession { WeakSession(std::rc::Rc::downgrade(&self.core)) }
     pub(crate) fn resident(&self) -> bool { self.core.resident.get() }
     pub(crate) fn service_tick(&mut self, now: std::time::Instant) {
+        let scene = self.core.shell_scene.borrow().clone();
+        if let Some(scene) = scene { scene.borrow_mut().tick(self); }
         let desktops = self.core.desktops.borrow().clone();
         if let Some(service) = desktops {
             let mut service = service.borrow_mut();
@@ -1012,15 +1060,21 @@ impl Session {
             if service.invalidated() { self.queue_service_effects(service.tick()); }
         }
     }
-    fn queue_service_effects(&self, effects: Vec<Value>) {
+    pub(crate) fn queue_service_effects(&self, effects: Vec<Value>) {
         let mut queued = self.core.effects.borrow_mut();
         for effect in effects {
             // Compatibility preferences are complete revisioned snapshots: keep the latest.
-            if matches!(effect["kind"].as_str(), Some("settingsState" | "localeState" | "notificationState")) { queued.retain(|old| old["kind"] != effect["kind"]); }
-            queued.push(effect);
+            if matches!(effect["kind"].as_str(), Some("settingsState" | "localeState" | "notificationState" | "shellKeyboard")) { queued.retain(|old| old["kind"] != effect["kind"]); }
+            // Apply the native transaction before keyboard observers inspect
+            // their compatibility windows (notably a fullscreen origin).
+            if effect["reply"]["state"].is_object() && matches!(effect["kind"].as_str(),Some("switcher" | "windowModel")) {
+                let position = queued.iter().position(|old|old["kind"]=="shellKeyboard").unwrap_or(queued.len());
+                queued.insert(position,effect);
+            } else { queued.push(effect); }
         }
     }
     pub(crate) fn service_wait(&self, now: std::time::Instant) -> Option<f64> {
+        if self.core.shell_scene.borrow().as_ref().is_some_and(|scene|scene.borrow().pending()) { return Some(0.); }
         if self.core.preference_publications.borrow().as_ref().is_some_and(|service| service.invalidated()) { return Some(0.); }
         if self.core.desktops.borrow().as_ref().is_some_and(|service| service.borrow().invalidated()) { return Some(0.); }
         [self.core.restore.borrow().as_ref().and_then(|service| service.borrow().background_wait(now)),
@@ -1032,6 +1086,11 @@ impl Session {
     pub(crate) fn service_pending(&self) -> bool { !self.core.effects.borrow().is_empty() }
     pub(crate) fn take_service_effects(&self) -> Option<Value> {
         let mut effects = self.core.effects.borrow_mut();
+        // A completion can wait in the bridge while another opening starts.
+        // Identity validation belongs here, before JS can apply its snapshot.
+        let nonce = self.core.switcher_nonce.get();
+        effects.retain(|effect| !matches!(effect["kind"].as_str(),Some("switcher" | "windowModel"))
+            || effect.get("nonce").is_none() || effect["nonce"].as_u64() == Some(nonce));
         (!effects.is_empty()).then(|| Value::Array(std::mem::take(&mut *effects)))
     }
     pub(crate) fn memory_service(&self) -> std::rc::Rc<std::cell::RefCell<crate::window_memory::Memory>> {

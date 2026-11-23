@@ -26,6 +26,8 @@ mod window_menu_tests;
 mod shell_icons;
 mod titlebar;
 mod switcher;
+pub(crate) mod shell_scene;
+mod shell_input;
 #[cfg(test)]
 mod switcher_tests;
 #[cfg(test)]
@@ -143,6 +145,7 @@ struct Registry {
     home: Option<String>,
     next: u32,
     hosts: BTreeMap<u32, Host>,
+    owned: BTreeMap<u32, crate::winmodel::WeakSession>,
 }
 thread_local! { static VIEWS: RefCell<Registry> = RefCell::new(Registry::default()); }
 static MODIFIERS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
@@ -154,6 +157,15 @@ pub extern "C" fn axia_view_set_modifiers(flags: i32) {
 pub(crate) fn modifiers() -> i32 {
     MODIFIERS.load(std::sync::atomic::Ordering::Relaxed)
 }
+#[no_mangle]
+pub extern "C" fn axia_view_get_modifiers() -> i32 { modifiers() }
+/// Bit 0: the native session consumed the physical key. Bit 1: its modifier
+/// state must still be delivered to a client that currently has keyboard focus.
+#[no_mangle]
+pub unsafe extern "C" fn axia_session_key(code: i32, value: i32, key: *const c_char, flags: i32) -> i32 {
+    if !(1..256).contains(&code) || !(0..=2).contains(&value) { return 0; }
+    services::key(code,value,text(key),flags & 31)
+}
 fn with<T>(f: impl FnOnce(&mut Registry) -> T) -> T {
     VIEWS.with(|r| f(&mut r.borrow_mut()))
 }
@@ -163,9 +175,28 @@ pub(crate) fn resource_roots() -> (String, Option<String>) {
 fn with_host<T>(handle: u32, f: impl FnOnce(&mut Host) -> T) -> Option<T> {
     // A host is taken out while it runs: an app request cannot reach the registry.
     let mut host = with(|r| r.hosts.remove(&handle))?;
+    if !host.mount_alive() {
+        with(|r| r.owned.remove(&handle));
+        return None;
+    }
     let out = f(&mut host);
+    let owner = with(|r| r.owned.get(&handle).and_then(crate::winmodel::WeakSession::upgrade));
+    if let Some(owner) = owner {
+        if let Some(Value::Array(effects)) = host.take() { owner.queue_service_effects(effects); }
+    }
     with(|r| r.hosts.insert(handle, host));
     Some(out)
+}
+fn register_host(host: Host, owner: Option<crate::winmodel::WeakSession>) -> u32 {
+    let handle = with(|r| {
+        r.next = r.next.checked_add(1).expect("native view handle exhausted");
+        let handle = r.next;
+        r.hosts.insert(handle, host);
+        if let Some(owner) = owner { r.owned.insert(handle, owner); }
+        handle
+    });
+    with_host(handle, |_| ()); // Drain effects produced by the first native sync.
+    handle
 }
 unsafe fn text<'a>(p: *const c_char) -> &'a str {
     if p.is_null() {
@@ -280,16 +311,11 @@ unsafe fn mount(node: i32, id: &str, facts: *const c_char,
         if let Some(reader) = windows { host.bind_window(reader); }
     }
     host.facts(facts);
-    with(|r| {
-        r.next = r.next.wrapping_add(1).max(1);
-        let handle = r.next;
-        r.hosts.insert(handle, host);
-        handle
-    })
+    register_host(host, None)
 }
 #[no_mangle]
 pub extern "C" fn axia_view_unmount(handle: u32) {
-    let host = with(|r| r.hosts.remove(&handle));
+    let host = with(|r| { r.owned.remove(&handle); r.hosts.remove(&handle) });
     // Dropped outside the registry: the app and its nodes go now.
     drop(host);
 }
@@ -298,13 +324,14 @@ pub extern "C" fn axia_view_unmount(handle: u32) {
 /// app's own thread-local service has already been destroyed.
 #[no_mangle]
 pub extern "C" fn axia_view_shutdown() {
-    let hosts = with(|r| std::mem::take(&mut r.hosts));
+    let hosts = with(|r| { r.owned.clear(); std::mem::take(&mut r.hosts) });
     // App close callbacks must run outside the registry borrow, as on unmount.
     // Keep the handle sequence: a stale JS callback must never target a new host.
     drop(hosts);
 }
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_facts(handle: u32, facts: *const c_char) {
+    if with(|r| r.owned.contains_key(&handle)) { return; }
     let facts = json(facts);
     with_host(handle, |h| h.facts(facts));
 }
@@ -421,7 +448,7 @@ pub extern "C" fn axia_view_tick(now: f64) {
     crate::locale::tick();
     services::tick(std::time::Instant::now());
     for handle in handles() {
-        with_host(handle, |h| h.tick(now));
+        if !with(|r| r.owned.contains_key(&handle)) { with_host(handle, |h| h.tick(now)); }
     }
 }
 /// Milliseconds until a view or resident settings need a tick, or -1.

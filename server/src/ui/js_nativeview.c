@@ -2,6 +2,7 @@
  * view its mount node, its facts (settings, theme, services) and runs the effects that belong
  * to the shell; drawing, input and captions are Rust's. */
 #include "js_nativeview.h"
+#include "js.h"
 #include "js_winmodel.h"
 #include "ui.h"
 #include <stdio.h>
@@ -154,7 +155,23 @@ static JSValue f_pointer(JSContext *c, JSValueConst t, int argc, JSValueConst *a
     return JS_NewInt32(c, mount);
 }
 
+/* Session-only synthetic evdev input for accessibility and compositor probes.
+ * It uses the physical translation/ownership path, not __lordKey. */
+static JSValue f_input_key(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t;
+    int32_t code = 0, value = 0;
+    if (only_app[0] || argc < 2 || JS_ToInt32(c, &code, argv[0]) || JS_ToInt32(c, &value, argv[1]) ||
+        code < 1 || code >= 256 || value < 0 || value > 2) return JS_FALSE;
+    js_key(code, value);
+    return JS_TRUE;
+}
+static JSValue f_modifiers(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
+    (void)t; (void)argc; (void)argv;
+    return JS_NewInt32(c, axia_view_get_modifiers());
+}
 static const JSCFunctionListEntry funcs[] = {
+    JS_CFUNC_DEF("inputKey", 2, f_input_key),
+    JS_CFUNC_DEF("modifiers", 0, f_modifiers),
     JS_CFUNC_DEF("mount", 3, f_mount),
     JS_CFUNC_DEF("unmount", 1, f_unmount),
     JS_CFUNC_MAGIC_DEF("facts", 2, f_json, 0),

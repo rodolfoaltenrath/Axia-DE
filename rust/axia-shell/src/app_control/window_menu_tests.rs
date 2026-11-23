@@ -82,7 +82,7 @@ fn switcher_preparation_resolves_current_surface_and_cancel_revalidates_the_orig
     let revision = reader.revision();
     control.request(&json!({"cmd":"switcherCancel","nonce":nonce}));
     assert_eq!(reader.revision(),revision,"closed origins cannot change focus or recreate a window");
-    for invalid in [json!({"cmd":"switcherCancel"})] {
+    for invalid in [json!({"cmd":"switcherCancel","nonce":false})] {
         assert_eq!(control.request(&invalid)["error"],"app.invalidRequest");
         assert_eq!(reader.revision(),revision);
     }
@@ -147,4 +147,51 @@ fn switcher_opening_survives_controller_recreation_and_rejects_stale_cancel() {
     assert_eq!(opening.read().as_ref().unwrap().nonce,next);
     assert!(changes.take().is_none());
     assert_eq!(session.reader().revision(),revision);
+}
+
+#[test]
+fn switcher_keys_use_native_hold_and_identity_without_mutating_the_model() {
+    let session = Session::default();
+    let mut control = Controller::new(session.clone());
+    let first = control.request(&json!({"cmd":"switcherPrepare","hold":8}));
+    let nonce = first["result"]["nonce"].as_u64().unwrap();
+    assert!(first["result"].get("hold").is_none());
+    // Recreating the transport cannot lose the held modifiers or opening.
+    let mut control = Controller::new(session.clone());
+    let revision = session.reader().revision();
+    let opening = session.switcher_reader();
+    let opening_revision = opening.revision();
+    let key = |control: &mut Controller, key, mods, down, shift| control.request(&json!({
+        "cmd":"switcherKey","nonce":nonce,"key":key,"mods":mods,"down":down,"shift":shift,
+        "hold":2,"origin":"forged","back":true,
+    }));
+    for (name, mods, down, shift, action) in [
+        ("Tab",8,true,false,json!(["move",1])),
+        ("Tab",9,true,true,json!(["move",-1])),
+        ("ArrowRight",9,true,true,json!(["move",1])),
+        ("ArrowLeft",8,true,false,json!(["move",-1])),
+        ("Enter",8,true,false,json!(["commit"])),
+        ("Escape",8,true,false,json!(["cancel"])),
+        ("Tab",8,false,false,Value::Null),
+        ("x",8,true,false,Value::Null),
+        ("Shift",8,false,false,Value::Null),
+        ("Meta",0,false,false,json!(["commit"])),
+        ("Alt",2,false,false,json!(["commit"])),
+    ] {
+        assert_eq!(key(&mut control,name,mods,down,shift),json!({"consumed":true,"action":action}));
+    }
+    for (field,value) in [("nonce",json!(-1)),("key",Value::Null),("mods",json!(-1)),
+        ("mods",json!(2147483648u64)),("down",json!(1)),("shift",Value::Null)] {
+        let mut input = json!({"cmd":"switcherKey","nonce":nonce,"key":"Tab","mods":8,"down":true,"shift":false});
+        input[field] = value;
+        assert_eq!(control.request(&input)["error"],"app.invalidRequest");
+    }
+    assert_eq!(session.reader().revision(),revision);
+    assert_eq!(opening.revision(),opening_revision);
+    control.request(&json!({"cmd":"switcherCancel","nonce":nonce}));
+    assert_eq!(key(&mut control,"Tab",8,true,false),json!({"consumed":false}));
+    control.request(&json!({"cmd":"switcherPrepare","hold":2}));
+    assert_eq!(key(&mut control,"Meta",0,false,false),json!({"consumed":false}));
+    let current = opening.read().as_ref().unwrap().nonce;
+    assert_eq!(control.request(&json!({"cmd":"switcherKey","nonce":current,"key":"Alt","mods":0,"down":false,"shift":false}))["action"],json!(["commit"]));
 }

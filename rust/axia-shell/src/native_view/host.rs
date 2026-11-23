@@ -223,6 +223,7 @@ fn offset_origin(style: Value, dx: f64, dy: f64) -> Value {
 }
 pub struct Host {
     mount: i32,
+    mount_generation: Option<u64>,
     app: Box<dyn NativeApp>,
     i18n: I18n,
     locale: Option<locale_source::Source>,
@@ -280,9 +281,10 @@ pub struct Host {
 }
 impl Drop for Host {
     fn drop(&mut self) {
-        crate::wayland::dnd_protocol::cancel_native_origin(self.mount);
+        let live = self.mount_alive();
+        if live { crate::wayland::dnd_protocol::cancel_native_origin(self.mount); }
         let _ = self.app.request(&json!({"cmd":"close"}));
-        if !scene::alive() {
+        if !live {
             return;
         }
         for m in self.tip_view.drain(..) {
@@ -303,6 +305,7 @@ impl Host {
         app.resources(assets, home);
         Self {
             mount,
+            mount_generation: scene::generation(mount),
             app,
             i18n: I18n::new(assets, home),
             locale: None,
@@ -347,6 +350,9 @@ impl Host {
             bars: HashMap::new(),
             drag: None,
         }
+    }
+    pub(super) fn mount_alive(&self) -> bool {
+        scene::alive() && self.mount_generation.is_some() && scene::generation(self.mount) == self.mount_generation
     }
     fn theme(&self, key: &str, fallback: &str) -> Value {
         let v = &self.theme_values()[key];

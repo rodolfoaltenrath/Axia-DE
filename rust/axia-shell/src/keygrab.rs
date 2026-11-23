@@ -104,6 +104,13 @@ fn current() -> Profile {
         _ => Profile::Disabled,
     }
 }
+pub(crate) fn enabled() -> bool { current() != Profile::Disabled }
+/// A live session owns policy; the JS entry point still enables/disables the
+/// remaining transitional dispatcher, but cannot override the persisted profile.
+pub(crate) fn sync_native(linux: bool, desktop_arrows: bool) {
+    let profile = if linux { Profile::Linux } else if desktop_arrows { Profile::FlowDesktops } else { Profile::Flow };
+    PROFILE.store(profile as u8, Ordering::Relaxed);
+}
 
 /// # Safety
 /// `profile` must be null or a valid NUL-terminated string.
@@ -123,17 +130,13 @@ pub unsafe extern "C" fn keygrab_set(profile: *const c_char) -> c_int {
 /// `base` must be null or a valid NUL-terminated string.
 #[no_mangle]
 pub unsafe extern "C" fn keygrab_letter(code: c_int, base: *const c_char) -> c_char {
-    if !base.is_null() {
-        let base = CStr::from_ptr(base).to_bytes();
-        if base.len() == 1 && base[0].is_ascii() {
-            return if base[0].is_ascii_alphabetic() {
-                base[0].to_ascii_lowercase() as c_char
-            } else {
-                0
-            };
-        }
+    letter(code, if base.is_null() { &[] } else { CStr::from_ptr(base).to_bytes() }) as c_char
+}
+pub(crate) fn letter(code: i32, base: &[u8]) -> u8 {
+    if base.len() == 1 && base[0].is_ascii() {
+        return if base[0].is_ascii_alphabetic() { base[0].to_ascii_lowercase() } else { 0 };
     }
-    crate::keymap::letter(code).map_or(0, |letter| letter as c_char)
+    crate::keymap::letter(code).map_or(0, |letter| letter as u8)
 }
 
 #[no_mangle]

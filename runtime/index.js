@@ -17,6 +17,8 @@ export const Surface = 'surface';
 // <MediaView media={id} />: video, photo, capture or camera from lord.media (docs/MEDIA.md); drawn by C.
 export const MediaView = 'media';
 export const screen = { width: lord.screen.width, height: lord.screen.height, displays: [], mirror: false };
+const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
+const shellRequest = value => !appHost && lord.nativeApps?.request ? lord.nativeApps.request(JSON.stringify(value)) : null;
 // Displays (docs/DISPLAYS.md): the desktop is one logical space (screen.width × height) and every
 // display shows a rectangle of it: { id, name, x, y, w, h, scale, main }. The menu bar and the Dock
 // go on the main one; windows can be on any display or span two.
@@ -276,13 +278,14 @@ function layerCount(container, d) {
   container.count = Math.max(0, (container.count || 0) + d);
 }
 function layersCommitted() {
-  let busy = false;
+  let busy = !!shellRequest({ cmd: 'shellKeyboard' })?.busy;
   for (const [z, c] of layerNodes) if (KEYBOARD_LAYERS.has(z) && c.count > 0) { busy = true; break; }
   if (busy === keyboardBusy) return;
   keyboardBusy = busy;
   for (const fn of keyboardWatchers) { try { fn(busy); } catch (e) { console.error(e); } }
 }
-export const shellHasKeyboard = () => keyboardBusy;
+export const shellHasKeyboard = () => keyboardBusy || !!shellRequest({ cmd: 'shellKeyboard' })?.busy;
+export const refreshShellKeyboard = () => layersCommitted();
 // After each commit, so something that follows the layout needs no polling. Layout runs later, on the
 // next frame: a watcher reads it from a timer of its own, and has to be cheap when it has nothing to do.
 const commitWatchers = new Set();
@@ -298,7 +301,8 @@ export function layerContainer(z) {
   if (!rootNode || !(z > 0)) return null;
   let c = layerNodes.get(z);
   if (!c) {
-    const id = lord.createNode('view');
+    const native = shellRequest({ cmd: 'shellLayer', z })?.node;
+    const id = native || lord.createNode('view');
     for (const [k, v] of [['position', 'absolute'], ['left', 0], ['top', 0], ['width', screen.width], ['height', screen.height],
       ['pointerEvents', 'box-none'], ['zIndex', z]]) lord.setStyle(id, k, v);
     lord.appendChild(rootNode, id);
@@ -316,9 +320,11 @@ export function createPortal(children, container, key = null) {
 export function render(element) {
   const rootId = lord.createNode('view');
   rootNode = rootId;
+  layerNodes.clear();
   lord.setStyle(rootId, 'width', screen.width);
   lord.setStyle(rootId, 'height', screen.height);
   lord.setRoot(rootId);
+  shellRequest({ cmd: 'shellRoot', node: rootId });
   const container = { id: rootId, isContainer: true };
   const report = (kind) => (e) => console.error(`react (${kind}):`, e?.message ? `${e.message}\n${e.stack || ''}` : e);
   // React 19: uncaught errors, errors caught by a boundary, and recoverable ones, separately

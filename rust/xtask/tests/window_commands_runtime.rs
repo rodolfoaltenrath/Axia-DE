@@ -48,7 +48,7 @@ import {createElement as h} from 'react';
 import {render,View} from '@lordos/runtime';
 import {configureWindows,registerBuiltinApp,wm,setDesktops,setActiveDesktop} from '@ROOT@/sdk/windows.js';
 import {cycleAppWindows,hideApp,hideOthers,showAllApps,toggleShowDesktop} from '@ROOT@/sdk/appcontrol.js';
-import {AppSwitcher,openSwitcher,cancelSwitcher} from '@ROOT@/sdk/appswitcher.jsx';
+import {openSwitcher,cancelSwitcher} from '@ROOT@/sdk/appswitcher.jsx';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';
 import {makeTheme} from '@ROOT@/themes/default/tokens.js';
@@ -70,7 +70,7 @@ const focused=()=>state().views.front;
 let handle=0;const mount=lord.nativeViews.mount;
 lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:switcher')handle=value;return value;};
 resetShortcuts();
-function Harness(){useShortcuts({grabs:'flow',onSuperTap:()=>{}});return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'azul',effects:{}})},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#222':'#eee'}},h(AppSwitcher)));}
+function Harness(){useShortcuts({grabs:'flow',onSuperTap:()=>{}});return h(ThemeProvider,{tokens:makeTheme({mode:'@MODE@',accent:'azul',effects:{}})},h(View,{style:{width:@WIDTH@,height:700,backgroundColor:'@MODE@'==='dark'?'#222':'#eee'}},null));}
 render(h(Harness));
 async function run(){
  setDesktops([1,2],1);const panel=wm.open('panel'),a=wm.open('notes',{instance:'a'}),b=wm.open('notes',{instance:'b'}),calc=wm.open('calculator');

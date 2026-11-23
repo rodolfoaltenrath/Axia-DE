@@ -1,8 +1,8 @@
 // Observation driver only. Rust verifies every reported behavior.
 import {createElement as h} from 'react';
-import {render,View,screen} from '@lordos/runtime';
+import {render,View,screen,shellHasKeyboard,modifiers} from '@lordos/runtime';
 import {configureWindows,registerBuiltinApp,windows,wm,setDesktops,setActiveDesktop} from '@ROOT@/sdk/windows.js';
-import {openSwitcher,switcherKey,cancelSwitcher,switcherOpen,AppSwitcher} from '@ROOT@/sdk/appswitcher.jsx';
+import {openSwitcher,switcherKey,cancelSwitcher as cancelNativeSwitcher,switcherOpen} from '@ROOT@/sdk/appswitcher.jsx';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {settings} from '@ROOT@/sdk/settings.js';
 import {settingsBridge} from '@ROOT@/sdk/nativesettings.js';
@@ -12,7 +12,6 @@ import {makeTheme} from '@ROOT@/themes/default/tokens.js';
 import {enableShellLayers} from '@ROOT@/sdk/layers.js';
 import {media} from '@ROOT@/sdk/media.js';
 import {nativeCatalogFacts} from '@ROOT@/sdk/nativecatalog.js';
-import {switcherBridge} from '@ROOT@/sdk/nativeswitcher.js';
 import '@ROOT@/sdk/wayland.js';
 const c=globalThis.__AXIA_UI_TEST__||{mode:'@MODE@',width:Number('@WIDTH@'),image:@IMAGE@};
 const kind=c.kind||'switcher_@APPEARANCE@';
@@ -21,9 +20,13 @@ const opposite=c.mode==='light'?'dark':'light';
 settings.set({mode:opposite,accent:'azul',effects:true,nativeAppearance:'axia',nativeStyle:appearance,shortcutProfile:'macos'});locale.set({...locale.get(),lang:'en'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<80&&!fn();i++)await sleep(20);return!!fn();}
-let noAppearanceFacts=true,noFullscreenFacts=true,noOpeningTransport=true,appearanceFacts=0,lastAppearanceFacts;
+let noAppearanceFacts=true,noFullscreenFacts=true,noOpeningTransport=true,noKeyStateTransport=true,appearanceFacts=0,lastAppearanceFacts={args:{}};
+let probingKeys=false,keyRequests=0,superTaps=0;const jsKeyEvents=[];
+const dispatchKey=globalThis.__lordKey;
+globalThis.__lordKey=(...args)=>{if(probingKeys)jsKeyEvents.push([args[0],args[1]]);return dispatchKey(...args);};
 const nativeRequest=lord.nativeApps.request;
-lord.nativeApps.request=function(text){const input=JSON.parse(text);if(input.cmd==='switcherPrepare'){noFullscreenFacts&&=!('fullscreen'in input)&&!('surface'in input);noOpeningTransport&&=!('nonce'in input)&&!('origin'in input);}if(input.cmd==='switcherCancel')noOpeningTransport&&=Number.isSafeInteger(input.nonce)&&!('origin'in input);return nativeRequest.call(this,text);};
+lord.nativeApps.request=function(text){const input=JSON.parse(text);if(probingKeys&&['switcherPrepare','switcherKey','switcherCancel'].includes(input.cmd))keyRequests++;if(input.cmd==='switcherPrepare'){noFullscreenFacts&&=!('fullscreen'in input)&&!('surface'in input);noOpeningTransport&&=!('nonce'in input)&&!('origin'in input);}if(input.cmd==='switcherCancel')noOpeningTransport&&=!('nonce'in input)&&!('origin'in input);if(input.cmd==='switcherKey')noKeyStateTransport&&=!('hold'in input)&&!('origin'in input)&&!('back'in input)&&!('nonce'in input);const reply=nativeRequest.call(this,text);if(input.cmd==='switcherPrepare')noKeyStateTransport&&=!('hold'in(reply.result||{}));return reply;};
+const input=(code,value)=>{if(!lord.nativeViews.inputKey(code,value))throw Error('physical input rejected '+code);};
 function inspectAppearance(raw){const input=JSON.parse(raw);lastAppearanceFacts=input;noAppearanceFacts&&=!('theme'in(input.context||{}))&&!('scale'in(input.context||{}))&&!('surface'in(input.args||{}))&&!('radius'in(input.args||{}));}
 async function changeAppearance(){
  const perform=settingsBridge.perform;settingsBridge.perform=()=>{};const before=appearanceFacts;
@@ -39,29 +42,50 @@ configureWindows({apps:[app('files','Files'),app('notes','Notes'),app('calculato
 const originalDisplays=screen.displays;
 screen.displays=originalDisplays.map(display=>({...display,x:10000,y:10000,w:20,h:20}));
 const staleDisplayMirror=screen.displays[0].x===10000;
-let handle=0,mountNode=0,mounts=0,unmounts=0,bound=false,noWindowTransport=true,noCatalogTransport=true,noDisplayTransport=true;
+let handle=0,mountNode=0,mounts=0,unmounts=0,bound=false,noWindowTransport=true,noCatalogTransport=true,noDisplayTransport=true,legacyMounts=0;
+const observedHandles=new Set();
+function status(){const state=nativeRequest.call(lord.nativeApps,JSON.stringify({cmd:'switcherStatus'}));if(state.handle){handle=state.handle;mountNode=state.node;observedHandles.add(handle);lastAppearanceFacts={args:{nonce:state.nonce}};bound=true;}return state;}
 const mount=lord.nativeViews.mount,facts=lord.nativeViews.facts,unmount=lord.nativeViews.unmount;
 function inspect(text){inspectAppearance(text);const input=JSON.parse(text);noOpeningTransport&&=!('origin'in(input.args||{}))&&!('back'in(input.args||{}))&&!('hold'in(input.args||{}));noDisplayTransport&&=!('display'in(input.args||{}))&&!('displays'in(input.args||{}));noCatalogTransport&&=!('registry'in input)&&!('catalog'in input);noWindowTransport&&=!('windows'in input)&&!('items'in (input.args||{}))&&!('index'in(input.args||{}));}
-lord.nativeViews.mount=(node,id,text,...source)=>{const value=mount(node,id,text,...source);if(id==='shell:switcher'){handle=value;mountNode=node;mounts++;bound=source[0]===lord.windowList;inspect(text);}return value;};
+lord.nativeViews.mount=(node,id,text,...source)=>{if(id==='shell:switcher'){legacyMounts++;throw Error('switcher must mount without JS');}return mount(node,id,text,...source);};
 lord.nativeViews.facts=(id,text)=>{if(id===handle){inspect(text);appearanceFacts++;}return facts(id,text);};
 lord.nativeViews.unmount=id=>{if(id===handle)unmounts++;return unmount(id);};
-const has=label=>!!lord.nativeViews.findText(handle,label);
+const has=label=>{status();return!!lord.nativeViews.findText(handle,label);};
 const raw=(op,...args)=>lord.windowList.call(op,JSON.stringify([{},...args]));
-const key=(key,shift=false)=>switcherKey({mods:8,down:true,key,shift});
-const release=()=>switcherKey({mods:0,down:false,key:'Meta'});
 let legacyFocusCalls=0,legacyPreparationCalls=0;
+const nativeInput=fn=>{const focus=wm.focus;wm.focus=()=>{legacyFocusCalls++;};try{return fn();}finally{wm.focus=focus;}};
+const key=(key,shift=false)=>nativeInput(()=>switcherKey({mods:8,down:true,key,shift}));
+const release=()=>nativeInput(()=>switcherKey({mods:0,down:false,key:'Meta'}));
+const cancelSwitcher=()=>nativeInput(cancelNativeSwitcher);
 const open=(hold,back=false)=>{const minimize=wm.minimize;wm.minimize=()=>{legacyPreparationCalls++;};try{return openSwitcher(hold,back);}finally{wm.minimize=minimize;}};
-const finish=switcherBridge.perform;
-switcherBridge.perform=effect=>{const focus=wm.focus;wm.focus=()=>{legacyFocusCalls++;};try{return finish(effect);}finally{wm.focus=focus;}};
 enableShellLayers();resetShortcuts();
-function Harness(){useShortcuts({grabs:'flow',onSuperTap:()=>{}});return h(ThemeProvider,{tokens:makeTheme({mode:c.mode,accent:'#3489bd',effects:{}})},h(View,{style:{width:c.width,height:700,backgroundColor:c.mode==='dark'?'#222':'#eee'}},h(AppSwitcher)));}
+function Harness(){useShortcuts({grabs:'flow',onSuperTap:()=>{superTaps++;}});return h(ThemeProvider,{tokens:makeTheme({mode:c.mode,accent:'#3489bd',effects:{}})},h(View,{style:{width:c.width,height:700,backgroundColor:c.mode==='dark'?'#222':'#eee'}}));}
 render(h(Harness));
 async function run(){
  const files=wm.open('files'),a=wm.open('notes',{instance:'a'}),b=wm.open('notes',{instance:'b'}),calc=wm.open('calculator');
+ probingKeys=true;input(125,1);input(15,1);await until(()=>has('Notes'));
+ const typedActivation=has('Notes');
+ input(15,0);input(15,1);input(15,2);input(105,1);input(28,1);
+ const typedCommit=await until(()=>!switcherOpen()&&wm.focused()===files);
+ for(const code of [105,28,15,125])input(code,0);
+ const stalePerform=settingsBridge.perform;settingsBridge.perform=()=>{};
+ lord.settings.state({cmd:'patch',patch:{shortcutProfile:'linux'}});
+ const staleShortcutMirror=settings.get().shortcutProfile==='macos';
+ input(56,1);input(15,1);await until(()=>{status();return switcherOpen()&&handle&&lord.nativeViews.text(handle);});
+ const nativeAltTab=switcherOpen()&&staleShortcutMirror;
+ lord.settings.state({cmd:'patch',patch:{shortcutProfile:'macos'}});
+ const nativeProfileCancel=await until(()=>!switcherOpen());
+ input(15,0);input(56,0);settingsBridge.perform=stalePerform;
+ const typedInput=typedActivation&&typedCommit&&nativeAltTab&&nativeProfileCancel&&keyRequests===0&&jsKeyEvents.every(([code,value])=>[125,56].includes(code)&&value===1);
+ probingKeys=false;lord.wayland.grabKeys('linux');input(56,1);input(15,1);
+ const nativeProfileRefusesAlt=!switcherOpen();input(15,0);input(56,0);
+ const nativeModifierRead=modifiers()===0,nativeNoSuperTap=superTaps===0;
+ wm.focus(files);wm.focus(b);wm.focus(calc);
  open(8);await until(()=>has('Notes'));const initial=has('Notes'),firstNonce=lastAppearanceFacts.args.nonce;
- const focusBeforeStale=wm.focused();let staleRead=false;
- switcherBridge.perform({nonce:-1,get reply(){staleRead=true;throw Error('stale completion read its snapshot');}});
- const staleCompletionIgnored=!staleRead&&switcherOpen()&&wm.focused()===focusBeforeStale;
+ const nativeKeyboardCapture=shellHasKeyboard();
+ const focusBeforeStale=wm.focused();
+ const staleReply=nativeRequest.call(lord.nativeApps,JSON.stringify({cmd:'switcherKey',nonce:0,key:'Enter',mods:8,down:true,shift:false}));
+ const staleCompletionIgnored=!staleReply.consumed&&switcherOpen()&&wm.focused()===focusBeforeStale;
  const publishNotes=(name,builtin=false)=>{const metadata=nativeCatalogFacts(true).get();return lord.nativeApps.request(JSON.stringify({cmd:'metadata',...metadata,registry:metadata.registry.map(app=>app.id==='notes'?{...app,name,builtin}:app)}));};
  const beforeCatalogFacts=appearanceFacts;publishNotes('Native Notes');
  const nativeCatalogRevision=await until(()=>has('Native Notes'))&&appearanceFacts===beforeCatalogFacts&&nativeCatalogFacts(true).get().registry.find(app=>app.id==='notes').name==='Notes';
@@ -70,10 +94,19 @@ async function run(){
  publishNotes('Notes');await until(()=>has('Notes'));
  raw('close',b);release();const freshCommit=await until(()=>!switcherOpen()&&wm.focused()===a);
  wm.focus(calc);open(8);await until(()=>has('Notes'));const nextNonce=lastAppearanceFacts.args.nonce;nativeRequest.call(lord.nativeApps,JSON.stringify({cmd:'switcherCancel',nonce:firstNonce,origin:files}));const staleCancelIgnored=nextNonce>firstNonce&&switcherOpen();key('Tab');await until(()=>has('Files'));const forward=has('Files');key('Tab',true);await until(()=>has('Notes'));
- const cycling=forward&&has('Notes');key('Escape');const cancelled=await until(()=>!switcherOpen()&&wm.focused()===calc);
+ const cycling=forward&&has('Notes');
+ // A forged hold in the raw request cannot replace the native modifiers.
+ nativeRequest.call(lord.nativeApps,JSON.stringify({cmd:'switcherKey',hold:2,mods:8,down:false,key:'Shift',shift:false}));await sleep(40);
+ const nativeHeldModifiers=switcherOpen()&&has('Notes');
+ key('Escape');const cancelled=await until(()=>!switcherOpen()&&wm.focused()===calc);
+ // There is no JS lifecycle mirror; stale commands are rejected by the owner.
+ open(8);const obsoleteNonce=status().nonce;
+ nativeRequest.call(lord.nativeApps,JSON.stringify({cmd:'switcherCancel',nonce:obsoleteNonce}));
+ const staleKeyRejected=!nativeRequest.call(lord.nativeApps,JSON.stringify({cmd:'switcherKey',nonce:obsoleteNonce,mods:8,down:true,key:'Tab',shift:false})).consumed;
+ await until(()=>!switcherOpen());
  open(8);release();const fastRelease=await until(()=>!switcherOpen()&&wm.focused()===a);
  wm.focus(calc);raw('open',{app:'files',instance:'native'});const stale=!wm.get('files#native');
- open(8);await until(()=>handle&&lord.nativeViews.text(handle));
+ open(8);await until(()=>{status();return handle&&lord.nativeViews.text(handle);});
  const rawTexts=[lord.nativeViews.text(handle)];
  for(let i=0;i<3&&!has('Files');i++){key('Tab');await sleep(40);rawTexts.push(lord.nativeViews.text(handle));}release();
  await until(()=>!switcherOpen());
@@ -95,20 +128,20 @@ async function run(){
  const fullscreen=lord.wayland.fullscreen,fullscreenWindow=lord.wayland.fullscreenWindow;
  let jsFullscreenReads=0;lord.wayland.fullscreen=lord.wayland.fullscreenWindow=()=>{jsFullscreenReads++;throw Error('switcher read fullscreen through JS');};
  const cancelFocus=wm.focus;wm.focus=()=>{legacyPreparationCalls++;};
- open(8);const notMounted=switcherBridge.handle.current===0;cancelSwitcher();wm.focus=cancelFocus;
+ open(8);const notMounted=status().handle===0;cancelSwitcher();wm.focus=cancelFocus;
  const beforeMountCancel=notMounted&&!switcherOpen()&&wm.focused()===game&&!JSON.parse(raw('resync')).state.windows.find(w=>w.id===game).w.minimized;
  raw('close',game);open(8);const missingFullscreenRejected=!switcherOpen();
  wm.open('linux',{instance:String(surface),args:{surface,appId:'axia.switcher-probe'}});
- open(8);await until(()=>switcherOpen()&&handle&&has('Files'));key('Escape');
+ input(125,1);input(15,1);await until(()=>switcherOpen()&&handle&&has('Files'));input(1,1);input(1,0);input(15,0);input(125,0);
  const fullscreenCancel=await until(()=>!switcherOpen()&&wm.focused()===game&&!wm.get(game).minimized);
- open(8);await until(()=>has('Files'));release();
+ input(125,1);input(15,1);await until(()=>has('Files'));input(15,0);input(125,0);
  const fullscreenCommit=await until(()=>!switcherOpen()&&wm.focused()==='files#native'&&wm.get(game).minimized);
  const nativeFullscreenProbe=jsFullscreenReads===0;
  lord.wayland.fullscreen=fullscreen;lord.wayland.fullscreenWindow=fullscreenWindow;
  lord.wayland.close(surface);const realClientClosed=await until(()=>!wm.get(game));
  open(8);await sleep(60);settings.set({shortcutProfile:'linux'});const profileCancel=await until(()=>!switcherOpen());
- __lordKey(15,1,'Tab','','',16);const dispatched=await until(()=>switcherOpen()&&handle&&lord.nativeViews.text(handle));
- __lordKey(1,1,'Escape','','',16);__lordKey(1,0,'','','',16);__lordKey(15,0,'','','',16);__lordKey(125,0,'Meta','','',0);
+ input(125,1);input(15,1);const dispatched=await until(()=>{status();return switcherOpen()&&handle&&lord.nativeViews.text(handle);});
+ input(1,1);input(1,0);input(15,0);input(125,0);
  const dispatcher=dispatched&&await until(()=>!switcherOpen());
  wm.focus(calc);open(8);await until(()=>has('Notes'));
  publishNotes('Notes',true);const removedGroup=await until(()=>!has('Notes'));release();await until(()=>!switcherOpen());
@@ -131,7 +164,9 @@ async function run(){
  for(const type of ['down','up']){const owner=lord.nativeViews.pointer(type,lord.nativeViews.hitTest(x,y),x,y,0);__lordEvent(type,owner||0,x,y,0);__lordNativeView();}}
  const pointerCommit=await until(()=>!switcherOpen()&&wm.focused()===ids[0]);
  cancelSwitcher();for(const id of ids)raw('close',id);open(8);const empty=await until(()=>!switcherOpen());
- await until(()=>mounts===unmounts);
- console.log(kind+'-observation '+JSON.stringify({noOpeningTransport,staleCancelIgnored,nativeOpeningFacts,noFullscreenFacts,realClientClosed,realFullscreenClient,nativeFullscreenProbe,nativePreparation:legacyPreparationCalls===0,beforeMountCancel,missingFullscreenRejected,noDisplayTransport,nativeDisplayGeometry,nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
+ await until(()=>[...observedHandles].every(id=>lord.nativeViews.text(id)===null));
+ mounts=observedHandles.size;unmounts=[...observedHandles].filter(id=>lord.nativeViews.text(id)===null).length;
+ const nativeMount=legacyMounts===0&&mounts>0,nativeKeyboardReleased=!shellHasKeyboard();
+ console.log(kind+'-observation '+JSON.stringify({typedInput,typedActivation,typedCommit,nativeAltTab,nativeProfileCancel,keyRequests,jsKeyEvents,nativeProfileRefusesAlt,nativeModifierRead,nativeNoSuperTap,nativeMount,nativeKeyboardCapture,nativeKeyboardReleased,noKeyStateTransport,nativeHeldModifiers,staleKeyRejected,noOpeningTransport,staleCancelIgnored,nativeOpeningFacts,noFullscreenFacts,realClientClosed,realFullscreenClient,nativeFullscreenProbe,nativePreparation:legacyPreparationCalls===0,beforeMountCancel,missingFullscreenRejected,noDisplayTransport,nativeDisplayGeometry,nativeFocusCommands:legacyFocusCalls===0,staleCompletionIgnored,noCatalogTransport,nativeCatalogRevision,staleCatalogFacts,nativeBuiltinPolicy,noAppearanceFacts,...appearanceUpdate,appearanceRetained,bound,initial,freshCommit,cycling,cancelled,fastRelease,rawTarget,rawFocus,rawTexts,stale,desktop,fullscreenCancel,fullscreenCommit,profileCancel,dispatcher,viewport,pointerCommit,empty,unmounted:mounts===unmounts,noWindowTransport,saved:!!saved?.ok,mounts,unmounts,rect:r,mountRect,text:lord.nativeViews.text(handle)}));
 }
 setTimeout(()=>run().catch(error=>console.error(kind+' driver: '+(error.stack||error))),200);

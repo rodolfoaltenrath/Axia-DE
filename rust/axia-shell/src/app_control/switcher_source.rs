@@ -1,6 +1,6 @@
 //! Borrow compositor fullscreen state synchronously on its UI thread, without JS facts.
 #[cfg(not(test))]
-pub(super) fn current() -> (bool, i64) {
+pub(crate) fn current() -> (bool, i64) {
     extern "C" {
         fn wl_fullscreen_active() -> i32;
         fn wl_fullscreen_window() -> i32;
@@ -11,7 +11,7 @@ pub(super) fn current() -> (bool, i64) {
 #[cfg(test)]
 thread_local! { static SOURCE: std::cell::Cell<(bool,i64)> = const { std::cell::Cell::new((false,0)) }; }
 #[cfg(test)]
-pub(super) fn current() -> (bool,i64) { SOURCE.with(std::cell::Cell::get) }
+pub(crate) fn current() -> (bool,i64) { SOURCE.with(std::cell::Cell::get) }
 #[cfg(test)]
 pub(super) struct Guard((bool,i64));
 #[cfg(test)]

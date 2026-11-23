@@ -77,10 +77,25 @@ pub fn run(home:&Path)->Result<(),String> {
     send(&mut socket,9,3,&string("axia.switcher-probe"))?;
     send(&mut socket,9,11,&words(&[0]))?;send(&mut socket,7,6,&[])?;
     let mut dimensions=(640u32,480u32);let mut mapped=false;
+    let mut enters=0;let mut depressed=0;let mut focused=false;
     loop {
         let (object,opcode,data)=event(&mut socket)?;
         if object==6 && opcode==0 {send(&mut socket,6,3,&data[..4])?;}
-        if object==9 && opcode==1 {return Ok(());}
+        if object==13 {
+            match opcode {
+                1 => { enters+=1;focused=true;eprintln!("keyboard enter {enters}"); },
+                2 => { focused=false;eprintln!("keyboard leave"); },
+                3 if matches!(number(&data,8),1|15|28|96|105|106) => return Err("switcher command leaked to the Wayland keyboard".into()),
+                3 => eprintln!("keyboard modifier {} {}",number(&data,8),number(&data,12)),
+                4 => { depressed=number(&data,4);eprintln!("keyboard modifiers {depressed}"); },
+                _ => {},
+            }
+        }
+        if object==9 && opcode==1 {
+            if enters<2 || depressed!=0 { return Err(format!("unbalanced keyboard after switching: enters={enters}, modifiers={depressed}, focused={focused}")); }
+            eprintln!("keyboard isolation: passed");
+            return Ok(());
+        }
         if object==9 && opcode==0 && !mapped {
             let (w,h)=(number(&data,0),number(&data,4));
             if w>0 && h>0 && w<=8192 && h<=8192 {dimensions=(w,h);}
@@ -98,6 +113,8 @@ pub fn run(home:&Path)->Result<(),String> {
                 send(&mut socket,10,0,&words(&[11,0,w,h,w*4,1]))?;
                 send(&mut socket,7,1,&words(&[11,0,0]))?;
                 send(&mut socket,7,2,&words(&[0,0,w,h]))?;
+                bind(&mut socket,*globals.get("wl_seat").ok_or("Wayland seat is missing")?,"wl_seat",12)?;
+                send(&mut socket,12,1,&words(&[13]))?;
                 mapped=true;
             }
             send(&mut socket,7,6,&[])?;

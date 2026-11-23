@@ -1218,6 +1218,9 @@ static void send_enter_keyboard(struct wl_resource *kb, Surf *s) {
     uint32_t d, l, k, g;
     kb_mods(&d, &l, &k, &g);
     wl_keyboard_send_modifiers(kb, wl_display_next_serial(dpy), d, l, k, g);
+    /* A release after focus returns must compare against the modifiers that
+     * this enter actually sent, not the previous focused client's cache. */
+    mods_sent[0] = d; mods_sent[1] = l; mods_sent[2] = k; mods_sent[3] = g;
 }
 
 static void seat_get_pointer(struct wl_client *c, struct wl_resource *r, uint32_t id) {
@@ -2918,18 +2921,18 @@ static int system_meta_key(int code, const KeyInfo *k) {
 
 /* Keys the shell keeps (Rust keygrab.rs) and the ❖ → Ctrl of Lord Flow. grabbed[code]: its press went to
  * the shell, so its release does too. remapped[code]: its press went to the app as Ctrl+key.
- * grab_hold: the modifier of a switcher in progress; until it is released every key is the shell's,
- * while modifiers still reach the app too, so it never keeps one stuck. */
+ * The native session handles the switcher's hold and input before wl_key. */
 #define KEY_SLOTS 256
 static unsigned char grabbed[KEY_SLOTS], remapped[KEY_SLOTS];
-static unsigned grab_hold;
 static int focus_terminal;
 
 void wl_focus_terminal(int on) { focus_terminal = !!on; }
 
-static int is_modifier_key(int code) {
-    return code == KEY_LEFTSHIFT || code == KEY_RIGHTSHIFT || code == KEY_LEFTCTRL || code == KEY_RIGHTCTRL ||
-           code == KEY_LEFTALT || code == KEY_RIGHTALT || code == KEY_LEFTMETA || code == KEY_RIGHTMETA;
+/* Rust already chose the owner. Clear transitional grab bookkeeping and keep
+ * the focused client's modifier state balanced, without routing a shortcut. */
+void wl_shell_key(int code, int value, int modifier) {
+    if (!value && code >= 0 && code < KEY_SLOTS) { grabbed[code] = 0; remapped[code] = 0; }
+    if (modifier && key_focus && value != 2) send_key_to_focus(code, value);
 }
 
 /* Like wl_send_paste, for one key held down: the client repeats it on its own while Ctrl stays set.
@@ -2968,13 +2971,6 @@ int wl_key(int code, int value, const KeyInfo *k) {
         if (key_focus) send_remapped(code, 0);
         return 1;
     }
-    if (grab_hold) {
-        if (!(mods & grab_hold)) grab_hold = 0;
-        if (is_modifier_key(code)) { if (key_focus && value != 2) send_key_to_focus(code, value); }
-        else if (value && was_grabbed) *was_grabbed = 1;
-        else if (!value && key_focus) send_key_to_focus(code, 0);   /* pressed before the switcher opened */
-        return 0;
-    }
     if (k->meta && code == KEY_ESC && !k->alt && (fs_surf || wl_pointer_locked())) {   /* ❖Esc exits; the shell learns ❖ was not alone */
         if (value != 1) return 1;
         if (wl_pointer_locked()) constraint_escape();
@@ -2988,7 +2984,6 @@ int wl_key(int code, int value, const KeyInfo *k) {
         int how = keygrab_match(code, letter, mods);
         if (how != KG_PASS) {
             *was_grabbed = 1;
-            if (how == KG_HOLD) grab_hold = mods & (KG_ALT | KG_META);
             return 0;
         }
         if (keygrab_is_remap(letter, mods) && !focus_is_lord_app()) {

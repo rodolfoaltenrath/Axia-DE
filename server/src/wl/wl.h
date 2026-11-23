@@ -35,6 +35,7 @@ void wl_drag_cancel(void);
 /* 0: the key is the shell's; 1: it went to the focused app; 2: it went to the app as another key
  * (Lord Flow's ❖ → Ctrl): the shell is only told, so ❖ does not count as pressed alone. */
 int  wl_key(int code, int value, const KeyInfo *k);
+void wl_shell_key(int code, int value, int modifier); /* native owner took this key */
 void wl_keymap_changed(void);
 int  wl_send_paste(void);               /* synthetic Ctrl+V to the Linux app with the keyboard */
 int  wl_has_key_focus(void);            /* does a Linux app have the keyboard? */

@@ -30,7 +30,8 @@ import { toggleEmojiPanel } from './emoji.jsx';
 import { quitFrontApp } from './dock.js';
 import { hasNowPlaying, mediaToggle, mediaNext, mediaPrev, mediaStop } from './media.js';
 import { wm } from './windows.js';
-import { switcherOpen, switcherKey, openSwitcher, cycleAppWindows, cancelSwitcher } from './appswitcher.jsx';
+import { cancelSwitcher, cycleAppWindows } from './appswitcher.jsx';
+import { syncNativeCatalog } from './nativecatalog.js';
 import { useSettings } from './settings.js';
 import { shortcutProfile, profileEntry } from './shortcutprofile.js';
 import { flowDesktopKeys, linuxDesktopKeys } from './desktops.js';
@@ -103,7 +104,7 @@ export const BASE = [
 const front = (fn) => () => { const id = wm.focused(); if (id) fn(id); };
 const SNAP_CODES = { 103: 'up', 105: 'left', 106: 'right', 108: 'down' };
 const COMMON = [
-  { id: 'switchApps', run: (e) => openSwitcher(e.meta ? 8 : 2, e.shift) },
+  { id: 'switchApps', native: true },
   { id: 'cycleWindows', run: (e) => cycleAppWindows(e.shift) },
   { id: 'minimize', run: front(wm.minimize) },
   { id: 'hide', run: () => hideApp() },
@@ -161,7 +162,6 @@ let superAlone = false;
 
 function filter(e) {
   if (!e.code) return false;                       // text an input method committed
-  if (switcherOpen()) { if (e.down) taken.add(e.code); else taken.delete(e.code); return switcherKey(e); }
   if (!e.down) {
     const tap = SUPER(e.code) && superAlone;
     if (SUPER(e.code)) superAlone = false;
@@ -175,7 +175,7 @@ function filter(e) {
   // Linux app in front, released with one (the key that switched to its desktop), it went to the app.
   if (taken.has(e.code)) { if (e.repeat) return true; taken.delete(e.code); }
   const entries = (lookup = lookup || index()).get(`${e.mods}:${keyName(e).toLowerCase()}`);
-  const entry = entries?.find((x) => !x.when || x.when(e));
+  const entry = entries?.find((x) => !x.native && (!x.when || x.when(e)));
   if (!entry) return false;
   (entry.repeat ? repeating : taken).add(e.code);
   entry.run(e);
@@ -201,6 +201,7 @@ export function useShortcuts({ grabs = '', table = [], onSuperTap: tap = null, a
   const tapRef = useRef(tap);
   tapRef.current = tap;
   useEffect(() => {
+    if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) syncNativeCatalog();
     themeTable = table;
     appsPaste = profile === 'macos';
     onSuperTap = () => tapRef.current?.();
@@ -209,7 +210,6 @@ export function useShortcuts({ grabs = '', table = [], onSuperTap: tap = null, a
   }, []);
   // a setting can change the table of keys while the theme runs (Lord Flow's ⌃ arrows)
   useEffect(() => {
-    cancelSwitcher();
     superAlone = false;
     currentProfile = profile;
     appsPaste = profile === 'macos';

@@ -19,6 +19,7 @@ struct Entry {
 
 pub struct Switcher {
     session: Option<Session>,
+    weak_session: Option<crate::winmodel::WeakSession>,
     generation: Option<u64>,
     opening: Option<(Reader<Option<SwitcherOpening>>, Subscription)>,
     appearance: Option<std::rc::Rc<Value>>,
@@ -44,6 +45,15 @@ impl Switcher {
     pub fn with_session(session: Session) -> Self {
         Self::with_displays(session,super::services::displays::reader())
     }
+    pub(super) fn resident(session: &Session) -> Self {
+        let mut view = Self::with_session(session.clone());
+        view.weak_session = Some(session.downgrade());
+        view.session = None;
+        view
+    }
+    fn owner(&self) -> Option<Session> {
+        self.session.clone().or_else(|| self.weak_session.as_ref().and_then(crate::winmodel::WeakSession::upgrade))
+    }
     pub fn with_displays(session: Session, displays: Reader<Vec<Value>>) -> Self {
         let windows = session.reader();
         let catalog = crate::forcequit::App::with_window_metadata(Rc::new(WindowReader(windows.clone())),session.catalog_store());
@@ -60,6 +70,7 @@ impl Switcher {
         let changes = windows.subscribe();
         Self {
             session: None,
+            weak_session: None,
             generation: None,
             opening: None,
             appearance: None,
@@ -99,7 +110,7 @@ impl Switcher {
                 self.nonce = json!(opening.nonce);
                 self.back = opening.back;
                 // A mount with an obsolete identity must not revoke the live owner.
-                self.generation = self.session.as_ref().and_then(Session::begin_switcher);
+                self.generation = self.owner().as_ref().and_then(Session::begin_switcher);
             }
         } else if !self.begun {
             self.origin = input["args"]["origin"].as_str().unwrap_or("").into();
@@ -227,7 +238,7 @@ impl Switcher {
             });
         self.done = true;
         drop(state);
-        if let Some(session) = &mut self.session {
+        if let Some(mut session) = self.owner() {
             let current = session.end_switcher(self.generation) && self.nonce.as_u64().and_then(|nonce|session.close_switcher_opening(nonce)).is_some();
             let reply = current.then(|| target.as_deref()
                 .and_then(|id| session.app_command(AppCommand::WindowAction(WindowMenuAction::Focus), &[id]).ok())).flatten();
@@ -286,7 +297,7 @@ impl Switcher {
 }
 impl Drop for Switcher {
     fn drop(&mut self) {
-        if let Some(session) = &self.session { session.end_switcher(self.generation); }
+        if let Some(session) = self.owner() { session.end_switcher(self.generation); }
     }
 }
 impl NativeApp for Switcher {

@@ -28,6 +28,22 @@ pub fn alive() -> bool {
 pub(crate) fn generation(id: i32) -> Option<u64> {
     super::SCENE.try_with(|s| s.borrow().generation(id as usize)).ok().flatten()
 }
+/// The renderer's live root and its identity. A reused node ID is a different root.
+#[cfg(not(test))]
+pub(crate) fn root() -> Option<(i32, u64)> {
+    unsafe { with_scene(|s, ui| {
+        let id = super::id(s, ui.root)?;
+        Some((id as i32, s.generation(id)?))
+    }) }
+}
+#[cfg(test)]
+thread_local! { static TEST_ROOT: std::cell::Cell<Option<(i32,u64)>> = const { std::cell::Cell::new(None) }; }
+#[cfg(test)]
+pub(crate) fn root() -> Option<(i32,u64)> {
+    TEST_ROOT.with(|root|root.get().filter(|(id,value)|generation(*id)==Some(*value)))
+}
+#[cfg(test)]
+pub(crate) fn set_test_root(id: i32) { TEST_ROOT.with(|root|root.set(generation(id).map(|generation|(id,generation)))); }
 pub(crate) fn animation_props(id: i32) -> Option<crate::anim::AnimProps> {
     unsafe { with_scene(|s, _| {
         let n=s.node(id as usize)?;

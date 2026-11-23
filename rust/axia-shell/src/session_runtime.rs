@@ -34,6 +34,17 @@ fn each(mut visit: impl FnMut(Session)) {
 pub(crate) fn tick(now: Instant) {
     each(|mut session| session.service_tick(now));
 }
+pub(crate) fn key(code: i32, value: i32, key: &str, flags: i32) -> i32 {
+    let mut used = 0;
+    let enabled = crate::keygrab::enabled();
+    each(|mut session| {
+        if used == 0 {
+            used = session.physical_key(code,value,key,flags,enabled);
+            if enabled { session.sync_key_grabs(); }
+        }
+    });
+    used
+}
 pub(crate) fn timeout(now: Instant) -> Option<f64> {
     let mut wait: Option<f64> = None;
     each(|session| {

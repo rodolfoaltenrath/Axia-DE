@@ -5,7 +5,7 @@
 // reads (settings, theme, services, catalog), binds its window state and runs shell effects:
 // opening apps, saving settings, firewall calls, the clipboard and the window title.
 import { version as reactVersion, createElement as h, useEffect, useLayoutEffect, useRef, useState, useMemo, memo } from 'react';
-import { View, screen, onScreenChange, shellHasKeyboard, onShellKeyboard, layerContainer } from '@lordos/runtime';
+import { View, screen, onScreenChange, shellHasKeyboard, onShellKeyboard, refreshShellKeyboard, layerContainer } from '@lordos/runtime';
 import { LAYERS, shellLayers } from './layers.js';
 import { filesEffect } from './nativefiles.js';
 import { barEffect } from './nativemenubar.js';
@@ -23,7 +23,6 @@ import { useLocale, formatNumber } from './i18n.js';
 import { wm, applyNativeWindowState } from './windows.js';
 import { launchApp } from './apps.js';
 import { nativeCatalogFacts, syncNativeCatalog } from './nativecatalog.js';
-import { switcherBridge } from './nativeswitcher.js';
 import { restoreBridge } from './nativerestore.js';
 export { appFacts } from './nativecatalog.js';
 import { refreshPackages } from './packages.js';
@@ -67,6 +66,9 @@ globalThis.__lordNativeView = () => {
           else if (effect.kind === 'localeState') localeBridge.perform?.(effect);
           else if (effect.kind === 'sessionRestore') restoreBridge.perform?.(effect);
           else if (effect.kind === 'clockReply') clockBridge.perform?.(effect);
+          else if (effect.kind === 'shellKeyboard') refreshShellKeyboard();
+          else if (effect.kind === 'switcher') { if (effect.reply) applyNativeWindowState(effect.reply); }
+          else if (effect.kind === 'windowModel') applyNativeWindowState(effect.reply);
           else notificationBridge.perform?.(effect);
         }
     } finally { drainingServices = false; }
@@ -92,7 +94,6 @@ function runner(handle, manifest, winId, node = () => 0) {
       try { launcherBridge.perform?.(effect.effect, { handle, node, act }); } catch (e) { console.error('native launcher:', e); }
       return;
     }
-    if (manifest.id === 'shell:switcher' && !effect.host) { switcherBridge.perform?.(effect); return; }
     if (manifest.id === 'shell:notifications' && !effect.host) { notificationBridge.perform?.(effect); return; }
     if (manifest.id === 'shell:restore' && !effect.host) { restoreBridge.perform?.(effect); return; }
     // the menu bar: building a menu's items and running one (sdk/nativemenubar.js)

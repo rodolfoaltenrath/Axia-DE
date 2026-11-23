@@ -6,7 +6,7 @@ import {
   RustLauncher, launchApp, useDockEntries, dockActivate, dockMenu, dockPrefs, DOCK_LAUNCHER,
   useTrash, openTrash, emptyTrash, trashMenu, ConfirmDialog,
   DesktopWidgets, registerGestureActions, screenDisplays, mainDisplay, settings, Layer, PowerDialog,
-  findWallpaper, wallpaperSrc, useShortcuts, AppSwitcher, hideApp, hideOthers,
+  findWallpaper, wallpaperSrc, useShortcuts, hideApp, hideOthers,
   toggleShowDesktop, appSettingsItem, flowDesktopKeys, flowGrabs, desktopSwipe, DesktopHud, OverviewBackdrop, OverviewChrome,
   openOverview, closeOverview, toggleOverview, whenAnimDone, nativeAnim, snapPreview,
 } from '@lordos/sdk';
@@ -189,7 +189,6 @@ function App() {
         )}
         {/* Restart… and Shut Down… (sdk/power.jsx): inside the ThemeProvider, so it takes the theme's colors */}
         <Layer name="modal"><PowerDialog /></Layer>
-        <AppSwitcher />
         <OverviewChrome />
         <DesktopHud />
         {control && <Layer name="popover"><ControlCenter t={t} top={MENU_H} area={control} onClose={() => setControl(null)} /></Layer>}

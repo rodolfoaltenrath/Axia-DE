@@ -288,6 +288,10 @@ fn run_ui_config(
     drop(session);
     drop(client);
     let log = fs::read_to_string(&log_path).unwrap_or_default();
+    if kind.starts_with("switcher_") && !log.contains(&format!("{kind} driver:")) {
+        let client = fs::read_to_string(scratch.0.join("client.log")).unwrap_or_default();
+        assert!(client.contains("keyboard isolation: passed"),"Wayland keyboard isolation: {client}\n{log}");
+    }
     if let Some(destination) =
         std::env::var_os(&format!("AXIA_{}_OUTPUT", kind.to_ascii_uppercase()))
     {

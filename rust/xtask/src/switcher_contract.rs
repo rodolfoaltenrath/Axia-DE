@@ -3,6 +3,16 @@ pub const DRIVER: &str = include_str!("../tests/fixtures/switcher_runtime.jsx");
 
 pub fn verify(report: &serde_json::Value) -> Result<(), String> {
     for flag in [
+        "typedInput",
+        "nativeProfileRefusesAlt",
+        "nativeModifierRead",
+        "nativeNoSuperTap",
+        "nativeMount",
+        "nativeKeyboardCapture",
+        "nativeKeyboardReleased",
+        "noKeyStateTransport",
+        "nativeHeldModifiers",
+        "staleKeyRejected",
         "noOpeningTransport",
         "staleCancelIgnored",
         "nativeOpeningFacts",
