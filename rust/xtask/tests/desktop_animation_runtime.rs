@@ -21,12 +21,12 @@ fn desktop_slides_use_native_bindings_and_finish_without_js_callbacks() {
                 |path| {
                     let image = image::open(path).unwrap().to_rgba8();
                     assert_eq!(
-                        image.get_pixel(400, 180).0,
+                        image.get_pixel(400, 240).0,
                         [46, 129, 198, 255],
                         "the arriving frame must restore its original opacity and position"
                     );
                     let reduced = image::open(format!("{}.reduced.png", path.display())).unwrap().to_rgba8();
-                    assert_eq!(reduced.get_pixel(400, 180).0, [46,129,198,255],
+                    assert_eq!(reduced.get_pixel(400, 240).0, [46,129,198,255],
                         "native reduced motion must render the final frame immediately");
                     let edited = image::open(format!("{}.edited.png", path.display()))
                         .unwrap()
@@ -37,7 +37,7 @@ fn desktop_slides_use_native_bindings_and_finish_without_js_callbacks() {
                         [233, 235, 239, 255]
                     };
                     assert_eq!(
-                        edited.get_pixel(310, 180).0,
+                        edited.get_pixel(310, 240).0,
                         background,
                         "an explicit transform must survive native cancellation and completion"
                     );

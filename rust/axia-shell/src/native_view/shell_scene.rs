@@ -30,6 +30,7 @@ pub(crate) struct Service {
     opening: Reader<Option<SwitcherOpening>>,
     changes: Subscription,
     mounted: Option<Mount>,
+    hud: Option<Mount>,
     pending: VecDeque<(u64, Value)>,
     input: super::shell_input::Input,
     commands: crate::forcequit::App,
@@ -40,7 +41,7 @@ impl Service {
         let changes = opening.subscribe();
         let home = super::resource_roots().1.unwrap_or_default();
         Self { owner: owner.downgrade(), root: None, layers: BTreeMap::new(),
-            opening, changes, mounted: None, pending: VecDeque::new(), input: super::shell_input::Input::new(&home),
+            opening, changes, mounted: None, hud: None, pending: VecDeque::new(), input: super::shell_input::Input::new(&home),
             commands: crate::forcequit::App::with_window_metadata(std::rc::Rc::new(crate::winmodel::WindowReader(owner.reader())),owner.catalog_store()) }
     }
     fn root_live(&self) -> bool {
@@ -51,9 +52,38 @@ impl Service {
         let next = Node(root,generation);
         if self.root == Some(next) { return true; }
         if self.root.is_some() { self.cancel(owner); }
+        self.hud = None;
         self.layers.clear();
         self.root = Some(next);
+        self.ensure_hud(owner);
         true
+    }
+    fn ensure_hud(&mut self, owner: &Session) {
+        if !self.root_live() { return; }
+        if self.hud.as_ref().is_some_and(|mount|mount.node.live() && super::with(|registry|registry.hosts.contains_key(&mount.handle))) { return; }
+        self.hud = None;
+        let Some(layer) = self.layer(80) else { return; };
+        let id = scene::create(scene::VIEW);
+        let Some(node) = Node::bind(id) else { scene::destroy(id); return; };
+        use scene::Prop::{Num,Str};
+        let props = [("position",Str("absolute".into())),("left",Num(0.)),("top",Num(0.)),
+            ("width",Num(0.)),("height",Num(0.)),("pointerEvents",Str("box-none".into()))];
+        scene::set_style(id,&props.iter().map(|(key,value)|(*key,Some(value))).collect::<Vec<_>>());
+        if !scene::insert(layer,id,0) { scene::destroy(id); return; }
+        let (assets,home) = super::resource_roots();
+        let mut host = Host::new(id,Box::new(super::desktop_hud::DesktopHud::with_displays(owner.reader(),super::services::displays::reader())),&assets,home.as_deref());
+        host.bind_locale(home.as_deref().unwrap_or(""),&assets);
+        host.facts(json!({}));
+        let handle = super::register_host(host,Some(self.owner.clone()));
+        self.hud = Some(Mount { nonce:0,handle,node });
+    }
+    pub(crate) fn hud_status(&self) -> Value {
+        let mount = self.hud.as_ref().filter(|mount|self.root_live() && mount.node.live());
+        json!({"handle":mount.map_or(0,|mount|mount.handle),"node":mount.map_or(0,|mount|mount.node.0)})
+    }
+    pub(crate) fn show_desktop_hud(&mut self, owner: &Session) {
+        self.ensure_hud(owner);
+        if let Some(mount) = &self.hud { super::with_host(mount.handle,|host|host.action(&json!({"action":["show"]}))); }
     }
     fn cancel(&mut self, owner: &mut Session) {
         let nonce = self.opening.read().as_ref().map(|opening| opening.nonce);
@@ -106,6 +136,17 @@ impl Service {
         match self.input.claim(nonce.is_some(),code,value,key,flags,enabled) {
             Claim::Pass => return 0,
             Claim::Consumed => {},
+            Claim::Desktop(command) => {
+                use super::shell_input::Desktop;
+                self.ensure_hud(owner);
+                let reply = match command {
+                    Desktop::Arrow(left) => owner.desktop_service().borrow().arrow(owner,left),
+                    Desktop::Add => owner.app_command(crate::winmodel::AppCommand::AddDesktopAndShow,&[]).unwrap_or(Value::Null),
+                    Desktop::Close => owner.app_command(crate::winmodel::AppCommand::CloseActiveDesktop,&[]).unwrap_or(Value::Null),
+                };
+                if reply["result"]["boundary"]==true { self.show_desktop_hud(owner); }
+                if reply["state"].is_object() { owner.queue_service_effects(vec![json!({"kind":"windowModel","reply":reply})]); }
+            },
             Claim::Window(command) => {
                 let reply = crate::app_control::window_command(owner,&self.commands,command,None,&Value::Null);
                 if reply["state"].is_object() { owner.queue_service_effects(vec![json!({"kind":"windowModel","reply":reply})]); }
@@ -133,10 +174,13 @@ impl Service {
         self.sync_input(owner);
         if !self.root_live() {
             self.cancel(owner);
+            self.hud = None;
             self.root = None;
             self.layers.clear();
             return;
         }
+        self.ensure_hud(owner);
+        if let Some(mount) = &self.hud { super::with_host(mount.handle,|host|host.tick(super::now_ms())); }
         self.changes.take();
         let nonce = self.opening.read().as_ref().map(|opening| opening.nonce);
         if self.mounted.as_ref().is_some_and(|mount| Some(mount.nonce)!=nonce || !mount.node.live()

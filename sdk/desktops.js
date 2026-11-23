@@ -61,11 +61,11 @@ export function nextDesktopBy(step) {
     if (id != null) switchDesktop(id); else showHud();
     return;
   }
-  if (desktopCommand('step', step)?.boundary) showHud();
+  desktopCommand('step', step);
 }
 const stepArrow = (dir) => {
   if (appHost) return nextDesktopBy(arrowStep(dir, direction() === 'rtl'));
-  if (sessionCommand('arrow', { direction: dir })?.boundary) showHud();
+  sessionCommand('arrow', { direction: dir });
 };
 
 export function addDesktopAndShow() {
@@ -108,23 +108,23 @@ const onStep = (e) => stepArrow(arrowDir(e));
 export const flowDesktopKeys = [
   { id: 'overview', keys: ['Ctrl+ArrowUp'], run: () => toggleOverview(), when: ctrlArrowsOn, listed: ctrlArrowsOn, label: 'shell.shortcuts.overview', group: 'desktops' },
   { id: 'appWindows', keys: ['Ctrl+ArrowDown'], run: () => toggleAppWindows(), when: ctrlArrowsOn, listed: ctrlArrowsOn, label: 'shell.shortcuts.appWindows', group: 'desktops' },
-  { id: 'switchDesktopCtrl', keys: ['Ctrl+ArrowLeft', 'Ctrl+ArrowRight'], show: ['⌃←→'], run: onStep, when: ctrlArrowsOn, listed: ctrlArrowsOn, label: 'shell.shortcuts.switchDesktop', group: 'desktops' },
-  { id: 'switchDesktopMeta', keys: ['Meta+Ctrl+ArrowLeft', 'Meta+Ctrl+ArrowRight'], show: ['❖⌃←→'], run: onStep, label: 'shell.shortcuts.switchDesktop', group: 'desktops' },
+  { id: 'switchDesktopCtrl', keys: ['Ctrl+ArrowLeft', 'Ctrl+ArrowRight'], show: ['⌃←→'], ...(appHost ? {run:onStep} : {native:true}), when: ctrlArrowsOn, listed: ctrlArrowsOn, label: 'shell.shortcuts.switchDesktop', group: 'desktops' },
+  { id: 'switchDesktopMeta', keys: ['Meta+Ctrl+ArrowLeft', 'Meta+Ctrl+ArrowRight'], show: ['❖⌃←→'], ...(appHost ? {run:onStep} : {native:true}), label: 'shell.shortcuts.switchDesktop', group: 'desktops' },
 ];
 export const flowGrabs = () => (ctrlArrowsOn() ? 'flow-desktops' : 'flow');
 
 // The Linux/Windows-style shortcut profile.
 export const linuxDesktopKeys = [
   { id: 'overview', keys: ['Meta+Tab'], run: () => toggleOverview(), label: 'shell.shortcuts.overview', group: 'desktops' },
-  { id: 'newDesktop', keys: ['Meta+Ctrl+D'], run: addDesktopAndShow, label: 'shell.shortcuts.newDesktop', group: 'desktops' },
-  { id: 'switchDesktop', keys: ['Meta+Ctrl+ArrowLeft', 'Meta+Ctrl+ArrowRight'], show: ['❖⌃←→'], run: onStep, label: 'shell.shortcuts.switchDesktop', group: 'desktops' },
-  { id: 'closeDesktop', keys: ['Meta+Ctrl+F4'], run: closeActiveDesktop, label: 'shell.shortcuts.closeDesktop', group: 'desktops' },
+  { id: 'newDesktop', keys: ['Meta+Ctrl+D'], ...(appHost ? {run:addDesktopAndShow} : {native:true}), label: 'shell.shortcuts.newDesktop', group: 'desktops' },
+  { id: 'switchDesktop', keys: ['Meta+Ctrl+ArrowLeft', 'Meta+Ctrl+ArrowRight'], show: ['❖⌃←→'], ...(appHost ? {run:onStep} : {native:true}), label: 'shell.shortcuts.switchDesktop', group: 'desktops' },
+  { id: 'closeDesktop', keys: ['Meta+Ctrl+F4'], ...(appHost ? {run:closeActiveDesktop} : {native:true}), label: 'shell.shortcuts.closeDesktop', group: 'desktops' },
 ];
 
 // Trackpad (registerGestureActions): with one desktop a sideways swipe still switches windows.
 export const desktopSwipe = (dir) => () => {
   if (!appHost) {
-    if (sessionCommand('swipe', { direction: dir })?.boundary) showHud();
+    sessionCommand('swipe', { direction: dir });
     return;
   }
   if (desktopList.get().length > 1) nextDesktopBy(swipeStep(dir, direction() === 'rtl'));
@@ -214,5 +214,5 @@ function LocalDesktopHud() {
   return desktopHud({ display: { x: d.x, y: d.y, w: d.w, h: d.h } });
 }
 export function DesktopHud() {
-  return appHost ? h(LocalDesktopHud) : desktopHud();
+  return appHost ? h(LocalDesktopHud) : null;
 }

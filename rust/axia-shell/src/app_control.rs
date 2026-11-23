@@ -45,10 +45,11 @@ impl Controller {
         self.windows.as_ref().and_then(Session::take_service_effects)
     }
     pub fn request(&mut self, input: &Value) -> Value {
-        if matches!(input["cmd"].as_str(),Some("shellRoot" | "shellLayer" | "shellKeyboard" | "switcherStatus")) {
+        if matches!(input["cmd"].as_str(),Some("shellRoot" | "shellLayer" | "shellKeyboard" | "switcherStatus" | "desktopHudStatus")) {
             let Some(windows) = &mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             match input["cmd"].as_str().unwrap() {
                 "switcherStatus" => return windows.switcher_status(),
+                "desktopHudStatus" => return windows.shell_scene().borrow().hud_status(),
                 "shellKeyboard" => return json!({"busy":windows.switcher_reader().read().is_some()}),
                 "shellRoot" => {
                     let Some(node) = input["node"].as_i64().and_then(|id|i32::try_from(id).ok()).filter(|_|windows.resident()) else {
@@ -130,6 +131,7 @@ impl Controller {
             let Some(windows)=&mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let service=windows.desktop_service();
             let reply = service.borrow_mut().command(windows,input);
+            if windows.resident() && reply["result"]["boundary"]==true { windows.shell_scene().borrow_mut().show_desktop_hud(windows); }
             return reply;
         }
         if input["cmd"] == "sessionRestore" {
@@ -172,6 +174,7 @@ impl Controller {
             };
             let Some(windows) = &mut self.windows else { return json!({"error":"app.invalidRequest"}); };
             let reply = windows.app_command(command,&[]).unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
+            if windows.resident() && reply["result"]["boundary"]==true { windows.shell_scene().borrow_mut().show_desktop_hud(windows); }
             return reply;
         }
         match input["cmd"].as_str() {

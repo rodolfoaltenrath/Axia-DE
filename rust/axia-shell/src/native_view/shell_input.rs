@@ -3,7 +3,8 @@ use axia_state::{Reader, Subscription};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
-pub(super) enum Claim { Pass, Consumed, Active, Open { hold: i32, back: bool }, Window(crate::winmodel::AppCommand) }
+pub(super) enum Desktop { Arrow(bool), Add, Close }
+pub(super) enum Claim { Pass, Consumed, Active, Open { hold: i32, back: bool }, Window(crate::winmodel::AppCommand), Desktop(Desktop) }
 pub(super) struct Input {
     preferences: Reader<Value>,
     changes: Subscription,
@@ -90,6 +91,17 @@ impl Input {
             }
         }
         if enabled && value==1 {
+            let desktop = if matches!(code,105|106) && (mods==18 || (!self.linux && mods==2 && self.preferences.read()["desktopArrows"]!=false)) {
+                Some(Desktop::Arrow(code==105))
+            } else if self.linux && mods==18 {
+                if crate::keygrab::letter(code,key.as_bytes())==b'd' { Some(Desktop::Add) }
+                else if code==62 { Some(Desktop::Close) } else { None }
+            } else { None };
+            if let Some(command) = desktop {
+                self.taken.insert(code);
+                self.held_modifiers |= mods;
+                return Claim::Desktop(command);
+            }
             if let Some(command) = self.window_command(code,key,mods) {
                 self.taken.insert(code);
                 self.held_modifiers |= mods;

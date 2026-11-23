@@ -3,6 +3,8 @@ use crate::app_control::Controller;
 use std::time::Instant;
 #[path = "shell_window_input_tests.rs"]
 mod window_input;
+#[path = "shell_desktop_input_tests.rs"]
+mod desktop_input;
 
 fn fixture() -> (Session,Controller,i32) {
     fixture_home(None)
@@ -109,7 +111,8 @@ fn resident_mount_queues_fast_release_and_closes_without_a_js_component() {
     assert!(scene::exists(sibling));
     let effects = session.take_service_effects().unwrap();
     assert!(effects.as_array().unwrap().iter().any(|effect|effect["kind"]=="switcher" && effect["nonce"]==nonce && effect["reply"].is_object()));
-    assert!(super::super::with(|registry|registry.owned.is_empty()));
+    let hud = control.request(&json!({"cmd":"desktopHudStatus"}))["handle"].as_u64().unwrap() as u32;
+    assert!(super::super::with(|registry|registry.owned.keys().copied().collect::<Vec<_>>()==vec![hud]));
     assert!(session.service_wait(Instant::now()).is_none());
     control.request(&json!({"cmd":"switcherPrepare","hold":8}));
     tick(&mut session);

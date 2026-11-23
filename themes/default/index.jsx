@@ -7,7 +7,7 @@ import {
   useTrash, openTrash, emptyTrash, trashMenu, ConfirmDialog,
   DesktopWidgets, registerGestureActions, screenDisplays, mainDisplay, settings, Layer, PowerDialog,
   findWallpaper, wallpaperSrc, useShortcuts, hideApp, hideOthers,
-  toggleShowDesktop, appSettingsItem, flowDesktopKeys, flowGrabs, desktopSwipe, DesktopHud, OverviewBackdrop, OverviewChrome,
+  toggleShowDesktop, appSettingsItem, flowDesktopKeys, flowGrabs, desktopSwipe, OverviewBackdrop, OverviewChrome,
   openOverview, closeOverview, toggleOverview, whenAnimDone, nativeAnim, snapPreview,
 } from '@lordos/sdk';
 import { apps } from '@lordos/apps';
@@ -190,7 +190,6 @@ function App() {
         {/* Restart… and Shut Down… (sdk/power.jsx): inside the ThemeProvider, so it takes the theme's colors */}
         <Layer name="modal"><PowerDialog /></Layer>
         <OverviewChrome />
-        <DesktopHud />
         {control && <Layer name="popover"><ControlCenter t={t} top={MENU_H} area={control} onClose={() => setControl(null)} /></Layer>}
         {context && (
           <Menu x={context.x} y={context.y} onClose={() => setContext(null)} items={[

@@ -95,6 +95,15 @@ impl Service {
         reply["result"] = json!(self.windows.read().desktops().get(index).copied());
         reply
     }
+    pub(crate) fn arrow(&self, session: &mut Session, left: bool) -> Value {
+        let rtl = self.locale.as_ref().is_some_and(|(reader, _)| reader.read().dir=="rtl");
+        let step = if left != rtl { -1 } else { 1 };
+        session.app_command(AppCommand::StepDesktop(step), &[]).unwrap_or_else(|error|json!({"error":error}))
+    }
+    pub(crate) fn swipe(&self, session: &mut Session, left: bool) -> Value {
+        let rtl = self.locale.as_ref().is_some_and(|(reader, _)| reader.read().dir=="rtl");
+        session.app_command(AppCommand::SwipeDesktop { left,rtl }, &[]).unwrap_or_else(|error|json!({"error":error}))
+    }
     pub fn command(&mut self, session: &mut Session, input: &Value) -> Value {
         let mut reply = match input["action"].as_str() {
             Some(action @ ("move" | "moveNew")) => {
@@ -116,13 +125,8 @@ impl Service {
                 let Some(direction @ ("left" | "right")) = input["direction"].as_str() else {
                     return json!({"error":"app.invalidRequest"});
                 };
-                let rtl = self.locale.as_ref().is_some_and(|(reader, _)| reader.read().dir == "rtl");
-                let command = if action == "swipe" {
-                    AppCommand::SwipeDesktop { left: direction == "left", rtl }
-                } else {
-                    AppCommand::StepDesktop(crate::winmodel::desktops::arrow_step(&input["direction"], rtl) as i64)
-                };
-                session.app_command(command, &[]).unwrap_or_else(|error| json!({"error":error}))
+                if action=="arrow" { self.arrow(session,direction=="left") }
+                else { self.swipe(session,direction=="left") }
             }
             Some("start") if !self.started => {
                 let reader = self.settings.as_ref().map(|(_, reader, _)| reader.clone());
