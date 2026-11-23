@@ -23,7 +23,7 @@
   "timerNone": "No",
   "toClipboard": "Copiar al portapapeles en vez de guardar",
   "mic": "Grabar el micrófono",
-  "shortcuts": "❖⇧3 pantalla completa · ❖⇧4 área (Espacio: ventana) · ❖⇧5 este panel o detener la grabación · Impr Pant",
+  "shortcuts": "Meta+Shift+3 pantalla completa · Meta+Shift+4 área (Espacio: ventana) · Meta+Shift+5 este panel o detener la grabación · Impr Pant",
   "protectedNote": {
     "one": "{count} ventana protegida: sale negra en las capturas",
     "other": "{count} ventanas protegidas: salen negras en las capturas"

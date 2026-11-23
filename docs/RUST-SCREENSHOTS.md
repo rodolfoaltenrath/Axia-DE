@@ -1,13 +1,19 @@
 # Screenshots migration
 
-The app is still in migration. `apps/screenshots/index.jsx` retains the panel
-and capture/recording/image transport. The icon and visual selector
+The app is still in migration. `apps/screenshots/index.jsx` retains
+capture/recording/image transport and window mounting. The icon and visual selector
 are native Rust views in `selector.rs`; `auxiliary.rs` owns the thumbnail,
 countdown and recording indicator scenes and their deadlines. `editor_view.rs`
 owns the markup scene and calls `geometry` and `markup::Editor` directly in Rust.
 `markup::Editor` owns the tool, color, operation
 history, draft stroke, text input and undo. Each editor has a separate native
 model. There is no JavaScript geometry or markup-policy fallback.
+
+`panel.rs` now owns the main scene, preferences, recent-file presentation and
+protection target policy. `session.rs` owns recording generations/identity,
+completion metadata and the bounded recent history independently of mounted
+views. JavaScript retains a revisioned notification mirror of that session
+snapshot, rather than owning the recording/history stores.
 
 The native geometry preserves reverse drags, exclusive right/bottom window
 edges, topmost eligible window selection and contain-fit letterboxing. Annotation
@@ -197,6 +203,64 @@ calls/s and 104.809 MiB RSS, below 15 calls/s and 120 MiB. These results do not
 prove a causal performance gain or physical capture/recording behavior. The
 previously documented isolated facts fixture remains unchanged.
 
+## Native panel and session facts
+
+The panel reads the authoritative native preference source, preserving timer,
+clipboard and microphone options. Patches retain unrelated screenshot keys.
+Its four capture cards, controls, protected-window note and five visible recent
+files are native and scroll at the minimum size. The existing Privacy menu sends
+fresh raw window facts at invocation; Rust chooses the top eligible window,
+including visible sticky/picture-in-picture windows, and excludes hidden,
+minimized, off-desktop and capture-app windows. Recent actions validate the
+selected path and preserve separate photo/video viewer instances.
+
+Panel key input does not enter the selector's Space/Enter/Escape handler. The
+shortcut legend spells out Meta+Shift in all three locales so missing symbol
+glyphs cannot obscure the keys.
+
+The persistent native model owns pending recording tokens, accepted source ID,
+start/completion times and the twenty-entry recent history. A new request either
+starts, cancels a pending attempt or stops the accepted recording. Old permission
+or job results cannot adopt a source after cancellation, clear a newer pending
+attempt or complete another recording. The adapter stops/closes rejected sources
+and folds matching completion into Rust. Cancelling a recording countdown
+invalidates its token immediately; an old window cleanup cannot cancel a new
+attempt. Permission-error feedback is suppressed for superseded attempts.
+
+The late-result scenario also reproduced a shared SDK indicator bug: closing an
+old microphone source cleared the marker while a newer tracked source remained.
+Commit `41c188d5` keeps the marker until the last tracked source of the same
+app/device kind ends. Its dedicated test fails before the fix and passes after;
+the native media service tests also pass. Evidence is under
+`build/validation/media-devices/`.
+
+Evidence for this delivery is under `build/validation/screenshots-panel/`.
+Twenty-three app tests and 716 shell tests pass (seven shell tests ignored),
+along with 105 historical geometry cases, the GPU=1 build, platform/ABI checks,
+eight LPK contracts, private installation and the installed switcher check.
+All thirty-two app GUI scenarios pass: eight each for panel, editor, selector
+and auxiliary windows, plus eight switcher scenarios. The panel matrix covers
+Axia/Adwaita, light/dark, 380x360 and 440x420 scenes at a nonzero desktop offset.
+It exercises preference persistence, unrelated preference keys, panel keyboard
+isolation, fresh privacy targets and black pixels throughout a protected-window
+capture; full/window/area capture, recent photo/video routing, completion without
+a mounted panel, delayed cancelled sources, microphone retention/cleanup and
+exactly one close per source. A real five-second countdown is cancelled and
+immediately restarted, ensuring old cleanup cannot invalidate the new attempt.
+The recording backend is simulated below the SDK; this does not validate physical
+recording or encoding. Representative controls and recent-file captures were
+inspected, including the minimum-size shortcut legend. Nine source/locale files
+match the Fedora execution tree byte for byte; all eight switcher PNGs match the
+preceding editor delivery. Three installed software/offline idle samples pass
+enforced limits, with medians of 13.200 poll calls/s and 104.449 MiB RSS (limits:
+15 calls/s and 120 MiB). These results do not establish a causal performance gain
+or replace the physical measurements deferred to the roadmap's end. The earlier
+isolated facts-fixture limitation remains unchanged.
+
+This is still a partial app migration. Global capture pipeline scheduling,
+filename selection, refusal presentation and SDK image/recording operations
+remain in the transport, along with compiled metadata and wrapper removal below.
+
 ## Remaining work
 
 User requirement (2026-11-23), implemented above: **PrintScreen opens the visual capture selector**,
@@ -217,16 +281,15 @@ setting and can return physical primary-display dimensions; it cannot be treated
 as a logical full-desktop image for multi-monitor selection. Check actual source
 dimensions and display transforms instead of assuming a 100% single display.
 
-- Compiled metadata and native panel: four capture modes,
-  persisted timer/clipboard/microphone options, protected-window indication,
-  recent files and the menu to protect the front window.
+- Compiled metadata and removal of the JSX/JSON entry points. All app scenes
+  are native, including the panel, selector, editor and auxiliary windows.
 - Capture controller independent of a mounted panel: hide capture windows before
   taking the frame; preserve editors; countdown and cancellation; permission
   refusal with a privacy action and toast fallback; chosen external screenshot
   app and the global shortcuts, including stop-recording priority.
-- Native recording completion, recent recording results and late completion
-  handling. Preserve SDK microphone indicator cleanup when the controller
-  migrates; thumbnail/countdown/recording presentation and deadlines are native.
+- Move the remaining recording event transport and stop/error handling into the
+  native controller. Recording identity/generations, matching completion and
+  recent results already belong to Rust; preserve SDK device-indicator cleanup.
 - Native image/file services and filename policy: the markup scene, input,
   tools, colors, thickness, preview operations, undo and result deadlines are
   native. Migrate the SDK image transport together with the capture controller,

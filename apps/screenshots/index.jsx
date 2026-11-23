@@ -9,17 +9,23 @@
 // After each capture a floating thumbnail shows up; a click opens the markup editor (arrow, box,
 // text, blur). They are saved in ~/Pictures/Screenshots or to the clipboard.
 import {
-  View, Text, NativeView, Layer, Toggle, Segmented, GroupBox, FormRow,
-  useTheme, useAppWindow, useStore, wm, windows, typeScale,
-  t as tr, media, userDirs, fs, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, useSettings, notify, toast, errorText, dndActive, appNotifyPrefs,
+  View, NativeView, Layer,
+  useAppWindow, useStore, useWindows, wm, windows,
+  t as tr, media, userDirs, fs, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, notify, toast, errorText, dndActive, appNotifyPrefs,
 } from '@lordos/sdk';
 import { useEffect, useRef } from 'react';
 import { screen, onScreenChange, displayFor } from '@lordos/runtime';
 import { clearTextFocus, focusToken, restoreFocus } from '../../sdk/components.jsx';
 
 const APP = 'screenshots';
-const recording = createStore(null);   // { id, path, start }
-const recent = createStore([]);       // [{ path, time }]
+const session = createStore({ revision: 0, recording: null, pendingRecord: false, recent: [] });
+let sessionOwner;
+function sessionRequest(input) {
+  const reply = (sessionOwner ||= lord.nativeApps.create(APP)).request(JSON.stringify({ cmd: 'session', ...input }));
+  if (reply.state.revision !== session.get().revision) session.set(reply.state);
+  return reply;
+}
+const recordCurrent = token => sessionRequest({ op: 'recordCurrent', token }).valid;
 const countdowns = new Map();        // pending transport callbacks, scoped to their window
 
 export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} icon={size} />; }
@@ -55,7 +61,7 @@ async function finish(handle, thumbnail) {
   if (o.clipboard) await media.copyImage(handle);
   else {
     const r = await media.saveImage(handle, freeName(captureDir(), tr('screenshots.fileName', { date: stamp() }), 'png'));
-    if (r.ok) { path = r.path; recent.set((l) => [{ path, time: Date.now() }, ...l].slice(0, 20)); }
+    if (r.ok) { path = r.path; sessionRequest({ op: 'recentAdd', path }); }
   }
   showThumb(handle, path, thumbnail);
 }
@@ -72,13 +78,18 @@ function afterHide(fn, delay = 160) {
   setTimeout(fn, delay);
 }
 
-function withTimer(fn) {
+function withTimer(fn, recordToken = null) {
   const secs = opts().timer;
   if (!secs) { fn(); return; }
   const start = Date.now();
   const id = wm.open(APP, { instance: 'count', args: { secs, start, returnWindow: wm.focused() } });
-  countdowns.set(id, { start, run: fn });
+  countdowns.set(id, { start, run: fn, recordToken });
   wm.setPip(id, { x: Math.round(lord.screen.width / 2 - 60), y: Math.round(lord.screen.height / 2 - 60), w: 120, h: 120 });
+}
+function cancelCountdown() {
+  const entry = countdowns.get(`${APP}#count`);
+  if (entry?.recordToken != null) sessionRequest({ op: 'recordFailed', token: entry.recordToken });
+  wm.close(`${APP}#count`, true);
 }
 
 // The screen permission is denied (no answer here means that) or the app is restricted (an exception):
@@ -90,12 +101,12 @@ function refused(err) {
     actions: [{ id: 'privacy', label: tr('screenshots.refused.open'), run: () => wm.open('settings', { args: { section: 'privacy', nonce: Date.now() } }) }] });
   if (!banner || dndActive() || appNotifyPrefs(APP).style === 'none') toast.set(body);
 }
-async function allowed(ask) {
+async function allowed(ask, current = () => true) {
   try {
     const got = await ask();
-    if (!got) refused();
+    if (!got && current()) refused();
     return got;
-  } catch (e) { refused(e); return null; }
+  } catch (e) { if (current()) refused(e); return null; }
 }
 const grab = () => allowed(() => media.screenshot(APP));
 
@@ -113,25 +124,30 @@ export const capture = {
     wm.setFullscreen(id, true);
   })),
   async record() {
-    const cur = recording.get();
-    if (cur) { media.stop(cur.id); return; }
-    afterHide(() => withTimer(async () => {
-      const path = freeName(captureDir(), tr('screenshots.recName', { date: stamp() }), 'mp4');
-      const id = await allowed(() => media.screenRecord(APP, path, { mic: opts().mic, appName: tr('apps.screenshots') }));
-      if (!id) return;
-      recording.set({ id, path, start: Date.now() });
-      const off = media.on(id, (type, d) => {
-        if (type === 'done' || type === 'closed') {
-          off();
-          recording.set(null);
-          wm.close(`${APP}#rec`, true);
-          if (type === 'done' && d.ok) recent.set((l) => [{ path: d.path, time: Date.now(), video: true }, ...l].slice(0, 20));
-          media.close(id);
-        }
-      });
-      const rid = wm.open(APP, { instance: 'rec' });
-      wm.setPip(rid, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
-    }), 220);
+    const action = sessionRequest({ op: 'recordAction' });
+    if (action.action === 'stop') { media.stop(action.id); return; }
+    if (action.action === 'cancel') { wm.close(`${APP}#count`, true); return; }
+    const token = action.token;
+    afterHide(() => {
+      if (!recordCurrent(token)) return;
+      withTimer(async () => {
+        if (!recordCurrent(token)) return;
+        const path = freeName(captureDir(), tr('screenshots.recName', { date: stamp() }), 'mp4');
+        const id = await allowed(() => media.screenRecord(APP, path, { mic: opts().mic, appName: tr('apps.screenshots') }), () => recordCurrent(token));
+        if (!id) { sessionRequest({ op: 'recordFailed', token }); return; }
+        if (!sessionRequest({ op: 'recordReady', token, id, path }).accepted) { media.stop(id); media.close(id); return; }
+        const off = media.on(id, (type, d) => {
+          if (type === 'done' || type === 'closed') {
+            off();
+            const result = sessionRequest({ op: 'recordDone', id, ok: type === 'done' && !!d?.ok, path: d?.path });
+            if (result.completed) wm.close(`${APP}#rec`, true);
+            media.close(id);
+          }
+        });
+        const rid = wm.open(APP, { instance: 'rec' });
+        wm.setPip(rid, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
+      }, token);
+    }, 220);
   },
 };
 
@@ -144,11 +160,11 @@ const orOther = (fn) => () => { const id = other(); if (id) launchApp(id); else 
 const captureFull = orOther(() => capture.full());
 const captureArea = orOther(() => capture.area('area'));
 // a recording in progress is this app's, whatever is chosen now: the key still stops it
-const openPanelOrStop = () => { if (recording.get()) capture.record(); else orOther(() => wm.open(APP))(); };
+const openPanelOrStop = () => { if (session.get().recording || session.get().pendingRecord) capture.record(); else orOther(() => wm.open(APP))(); };
 addShortcuts([
   // Cancel before a focused app's text field receives Escape; keep other keys
   // available while the person prepares the screen during the countdown.
-  { id: 'capture.cancel', keys: ['Escape'], when: () => !!wm.get(`${APP}#count`), run: () => wm.close(`${APP}#count`, true) },
+  { id: 'capture.cancel', keys: ['Escape'], when: () => !!wm.get(`${APP}#count`), run: cancelCountdown },
   { id: 'capture.full', keys: ['Meta+Shift+3'], when: usable, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
   { id: 'capture.selector', keys: ['PrintScreen'], when: usable, run: captureArea, label: 'shell.shortcuts.captureSelector', group: 'system' },
   { id: 'capture.area', keys: ['Meta+Shift+4'], when: usable, run: captureArea, label: 'shell.shortcuts.captureArea', group: 'system' },
@@ -240,7 +256,10 @@ function Countdown({ secs, start }) {
   useEffect(() => {
     clearTextFocus();
     return () => {
-      if (countdowns.get(win.id) === entry) countdowns.delete(win.id);
+      if (countdowns.get(win.id) === entry) {
+        countdowns.delete(win.id);
+        if (entry?.recordToken != null) sessionRequest({ op: 'recordFailed', token: entry.recordToken });
+      }
       if (wm.focused() === win.args.returnWindow) restoreFocus(returnFocus.current);
     };
   }, [entry]);
@@ -249,13 +268,14 @@ function Countdown({ secs, start }) {
     if (effect.view !== 'countdown' || effect.source !== start) return true;
     const pending = countdowns.get(win.id);
     countdowns.delete(win.id); wm.close(win.id, true);
+    if (effect.op !== 'complete' && pending?.recordToken != null) sessionRequest({ op: 'recordFailed', token: pending.recordToken });
     if (effect.op === 'complete' && pending?.start === start) setTimeout(pending.run, 180);
     return true;
   }} />;
 }
 
 function RecBadge() {
-  const rec = useStore(recording);
+  const rec = useStore(session, value => value.recording);
   const native = useRef(null);
   return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'recording', recording: rec }} onEffect={effect => {
     if (effect.kind !== 'captureAuxiliary') return false;
@@ -332,63 +352,35 @@ function Editor({ handle, path }) {
 
 // ---- the panel (main window) ----
 
+function panelFacts() {
+  return { desktop: wm.desktop(), windows: windows.get().map(w => ({
+    id: w.id, app: w.app, desktop: w.desktop, minimized: w.minimized, hidden: w.hidden,
+    visible: w.visible, sticky: w.sticky, pip: !!w.pip, protected: !!w.protected,
+  })) };
+}
 function Panel() {
-  const th = useTheme();
-  const win = useAppWindow();
-  const [s, update] = useSettings();
-  const o = { ...opts(), ...(s.screenshots || {}) };
-  const set = (p) => update({ screenshots: { ...o, ...p } });
-  const rec = useStore(recording);
-  const list = useStore(recent);
+  const win = useAppWindow(), native = useRef(null);
+  useWindows();
+  const state = useStore(session);
+  const protect = () => {
+    if (native.current) lord.nativeViews.action(native.current, { action: ['protectFacts'], extra: { facts: panelFacts() } });
+  };
   useEffect(() => {
     wm.setMenus(win.id, [{ label: tr('screenshots.menu.window'), items: [
-      { label: tr('screenshots.menu.protect'), onClick: () => {
-        const others = windows.get().filter((w) => w.app !== APP && !w.minimized && w.desktop === wm.desktop());
-        const front = others[others.length - 1];
-        if (front) wm.setProtected(front.id, !front.protected);
-      } },
+      { label: tr('screenshots.menu.protect'), onClick: protect },
     ] }]);
   }, []);
-  const Mode = ({ glyph, label, onClick, danger }) => (
-    <View onClick={onClick} style={{ flex: 1, minWidth: 0, height: 82, borderRadius: 10, alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingTop: 16,
-      backgroundColor: danger ? 'rgba(255,59,48,0.14)' : th.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: `1px solid ${th.separator}` }}>
-      <Text style={{ fontSize: 22, color: danger ? '#ff3b30' : th.text }}>{glyph}</Text>
-      <Text style={{ fontSize: typeScale.caption, fontWeight: 500, color: th.text, textAlign: 'center', lineHeight: 1.2 }}>{label}</Text>
-    </View>
-  );
-  const prot = windows.get().filter((w) => w.protected).length;
-  return (
-    <View style={{ flex: 1, padding: 20, gap: 16 }}>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Mode glyph="▣" label={tr('screenshots.mode.full')} onClick={() => capture.full()} />
-        <Mode glyph="⧈" label={tr('screenshots.mode.window')} onClick={() => capture.area('window')} />
-        <Mode glyph="⬚" label={tr('screenshots.mode.area')} onClick={() => capture.area('area')} />
-        <Mode glyph={rec ? '■' : '●'} danger label={tr(rec ? 'screenshots.mode.stop' : 'screenshots.mode.record')} onClick={() => capture.record()} />
-      </View>
-      <GroupBox footer={null}>
-        <FormRow label={tr('screenshots.timer')}>
-          <Segmented small value={o.timer} onChange={(v) => set({ timer: v })} options={[[0, tr('screenshots.timerNone')], [5, '5 s'], [10, '10 s']]} />
-        </FormRow>
-        <FormRow label={tr('screenshots.toClipboard')}><Toggle on={!!o.clipboard} onChange={(v) => set({ clipboard: v })} /></FormRow>
-        <FormRow label={tr('screenshots.mic')}><Toggle on={!!o.mic} onChange={(v) => set({ mic: v })} /></FormRow>
-      </GroupBox>
-      <Text style={{ fontSize: typeScale.caption, color: th.textDim, lineHeight: 1.45, paddingHorizontal: 8 }}>{tr('screenshots.shortcuts')}</Text>
-      {prot > 0 && <Text style={{ fontSize: typeScale.caption, color: th.textDim, paddingHorizontal: 8 }}>{tr('screenshots.protectedNote', { count: prot })}</Text>}
-      {list.length > 0 && (
-        <GroupBox title={tr('screenshots.recent')}>
-          {list.slice(0, 5).map((r) => (
-            <View key={r.path} onClick={() => wm.open(r.video ? 'player' : 'photos', { new: true, args: { path: r.path } })}
-              style={{ minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ width: 16, fontSize: 12, color: th.accent, textAlign: 'center' }}>{r.video ? '▶' : '◫'}</Text>
-              <View style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <Text style={{ fontSize: typeScale.callout, color: th.text, whiteSpace: 'nowrap' }}>{r.path.split('/').pop()}</Text>
-              </View>
-            </View>
-          ))}
-        </GroupBox>
-      )}
-    </View>
-  );
+  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native}
+    args={{ view: 'panel', session: state, facts: panelFacts() }} onEffect={effect => {
+      if (effect.kind !== 'capturePanel') return false;
+      if (effect.op === 'capture') {
+        if (effect.mode === 'full') capture.full();
+        else if (effect.mode === 'record') capture.record();
+        else capture.area(effect.mode);
+      } else if (effect.op === 'recent') wm.open(effect.app, { new: true, args: { path: effect.path } });
+      else if (effect.op === 'protect') wm.setProtected(effect.id, effect.on);
+      return true;
+    }} />;
 }
 
 export default function Screenshots() {

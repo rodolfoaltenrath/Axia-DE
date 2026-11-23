@@ -184,14 +184,28 @@ pub struct App {
     selector: crate::selector::App,
     auxiliary: Option<Auxiliary>,
     editor: Option<crate::editor_view::App>,
+    panel: Option<crate::panel::App>,
     theme: std::rc::Rc<Value>,
 }
 impl App {
+    fn panel(&mut self) -> &mut crate::panel::App {
+        self.editor = None;
+        self.auxiliary = None;
+        let panel = self.panel.get_or_insert_with(Default::default);
+        if !self.theme.is_null() {
+            panel.set_native_appearance(self.theme.clone());
+        }
+        panel
+    }
     fn request_at(&mut self, input: &Value, now: i64) -> Value {
         if input["cmd"] == "icon" {
             return crate::selector::icon(input["size"].as_f64().unwrap_or(48.));
         }
         if input["cmd"] == "sync" {
+            if input["args"]["view"] == "panel" {
+                return self.panel().request(input);
+            }
+            self.panel = None;
             if input["args"]["view"] == "editor" {
                 let editor = self.editor.get_or_insert_with(Default::default);
                 if !self.theme.is_null() {
@@ -205,6 +219,9 @@ impl App {
                 self.auxiliary = kind.map(Auxiliary::new);
                 self.selector = Default::default();
             }
+        }
+        if let Some(panel) = &mut self.panel {
+            return panel.request(input);
         }
         if let Some(editor) = &mut self.editor {
             return editor.request_at(input, now);
@@ -222,12 +239,25 @@ impl NativeApp for App {
     }
     fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
         self.theme = theme.clone();
+        if let Some(panel) = &mut self.panel {
+            panel.set_native_appearance(theme.clone());
+        }
         if let Some(editor) = &mut self.editor {
             editor.set_native_appearance(theme);
         }
     }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, axia_native::clock::now())
+    }
+    fn uses_preferences(&self) -> bool {
+        true
+    }
+    fn sync_with_preferences(&mut self, input: &Value, preferences: &Value) -> Value {
+        if input["args"]["view"] == "panel" {
+            self.panel().sync_with_preferences(input, preferences)
+        } else {
+            self.request(input)
+        }
     }
     fn refresh_ms(&self) -> Option<f64> {
         if let Some(editor) = &self.editor {
@@ -241,6 +271,9 @@ impl NativeApp for App {
         self.refresh_ms()
     }
     fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
+        if self.panel.is_some() {
+            return None;
+        }
         if let Some(editor) = &mut self.editor {
             return editor.key(key, chr, flags);
         }

@@ -310,6 +310,21 @@ jobs:
           AXIA_SCREENSHOTS_EDITOR_AXIA_OUTPUT: ${{ runner.temp }}/axia-screenshots-editor/axia
           AXIA_SCREENSHOTS_EDITOR_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-screenshots-editor/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_geometry_runtime -- --ignored --nocapture
+      - name: Native capture panel, privacy and recording generations
+        if: matrix.gpu == 1
+        env:
+          AXIA_CAPTURE_PANEL_AXIA_OUTPUT: ${{ runner.temp }}/axia-capture-panel/axia
+          AXIA_CAPTURE_PANEL_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-capture-panel/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_panel_runtime -- --ignored --nocapture
+      - name: Overlapping media device indicators
+        if: matrix.gpu == 1
+        run: node server/tests/media_device_lifecycle_test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-capture-panel
+          path: ${{ runner.temp }}/axia-capture-panel/
+          if-no-files-found: warn
       - name: Native PrintScreen selector and saved thumbnail
         if: matrix.gpu == 1
         env:

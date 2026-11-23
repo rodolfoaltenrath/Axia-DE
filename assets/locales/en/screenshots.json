@@ -23,7 +23,7 @@
   "timerNone": "None",
   "toClipboard": "Copy to clipboard instead of saving",
   "mic": "Record the microphone",
-  "shortcuts": "❖⇧3 entire screen · ❖⇧4 selection (Space: window) · ❖⇧5 this panel or stop recording · Print Screen",
+  "shortcuts": "Meta+Shift+3 entire screen · Meta+Shift+4 selection (Space: window) · Meta+Shift+5 this panel or stop recording · Print Screen",
   "protectedNote": {
     "one": "{count} protected window: it comes out black in captures",
     "other": "{count} protected windows: they come out black in captures"
