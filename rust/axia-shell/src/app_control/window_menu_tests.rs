@@ -54,7 +54,8 @@ fn switcher_preparation_resolves_current_surface_and_cancel_revalidates_the_orig
     let reader = session.reader();
     let revision = reader.revision();
     let normal = control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":99}));
-    assert_eq!(normal["result"],json!({"opened":true,"origin":""}));
+    assert_eq!(normal["result"]["opened"],true);
+    control.request(&json!({"cmd":"switcherCancel","nonce":normal["result"]["nonce"]}));
     assert_eq!(reader.revision(),revision);
     for surface in [0,-1,7,100] {
         let _probe = super::switcher_source::set(true,surface);
@@ -63,21 +64,23 @@ fn switcher_preparation_resolves_current_surface_and_cancel_revalidates_the_orig
     }
     let _probe = super::switcher_source::set(true,99);
     let reply = control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":100,"origin":"notes","windows":[],"facts":{"active":2}}));
-    assert_eq!(reply["result"],json!({"opened":true,"origin":"linux#7"}));
+    assert_eq!(session.switcher_reader().read().as_ref().unwrap().origin,"linux#7");
+    let nonce = reply["result"]["nonce"].clone();
     assert!(reader.read().window("linux#7").unwrap().minimized());
     assert_eq!(reader.revision(),revision+1);
     assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":99}))["result"]["opened"],false,"an already minimized origin is stale");
     assert_eq!(reader.revision(),revision+1);
     session.call("setActiveDesktop",&[json!({}),json!(2)]).unwrap();
     let revision = reader.revision();
-    control.request(&json!({"cmd":"switcherCancel","origin":"linux#7"}));
+    control.request(&json!({"cmd":"switcherCancel","nonce":nonce}));
     assert_eq!(reader.revision(),revision+1);
     assert_eq!(reader.read().focused_window(),Some("linux#7"));
     assert_eq!(reader.read().active_desktop(),1);
     assert!(!reader.read().window("linux#7").unwrap().minimized());
+    let nonce = control.request(&json!({"cmd":"switcherPrepare"}))["result"]["nonce"].clone();
     session.call("close",&[json!({}),json!("linux#7")]).unwrap();
     let revision = reader.revision();
-    control.request(&json!({"cmd":"switcherCancel","origin":"linux#7"}));
+    control.request(&json!({"cmd":"switcherCancel","nonce":nonce}));
     assert_eq!(reader.revision(),revision,"closed origins cannot change focus or recreate a window");
     for invalid in [json!({"cmd":"switcherCancel"})] {
         assert_eq!(control.request(&invalid)["error"],"app.invalidRequest");
@@ -92,7 +95,9 @@ fn switcher_preparation_uses_the_native_probe_even_when_caller_facts_disagree() 
     session.call("open",&[json!({}),json!({"app":"linux","instance":12,"args":{"surface":97}})]).unwrap();
     let mut control = Controller::new(session.clone());
     let revision = session.reader().revision();
-    assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":97}))["result"],json!({"opened":true,"origin":""}));
+    let normal = control.request(&json!({"cmd":"switcherPrepare","fullscreen":true,"surface":97}));
+    assert_eq!(session.switcher_reader().read().as_ref().unwrap().origin,"");
+    control.request(&json!({"cmd":"switcherCancel","nonce":normal["result"]["nonce"]}));
     assert_eq!(session.reader().revision(),revision);
     {
         let _probe = super::switcher_source::set(true,0);
@@ -101,7 +106,45 @@ fn switcher_preparation_uses_the_native_probe_even_when_caller_facts_disagree() 
     }
     {
         let _probe = super::switcher_source::set(true,97);
-        assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":0}))["result"]["origin"],"linux#12");
+        assert_eq!(control.request(&json!({"cmd":"switcherPrepare","fullscreen":false,"surface":0}))["result"]["opened"],true);
+        assert_eq!(session.switcher_reader().read().as_ref().unwrap().origin,"linux#12");
         assert_eq!(session.reader().revision(),revision+1);
     }
+}
+
+#[test]
+fn switcher_opening_survives_controller_recreation_and_rejects_stale_cancel() {
+    let mut session = Session::default();
+    session.call("open",&[json!({}),json!({"app":"notes"})]).unwrap();
+    let opening = session.switcher_reader();
+    let changes = opening.subscribe();
+    changes.take();
+    let mut control = Controller::new(session.clone());
+    for invalid in [json!({"hold":-1}),json!({"hold":2147483648u64}),json!({"back":1})] {
+        let mut request = invalid;
+        request["cmd"] = json!("switcherPrepare");
+        assert_eq!(control.request(&request)["error"],"app.invalidRequest");
+        assert!(opening.read().is_none());
+    }
+    let first = control.request(&json!({"cmd":"switcherPrepare","hold":8,"back":true,"nonce":500,"origin":"forged"}));
+    let nonce = first["result"]["nonce"].as_u64().unwrap();
+    assert_ne!(nonce,500);
+    assert!(changes.take().is_some());
+    assert_eq!(opening.read().as_ref().unwrap().hold,8);
+    assert!(opening.read().as_ref().unwrap().back);
+    assert!(opening.read().as_ref().unwrap().origin.is_empty());
+    drop(control);
+    let mut control = Controller::new(session.clone());
+    assert_eq!(control.request(&json!({"cmd":"switcherPrepare"}))["result"]["opened"],false);
+    assert!(changes.take().is_none());
+    assert_eq!(control.request(&json!({"cmd":"switcherCancel","nonce":nonce}))["result"],true);
+    let second = control.request(&json!({"cmd":"switcherPrepare","hold":4}));
+    let next = second["result"]["nonce"].as_u64().unwrap();
+    assert!(next>nonce);
+    changes.take();
+    let revision = session.reader().revision();
+    assert_eq!(control.request(&json!({"cmd":"switcherCancel","nonce":nonce,"origin":"notes"}))["result"],false);
+    assert_eq!(opening.read().as_ref().unwrap().nonce,next);
+    assert!(changes.take().is_none());
+    assert_eq!(session.reader().revision(),revision);
 }

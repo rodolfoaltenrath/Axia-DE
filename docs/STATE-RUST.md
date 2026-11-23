@@ -220,7 +220,7 @@ Revisões invalidam a cena e são consumidas antes de confirmar uma ação; fech
 a janela escolhida substitui sua representante ou remove o grupo.
 
 Seleção, ícones e faixa por viewport são nativos. `appswitcher.jsx` conserva
-o ciclo de abertura, os atalhos e o snapshot de compatibilidade.
+a montagem, os atalhos e o snapshot de compatibilidade.
 `nativeswitcher.js` enfileira comandos recebidos antes do mount e usa um nonce
 para que efeitos de uma abertura antiga não encerrem a seguinte. Aparência e
 metadados são lidos por referências nativas: a montagem validada da sessão usa
@@ -264,6 +264,32 @@ anterior; concluir consome a geração, e desmontar só libera a geração da pr
 view. Assim, uma entrada atrasada de uma view antiga não altera foco nem revisão,
 e seu descarte não invalida a view atual.
 
+A abertura agora pertence a um Store tipado do Session: nonce, modificadores
+mantidos, direção inicial e origem. O nonce cresce nativamente e respeita o
+inteiro seguro de JS; recriar o controlador não perde nem reinicia a abertura.
+`switcherPrepare` recebe hold/back como intenção e retorna somente identidade e
+hold, além do snapshot de compatibilidade. O SDK mantém esse espelho mínimo para
+montagem/atalhos; envia à view somente o nonce. A view assina o Reader nativo,
+ignora origem/direção locais e só adquire geração após validar a identidade.
+`switcherCancel` recebe nonce e restaura exclusivamente a origem registrada;
+um cancelamento antigo não fecha a abertura atual nem muda foco/revisão.
+Cancelar por outra entrada acorda o host montado e encerra sem foco duplicado.
+Desmontar permite remontar a mesma abertura, mantendo a proteção por geração.
+Montagens locais por Reader conservam fatos explícitos.
+
+O estado de abertura passou em 694 testes da shell (sete ignorados), oito
+contratos LPK, oito cenários gráficos ampliados e quatro de regressão de foco,
+além do encerramento instalado por timeout/SIGTERM. Dois testes novos e os
+contratos ampliados verificam identidade nativa, recriação do controlador,
+intenções inválidas, cancelamento antigo, origem/direção falsas, host acordado
+por cancelamento e montagem inválida sem revogar a view atual. O contrato
+compartilhado com RPM exige ausência de origem/back/hold nos fatos e nonce
+gerado no Session; passou também no `switcher-check` da instalação privada.
+Build GPU=1 e bundles aprovados. Oito capturas são idênticas byte a byte às da
+etapa anterior; claro/escuro mínimos inspecionados e pixels de material/destaque
+verificados. Evidências em `build/validation/native-switcher-opening/`.
+Montagem, atalhos e espelho mínimo JS seguem pendentes; a Fase 2 continua aberta.
+
 Preparar a abertura usa `switcherPrepare`, sem fatos de tela cheia no pedido.
 Rust consulta diretamente `wl_fullscreen_active`/`wl_fullscreen_window` na thread
 do compositor e ignora os campos fullscreen/surface de pedidos antigos.
@@ -274,7 +300,7 @@ Sem tela cheia, permite abrir sem alterar janelas; origem ausente ou obsoleta
 recusa a abertura. A origem não é construída pelo JS nem depende do espelho.
 Cancelar antes do mount usa `switcherCancel`, que revalida e restaura foco,
 desktop e minimização no proprietário nativo. O SDK só aplica os snapshots.
-Nonce e montagem continuam no adaptador.
+Montagem e encaminhamento dos atalhos continuam no adaptador.
 
 A leitura direta do compositor passou em 692 testes da shell, oito contratos
 LPK, oito cenários gráficos do alternador e quatro de regressão de foco,

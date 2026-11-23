@@ -883,12 +883,21 @@ impl axia_native::windows::WindowSource for WindowReader {
 pub struct Session {
     core: std::rc::Rc<SessionCore>,
 }
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct SwitcherOpening {
+    pub nonce: u64,
+    pub hold: i32,
+    pub back: bool,
+    pub origin: String,
+}
 #[derive(Default)]
 struct SessionCore {
     state: Store<WindowState>,
     catalog: Store<Value>,
     switcher_generation: std::cell::Cell<u64>,
     active_switcher: std::cell::Cell<Option<u64>>,
+    switcher_nonce: std::cell::Cell<u64>,
+    switcher_opening: Store<Option<SwitcherOpening>>,
     restore: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::session_restore::Service>>>>,
     desktops: std::cell::RefCell<Option<std::rc::Rc<std::cell::RefCell<crate::desktop_session::Service>>>>,
     notifications: std::rc::Rc<std::cell::RefCell<crate::notifications::Service>>,
@@ -906,6 +915,35 @@ impl WeakSession {
 }
 
 impl Session {
+    pub(crate) fn switcher_reader(&self) -> Reader<Option<SwitcherOpening>> { self.core.switcher_opening.reader() }
+    // The adapter mirrors only identity/held modifiers; origin and direction stay here.
+    pub(crate) fn prepare_switcher(&mut self, fullscreen: bool, surface: i64, hold: i32, back: bool) -> Result<Value,String> {
+        if self.core.switcher_opening.read().is_some() { return Ok(json!({"result":{"opened":false}})); }
+        // Never reuse an identity or round it when it crosses the JS boundary.
+        let Some(nonce) = self.core.switcher_nonce.get().checked_add(1).filter(|nonce| *nonce <= 9_007_199_254_740_991) else {
+            return Ok(json!({"result":{"opened":false}}));
+        };
+        let mut reply = self.app_command(AppCommand::PrepareSwitcher { fullscreen, surface }, &[])?;
+        if reply["result"]["opened"] != true { return Ok(reply); }
+        let origin = reply["result"]["origin"].as_str().unwrap_or("").to_owned();
+        self.core.switcher_nonce.set(nonce);
+        self.core.active_switcher.set(None);
+        self.core.switcher_opening.set(Some(SwitcherOpening { nonce,hold,back,origin }));
+        reply["result"] = json!({"opened":true,"nonce":nonce,"hold":hold});
+        Ok(reply)
+    }
+    pub(crate) fn close_switcher_opening(&self, nonce: u64) -> Option<SwitcherOpening> {
+        self.core.switcher_opening.update(|opening| {
+            if opening.as_ref().is_some_and(|opening| opening.nonce == nonce) { (opening.take(),true) }
+            else { (None,false) }
+        })
+    }
+    pub(crate) fn cancel_switcher(&mut self, nonce: u64) -> Result<Value,String> {
+        let Some(opening) = self.close_switcher_opening(nonce) else { return Ok(json!({"result":false})); };
+        self.core.active_switcher.set(None);
+        if opening.origin.is_empty() { return Ok(json!({"result":true})); }
+        self.app_command(AppCommand::WindowAction(WindowMenuAction::Focus), &[&opening.origin])
+    }
     pub(crate) fn begin_switcher(&self) -> Option<u64> {
         self.core.active_switcher.set(None);
         let generation = self.core.switcher_generation.get().checked_add(1)?;

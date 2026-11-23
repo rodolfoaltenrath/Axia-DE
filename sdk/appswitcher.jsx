@@ -13,7 +13,6 @@ const MANIFEST = { id: 'shell:switcher', shell: true, appearanceSource: 'native'
 // Lifecycle only. Entries and the selected index are private to the Rust view.
 export const switcherState = createStore(null);
 export const switcherOpen = () => !!switcherState.get();
-let nonce = 0;
 switcherBridge.perform = effect => {
   if (effect.nonce !== switcherState.get()?.nonce) return;
   switcherState.set(null);
@@ -23,12 +22,11 @@ switcherBridge.perform = effect => {
 };
 export function openSwitcher(hold, back = false) {
   if (switcherOpen()) cancelSwitcher();
-  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'switcherPrepare' });
+  const reply = nativeAppRequest(lord.nativeApps, { cmd: 'switcherPrepare', hold, back });
   if (!reply.result?.opened) return;
   applyNativeWindowState(reply);
-  const origin = reply.result.origin;
   switcherBridge.reset();
-  switcherState.set({ hold, back, origin, nonce: ++nonce });
+  switcherState.set({ hold: reply.result.hold, nonce: reply.result.nonce });
 }
 export function cancelSwitcher() {
   const state = switcherState.get();
@@ -36,7 +34,7 @@ export function cancelSwitcher() {
   if (switcherBridge.handle.current) switcherBridge.send(['cancel']);
   else {
     switcherState.set(null);switcherBridge.reset();
-    if (state.origin) applyNativeWindowState(nativeAppRequest(lord.nativeApps, { cmd: 'switcherCancel', origin: state.origin }));
+    applyNativeWindowState(nativeAppRequest(lord.nativeApps, { cmd: 'switcherCancel', nonce: state.nonce }));
   }
 }
 export function switcherKey(e) {
@@ -57,7 +55,7 @@ export function AppSwitcher() {
   return h(Layer, { name: 'overlay' }, h(NativeView, {
     key: state.nonce, manifest: MANIFEST,
     stateSource: lord.windowList, handleRef: switcherBridge.handle,
-    args: state,
+    args: { nonce: state.nonce },
     style: { position: 'absolute', left: 0, top: 0, width: 0, height: 0, pointerEvents: 'box-none' },
   }));
 }

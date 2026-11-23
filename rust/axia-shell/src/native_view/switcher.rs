@@ -1,7 +1,7 @@
 //! App selection and scene read the context's window model directly.
 use super::NativeApp;
 use crate::{
-    winmodel::{AppCommand, Session, WindowMenuAction, WindowReader, WindowState},
+    winmodel::{AppCommand, Session, SwitcherOpening, WindowMenuAction, WindowReader, WindowState},
     AxiaSwitcher,
 };
 use axia_state::{Reader, Subscription};
@@ -20,6 +20,7 @@ struct Entry {
 pub struct Switcher {
     session: Option<Session>,
     generation: Option<u64>,
+    opening: Option<(Reader<Option<SwitcherOpening>>, Subscription)>,
     appearance: Option<std::rc::Rc<Value>>,
     surface: Value,
     windows: Reader<WindowState>,
@@ -32,6 +33,7 @@ pub struct Switcher {
     done: bool,
     origin: String,
     nonce: Value,
+    back: bool,
     effects: Vec<Value>,
 }
 impl Switcher {
@@ -45,10 +47,11 @@ impl Switcher {
     pub fn with_displays(session: Session, displays: Reader<Vec<Value>>) -> Self {
         let windows = session.reader();
         let catalog = crate::forcequit::App::with_window_metadata(Rc::new(WindowReader(windows.clone())),session.catalog_store());
-        let generation = session.begin_switcher();
         let mut switcher = Self::with_catalog(windows,catalog);
+        let opening = session.switcher_reader();
+        let changes = opening.subscribe();
+        switcher.opening = Some((opening,changes));
         switcher.session = Some(session);
-        switcher.generation = generation;
         let changes = displays.subscribe();
         switcher.displays = Some((displays,changes));
         switcher
@@ -58,6 +61,7 @@ impl Switcher {
         Self {
             session: None,
             generation: None,
+            opening: None,
             appearance: None,
             surface: Value::Null,
             windows,
@@ -70,6 +74,7 @@ impl Switcher {
             done: false,
             origin: String::new(),
             nonce: Value::Null,
+            back: false,
             effects: Vec::new(),
         }
     }
@@ -78,6 +83,28 @@ impl Switcher {
         if let Some((_, changes)) = &self.displays { changes.take(); }
         if self.done {
             return;
+        }
+        if let Some((reader, changes)) = &self.opening {
+            changes.take();
+            let opening = reader.read();
+            let wanted = if self.begun { self.nonce.as_u64() } else { input["args"]["nonce"].as_u64() };
+            let Some(opening) = opening.as_ref().filter(|opening|Some(opening.nonce)==wanted) else {
+                self.done = true;
+                if !self.begun { self.nonce = input["args"]["nonce"].clone(); }
+                self.effects.push(json!({"kind":"switcher","nonce":self.nonce,"reply":null}));
+                return;
+            };
+            if !self.begun {
+                self.origin.clone_from(&opening.origin);
+                self.nonce = json!(opening.nonce);
+                self.back = opening.back;
+                // A mount with an obsolete identity must not revoke the live owner.
+                self.generation = self.session.as_ref().and_then(Session::begin_switcher);
+            }
+        } else if !self.begun {
+            self.origin = input["args"]["origin"].as_str().unwrap_or("").into();
+            self.nonce = input["args"]["nonce"].clone();
+            self.back = input["args"]["back"] == true;
         }
         let opening = !self.begun;
         let groups = self.catalog.native_groups(input);
@@ -114,8 +141,6 @@ impl Switcher {
             })
             .collect();
         if !self.begun {
-            self.origin = input["args"]["origin"].as_str().unwrap_or("").into();
-            self.nonce = input["args"]["nonce"].clone();
             let focused = if self.origin.is_empty() {
                 state.focused_window()
             } else {
@@ -151,7 +176,7 @@ impl Switcher {
             self.selector.begin(
                 &keys,
                 focused,
-                input["args"]["back"].as_bool().unwrap_or(false),
+                self.back,
             );
             let mut by_key: std::collections::BTreeMap<_, _> = entries
                 .into_iter()
@@ -203,7 +228,8 @@ impl Switcher {
         self.done = true;
         drop(state);
         if let Some(session) = &mut self.session {
-            let reply = session.end_switcher(self.generation).then(|| target.as_deref()
+            let current = session.end_switcher(self.generation) && self.nonce.as_u64().and_then(|nonce|session.close_switcher_opening(nonce)).is_some();
+            let reply = current.then(|| target.as_deref()
                 .and_then(|id| session.app_command(AppCommand::WindowAction(WindowMenuAction::Focus), &[id]).ok())).flatten();
             self.effects.push(json!({"kind":"switcher","nonce":self.nonce,"reply":reply}));
         } else {
@@ -273,6 +299,7 @@ impl NativeApp for Switcher {
     }
     fn invalidated(&self) -> bool {
         !self.done && (self.changes.pending() || self.catalog.invalidated()
+            || self.opening.as_ref().is_some_and(|(_,changes)|changes.pending())
             || self.displays.as_ref().is_some_and(|(_, changes)| changes.pending()))
     }
     fn request(&mut self, input: &Value) -> Value {

@@ -1,5 +1,5 @@
 //! Session commands borrow native groups and mutate their context's window owner.
-use crate::winmodel::{AppCommand, Session, WindowMenuAction, WindowReader};
+use crate::winmodel::{AppCommand, Session, WindowReader};
 use serde_json::{json, Value};
 use std::rc::Rc;
 #[cfg(test)]
@@ -50,14 +50,22 @@ impl Controller {
                 return json!({"error":"app.invalidRequest"});
             };
             let (fullscreen,surface) = switcher_source::current();
-            return windows.app_command(AppCommand::PrepareSwitcher { fullscreen, surface }, &[])
+            let hold = match input.get("hold") {
+                None => 0,
+                Some(value) => match value.as_i64().and_then(|value|i32::try_from(value).ok()).filter(|value|*value>=0) {
+                    Some(value) => value,
+                    None => return json!({"error":"app.invalidRequest"}),
+                },
+            };
+            let back = match input.get("back") { None => false, Some(Value::Bool(value)) => *value, _ => return json!({"error":"app.invalidRequest"}) };
+            return windows.prepare_switcher(fullscreen,surface,hold,back)
                 .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
         }
         if input["cmd"] == "switcherCancel" {
-            let (Some(windows),Some(origin)) = (&mut self.windows,input["origin"].as_str()) else {
+            let (Some(windows),Some(nonce)) = (&mut self.windows,input["nonce"].as_u64()) else {
                 return json!({"error":"app.invalidRequest"});
             };
-            return windows.app_command(AppCommand::WindowAction(WindowMenuAction::Focus), &[origin])
+            return windows.cancel_switcher(nonce)
                 .unwrap_or_else(|_|json!({"error":"app.invalidRequest"}));
         }
         if input["cmd"] == "clockCommand" {

@@ -106,9 +106,10 @@ fn bound_switcher_reads_catalog_revisions_and_revalidates_before_commit() {
     let metadata = |name: &str, builtin: bool| json!({"cmd":"metadata","catalog":[],"registry":[
         {"id":"files","name":"Files"},{"id":"notes","name":name,"builtin":builtin},{"id":"calculator","name":"Calculator"}]});
     control.request(&metadata("Notes",false));
+    let nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
     let node = scene::create(scene::VIEW);
     let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),physical_display())),"",None);
-    let stale = json!({"width":640,"args":{"nonce":10},"registry":[{"id":"notes","name":"Forged","builtin":true}],"catalog":[]});
+    let stale = json!({"width":640,"args":{"nonce":nonce},"registry":[{"id":"notes","name":"Forged","builtin":true}],"catalog":[]});
     host.facts(stale.clone());
     assert_ne!(host.find_text("Notes"),0);
     assert!(host.deadline().is_none());
@@ -124,7 +125,7 @@ fn bound_switcher_reads_catalog_revisions_and_revalidates_before_commit() {
     host.action(&json!({"action":["commit"]}));
     let effects = host.take().unwrap();
     assert_eq!(effects[0]["kind"],"switcher");
-    assert_eq!(effects[0]["nonce"],10);
+    assert_eq!(effects[0]["nonce"],nonce);
     assert!(effects[0]["focus"].is_null(),"native focus must not return as a JS command");
     assert_ne!(session.reader().read().focused_window(),Some("notes"),"a removed group cannot remain the target");
     assert!(effects[0]["reply"].is_object());
@@ -143,13 +144,14 @@ fn native_catalog_emptying_closes_the_switcher_once_without_stale_fallback() {
     call(&mut session,"open",&[json!({"app":"notes"})]);
     let mut control = crate::app_control::Controller::new(session.clone());
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Notes"}]}));
+    let nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
     let node = scene::create(scene::VIEW);
     let mut host = Host::new(node,Box::new(Switcher::with_displays(session,physical_display())),"",None);
-    host.facts(json!({"width":640,"args":{"nonce":11},"registry":[{"id":"notes","name":"Forged"}]}));
+    host.facts(json!({"width":640,"args":{"nonce":nonce},"registry":[{"id":"notes","name":"Forged"}]}));
     assert_ne!(host.find_text("Notes"),0);
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","builtin":true}]}));
     host.tick(0.);
-    assert_eq!(host.take(),Some(json!([{"kind":"switcher","nonce":11,"reply":null}])));
+    assert_eq!(host.take(),Some(json!([{"kind":"switcher","nonce":nonce,"reply":null}])));
     assert_eq!(host.find_text("Forged"),0);
     assert!(host.deadline().is_none());
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[]}));
@@ -167,13 +169,13 @@ fn bound_switcher_focuses_in_one_native_revision_and_restores_fullscreen_origin(
         call(&mut session,"setDesktops",&[json!([1,2]),json!(1)]);
         call(&mut session,"open",&[json!({"app":"notes","desktop":2})]);
         call(&mut session,"open",&[json!({"app":"linux","instance":9,"args":{"appId":"game","surface":9}})]);
-        call(&mut session,"minimize",&[json!("linux#9")]);
         call(&mut session,"setActiveDesktop",&[json!(1)]);
         let mut control = crate::app_control::Controller::new(session.clone());
         control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"notes","name":"Notes"},{"id":"linux","builtin":true}]}));
+        let nonce = session.prepare_switcher(true,9,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
         let node = scene::create(scene::VIEW);
         let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),physical_display())),"",None);
-        host.facts(json!({"width":640,"args":{"nonce":12,"origin":"linux#9"}}));
+        host.facts(json!({"width":640,"args":{"nonce":nonce,"origin":"forged","back":true}}));
         assert_ne!(host.find_text("Notes"),0);
         let revision = session.reader().revision();
         host.action(&json!({"action":[if cancel { "cancel" } else { "commit" }]}));
@@ -201,26 +203,28 @@ fn newer_switcher_generation_prevents_stale_focus_and_drop_keeps_the_current_own
     for app in ["files","notes","calculator"] { call(&mut session,"open",&[json!({"app":app})]); }
     let mut control = crate::app_control::Controller::new(session.clone());
     control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}]}));
+    let nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
     let sync = |switcher: &mut Switcher, nonce| switcher.request(&json!({"cmd":"sync","args":{"nonce":nonce}}));
     let mut stale = Switcher::with_displays(session.clone(),physical_display());
-    sync(&mut stale,20);
+    sync(&mut stale,nonce);
     let mut current = Switcher::with_displays(session.clone(),physical_display());
-    sync(&mut current,21);
+    sync(&mut current,nonce);
     let revision = session.reader().revision();
     stale.request(&json!({"cmd":"commit"}));
     assert_eq!(session.reader().revision(),revision);
-    assert!(sync(&mut stale,20)["effects"][0]["reply"].is_null());
+    assert!(sync(&mut stale,nonce)["effects"][0]["reply"].is_null());
     drop(stale);
     current.request(&json!({"cmd":"commit"}));
     assert_eq!(session.reader().read().focused_window(),Some("notes"));
     assert_eq!(session.reader().revision(),revision+1);
-    assert!(sync(&mut current,21)["effects"][0]["reply"].is_object());
+    assert!(sync(&mut current,nonce)["effects"][0]["reply"].is_object());
+    let next_nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
     let abandoned = Switcher::with_displays(session.clone(),physical_display());
     drop(abandoned);
     let mut next = Switcher::with_displays(session.clone(),physical_display());
-    sync(&mut next,22);
+    sync(&mut next,next_nonce);
     next.request(&json!({"cmd":"commit"}));
-    assert!(sync(&mut next,22)["effects"][0]["reply"].is_object());
+    assert!(sync(&mut next,next_nonce)["effects"][0]["reply"].is_object());
 }
 
 #[test]
@@ -232,8 +236,9 @@ fn physical_displays_reposition_and_resize_without_restarting_selection() {
     let mut control = crate::app_control::Controller::new(session.clone());
     control.request(&json!({"cmd":"metadata","registry":registry,"catalog":[]}));
     let source = axia_state::Store::new(vec![json!({"x":-800,"y":0,"w":800,"h":600}),json!({"x":0,"y":20,"w":640,"h":700,"main":true})]);
+    let nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
     let mut switcher = Switcher::with_displays(session,source.reader());
-    let input = json!({"cmd":"sync","args":{"nonce":30,"display":{"x":9999,"y":9999,"w":1,"h":1}},"context":{"width":9999,"height":9999}});
+    let input = json!({"cmd":"sync","args":{"nonce":nonce,"display":{"x":9999,"y":9999,"w":1,"h":1}},"context":{"width":9999,"height":9999}});
     let label = |tree: &Value| tree["children"][0]["children"][1]["children"][0]["label"].clone();
     let columns = |tree: &Value| tree["children"][0]["children"][0]["children"].as_array().unwrap().len();
     let tree = switcher.request(&input)["tree"].clone();
@@ -270,9 +275,10 @@ fn physical_display_changes_wake_the_host_without_facts_and_keep_the_focus_targe
     let mut control = crate::app_control::Controller::new(session.clone());
     control.request(&json!({"cmd":"metadata","registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}],"catalog":[]}));
     let source = axia_state::Store::new(vec![json!({"x":0,"y":0,"w":640,"h":700})]);
+    let nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
     let node = scene::create(scene::VIEW);
     let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),source.reader())),"",None);
-    host.facts(json!({"width":9999,"args":{"nonce":31}}));
+    host.facts(json!({"width":9999,"args":{"nonce":nonce}}));
     assert_ne!(host.find_text("Notes"),0);
     source.update(|displays| { displays.clear();((),true) });
     assert_eq!(host.deadline(),Some(0.));
@@ -287,6 +293,45 @@ fn physical_display_changes_wake_the_host_without_facts_and_keep_the_focus_targe
     assert_eq!(session.reader().read().focused_window(),Some("notes"));
     assert!(host.take().is_some());
     source.update(|displays| { displays.clear();((),true) });
+    assert!(host.deadline().is_none());
+    drop(host);
+    scene::destroy(node);
+}
+
+#[test]
+fn opening_cancel_wakes_the_host_and_invalid_mount_cannot_revoke_the_owner() {
+    let mut session = Session::default();
+    for app in ["files","notes","calculator"] { call(&mut session,"open",&[json!({"app":app})]); }
+    let mut control = crate::app_control::Controller::new(session.clone());
+    control.request(&json!({"cmd":"metadata","catalog":[],"registry":[{"id":"files","name":"Files"},{"id":"notes","name":"Notes"},{"id":"calculator","name":"Calculator"}]}));
+    let nonce = session.prepare_switcher(false,0,8,true).unwrap()["result"]["nonce"].as_u64().unwrap();
+    let node = scene::create(scene::VIEW);
+    let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),physical_display())),"",None);
+    host.facts(json!({"args":{"nonce":nonce,"origin":"notes","back":false}}));
+    assert_ne!(host.find_text("Files"),0,"native backwards intent wins over facts");
+    use super::NativeApp;
+    let mut invalid = Switcher::with_displays(session.clone(),physical_display());
+    invalid.request(&json!({"cmd":"sync","args":{"nonce":nonce+1}}));
+    invalid.request(&json!({"cmd":"commit"}));
+    drop(invalid);
+    host.action(&json!({"action":["commit"]}));
+    assert_eq!(session.reader().read().focused_window(),Some("files"));
+    assert!(host.take().unwrap()[0]["reply"].is_object());
+    drop(host);
+    scene::destroy(node);
+    let nonce = session.prepare_switcher(false,0,8,false).unwrap()["result"]["nonce"].as_u64().unwrap();
+    let node = scene::create(scene::VIEW);
+    let mut host = Host::new(node,Box::new(Switcher::with_displays(session.clone(),physical_display())),"",None);
+    host.facts(json!({"args":{"nonce":nonce}}));
+    assert!(host.deadline().is_none());
+    session.cancel_switcher(nonce).unwrap();
+    let revision = session.reader().revision();
+    assert_eq!(host.deadline(),Some(0.));
+    host.tick(0.);
+    assert_eq!(host.take(),Some(json!([{"kind":"switcher","nonce":nonce,"reply":null}])));
+    host.action(&json!({"action":["commit"]}));
+    assert_eq!(session.reader().revision(),revision);
+    assert!(host.take().is_none());
     assert!(host.deadline().is_none());
     drop(host);
     scene::destroy(node);

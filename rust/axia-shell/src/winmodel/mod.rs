@@ -17,6 +17,7 @@ mod tests;
 pub use layout::{grid, ASSIST_GRID, OVERVIEW_GRID};
 pub(crate) use session::WeakSession;
 pub use session::{AppCommand, WindowMenuAction, Session, Window, WindowReader, WindowState};
+pub(crate) use session::SwitcherOpening;
 
 use serde_json::Value;
 
