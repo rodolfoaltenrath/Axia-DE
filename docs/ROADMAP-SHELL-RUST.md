@@ -718,7 +718,7 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       antigo. Ver [RUST-DISK.md](RUST-DISK.md).
 - [ ] `screenshots`: geometria de seleção, janela sob o ponteiro, coordenadas,
       ferramentas e histórico do editor, ícone, seletor PrintScreen e janelas
-      auxiliares em Rust. Painel, apresentação do editor, controle global das
+      auxiliares e interface do editor em Rust. Painel, controle global das
       capturas/gravação, atalhos e seus transportes ainda em migração.
       Ver [RUST-SCREENSHOTS.md](RUST-SCREENSHOTS.md).
 - [ ] `pdf`

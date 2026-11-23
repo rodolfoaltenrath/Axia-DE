@@ -1,11 +1,11 @@
 # Screenshots migration
 
-The app is still in migration. `apps/screenshots/index.jsx` retains the panel,
-markup presentation and capture/recording transport. The icon and visual selector
+The app is still in migration. `apps/screenshots/index.jsx` retains the panel
+and capture/recording/image transport. The icon and visual selector
 are native Rust views in `selector.rs`; `auxiliary.rs` owns the thumbnail,
-countdown and recording indicator scenes and their deadlines. Selection and annotation
-coordinate calculations call `axia-app-screenshots::geometry` through the
-compiled native model bridge. `markup::Editor` owns the tool, color, operation
+countdown and recording indicator scenes and their deadlines. `editor_view.rs`
+owns the markup scene and calls `geometry` and `markup::Editor` directly in Rust.
+`markup::Editor` owns the tool, color, operation
 history, draft stroke, text input and undo. Each editor has a separate native
 model. There is no JavaScript geometry or markup-policy fallback.
 
@@ -153,6 +153,50 @@ medians of 12.350 poll calls/s and 104.453 MiB RSS (limits: 15 calls/s, 120 MiB)
 These measurements do not establish a causal performance gain or replace the
 physical measurements deferred to the roadmap's end.
 
+## Native markup scene
+
+The toolbar, palette, canvas, native text field and transient save/copy captions
+now belong to `editor_view::App`, with no React editor state or JavaScript
+pointer/keyboard listeners. The toolbar uses two rows at narrow widths. Text
+fields stay inside the canvas while the annotation retains its original image
+coordinates. Keyboard history supports Ctrl+Z and Meta+Z; Enter commits text and
+Escape cancels it. Losing window focus cancels an unfinished stroke.
+
+A countdown's Escape must win before an app's native text field. The existing
+global shortcut transport now scopes `capture.cancel` to the countdown window,
+closing it before forwarding that key to the field. Other keys remain usable
+while preparing the screen during the timer. The editor GUI reproduces the
+failure without this binding (`native-countdown-before-fix.log`), then verifies
+typing before/during/after cancellation preserves the same native text draft
+in both keyboard profiles. Global shortcut transport remains pending below.
+
+Only drawing revisions emit `captureEditor/annotate`; idle pointer movement,
+tool/color changes and save/copy messages do not regenerate the raster. Save and
+copy reject duplicate jobs while pending. Source handles and request tokens
+guard replies after image replacement; terminal close rejects later actions.
+Result captions expire after 2.5 seconds using the native deadline, without a
+JavaScript timeout. The transport owns original/preview leases, reuses previews,
+releases replacements and ignores completions after unmount. File naming and
+SDK image I/O still use the transport until the global controller migrates.
+
+Evidence is in `build/validation/screenshots-editor/`: eighteen app tests, 716
+shell tests (seven ignored), 105 historical geometry cases, platform/ABI, GPU=1
+build, eight LPK checks, private installation and installed switcher check pass.
+All twenty-four app GUI scenarios pass (eight editor, eight selector, eight
+auxiliary), plus eight switcher scenarios. The editor matrix covers Axia/Adwaita,
+light/dark, 380×360 and 1000×680 scenes; the minimum scene is also offset from
+the desktop origin. It exercises all tools, color changes, text Enter/Escape, actual
+field placement, Ctrl/Meta+Z, focus loss during a draft, idle raster reuse,
+save/copy success, an injected copy failure, caption expiry, replacement during a pending job,
+late-result rejection and single release of originals/previews. Original PNG
+bytes are compared after saving the annotated copy. Captures are inspected.
+Five changed sources match the Fedora execution tree byte for byte; all eight
+switcher captures match the preceding auxiliary delivery. Three installed
+software/offline idle samples pass the enforced limits: medians 12.350 poll
+calls/s and 104.809 MiB RSS, below 15 calls/s and 120 MiB. These results do not
+prove a causal performance gain or physical capture/recording behavior. The
+previously documented isolated facts fixture remains unchanged.
+
 ## Remaining work
 
 User requirement (2026-11-23), implemented above: **PrintScreen opens the visual capture selector**,
@@ -183,11 +227,10 @@ dimensions and display transforms instead of assuming a 100% single display.
 - Native recording completion, recent recording results and late completion
   handling. Preserve SDK microphone indicator cleanup when the controller
   migrates; thumbnail/countdown/recording presentation and deadlines are native.
-- Native markup presentation and image transport: state, tools, colors,
-  thickness, preview operations, text submit/cancel and undo are already native.
-  Migrate the actual toolbar/canvas, save/copy and transient result captions.
-  Preserve originals, reuse/release preview handles, and dispose image
-  resources exactly once across close, replacement and pending async replies.
+- Native image/file services and filename policy: the markup scene, input,
+  tools, colors, thickness, preview operations, undo and result deadlines are
+  native. Migrate the SDK image transport together with the capture controller,
+  preserving original files and exact resource ownership across async replies.
 - Required graphical coverage of the complete flows at minimum/default sizes,
   light/dark and Axia/Adwaita; source comparison, build, platform/ABI and LPK
   regression checks, installed checks and idle limits. Physical measurements

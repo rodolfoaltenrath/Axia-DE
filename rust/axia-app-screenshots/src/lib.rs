@@ -1,5 +1,7 @@
 #[path = "../../../apps/screenshots/auxiliary.rs"]
 pub mod auxiliary;
+#[path = "../../../apps/screenshots/editor_view.rs"]
+pub mod editor_view;
 #[path = "../../../apps/screenshots/geometry.rs"]
 pub mod geometry;
 #[path = "../../../apps/screenshots/markup.rs"]

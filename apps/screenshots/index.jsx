@@ -9,19 +9,15 @@
 // After each capture a floating thumbnail shows up; a click opens the markup editor (arrow, box,
 // text, blur). They are saved in ~/Pictures/Screenshots or to the clipboard.
 import {
-  View, Text, MediaView, NativeView, Layer, Button, Toggle, Segmented, TextInput, Toolbar, ToolbarButton, ToolbarGroup, ToolbarDivider, ToolbarSpacer, GroupBox, FormRow,
-  useTheme, useAppWindow, useKeyboard, useStore, wm, windows, typeScale,
-  t as tr, media, userDirs, fs, addListener, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, useSettings, notify, toast, errorText, dndActive, appNotifyPrefs,
+  View, Text, NativeView, Layer, Toggle, Segmented, GroupBox, FormRow,
+  useTheme, useAppWindow, useStore, wm, windows, typeScale,
+  t as tr, media, userDirs, fs, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, settings, useSettings, notify, toast, errorText, dndActive, appNotifyPrefs,
 } from '@lordos/sdk';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { screen, onScreenChange, displayFor } from '@lordos/runtime';
 import { clearTextFocus, focusToken, restoreFocus } from '../../sdk/components.jsx';
 
 const APP = 'screenshots';
-// Transitional presentation only: selection and image coordinates belong to Rust.
-let geometryOwner;
-const geometry = input => (geometryOwner ||= lord.nativeApps.create(APP)).request(JSON.stringify(input));
-const point = ({ x, y }) => ({ x, y });
 const recording = createStore(null);   // { id, path, start }
 const recent = createStore([]);       // [{ path, time }]
 const countdowns = new Map();        // pending transport callbacks, scoped to their window
@@ -150,6 +146,9 @@ const captureArea = orOther(() => capture.area('area'));
 // a recording in progress is this app's, whatever is chosen now: the key still stops it
 const openPanelOrStop = () => { if (recording.get()) capture.record(); else orOther(() => wm.open(APP))(); };
 addShortcuts([
+  // Cancel before a focused app's text field receives Escape; keep other keys
+  // available while the person prepares the screen during the countdown.
+  { id: 'capture.cancel', keys: ['Escape'], when: () => !!wm.get(`${APP}#count`), run: () => wm.close(`${APP}#count`, true) },
   { id: 'capture.full', keys: ['Meta+Shift+3'], when: usable, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
   { id: 'capture.selector', keys: ['PrintScreen'], when: usable, run: captureArea, label: 'shell.shortcuts.captureSelector', group: 'system' },
   { id: 'capture.area', keys: ['Meta+Shift+4'], when: usable, run: captureArea, label: 'shell.shortcuts.captureArea', group: 'system' },
@@ -274,98 +273,61 @@ function RecBadge() {
 
 // ---- markup editor ----
 
-const COLORS = ['#ff3b30', '#ffcc00', '#34c759', '#0a84ff', '#ffffff', '#1c1c1e'];
-
+// Native scene; this wrapper only owns image leases and executes SDK I/O.
 function Editor({ handle, path }) {
-  const th = useTheme();
-  const win = useAppWindow();
-  const info = media.info(handle) || { width: 1, height: 1 };
-  const owner = useRef(null);
-  if (!owner.current) owner.current = lord.nativeApps.create(APP);
-  const request = input => owner.current.request(JSON.stringify({ cmd: 'markup', ...input }));
-  const [state, setState] = useState(() => request({ op: 'open', image: info }));
-  const latest = useRef(state);
-  const { tool, color, ops, draft, text } = state;
-  const send = (op, facts = {}) => {
-    const reply = request({ op, ...facts });
-    if (reply.revision !== latest.current.revision) { latest.current = reply; setState(reply); }
-  };
-  const [preview, setPreview] = useState(0);
-  const [msg, setMsg] = useState(null);
-  const box = useRef(null);
-  useEffect(() => () => { media.close(handle); }, []);
-  useEffect(() => () => { if (preview) media.close(preview); }, [preview]);
+  const win = useAppWindow(), native = useRef(null), lease = useRef(null);
+  if (!lease.current || lease.current.handle !== handle) {
+    const info = media.info(handle) || { width: 1, height: 1 };
+    lease.current = { handle, info: { width: info.width, height: info.height }, preview: 0, closed: false };
+  }
+  const owner = lease.current;
   useEffect(() => {
-    const all = draft ? [...ops, draft] : ops;
-    const id = media.annotate(handle, all, preview);
-    if (id && id !== preview) setPreview(id);
-    if (id) media.view(id, { fit: 'contain', background: 0 });
-  }, [state.drawingRevision, handle]);
-  const imageGeometry = (cmd, point) => {
-    const [x, y, w, h] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1];
-    return geometry({ cmd, point, viewport: { x, y, w, h }, image: info });
+    media.view(handle, { fit: 'contain', background: 0 });
+    return () => {
+      owner.closed = true;
+      if (owner.preview && owner.preview !== handle) media.close(owner.preview);
+      media.close(handle);
+    };
+  }, [handle]);
+  const report = result => {
+    if (!owner.closed && lease.current === owner && native.current)
+      lord.nativeViews.action(native.current, { action: ['editorResult', { ...result, source: handle }] });
   };
-  const pointerFacts = e => {
-    const [x, y, w, h] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1];
-    return { point: point(e), viewport: { x, y, w, h } };
+  const perform = async effect => {
+    try {
+      let result;
+      if (effect.op === 'copy') result = await media.copyImage(effect.image);
+      else {
+        const base = path ? path.split('/').pop().replace(/\.png$/i, '') : tr('screenshots.fileName', { date: stamp() });
+        result = await media.saveImage(effect.image, freeName(captureDir(), `${base} (${tr('screenshots.annotated')})`, 'png'));
+      }
+      report({ op: effect.op, token: effect.token, ok: !!result?.ok });
+    } catch (error) {
+      report({ op: effect.op, token: effect.token, ok: false });
+      if (!owner.closed) toast.set(errorText(error));
+    }
   };
-  useEffect(() => {
-    const offMove = addListener('pointermove', (e) => {
-      if (latest.current.dragging) send('move', pointerFacts(e));
-    });
-    const offUp = addListener('pointerup', () => {
-      if (latest.current.dragging) send('up');
-    });
-    return () => { offMove(); offUp(); };
-  });
-  const down = e => send('down', pointerFacts(e));
-  const addText = () => send('textSubmit');
-  useKeyboard((e) => { if ((e.ctrl || e.meta) && String(e.base).toLowerCase() === 'z') send('undo'); });
-  const save = async () => {
-    const base = path ? path.split('/').pop().replace(/\.png$/i, '') : tr('screenshots.fileName', { date: stamp() });
-    const r = await media.saveImage(preview || handle, freeName(captureDir(), `${base} (${tr('screenshots.annotated')})`, 'png'));
-    setMsg(r.ok ? tr('screenshots.savedTo', { folder: tr('screenshots.folder') }) : tr('screenshots.saveError'));
-    setTimeout(() => setMsg(null), 2500);
-  };
-  const copy = async () => { const r = await media.copyImage(preview || handle); setMsg(r.ok ? tr('screenshots.copied') : tr('screenshots.saveError')); setTimeout(() => setMsg(null), 2500); };
-  const tools = [['arrow', '↗', 'screenshots.tool.arrow'], ['box', '▢', 'screenshots.tool.box'], ['text', 'T', 'screenshots.tool.text'],
-    ['blur', '▒', 'screenshots.tool.blur'], ['line', '╱', 'screenshots.tool.line']];
-  const tp = text ? imageGeometry('anchor', text) : null;
-  return (
-    <View style={{ flex: 1 }}>
-      <Toolbar>
-        <ToolbarGroup>
-          {tools.map(([k, g, key]) => <ToolbarButton key={k} icon={g} title={tr(key)} active={tool === k} onClick={() => send('tool', { value: k })} />)}
-        </ToolbarGroup>
-        <ToolbarDivider />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {COLORS.map((c) => (
-            <View key={c} onClick={() => send('color', { value: c })} style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
-              border: `2px solid ${color === c ? th.accent : 'transparent'}` }}>
-              <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: c, border: `1px solid ${th.separator}` }} />
-            </View>
-          ))}
-        </View>
-        <ToolbarSpacer />
-        <ToolbarButton icon="⟲" title={tr('screenshots.undo')} onClick={() => send('undo')} />
-        <ToolbarButton icon="⧉" title={tr('screenshots.copy')} onClick={copy} />
-        <Button label={tr('screenshots.done')} onClick={() => wm.close(win.id)} />
-        <Button primary label={tr('screenshots.save')} onClick={save} />
-      </Toolbar>
-      <View ref={box} style={{ flex: 1, backgroundColor: th.mode === 'dark' ? '#111' : '#ddd', overflow: 'hidden', direction: 'ltr' }} onMouseDown={down}>
-        <MediaView media={preview || handle} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} />
-        {text && tp && (
-          <View style={{ position: 'absolute', left: tp.left, top: tp.top, width: 260 }}>
-            <TextInput value={text.value} autoFocus onChange={(value) => send('text', { value })} onSubmit={addText} onCancel={() => send('textCancel')}
-              placeholder={tr('screenshots.textHint')} />
-          </View>
-        )}
-        {msg && <View style={{ position: 'absolute', left: 0, right: 0, bottom: 20, alignItems: 'center' }}>
-          <View style={{ paddingHorizontal: 14, height: 30, justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.75)' }}><Text style={{ fontSize: 12, color: '#fff' }}>{msg}</Text></View>
-        </View>}
-      </View>
-    </View>
-  );
+  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native}
+    args={{ view: 'editor', handle, path, info: owner.info }} onEffect={effect => {
+      if (effect.kind !== 'captureEditor') return false;
+      if (effect.source !== handle || owner.closed) return true;
+      if (effect.op === 'annotate') {
+        try {
+          const preview = media.annotate(handle, effect.ops, owner.preview);
+          if (preview) {
+            if (owner.preview && owner.preview !== preview && owner.preview !== handle) media.close(owner.preview);
+            owner.preview = preview;
+            media.view(preview, { fit: 'contain', background: 0 });
+          }
+          report({ op: 'annotate', revision: effect.revision, handle: preview || 0 });
+        } catch (error) {
+          report({ op: 'annotate', revision: effect.revision, handle: 0 });
+          toast.set(errorText(error));
+        }
+      } else if (effect.op === 'close') wm.close(win.id);
+      else if (effect.op === 'save' || effect.op === 'copy') perform(effect);
+      return true;
+    }} />;
 }
 
 // ---- the panel (main window) ----

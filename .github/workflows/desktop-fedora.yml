@@ -304,10 +304,11 @@ jobs:
           AXIA_DISKS_AXIA_OUTPUT: ${{ runner.temp }}/axia-disks/axia
           AXIA_DISKS_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-disks/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test disks_runtime -- --ignored --nocapture
-      - name: Rust capture selection and annotation coordinates
+      - name: Native screenshot editor, image jobs and ownership
         if: matrix.gpu == 1
         env:
-          AXIA_SCREENSHOTS_GEOMETRY_OUTPUT: ${{ runner.temp }}/axia-screenshots-geometry
+          AXIA_SCREENSHOTS_EDITOR_AXIA_OUTPUT: ${{ runner.temp }}/axia-screenshots-editor/axia
+          AXIA_SCREENSHOTS_EDITOR_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-screenshots-editor/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_geometry_runtime -- --ignored --nocapture
       - name: Native PrintScreen selector and saved thumbnail
         if: matrix.gpu == 1
@@ -336,8 +337,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:
-          name: axia-screenshots-geometry
-          path: ${{ runner.temp }}/axia-screenshots-geometry/
+          name: axia-screenshots-editor
+          path: ${{ runner.temp }}/axia-screenshots-editor/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1

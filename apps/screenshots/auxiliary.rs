@@ -183,6 +183,8 @@ impl Auxiliary {
 pub struct App {
     selector: crate::selector::App,
     auxiliary: Option<Auxiliary>,
+    editor: Option<crate::editor_view::App>,
+    theme: std::rc::Rc<Value>,
 }
 impl App {
     fn request_at(&mut self, input: &Value, now: i64) -> Value {
@@ -190,11 +192,22 @@ impl App {
             return crate::selector::icon(input["size"].as_f64().unwrap_or(48.));
         }
         if input["cmd"] == "sync" {
+            if input["args"]["view"] == "editor" {
+                let editor = self.editor.get_or_insert_with(Default::default);
+                if !self.theme.is_null() {
+                    editor.set_native_appearance(self.theme.clone());
+                }
+                return editor.request_at(input, now);
+            }
+            self.editor = None;
             let kind = Kind::read(&input["args"]["view"]);
             if kind != self.auxiliary.as_ref().map(|a| a.kind) {
                 self.auxiliary = kind.map(Auxiliary::new);
                 self.selector = Default::default();
             }
+        }
+        if let Some(editor) = &mut self.editor {
+            return editor.request_at(input, now);
         }
         if let Some(auxiliary) = &mut self.auxiliary {
             auxiliary.request_at(input, now)
@@ -207,10 +220,19 @@ impl NativeApp for App {
     fn uses_native_appearance(&self) -> bool {
         true
     }
+    fn set_native_appearance(&mut self, theme: std::rc::Rc<Value>) {
+        self.theme = theme.clone();
+        if let Some(editor) = &mut self.editor {
+            editor.set_native_appearance(theme);
+        }
+    }
     fn request(&mut self, input: &Value) -> Value {
         self.request_at(input, axia_native::clock::now())
     }
     fn refresh_ms(&self) -> Option<f64> {
+        if let Some(editor) = &self.editor {
+            return editor.refresh_ms();
+        }
         self.auxiliary
             .as_ref()
             .and_then(|a| a.refresh_at(axia_native::clock::now()))
@@ -219,6 +241,9 @@ impl NativeApp for App {
         self.refresh_ms()
     }
     fn key(&mut self, key: &str, chr: &str, flags: i32) -> Option<Value> {
+        if let Some(editor) = &mut self.editor {
+            return editor.key(key, chr, flags);
+        }
         if let Some(a) = &self.auxiliary {
             if a.kind == Kind::Countdown && key == "Escape" {
                 return Some(self.request(&json!({"cmd":"cancel"})));
@@ -226,6 +251,11 @@ impl NativeApp for App {
             None
         } else {
             self.selector.key(key, chr, flags)
+        }
+    }
+    fn blur(&mut self) {
+        if let Some(editor) = &mut self.editor {
+            editor.blur();
         }
     }
 }
