@@ -24,6 +24,7 @@ const geometry = input => (geometryOwner ||= lord.nativeApps.create(APP)).reques
 const point = ({ x, y }) => ({ x, y });
 const recording = createStore(null);   // { id, path, start }
 const recent = createStore([]);       // [{ path, time }]
+const countdowns = new Map();        // pending transport callbacks, scoped to their window
 
 export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} icon={size} />; }
 
@@ -78,9 +79,10 @@ function afterHide(fn, delay = 160) {
 function withTimer(fn) {
   const secs = opts().timer;
   if (!secs) { fn(); return; }
-  const id = wm.open(APP, { instance: 'count', args: { secs, start: Date.now() } });
+  const start = Date.now();
+  const id = wm.open(APP, { instance: 'count', args: { secs, start, returnWindow: wm.focused() } });
+  countdowns.set(id, { start, run: fn });
   wm.setPip(id, { x: Math.round(lord.screen.width / 2 - 60), y: Math.round(lord.screen.height / 2 - 60), w: 120, h: 120 });
-  setTimeout(() => { wm.close(id, true); setTimeout(fn, 180); }, secs * 1000);
 }
 
 // The screen permission is denied (no answer here means that) or the app is restricted (an exception):
@@ -157,6 +159,7 @@ addShortcuts([
 // ---- the app's windows ----
 
 const OVERLAY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true, shell: true };
+const AUXILIARY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true };
 const displaySignature = () => JSON.stringify([screen.width, screen.height, screen.displays]);
 function selectionFacts() {
   return { screen: { width: screen.width, height: screen.height }, displays: screen.displays, returnWindow: wm.focused(),
@@ -209,53 +212,64 @@ function Overlay({ handle, mode }) {
 }
 function Thumb({ handle, path }) {
   const win = useAppWindow();
-  const [hover, setHover] = useState(false);
+  const native = useRef(null);
   useEffect(() => {
     media.view(handle, { fit: 'cover', background: 0xff222222 });
-    const tmr = setTimeout(() => { if (!hover) wm.close(win.id, true); }, 8000);
-    return () => clearTimeout(tmr);
-  }, [handle, hover]);
-  useEffect(() => () => { if (!windows.get().some((w) => w.args?.handle === handle && w.id !== win.id)) media.close(handle); }, []);
-  return (
-    <View style={{ flex: 1 }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      onClick={() => {
+    return () => { if (!windows.get().some(w => w.args?.handle === handle && w.id !== win.id)) media.close(handle); };
+  }, [handle]);
+  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'thumbnail', handle, path }} onEffect={effect => {
+    if (effect.kind !== 'captureAuxiliary') return false;
+    if (effect.view !== 'thumbnail' || effect.source !== handle) return true;
+    if (effect.op === 'edit') {
+      try {
         const w = Math.min(1000, lord.screen.width - 80), h = Math.min(680, lord.screen.height - 140);
         wm.open(APP, { instance: `edit${handle}`, args: { handle, path }, frame: { x: Math.round((lord.screen.width - w) / 2), y: 60, w, h } });
-        setTimeout(() => wm.close(win.id, true), 50);
-      }}>
-      <MediaView media={handle} style={{ flex: 1 }} />
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-        <Text style={{ fontSize: 11, color: '#fff' }}>{path ? tr('screenshots.savedTo', { folder: tr('screenshots.folder') }) : tr('screenshots.copied')}</Text>
-      </View>
-    </View>
-  );
+        setTimeout(() => { if (wm.get(win.id)?.args.handle === handle) wm.close(win.id, true); }, 50);
+      } catch (error) {
+        if (native.current) lord.nativeViews.action(native.current, { action: ['retry', handle] });
+        toast.set(errorText(error));
+      }
+    } else if (effect.op === 'expire') wm.close(win.id, true);
+    return true;
+  }} />;
 }
 
 function Countdown({ secs, start }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const tmr = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(tmr); }, []);
-  const left = Math.max(0, Math.ceil(secs - (now - start) / 1000));
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(20,20,24,0.85)' }}>
-      <Text style={{ fontSize: 56, fontWeight: 600, color: '#fff' }}>{left}</Text>
-    </View>
-  );
+  const win = useAppWindow();
+  const entry = countdowns.get(win.id);
+  const returnFocus = useRef(focusToken());
+  useEffect(() => {
+    clearTextFocus();
+    return () => {
+      if (countdowns.get(win.id) === entry) countdowns.delete(win.id);
+      if (wm.focused() === win.args.returnWindow) restoreFocus(returnFocus.current);
+    };
+  }, [entry]);
+  return <NativeView manifest={OVERLAY_MANIFEST} args={{ view: 'countdown', secs, start }} onEffect={effect => {
+    if (effect.kind !== 'captureAuxiliary') return false;
+    if (effect.view !== 'countdown' || effect.source !== start) return true;
+    const pending = countdowns.get(win.id);
+    countdowns.delete(win.id); wm.close(win.id, true);
+    if (effect.op === 'complete' && pending?.start === start) setTimeout(pending.run, 180);
+    return true;
+  }} />;
 }
 
 function RecBadge() {
   const rec = useStore(recording);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const tmr = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(tmr); }, []);
-  const secs = rec ? Math.floor((now - rec.start) / 1000) : 0;
-  return (
-    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, backgroundColor: 'rgba(30,30,34,0.92)' }}>
-      <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#ff3b30' }} />
-      <Text style={{ fontSize: 13, fontWeight: 500, color: '#fff', flex: 1, direction: 'ltr' }}>{`${Math.floor(secs / 60)}:${pad(secs % 60)}`}</Text>
-      <View onClick={() => capture.record()} style={{ paddingHorizontal: 12, height: 24, borderRadius: 6, justifyContent: 'center', backgroundColor: '#ff3b30' }}>
-        <Text style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tr('screenshots.stop')}</Text>
-      </View>
-    </View>
-  );
+  const native = useRef(null);
+  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'recording', recording: rec }} onEffect={effect => {
+    if (effect.kind !== 'captureAuxiliary') return false;
+    if (effect.view === 'recording' && effect.op === 'stop' && rec?.id === effect.source) {
+      try {
+        if (!media.stop(rec.id) && native.current) lord.nativeViews.action(native.current, { action: ['retry', rec.id] });
+      } catch (error) {
+        if (native.current) lord.nativeViews.action(native.current, { action: ['retry', rec.id] });
+        toast.set(errorText(error));
+      }
+    }
+    return true;
+  }} />;
 }
 
 // ---- markup editor ----

@@ -98,7 +98,7 @@ fn release_image(id: i32) { RELEASED_PREVIEWS.with(|r| r.borrow_mut().push((fals
 pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
     install_services();
     match id {
-        "screenshots" => Some(Box::new(axia_app_screenshots::selector::App::default())),
+        "screenshots" => Some(Box::new(axia_app_screenshots::auxiliary::App::default())),
         crate::native_apps::settings::ID=>Some(Box::new(crate::settings_app::App::default())),
         crate::native_apps::sysprobe::ID => Some(Box::new(crate::sysprobe_app::App::default())),
         crate::native_apps::reminders::ID => Some(Box::new(crate::reminders_app::App::default())),

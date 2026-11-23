@@ -717,8 +717,9 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       privilegiado ausente no desktop continua pendente, sem restaurar o código
       antigo. Ver [RUST-DISK.md](RUST-DISK.md).
 - [ ] `screenshots`: geometria de seleção, janela sob o ponteiro, coordenadas,
-      ferramentas e histórico do editor em Rust; interface, controle das
-      capturas/gravação, atalhos e prazos ainda em migração.
+      ferramentas e histórico do editor, ícone, seletor PrintScreen e janelas
+      auxiliares em Rust. Painel, apresentação do editor, controle global das
+      capturas/gravação, atalhos e seus transportes ainda em migração.
       Ver [RUST-SCREENSHOTS.md](RUST-SCREENSHOTS.md).
 - [ ] `pdf`
 - [ ] `player`

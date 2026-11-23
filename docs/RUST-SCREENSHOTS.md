@@ -1,8 +1,9 @@
 # Screenshots migration
 
 The app is still in migration. `apps/screenshots/index.jsx` retains the panel,
-markup presentation, auxiliary windows and capture/recording transport. The icon
-and visual selector are native Rust views in `selector.rs`. Selection and annotation
+markup presentation and capture/recording transport. The icon and visual selector
+are native Rust views in `selector.rs`; `auxiliary.rs` owns the thumbnail,
+countdown and recording indicator scenes and their deadlines. Selection and annotation
 coordinate calculations call `axia-app-screenshots::geometry` through the
 compiled native model bridge. `markup::Editor` owns the tool, color, operation
 history, draft stroke, text input and undo. Each editor has a separate native
@@ -106,6 +107,52 @@ was reproduced against the HEAD bridge before this delivery
 (`facts-baseline.log`, compared with `facts.log`). This is a pre-existing fixture
 limitation; the selector, markup and switcher GUI runs use the production bridge.
 
+## Native auxiliary windows
+
+`auxiliary::App` dispatches the selector and auxiliary scenes. The thumbnail
+keeps its bottom-right placement, saved/copied caption and click-to-edit. Rust
+owns its eight-second deadline, suspends it during hover and restarts it on
+leave. Replacing the image resets its deadline; terminal effects carry the
+source handle so they cannot consume a replacement. The SDK transport releases
+replaced images and transfers ownership to the editor. A delayed thumbnail close
+checks the current handle before closing its window.
+
+The countdown uses the native deadline and second boundaries instead of a
+200-ms JavaScript interval. Escape cancels it; closing its window disposes the
+pending transport callback. Its keyboard scope works for a picture-in-picture
+window, releasing and restoring legacy text focus around the countdown. The
+recording indicator also refreshes at second boundaries, replacing the 500-ms
+JavaScript interval. Stop emits once while awaiting the backend; a failed stop
+can be retried. A failed editor launch similarly restores the thumbnail action.
+No native refresh is scheduled for a hovered/consumed thumbnail, cancelled or
+completed countdown, inactive recording or pending successful stop.
+
+The global capture/recording controller, media handles, completion callbacks,
+settings and recent list still use the existing transport. The short delays
+between hiding windows and taking a frame, and between opening the editor and
+closing the thumbnail, remain there until the controller migrates. Moving these
+scenes does not complete the app or remove JavaScript from the session.
+
+Validation under `build/validation/screenshots-auxiliary/` includes sixteen app
+tests, 716 shell tests (seven ignored), the GPU=1 build, platform/ABI checks,
+105 historical geometry cases, eight LPK checks and eight switcher scenarios.
+All eighteen app GUI scenarios pass (eight auxiliary, eight selector, two editor).
+The auxiliary matrix covers Axia/Adwaita, light/dark and 760/1000-px desktops;
+one fixture also waits across the real eight-second hover/expiry deadline and
+past a closed five-second countdown. All fixtures exercise Escape/text-focus
+restoration, background countdown completion, thumbnail replacement/transfer,
+elapsed recording time, failed-stop retry, duplicate-stop suppression and SDK
+microphone-indicator cleanup. The recording backend is simulated below the SDK;
+this does not prove physical screen/audio recording or encoder behavior.
+Captures are inspected. Five changed sources match the Fedora execution tree
+byte for byte, and eight switcher captures match the preceding selector delivery.
+The installed switcher check passes. The earlier isolated facts-fixture failure
+documented above remains outside this delivery; the SDK bridge itself is unchanged.
+Three installed software/offline idle samples pass the enforced limits, with
+medians of 12.350 poll calls/s and 104.453 MiB RSS (limits: 15 calls/s, 120 MiB).
+These measurements do not establish a causal performance gain or replace the
+physical measurements deferred to the roadmap's end.
+
 ## Remaining work
 
 User requirement (2026-11-23), implemented above: **PrintScreen opens the visual capture selector**,
@@ -133,11 +180,9 @@ dimensions and display transforms instead of assuming a 100% single display.
   taking the frame; preserve editors; countdown and cancellation; permission
   refusal with a privacy action and toast fallback; chosen external screenshot
   app and the global shortcuts, including stop-recording priority.
-- Native thumbnail presentation with hover-aware expiry
-  and explicit image ownership transfer into the editor.
-- Native countdown and recording indicator, elapsed time, stop and completion,
-  recent recording results, SDK microphone indicator cleanup and late completion
-  handling. No unnecessary work while idle.
+- Native recording completion, recent recording results and late completion
+  handling. Preserve SDK microphone indicator cleanup when the controller
+  migrates; thumbnail/countdown/recording presentation and deadlines are native.
 - Native markup presentation and image transport: state, tools, colors,
   thickness, preview operations, text submit/cancel and undo are already native.
   Migrate the actual toolbar/canvas, save/copy and transient result captions.

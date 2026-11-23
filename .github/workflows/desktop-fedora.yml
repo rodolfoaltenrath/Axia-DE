@@ -315,6 +315,18 @@ jobs:
           AXIA_CAPTURE_SELECTOR_AXIA_OUTPUT: ${{ runner.temp }}/axia-capture-selector/axia
           AXIA_CAPTURE_SELECTOR_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-capture-selector/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_selector_runtime -- --ignored --nocapture
+      - name: Native screenshot thumbnail deadlines, countdown and recording indicator
+        if: matrix.gpu == 1
+        env:
+          AXIA_CAPTURE_AUXILIARY_AXIA_OUTPUT: ${{ runner.temp }}/axia-capture-auxiliary/axia
+          AXIA_CAPTURE_AUXILIARY_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-capture-auxiliary/adwaita
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_auxiliary_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-capture-auxiliary
+          path: ${{ runner.temp }}/axia-capture-auxiliary/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:
