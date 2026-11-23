@@ -1,5 +1,5 @@
 /* mpulse.c — PipeWire streams for media, in axia-server (PulseAudio protocol, the
- * same tagstruct as server/src/sound/pulse.c). One connection per stream, so that each one
+ * same tagstruct as rust/axia-sound/src/pulse.rs). One connection per stream, so that each one
  * shows up with its app in Settings → Sound: playback (Player, Photos) with its latency for the
  * video clock, or recording (microphone, after the permission). All asynchronous: axia-server never
  * waits for PipeWire (see aring.h and docs/MEDIA.md). */

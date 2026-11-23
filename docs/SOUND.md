@@ -36,7 +36,7 @@ PipeWire accepts clients over two protocols:
    "default output") that PipeWire translates and WirePlumber remembers. It is what pavucontrol,
    the GNOME and KDE applets, and `pactl` use.
 
-We chose option 2: with about 1300 lines (`snd.c` and `pulse.c`) it covers everything the UI
+We chose option 2: with about 1300 lines (`rust/axia-sound/src/snd.rs` and `pulse.rs`) it covers everything the UI
 needs. It is still talking to PipeWire: `pipewire-pulse` is a PipeWire module, not a separate
 server. The format was taken from PulseAudio 17's `pulsecore/protocol-native.c` and `tagstruct.h`.
 That code was only read to follow the format: it isn't linked or copied.
@@ -119,11 +119,11 @@ normally hides them from the microphone list.
 
 ## Tests
 
-- `make -C server test` includes `build/sound-test`: round trip of each tagstruct type,
+- `cargo test -p axia-sound` includes the codec tests: round trip of each tagstruct type,
   property lists, descriptors, truncated packets (none reads outside the buffer) and wrong
   types.
 - `build/sound-cli` (`make -C server build/sound-cli`) is a command-line client over the same
-  `snd.c`, against the real PipeWire: `list`, `volume`, `mute`, `default`, `port`, `move`,
+  client (`rust/axia-sound`), against the real PipeWire: `list`, `volume`, `mute`, `default`, `port`, `move`,
   `meter`, `play`, `watch`. `LORD_SND_DEBUG=1` shows every packet.
 
 Tested in the VM (PipeWire 1.4.2) with two virtual outputs (`module-null-sink`) and one virtual
@@ -261,7 +261,7 @@ The input level meter in Settings → Sound used pavucontrol's 25 Hz `PEAK_DETEC
 PipeWire is a node at rate 25 with a quantum of 1; on the VMware machine PipeWire was seen at
 ~36 % CPU while the page was open. It is now a plain 48 kHz mono stream read in blocks of 2048
 samples (~23 levels a second), opened only while the Sound page is open and closed when it
-closes (`apps/settings/hardware.rs`, `snd_meter` in `server/src/sound/snd.c`). The Voice Recorder computes its level from
+closes (`apps/settings/hardware.rs`, `snd_meter` in `rust/axia-sound/src/snd.rs`). The Voice Recorder computes its level from
 its own recording stream and has no extra one.
 
 **Tested (VM 123, Proxmox, live ISO, emulated HD Audio with `driver=none`, SeaBIOS):** the sink

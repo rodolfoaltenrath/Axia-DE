@@ -1,5 +1,5 @@
 /* pulse.h — serialization of the PulseAudio native protocol ("tagstruct" and packets), the one
- * pipewire-pulse speaks. No libpulse: only what snd.c uses. See docs/SOUND.md. */
+ * pipewire-pulse speaks. No libpulse: only what the sound client (rust/axia-sound) uses. See docs/SOUND.md. */
 #ifndef LORD_PULSE_H
 #define LORD_PULSE_H
 

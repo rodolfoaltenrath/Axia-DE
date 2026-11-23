@@ -925,3 +925,27 @@ Behavior that is deliberately not identical:
 
 - The one error text that was in Spanish ("clave repetida") is now "repeated key".
 - Numbers are read with Rust's `f64` parser instead of `strtod`: both round correctly.
+
+## Sound: the PulseAudio protocol and the mixer client (2026-11-22)
+
+`server/src/sound/pulse.c`, `server/src/sound/snd.c` and `server/tests/sound_test.c` are gone. The crate
+`rust/axia-sound` has the tagstruct codec (`pulse.rs`: a safe `Writer` and `Reader`, and the C ABI of `pulse.h`
+over the same `TsOut` and `TsIn` structs, which `media/mpulse.c` still uses) and the client of pipewire-pulse
+(`snd.rs`: the handshake, the copy of sinks, sources and app streams, the subscription events, the level meter,
+the system sounds and the state JSON, with the C ABI of `snd.h` for `main.c` and `js_sound.c`). `snd.h` and
+`pulse.h` stay for the C callers. axia-server and the media test get the crate through `libaxia_shell.a`;
+`build/sound-cli` links it too.
+
+Validation:
+
+- `cargo test -p axia-sound`: the cases of `sound_test.c` through the Rust API and the C ABI (every type, skip,
+  every truncated prefix, wrong types, property lists, data packets) and a fake PulseAudio server on a private
+  socket (handshake, the JSON of sinks, sources and streams, every command's bytes, the meter and the sounds).
+- A temporary differential harness linked the original C client beside the crate (not committed) and ran both
+  against identical fake servers: the state JSON, every event and the bytes of every command (volume, level,
+  mute for the four kinds, default, port with an error reply, move, meter with data, the three system sounds,
+  and the subscription events of every kind) are identical.
+
+Behavior that is deliberately not identical: the two log lines that were in Spanish ("sonido: comando…") are in
+English, and a volume, level or mute command with a kind outside the four is refused instead of indexing past
+a table.

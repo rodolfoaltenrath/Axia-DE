@@ -5,6 +5,7 @@ mod anim;
 use axia_clock as clock;
 use axia_backup as _; // the C ABI of server/src/backup/backup.h lives in its crate
 use axia_print as _; // the C ABI of server/src/print/print.h lives in its crate
+use axia_sound as _; // the C ABI of server/src/sound/{pulse,snd}.h lives in its crate
 use axia_hw as _; // the C ABI of server/src/hw/{power,uevent,hwscan,brframe}.h lives in its crate
 use axia_fan as _; // the C ABI of server/src/fan/fancurve.h lives in its crate
 use axia_netstate as _; // the C ABI of server/src/net/net.h (the state side) lives in its crate

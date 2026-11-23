@@ -470,12 +470,21 @@ dependencies = [
  "axia-native",
  "axia-netstate",
  "axia-print",
+ "axia-sound",
  "axia-state",
  "axia-sysreport",
  "image",
  "libc",
  "regex",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "axia-sound"
+version = "0.1.0"
+dependencies = [
+ "libc",
  "serde_json",
 ]
 

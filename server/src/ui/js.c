@@ -879,7 +879,7 @@ void js_wl_event(int id, const char *type, const char *json) {
     drain_jobs();
 }
 
-/* Sound (sound/snd.c): "state" with the full state, "peak" with the meter → __lordSound(type, data). */
+/* Sound (rust/axia-sound/src/snd.rs): "state" with the full state, "peak" with the meter → __lordSound(type, data). */
 void js_sound_event(const char *type, const char *json) {
     if (!ctx) return;
     JSValueConst args[2] = { JS_NewString(ctx, type), JS_ParseJSON(ctx, json, strlen(json), "<sound>") };

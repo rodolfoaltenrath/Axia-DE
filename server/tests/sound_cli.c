@@ -1,4 +1,4 @@
-/* sound_cli.c — manual test of the sound client (sound/snd.c) against the real PipeWire.
+/* sound_cli.c — manual test of the sound client (rust/axia-sound/src/snd.rs) against the real PipeWire.
  *
  *   sound-cli list                     full state (JSON)
  *   sound-cli volume sink 36 0.5       volume (also source, input, output; or a list: 0.5,0.8)

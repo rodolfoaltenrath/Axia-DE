@@ -1,0 +1,12 @@
+[package]
+name = "axia-sound"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Axia's sound client: the PulseAudio native protocol that pipewire-pulse serves, and the mixer state built from it"
+
+[dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+serde_json = "1"

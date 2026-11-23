@@ -1,5 +1,5 @@
 /* js_sound.c — lord.sound: outputs, inputs and per-app volume (PipeWire client in
- * sound/snd.c). It launches nothing and touches no files: it only talks to the user's sound server.
+ * rust/axia-sound/src/snd.rs). It launches nothing and touches no files: it only talks to the user's sound server.
  * Each command validates its type and index; changes arrive later as a "state" event to
  * __lordSound (see docs/SOUND.md). */
 #include "js_sound.h"

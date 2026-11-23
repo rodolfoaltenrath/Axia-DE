@@ -11,6 +11,7 @@ axia-backup = { path = "../axia-backup" }
 axia-print = { path = "../axia-print" }
 axia-fan = { path = "../axia-fan" }
 axia-hw = { path = "../axia-hw" }
+axia-sound = { path = "../axia-sound" }
 axia-netstate = { path = "../axia-netstate" }
 axia-sysreport = { path = "../axia-sysreport" }
 axia-app-pdf = { path = "../axia-app-pdf" }

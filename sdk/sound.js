@@ -1,4 +1,4 @@
-// sound.js — session sound (PipeWire; the client is in C, server/src/sound — see
+// sound.js — session sound (PipeWire; the client is Rust, rust/axia-sound — see
 // docs/SOUND.md). A store with the full state that updates only when something changes,
 // also if another program changed it.
 //
