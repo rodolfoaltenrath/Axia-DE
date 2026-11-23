@@ -154,6 +154,9 @@ impl Service {
         match self.input.claim(nonce.is_some(),code,value,key,flags,enabled) {
             Claim::Pass => return 0,
             Claim::Consumed => {},
+            Claim::Launch(app) => {
+                owner.queue_service_effects(vec![json!({"kind":"shellLaunch","scene":self.generation(),"app":app})]);
+            },
             Claim::Desktop(command) => {
                 use super::shell_input::Desktop;
                 self.ensure_hud(owner);

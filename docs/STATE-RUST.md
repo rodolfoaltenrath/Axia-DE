@@ -1422,6 +1422,42 @@ respectivamente; relatórios em `build/validation/commit-parts/`. O estado final
 passou nos 715 testes e integrações acima. As linhas do histórico no roadmap
 preservam as etapas de validação anteriores, consolidadas nesses commits.
 
+## Atalhos físicos de abertura de apps
+
+No perfil Linux, Meta+E (Arquivos), Meta+I (Configurações) e Ctrl+Shift+Escape
+(Monitor) passam por `shell_input::Input` antes de Wayland, IME e dispatcher JS.
+Perfil vem do leitor nativo de preferências; letras acompanham o layout, com
+fallback de posição para layouts sem letras latinas. Repetições e solturas
+tardias são consumidas sem repetir a abertura; o alternador aberto tem prioridade.
+Os rótulos continuam em `shortcuts.js`, sem callbacks JS para reconhecer as teclas.
+
+O serviço publica somente `shellLaunch`, com app e geração da raiz. A drenagem
+revalida essa geração antes de entregar ao adaptador, descartando a intenção se
+a cena morreu ou foi substituída. `executeNativeEffect` conserva a abertura
+existente por `wm.open`; catálogo, carregamento e montagem geral ainda não foram
+migrados por esta entrega. Não há novo método público nem timer de serviço.
+
+Testes unitários cobrem perfil/layout/modificadores, repetições, desativação,
+prioridade e raízes antigas. `shell_launch_runtime` exige quatro cenários no
+compositor real com perfil JS congelado em macOS e perfil nativo Linux, uma
+abertura por tecla e nenhuma tecla consumida no dispatcher. As consultas de
+compatibilidade `shellKeyboard` durante a abertura permanecem; não são eventos
+de tecla nem pedidos de seleção do comando. O perfil macOS entrega essas
+combinações ao dispatcher normal. Teste e capturas são exigidos no CI GPU=1.
+Evidências em `build/validation/native-launch-input/`; medições físicas seguem
+para o encerramento do roadmap.
+
+Validação privada em Fedora 44: 719 testes da shell (sete ignorados), oito
+contratos LPK e 28 cenários gráficos/funcionais de abertura, materiais,
+alternador, comandos, swipes e indicador aprovados. Build GPU=1, bundles,
+plataforma/ABI (incluindo 160 verificações do vidro), instalação privada e
+`switcher-check` instalado passaram. Doze fontes comparadas byte a byte com
+a árvore validada; oito capturas do alternador idênticas às da correção do
+vidro. Ociosidade em três amostras, com limites impostos de 15 poll/s e 120 MiB:
+medianas de 14,500 poll/s e 105,027 MiB; amostras de poll entre 12,200 e 16,850.
+O verificador aplica os limites às medianas; relatório completo preservado.
+Não há prova de ganho causal.
+
 ## Animação de troca de desktops
 
 `desktop_animation.rs` acompanha o desktop ativo no leitor do contexto e

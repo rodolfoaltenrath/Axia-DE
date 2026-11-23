@@ -70,6 +70,7 @@ globalThis.__lordNativeView = () => {
           else if (effect.kind === 'switcher') { if (effect.reply) applyNativeWindowState(effect.reply); }
           else if (effect.kind === 'windowModel') applyNativeWindowState(effect.reply);
           else if (effect.kind === 'shellGesture') gestureBridge.perform?.(effect);
+          else if (effect.kind === 'shellLaunch') executeNativeEffect({ kind: 'openApp', app: effect.app });
           else notificationBridge.perform?.(effect);
         }
     } finally { drainingServices = false; }

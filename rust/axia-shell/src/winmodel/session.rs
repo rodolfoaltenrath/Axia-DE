@@ -1094,7 +1094,8 @@ impl Session {
         // Identity validation belongs here, before JS can apply its snapshot.
         let nonce = self.core.switcher_nonce.get();
         let generation = self.core.shell_scene.borrow().as_ref().and_then(|scene|scene.borrow().generation());
-        effects.retain(|effect|effect["kind"]!="shellGesture" || effect["scene"].as_u64()==generation);
+        effects.retain(|effect| !matches!(effect["kind"].as_str(),Some("shellGesture" | "shellLaunch"))
+            || generation.is_some() && effect["scene"].as_u64()==generation);
         effects.retain(|effect| !matches!(effect["kind"].as_str(),Some("switcher" | "windowModel"))
             || effect.get("nonce").is_none() || effect["nonce"].as_u64() == Some(nonce));
         (!effects.is_empty()).then(|| Value::Array(std::mem::take(&mut *effects)))

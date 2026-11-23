@@ -111,9 +111,9 @@ const COMMON = [
   { id: 'hideOthers', native: true },
   { id: 'closeWindow', run: front(wm.close) },
   { id: 'showDesktop', native: true },
-  { id: 'files', run: () => wm.open('files'), group: 'apps' },
-  { id: 'settings', run: () => wm.open('settings'), group: 'apps' },
-  { id: 'monitor', run: () => wm.open('monitor'), group: 'apps' },
+  { id: 'files', native: true, group: 'apps' },
+  { id: 'settings', native: true, group: 'apps' },
+  { id: 'monitor', native: true, group: 'apps' },
   { id: 'snap', run: (e) => { const id = wm.focused(); if (id) wm.snapKey(id, SNAP_CODES[e.code]); }, repeat: true },
   { id: 'appSettings', run: () => appSettingsItem(wm.focused())?.onClick(), when: () => !!appSettingsItem(wm.focused()), keys: ['Meta+,'], group: 'apps' },
 ].map((entry) => ({ keys: [], group: 'windows', label: 'shell.shortcuts.' + entry.id, ...entry }));

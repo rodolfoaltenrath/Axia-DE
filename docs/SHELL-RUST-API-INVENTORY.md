@@ -632,6 +632,13 @@ uma intenção de inspeção em `lord.nativeApps.request`, sem novo método `lor
 devolve handle/nó do indicador pertencente à cena para provas de montagem.
 Não seleciona alvos, transmite estado ou monta o indicador no JS.
 
+Os atalhos Linux de Arquivos, Configurações e Monitor também usam essa entrada
+física (Meta+E, Meta+I e Ctrl+Shift+Escape). A seleção de comando, o perfil e a
+posse de repetições/solturas pertencem ao Rust. O efeito de compatibilidade
+`shellLaunch` leva somente o app e a geração da cena; a drenagem nativa descarta
+raízes antigas. O SDK carrega/abre o app e conserva os rótulos dos atalhos, sem
+novo método público `lord.*` ou transporte de evento de tecla.
+
 `axia_session_swipe` é outra entrada C/Rust interna. Reconhece somente os
 swipes reservados ao sistema, antes de `__lordGesture`, sem pedidos JSON de
 desktop. O efeito de compatibilidade `shellGesture` publica a direção já

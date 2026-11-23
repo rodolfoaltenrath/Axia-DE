@@ -3,6 +3,8 @@ use crate::app_control::Controller;
 use std::time::Instant;
 #[path = "shell_window_input_tests.rs"]
 mod window_input;
+#[path = "shell_launch_input_tests.rs"]
+mod launch_input;
 #[path = "shell_desktop_input_tests.rs"]
 mod desktop_input;
 #[path = "shell_swipe_tests.rs"]

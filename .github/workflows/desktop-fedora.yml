@@ -310,6 +310,17 @@ jobs:
           name: axia-switcher
           path: ${{ runner.temp }}/axia-switcher/
           if-no-files-found: warn
+      - name: Rust physical app launch shortcuts
+        if: matrix.gpu == 1
+        env:
+          AXIA_SHELL_LAUNCH_OUTPUT: ${{ runner.temp }}/axia-shell-launch
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test shell_launch_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-shell-launch
+          path: ${{ runner.temp }}/axia-shell-launch/
+          if-no-files-found: warn
       - name: Rust Dock glass border integration and captures
         if: matrix.gpu == 1
         env:

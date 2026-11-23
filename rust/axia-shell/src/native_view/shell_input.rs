@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 
 pub(super) enum Desktop { Arrow(bool), Add, Close }
-pub(super) enum Claim { Pass, Consumed, Active, Open { hold: i32, back: bool }, Window(crate::winmodel::AppCommand), Desktop(Desktop) }
+pub(super) enum Claim { Pass, Consumed, Active, Open { hold: i32, back: bool }, Window(crate::winmodel::AppCommand), Desktop(Desktop), Launch(&'static str) }
 pub(super) struct Input {
     preferences: Reader<Value>,
     changes: Subscription,
@@ -91,6 +91,16 @@ impl Input {
             }
         }
         if enabled && value==1 {
+            let launch = if self.linux && mods == 16 {
+                match crate::keygrab::letter(code,key.as_bytes()) {
+                    b'e' => Some("files"), b'i' => Some("settings"), _ => None,
+                }
+            } else if self.linux && code == 1 && mods == 3 { Some("monitor") } else { None };
+            if let Some(app) = launch {
+                self.taken.insert(code);
+                self.held_modifiers |= mods;
+                return Claim::Launch(app);
+            }
             let desktop = if matches!(code,105|106) && (mods==18 || (!self.linux && mods==2 && self.preferences.read()["desktopArrows"]!=false)) {
                 Some(Desktop::Arrow(code==105))
             } else if self.linux && mods==18 {
