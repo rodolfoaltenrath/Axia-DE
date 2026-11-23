@@ -95,7 +95,7 @@ async function run() {
   check(await until(() => drags.length === 1), 'a press on the title bar asks to drag the window');
   check(drags[0][0] > 100 && drags[0][1] >= 100, 'the pointer comes in screen coordinates');
   press(find('Smoke window')); press(find('Smoke window'));
-  check(await until(() => maxes >= 1), 'a double press on the title bar zooms');
+  check(await until(() => wm.get(titleId)?.maximized === true), 'a double press on the title bar zooms the window through its native owner');
   console.log('title bar integration: passed');
   setTitleWindow(null); wm.close(titleId); await sleep(100);
   // the launcher: the grid of apps drawn by Rust, opened and closed by the shell
