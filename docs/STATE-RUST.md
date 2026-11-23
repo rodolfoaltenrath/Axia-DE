@@ -211,6 +211,175 @@ evidência de que o espelho inteiro foi retirado.
 
 ## Alternador nativo
 
+O serviço de entrada física também executa os comandos de janela: no perfil
+macOS, Meta+M minimiza, Meta+H oculta o app, Meta+Alt+H oculta outros e Meta+F11
+alterna a área de trabalho; no Linux, Meta+H minimiza e Meta+D alterna a área
+de trabalho. Meta+grave (macOS) ou Alt+grave (Linux), com Shift para voltar,
+cicla as janelas do app. Letras seguem o layout, com fallback posicional em
+layouts sem letras latinas, pelo mesmo helper do grab nativo.
+
+Essas teclas chegam a `shell_input` antes do Wayland, IME e dispatcher JS.
+O alternador aberto tem prioridade; fora dele, cada pressão nova executa uma
+única transação e suas repetições/solturas continuam consumidas. O serviço
+compartilha `app_control::window_command` com os pedidos explícitos: lê foco,
+grupos e metadados atuais, respeita painéis, PiP e a memória por desktop, sem
+consultar o espelho JS. Publica somente a resposta de compatibilidade pelo
+drain já existente. O novo leitor de comandos não retém o Session forte.
+
+`cycleWindows`, `minimize`, `hide`, `hideOthers` e `showDesktop` no dispatcher
+JS conservam somente metadados para a lista de atalhos. Helpers de intenção
+continuam disponíveis para menus e consumidores explícitos. Fechamento com
+guardas, encaixe com geometria, outros atalhos, raiz e portais continuam no
+escopo da migração.
+
+A abertura explícita também sincroniza a revisão de perfil antes de criar seu
+nonce. Sem essa ordem, trocar o perfil e chamar `switcherPrepare` antes do
+próximo tick fazia a revisão anterior cancelar a abertura nova. O teste de
+regressão reproduziu a falha antes da correção e exige que o novo nonce e o
+host permaneçam vivos após o tick. A integração exige montagem antes da captura.
+
+Validação dos comandos físicos em Fedora 44 privado: 707 testes da shell
+aprovados (sete ignorados), oito contratos LPK, oito cenários gráficos do
+alternador e doze de foco/comandos/menu Janela. Os quatro cenários ampliados
+dos comandos verificam os cinco comandos pelo caminho físico, repetição e
+soltura tardia, zero pedidos JSON de comando, callbacks JS somente para os
+modificadores iniciais, ausência de Super tap e atualização do espelho legado.
+O perfil Linux funciona com o espelho macOS congelado. Os testes unitários
+cobrem revisão única, grupo atual, layout, painéis/PiP, memória por desktop,
+revalidação de membros removidos/movidos, prioridade do alternador e raiz antiga.
+
+Build GPU=1, bundles, plataforma/ABI, instalação privada e `switcher-check`
+instalado passaram. As oito capturas do alternador são idênticas byte a byte
+às de `native-switcher-input`; as capturas dos comandos em claro/escuro mínimos
+foram inspecionadas com o alternador realmente montado. Três amostras ociosas
+passaram com limites impostos de 15 poll/s e 120 MiB: 12,150 poll/s e
+105,441 MiB de RSS. Sem prova de ganho causal. Fontes de produção e testes
+comparadas byte a byte com a árvore validada. Evidências em
+`build/validation/native-window-input/`, incluindo a reprodução anterior à
+correção de perfil. Implementação em `2bb3538b`; a Fase 2 continua aberta e
+as medições físicas permanecem para o encerramento.
+
+A entrada física do alternador passa por `axia_session_key`, antes do Wayland,
+do método de entrada e de `__lordKey`, tanto com XKB quanto com a tradução de
+fallback. Meta+Tab e Shift+Meta+Tab abrem nos dois perfis; Alt+Tab e Shift+Alt+Tab
+abrem somente no perfil Linux. O perfil e `desktopArrows` vêm do Reader nativo
+das preferências. O serviço também cancela a abertura quando o perfil muda,
+sem depender da publicação do espelho ou de um efeito React.
+
+Rust mantém teclas consumidas e modificadores até suas solturas, inclusive
+depois de Enter ou Escape fechar a view. Repetições não criam nova abertura;
+uma soltura tardia não chega ao app nem vira um toque isolado de Super. O C
+apenas limpa a contabilidade dos grabs restantes e entrega modificadores ao
+cliente focado. O antigo `grab_hold` de C foi retirado. Ponteiros leem os
+modificadores atuais por getter nativo, inclusive quando a tecla não passou
+pelo JS. Snapshots de janelas precedem a invalidação do teclado no drain.
+
+O dispatcher JS não consulta `switcherKey` a cada tecla e a entrada `switchApps`
+serve somente à lista de atalhos. A inicialização mantém uma importação
+compartilhada do catálogo; não importa metadados por tecla. Os helpers de
+intenção do SDK continuam para chamadas explícitas e compatibilidade.
+`nativeViews.inputKey` permite ao teste da sessão usar `js_key`, com tradução e
+roteamento físicos; o host isolado recusa essa injeção. O cliente Wayland do
+fixture possui um teclado real para verificar isolamento e modificadores.
+
+Validação da entrada física: 702 testes da shell aprovados (sete ignorados),
+oito contratos LPK, oito cenários gráficos do alternador e doze de foco,
+comandos e menu Janela. Os testes novos cobrem abertura antes do mount,
+repetição, solturas após fechar, perfil nativo, cancelamento por revisão,
+combinações não reservadas e raiz antiga. O driver injeta eventos pelo caminho
+físico, com zero pedidos JSON de abrir/tecla/cancelar e sem callbacks JS para
+as teclas consumidas. Congela o espelho no perfil macOS enquanto Alt+Tab abre
+pelo perfil Linux nativo, e observa cancelamento sem publicar preferências.
+
+O cliente Wayland do teste encontrou um cache antigo no retorno do foco:
+`send_enter_keyboard` enviava Super pressionado, mas não atualizava `mods_sent`.
+Corrigido o cache; o cliente agora confirma a soltura, modificadores zerados
+e ausência de Tab/Escape/Enter/setas em seu teclado. O protocolo completo e
+essas assertivas também passaram no `switcher-check` da instalação privada.
+
+Build GPU=1, bundles e `test-platform SKIP_RUST_TESTS=1` passaram; a suíte Rust
+da shell foi executada separadamente. Oito capturas são idênticas byte a byte
+às de `native-switcher-mount`, com pixels de material/destaque verificados.
+Três amostras ociosas passaram com os limites mantidos: 13,400 poll/s e
+104,873 MiB de RSS. Passaram também dezoito cenários de Dock (três posições),
+Arquivos e Launcher para conferir o getter de modificadores no runtime comum.
+Não há prova de ganho causal. Evidências locais em
+`build/validation/native-switcher-input/` e na árvore Fedora
+`/var/tmp/axia-shell-key-20261123`. Medições físicas seguem no encerramento.
+
+O `shell_scene::Service` do Session agora cria e descarta o host do alternador,
+sem `<AppSwitcher />` no tema ou no driver. O runtime registra somente a raiz
+atual por identidade; Rust valida raiz e geração, cria camadas compartilhadas
+com os portais existentes e monta o host na camada 40. A view retém o contexto
+por referência fraca. Descartar o contexto encerra host e nós próprios;
+camadas e portais irmãos pertencem à raiz e não são removidos pelo serviço.
+Trocar ou destruir a raiz cancela a abertura; gerações protegem IDs reciclados.
+
+O SDK deixou de manter `switcherState`, nonce, handle e fila de ações.
+`nativeswitcher.js` foi apagado; `AppSwitcher` permanece como export de
+compatibilidade vazio. A fila anterior ao mount é nativa. O serviço usa o
+mesmo leitor de catálogo, aparência e telas físicas da view anterior.
+`shellKeyboard` combina a abertura nativa com as camadas do runtime e publica
+somente invalidação de compatibilidade: suspende foco Linux e entrada dos apps
+enquanto o alternador está aberto. Não acrescenta temporizadores ou polling.
+
+Conclusões são drenadas pelo proprietário nativo. Antes de entregar um snapshot
+ao JS, o Session descarta conclusões cujo nonce foi substituído; um callback
+atrasado não substitui o espelho de uma abertura nova. A raiz geral da sessão,
+portais React, despacho geral de atalhos e importação inicial do catálogo
+continuam em JS. Esta entrega não conclui a Fase 2.
+
+Validação da montagem em Fedora 44 privado: 700 testes da shell aprovados
+(sete ignorados), oito contratos LPK e oito cenários gráficos do alternador,
+agora sem componente de montagem e com o mount JS explicitamente bloqueado.
+Quatro testes novos verificam fila antes do mount, conclusão rápida, descarte
+fraco do contexto, nós reciclados, raiz substituída/destruída, portais irmãos e
+filtragem do snapshot antigo antes do drain. A integração exige captura e
+devolução do teclado nativas, fatos antigos ignorados e descarte de todos os
+handles observados. Passaram mais doze cenários de foco, comandos e menu Janela.
+
+Compositor GPU=1, bundles, instalação privada e `switcher-check` instalado
+passaram. Oito capturas são idênticas byte a byte às de `native-switcher-keys`;
+pixels de material/destaque também foram verificados. Três amostras ociosas
+passaram com limites impostos: 14,600 poll/s e 105,465 MiB, abaixo de 15 poll/s
+e 120 MiB. A variação das rodadas anteriores impede atribuir ganho causal.
+Evidências em `build/validation/native-switcher-mount/`, na mesma árvore Fedora
+`/var/tmp/axia-shell-key-20261123`. Medições físicas seguem no encerramento.
+
+Para chamadas explícitas, o pedido `switcherKey` interpreta as teclas usando os modificadores mantidos no
+`SwitcherOpening` do Session. O SDK envia evento de teclado; não recebe hold,
+origem nem direção. Tab/Shift+Tab e setas escolhem o avanço, Enter confirma,
+Escape cancela e soltar o modificador confirma inclusive antes do mount. Outras
+teclas e solturas são consumidas enquanto a abertura correspondente existir.
+Um nonce encerrado ou substituído não produz ação nem consome a tecla.
+
+Pedidos explícitos com nonce continuam validados para compatibilidade e testes;
+o SDK já não transporta essa identidade. A consulta pura não altera revisões;
+na sessão vinculada, a intenção é executada ou enfileirada pelo próprio serviço.
+
+Na etapa anterior dos atalhos em Fedora 44 privado, passaram 696 testes da shell
+(sete ignorados), oito contratos LPK, oito cenários gráficos do alternador e
+oito cenários de regressão de foco/comandos de janela. O teste novo cobre
+recriação do controlador, identidade antiga, modificadores nativos, todas as
+teclas e pedidos inválidos, sem alterar revisões. O driver compartilhado com
+RPM injeta hold antigo no espelho JS, recusa teclas após cancelar a abertura e
+exige ausência de hold nos pedidos de tecla e no retorno da preparação.
+
+Compositor GPU=1, bundles, instalação privada e `switcher-check` instalado
+passaram. As oito capturas têm pixels de material/destaque verificados; os
+quatro modos na largura mínima foram inspecionados. Evidências locais em
+`build/validation/native-switcher-keys/`, também na árvore Fedora
+`/var/tmp/axia-shell-key-20261123`. Medições físicas seguem no encerramento.
+
+Ociosidade: a rodada inicial excedeu o limite com 17,600 poll/s; a comparação
+com JS original no mesmo binário também excedeu com 16,700 poll/s. Uma rodada
+de confirmação do código novo passou com 12,500 poll/s e 105,203 MiB de RSS.
+Para conferir a referência completa, recompilamos as fontes Rust originais de
+`ec3ef46c`, mantendo C, dependências e flags iguais: 13,950 poll/s e 105,090 MiB,
+também aprovada. Cada rodada tem três amostras e impõe 15 poll/s e 120 MiB;
+relatórios e traces de todas foram preservados, inclusive os que excederam.
+A variação entre rodadas impede atribuir ganho causal à mudança.
+
 `native_view/switcher.rs` monta `shell:switcher` com o leitor do contexto.
 O histórico MRU agora pertence a `WindowState`: alterações semânticas atualizam
 o foco recente e removem IDs fechados; leituras e ressincronizações são silenciosas.
@@ -220,8 +389,8 @@ Revisões invalidam a cena e são consumidas antes de confirmar uma ação; fech
 a janela escolhida substitui sua representante ou remove o grupo.
 
 Seleção, ícones e faixa por viewport são nativos. `appswitcher.jsx` conserva
-a montagem, os atalhos e o snapshot de compatibilidade.
-`nativeswitcher.js` enfileira comandos recebidos antes do mount e usa um nonce
+somente a entrada de intenções e a atualização do snapshot de compatibilidade.
+O serviço Rust enfileira comandos recebidos antes do mount e usa um nonce
 para que efeitos de uma abertura antiga não encerrem a seguinte. Aparência e
 metadados são lidos por referências nativas: a montagem validada da sessão usa
 o Store compartilhado do catálogo e suas revisões, sem registry/catalog nos
@@ -230,7 +399,7 @@ descoberta/importação inicial ainda pertencem a `nativecatalog.js`. Montagens
 locais por Reader preservam os fatos explícitos de metadados.
 
 Posição, tamanho e quantidade de colunas também vêm da fonte física de monitores,
-emprestada por Reader na sessão. O SDK monta uma âncora neutra de tamanho zero;
+emprestada por Reader na sessão. O serviço monta uma âncora neutra de tamanho zero;
 a view posiciona a cena no retângulo do monitor principal, com fallback ao primeiro
 monitor. A montagem não consulta `mainDisplay()` nem envia geometria de telas.
 Troca do principal, desconexão, reconexão e redimensionamento invalidam a cena
@@ -256,7 +425,7 @@ Session via `AppCommand::WindowAction(WindowMenuAction::Focus)`.
 A view libera o empréstimo antes da mutação;
 mostrar o desktop, reabrir a janela e trazê-la à frente publicam uma revisão.
 O efeito de conclusão contém somente a resposta do modelo, sem comando de foco
-JS. O adaptador confere o nonce antes de aplicar esse snapshot e encerrar a
+JS. O drain nativo confere o nonce antes de entregar esse snapshot e encerrar a
 apresentação. Controladores por Reader mantêm o efeito explícito anterior.
 
 Cada view vinculada recebe uma geração do Session. Uma montagem nova revoga a
@@ -267,9 +436,9 @@ e seu descarte não invalida a view atual.
 A abertura agora pertence a um Store tipado do Session: nonce, modificadores
 mantidos, direção inicial e origem. O nonce cresce nativamente e respeita o
 inteiro seguro de JS; recriar o controlador não perde nem reinicia a abertura.
-`switcherPrepare` recebe hold/back como intenção e retorna somente identidade e
-hold, além do snapshot de compatibilidade. O SDK mantém esse espelho mínimo para
-montagem/atalhos; envia à view somente o nonce. A view assina o Reader nativo,
+`switcherPrepare` recebe hold/back como intenção e retorna somente identidade,
+além do snapshot de compatibilidade. O SDK não retém essa identidade;
+o serviço fornece o nonce à view. A view assina o Reader nativo,
 ignora origem/direção locais e só adquire geração após validar a identidade.
 `switcherCancel` recebe nonce e restaura exclusivamente a origem registrada;
 um cancelamento antigo não fecha a abertura atual nem muda foco/revisão.
@@ -288,7 +457,8 @@ gerado no Session; passou também no `switcher-check` da instalação privada.
 Build GPU=1 e bundles aprovados. Oito capturas são idênticas byte a byte às da
 etapa anterior; claro/escuro mínimos inspecionados e pixels de material/destaque
 verificados. Evidências em `build/validation/native-switcher-opening/`.
-Montagem, atalhos e espelho mínimo JS seguem pendentes; a Fase 2 continua aberta.
+A montagem e o espelho mínimo foram retirados na entrega seguinte, descrita
+acima. Despacho geral de atalhos e demais consumidores mantêm a Fase 2 aberta.
 
 Preparar a abertura usa `switcherPrepare`, sem fatos de tela cheia no pedido.
 Rust consulta diretamente `wl_fullscreen_active`/`wl_fullscreen_window` na thread
@@ -300,7 +470,8 @@ Sem tela cheia, permite abrir sem alterar janelas; origem ausente ou obsoleta
 recusa a abertura. A origem não é construída pelo JS nem depende do espelho.
 Cancelar antes do mount usa `switcherCancel`, que revalida e restaura foco,
 desktop e minimização no proprietário nativo. O SDK só aplica os snapshots.
-Montagem e encaminhamento dos atalhos continuam no adaptador.
+Montagem e entrada física foram migradas posteriormente ao serviço do Session,
+conforme a seção Alternador nativo acima; os helpers explícitos permanecem.
 
 A leitura direta do compositor passou em 692 testes da shell, oito contratos
 LPK, oito cenários gráficos do alternador e quatro de regressão de foco,
@@ -593,12 +764,25 @@ estabelece a referência sem mostrar o indicador. Overview e desktop único
 cancelam o prazo; sair do Overview não repete a indicação. Oculto, o app não
 pede atualização periódica. O assinante e o prazo acabam ao desmontar a view.
 
-`sdk/desktops.js` fornece apenas o mount, aparência e geometria do monitor
-principal, com assinatura de eventos de tela. A tentativa de avançar além do
-limite encaminha um comando `show`; não envia desktop ativo, lista ou árvores.
-Removidos `hudState`, `hudTimer` e a assinatura JS que mostrava o indicador.
-Animação de janelas continua no adaptador; persistência e restauração têm
-seus serviços nativos descritos nas seções seguintes.
+O `shell_scene::Service` cria o host diretamente na camada compartilhada 80,
+com Reader de janelas, telas físicas, aparência e locale nativos. O tema não
+monta `<DesktopHud />`; o export conserva somente a compatibilidade local do
+host `.lpk`. No processo da sessão, é um componente vazio. Remontar ou retirar
+esse componente não recria o host nem reinicia o prazo. Contexto fraco e
+gerações protegem o descarte da raiz e os IDs reciclados, mantendo portais
+irmãos. Limites de teclas, gestos e pedidos explícitos executam `show` no Rust,
+sem handle ou comando de apresentação no SDK da sessão. Os antigos
+`hudState`, `hudTimer` e a assinatura JS de apresentação já foram retirados.
+Animação, persistência e restauração têm serviços nativos descritos adiante.
+
+Setas físicas Ctrl+Esquerda/Direita no perfil macOS respeitam `desktopArrows`;
+Meta+Ctrl+Esquerda/Direita funciona nos dois perfis. No Linux, Meta+Ctrl+D cria
+e mostra e Meta+Ctrl+F4 fecha o desktop atual. A entrada nativa precede Wayland,
+IME e `__lordKey`, lê perfil e locale atuais e executa uma transação tipada.
+Compartilha a regra de direção com o serviço explícito. Repetições e solturas
+tardias ficam consumidas; o alternador aberto tem prioridade. Entradas JS
+dessas teclas fornecem somente metadados na sessão. Overview, demais gestos,
+despacho geral, raiz e portais ainda têm adaptadores JS.
 
 Os comandos `desktopCommand` também pertencem ao controlador vinculado ao
 contexto: `step`, `add` e `closeActive` consultam a lista e o desktop atuais no
@@ -609,15 +793,38 @@ Pedidos inválidos e controladores sem proprietário são recusados. O SDK aplic
 o delta de compatibilidade, mas não escolhe os alvos pelo espelho. O host `.lpk`
 mantém o caminho local anterior, selecionado na compilação.
 
-O teste Rust `desktop_hud_runtime` monta o componente real e exige fonte opaca
-correta, troca com espelho parado, extensão/expiração do prazo, indicação no
-limite, supressão no Overview/desktop único e desmontagem. Quatro cenários,
-claro/escuro em 640/1000 px, produzem capturas em
-`build/validation/desktop-hud/`; o CI GPU=1 exige o teste e publica
-`axia-desktop-hud`. O teste unitário usa instantes explícitos para verificar
-extensão e expiração sem espera. Não houve medição física nesta etapa.
+O teste Rust `desktop_hud_runtime` exige montagem sem chamada JS, troca com
+espelho parado, extensão/expiração, indicação no limite, supressão no Overview
+e desktop único e retenção ao remontar/retirar o componente React. Injeta
+setas e criar/fechar pelo caminho físico com zero pedidos JSON de desktop,
+sem callbacks JS para teclas consumidas ou toque Super acidental. Congela os
+espelhos de perfil, idioma e preferências e verifica RTL e a política nativa.
+Quatro cenários, claro/escuro em 640/1000 px, produzem capturas. O CI GPU=1
+exige o teste e publica `axia-desktop-hud`. Testes unitários usam instantes
+explícitos para extensão/expiração e cobrem raiz, geração e proprietário fraco.
 
-Compositor/frontend recompilados; passaram 526 testes unitários da shell (sete
+Validação desta migração de montagem/entrada: 711 testes unitários da shell
+aprovados (sete ignorados), oito contratos LPK, quatro cenários do indicador,
+oito do alternador e dezesseis de animação/foco/comandos/menu Janela. Build
+GPU=1, bundles, plataforma/ABI, instalação privada e `switcher-check` instalado
+passaram. As oito capturas do alternador são idênticas às de
+`native-window-input`; os indicadores mínimos claro/escuro foram inspecionados,
+com pixels de texto/cor/posição exigidos. A animação agora inclui o indicador
+real; sua sombra atingia o antigo pixel de fundo. O teste amostra a mesma
+janela em y=240, preservando as verificações de opacidade, posição e
+transformação fora dessa sobreposição.
+
+Ociosidade com três amostras e limites de 15 poll/s e 120 MiB impostos:
+rodada inicial 15,100 poll/s e 104,949 MiB (limite de poll excedido), referência
+da instalação `native-window-input` 13,450 poll/s e 105,430 MiB, confirmação
+nova 12,550 poll/s e 104,922 MiB (aprovada). Todos os relatórios foram
+preservados, sem prova de ganho causal. Fontes de produção e testes comparadas
+byte a byte com a árvore validada. Evidências em
+`build/validation/native-desktop-keys/`. Implementação em `c40694e6`; demais
+consumidores e adaptadores mantêm a Fase 2 aberta. Medições físicas seguem
+reservadas ao encerramento.
+
+Na primeira etapa, compositor/frontend recompilados; passaram 526 testes unitários da shell (sete
 especiais ignorados), três contratos LPK e as regressões gráficas dos comandos
 de janela e menu Janela, em quatro cenários cada.
 
@@ -1162,14 +1369,58 @@ ações pelo histórico, Adiar, Parar, limites, idioma e cancelamento do toque.
 
 ## Gestos horizontais de desktop
 
-`desktopCommand/swipe` resolve no proprietário Rust se o gesto troca desktops
-ou alterna janelas. O pedido contém direção e RTL, sem lista ou seleção JS.
+O reconhecimento do swipe de sistema pertence ao `shell_scene::Service` do
+Session. `touch/route.rs` mantém a política de reserva de três/quatro dedos e
+a entrega de gestos dos apps ao destino; `js_gesture` entrega somente gestos
+reservados à entrada nativa antes de `__lordGesture`. Nenhum delta de um gesto
+de sistema atravessa o dispatcher JS. O proprietário acumula updates, exige
+60 px no maior eixo, escolhe o eixo dominante (empate é vertical), ignora o
+delta de end, cancela sem ação e produz uma conclusão por begin. Sem begin,
+repetir end, números não finitos e overflow não executam ação. Não há polling.
+
+Horizontais executam no serviço de desktops com modelo e locale atuais no
+instante da conclusão. `desktopCommand/swipe` permanece para pedidos explícitos;
+a rota da sessão usa `desktopSession/swipe`, sem RTL, lista ou seleção JS.
 Com vários desktops, respeita a ordem visual e retorna o limite sem mutação;
 com um só, reutiliza a seleção do ciclo legado e exclui janelas minimizadas,
 fullscreen e PiP. A operação publica no máximo uma revisão. O adaptador só
-encaminha o gesto e mostra o indicador no limite; o host LPK preserva a API local.
-O teste Rust verifica direções, RTL, filtragem, limites e entradas inválidas.
-A integração do indicador bloqueia leituras do espelho de desktops durante o gesto.
+observa o resultado; o indicador de limite é mostrado nativamente. O host LPK
+preserva reconhecimento e API locais. Para verticais, o efeito `shellGesture`
+carrega somente direção, dedos e instante para os callbacks existentes de
+launcher/Overview. `lastSwipe` espelha a conclusão, sem decidir horizontais.
+O tema deixou de registrar ações horizontais. Configuração do driver,
+vigilância dos dispositivos e ações verticais ainda usam adaptadores JS.
+
+O alternador aberto consome swipes sem executar ações nem conservar movimento
+parcial. Destruir/trocar a raiz limpa a acumulação; a geração também é validada
+antes de drenar a intenção vertical, para que uma conclusão antiga não abra
+uma tela na raiz nova. Testes unitários cobrem limiar, eixo, repetição,
+cancelamento, fluxo inválido, revalidação de alvos, desktop único, prioridade e
+gerações. A integração `system_swipes_runtime` usa o roteamento real por
+`inputSwipe`: quatro cenários com espelhos parados, RTL alterado durante o
+gesto, reserva de três/quatro dedos, threeDrag, fluxo dos apps, ausência de
+eventos JS de sistema e zero pedidos JSON de comando. É exigida no CI GPU=1,
+com capturas publicadas em `axia-system-swipes`.
+
+Validação em Fedora 44 privado: 715 testes da shell aprovados (sete ignorados),
+oito contratos LPK, quatro cenários novos de swipes, quatro do indicador,
+oito do alternador e dezesseis de animação/foco/comandos/menu Janela. Build
+GPU=1, bundles, plataforma/ABI, instalação privada e `switcher-check` instalado
+passaram. Os swipes reservados produziram zero eventos JS brutos e zero pedidos
+JSON de comando; gestos dos apps preservaram seu fluxo. As oito capturas do
+alternador são idênticas às de `native-desktop-keys`; capturas mínimas do novo
+fluxo foram inspecionadas em claro/escuro e exigem pixels do indicador nativo.
+Três amostras ociosas passaram com limites de 15 poll/s e 120 MiB impostos:
+13,400 poll/s e 105,102 MiB de RSS, sem prova de ganho causal. Evidências em
+`build/validation/native-system-swipes/`. Medições físicas continuam no encerramento.
+
+Entrega consolidada em commits por parte: `89be1316` (alternador, cena e
+entrada física), `2bb3538b` (comandos de janela), `c40694e6` (desktops e
+indicador) e `e2b7840f` (swipes de sistema). Os estados intermediários dos
+três primeiros passaram novamente em 702, 707 e 711 testes da shell,
+respectivamente; relatórios em `build/validation/commit-parts/`. O estado final
+passou nos 715 testes e integrações acima. As linhas do histórico no roadmap
+preservam as etapas de validação anteriores, consolidadas nesses commits.
 
 ## Animação de troca de desktops
 

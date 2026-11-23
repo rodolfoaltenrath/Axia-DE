@@ -611,3 +611,28 @@ Os dados completos e o helper da captura ficam em
 O uso do Acorn interno é só deste levantamento, não uma dependência do produto.
 Revisar a tabela e o grafo depois de cada mudança de exports, registro de contexto
 ou manifesto. Não comparar contagens de recortes diferentes como regressão.
+
+## Entradas adicionadas durante a migração, 2026-11-23
+
+Estas entradas posteriores não alteram a contagem histórica da captura acima.
+
+| Entrada | Classificação | Contexto e uso | Implementação |
+| --- | --- | --- | --- |
+| `lord.nativeViews.modifiers()` | ativa | Leitura dos modificadores atuais em `runtime/events.js`, incluindo teclas consumidas sem passar por JS; no host isolado lê somente o estado do próprio processo. | `server/src/ui/js_nativeview.c`, `axia_view_get_modifiers` |
+| `lord.nativeViews.inputKey(code, value)` | ativa, sessão/probes | Injeta um evento evdev na entrada física `js_key` para provas nativas. Códigos 1–255 e valores 0–2; recusada pelo registro do host isolado. Usada no driver do alternador, sem mudar os exports públicos do SDK. | `server/src/ui/js_nativeview.c` |
+| `lord.nativeViews.inputSwipe(phase, fingers, dx, dy)` | ativa, sessão/probes | Usa `tp_route_swipe` e a política real do driver para verificar gestos de sistema e de apps. Fases 1–4, dois a cinco dedos e deltas finitos; recusada no host isolado. | `server/src/ui/js_nativeview.c`, `touch/route.rs` |
+
+`axia_session_key` é uma entrada C/Rust interna, anterior ao Wayland e ao IME;
+não é um método `lord.*` nem recebe JSON. O dispatcher JS preserva os rótulos
+de Meta/Alt+Tab, mas não executa a abertura nem consulta estado por tecla.
+
+O mesmo caminho físico executa comandos de janela e desktops. As entradas JS
+correspondentes mantêm metadados de atalhos na sessão. `desktopHudStatus` é
+uma intenção de inspeção em `lord.nativeApps.request`, sem novo método `lord.*`:
+devolve handle/nó do indicador pertencente à cena para provas de montagem.
+Não seleciona alvos, transmite estado ou monta o indicador no JS.
+
+`axia_session_swipe` é outra entrada C/Rust interna. Reconhece somente os
+swipes reservados ao sistema, antes de `__lordGesture`, sem pedidos JSON de
+desktop. O efeito de compatibilidade `shellGesture` publica a direção já
+reconhecida; o SDK executa apenas ações verticais ainda ligadas às telas JS.
