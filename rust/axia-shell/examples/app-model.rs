@@ -20,6 +20,7 @@ fn main() {
             "terminal" => terminal_model::request(&input["input"]),
             "passwords" => passwords_model::request(&input["input"]),
             "sysinfo" => sysinfo_model::request(&input["input"]),
+            "screenshots" => axia_app_screenshots::geometry::request(&input["input"]),
             _ => json!({"error":"app.invalidRequest"}),
         };
         println!("{reply}");

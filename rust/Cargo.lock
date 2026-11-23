@@ -258,6 +258,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-app-screenshots"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "axia-app-settings"
 version = "0.1.0"
 dependencies = [
@@ -469,6 +476,7 @@ dependencies = [
  "axia-app-recorder",
  "axia-app-reminders",
  "axia-app-scanner",
+ "axia-app-screenshots",
  "axia-app-settings",
  "axia-app-store",
  "axia-app-sysinfo",

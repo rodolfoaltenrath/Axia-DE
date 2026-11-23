@@ -6,6 +6,7 @@ license = "MIT"
 description = "Axia desktop policies, embedded in the C compositor"
 
 [dependencies]
+axia-app-screenshots = { path = "../axia-app-screenshots" }
 axia-state = { path = "../axia-state" }
 axia-backup = { path = "../axia-backup" }
 axia-print = { path = "../axia-print" }

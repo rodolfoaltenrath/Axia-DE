@@ -29,6 +29,7 @@ members = [
     "axia-app-recorder",
     "axia-app-reminders",
     "axia-app-scanner",
+    "axia-app-screenshots",
     "axia-app-settings",
     "axia-app-store",
     "axia-app-sysinfo",

@@ -16,6 +16,11 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 const APP = 'screenshots';
+// Transitional presentation only: selection and image coordinates belong to Rust.
+let geometryOwner;
+const geometry = input => (geometryOwner ||= lord.nativeApps.create(APP)).request(JSON.stringify(input));
+const point = ({ x, y }) => ({ x, y });
+const selection = (start, end) => geometry({ cmd: 'selection', start: point(start), end: point(end) });
 const recording = createStore(null);   // { id, path, start }
 const recent = createStore([]);       // [{ path, time }]
 
@@ -180,18 +185,16 @@ function Overlay({ handle, mode: initial }) {
   });
   useEffect(() => {
     const offMove = addListener('pointermove', (e) => {
-      if (drag.current) { const d = drag.current; setRect({ x: Math.min(d.x, e.x), y: Math.min(d.y, e.y), w: Math.abs(e.x - d.x), h: Math.abs(e.y - d.y) }); return; }
+      if (drag.current) { setRect(selection(drag.current, e)); return; }
       // window under the pointer (the topmost one)
-      const vis = list.filter((w) => !w.minimized && w.app !== APP);
-      let found = null;
-      for (const w of vis) { const f = wm.frame(w); if (e.x >= f.x && e.y >= f.y && e.x < f.x + f.w && e.y < f.y + f.h) found = { ...f, title: windowTitle(w) }; }
-      setHover(found);
+      setHover(geometry({ cmd: 'window', point: point(e), windows: list.map(w => ({ app: w.app,
+        minimized: w.minimized, title: windowTitle(w), frame: wm.frame(w) })) }));
     });
     const offUp = addListener('pointerup', (e) => {
       if (!drag.current) return;
       const d = drag.current;
       drag.current = null;
-      done({ x: Math.min(d.x, e.x), y: Math.min(d.y, e.y), w: Math.abs(e.x - d.x), h: Math.abs(e.y - d.y) });
+      done(selection(d, e));
     });
     return () => { offMove(); offUp(); };
   }, [list, mode]);
@@ -298,16 +301,16 @@ function Editor({ handle, path }) {
     if (id && id !== preview) setPreview(id);
     if (id) media.view(id, { fit: 'contain', background: 0 });
   }, [ops, draft, handle]);
-  const map = (x, y) => {
-    const [lx, ly, bw, bh] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1];
-    const s = Math.min(bw / info.width, bh / info.height);
-    const ox = lx + (bw - info.width * s) / 2, oy = ly + (bh - info.height * s) / 2;
-    return { x: (x - ox) / s, y: (y - oy) / s, s };
+  const imageGeometry = (cmd, point) => {
+    const [x, y, w, h] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1];
+    return geometry({ cmd, point, viewport: { x, y, w, h }, image: info });
   };
+  const map = (x, y) => imageGeometry('map', { x, y });
   useEffect(() => {
     const offMove = addListener('pointermove', (e) => {
       if (!drag.current) return;
       const p = map(e.x, e.y);
+      if (!p) return;
       setDraft((d) => d && { ...d, x2: p.x, y2: p.y });
     });
     const offUp = addListener('pointerup', () => {
@@ -320,6 +323,7 @@ function Editor({ handle, path }) {
   const width = Math.max(3, Math.round(Math.min(info.width, info.height) / 220));
   const down = (e) => {
     const p = map(e.x, e.y);
+    if (!p) return;
     if (tool === 'text') { setText({ x: p.x, y: p.y, value: '' }); return; }
     drag.current = true;
     setDraft({ type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, color, width: tool === 'blur' ? 6 : width });
@@ -338,8 +342,7 @@ function Editor({ handle, path }) {
   const copy = async () => { const r = await media.copyImage(preview || handle); setMsg(r.ok ? tr('screenshots.copied') : tr('screenshots.saveError')); setTimeout(() => setMsg(null), 2500); };
   const tools = [['arrow', '↗', 'screenshots.tool.arrow'], ['box', '▢', 'screenshots.tool.box'], ['text', 'T', 'screenshots.tool.text'],
     ['blur', '▒', 'screenshots.tool.blur'], ['line', '╱', 'screenshots.tool.line']];
-  const tp = text ? (() => { const [lx, ly, bw, bh] = box.current ? lord.getLayout(box.current.id) : [0, 0, 1, 1]; const s = Math.min(bw / info.width, bh / info.height);
-    return { left: (bw - info.width * s) / 2 + text.x * s, top: (bh - info.height * s) / 2 + text.y * s }; })() : null;
+  const tp = text ? imageGeometry('anchor', text) : null;
   return (
     <View style={{ flex: 1 }}>
       <Toolbar>

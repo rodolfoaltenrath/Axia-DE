@@ -13,6 +13,7 @@ pub enum NativeApp {
     Sysinfo,
     Pdf(pdf_model::Model),
     Notes,
+    Screenshots,
 }
 impl NativeApp {
     fn new(id: &[u8]) -> Option<Self> {
@@ -25,6 +26,7 @@ impl NativeApp {
             b"sysinfo" => Some(Self::Sysinfo),
             b"pdf" => Some(Self::Pdf(Default::default())),
             b"notes" => Some(Self::Notes),
+            b"screenshots" => Some(Self::Screenshots),
             _ => None,
         }
     }
@@ -45,6 +47,7 @@ impl NativeApp {
             Self::Sysinfo => crate::sysinfo_model::request(input),
             Self::Pdf(model) => model.request(input),
             Self::Notes => crate::notes_app::store::background(input),
+            Self::Screenshots => axia_app_screenshots::geometry::request(input),
         }
     }
 }

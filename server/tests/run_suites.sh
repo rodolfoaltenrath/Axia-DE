@@ -185,6 +185,7 @@ EOF
     # (0.8.5) System Information's model (apps/sysinfo/model.rs): GPU layers, CPU reasons, Compatibility
     if have node && have cargo; then
         run "app-model-test-adapter" cargo build --manifest-path ../rust/Cargo.toml --locked --offline --example app-model
+        run "screenshots-geometry (Rust selection and image coordinates)" node tests/screenshots_geometry_test.mjs
         run "sysinfo-model-test (Rust checks and apps/sysinfo/model.rs)" node --import ./tests/native_app_model_node.mjs tests/sysinfo_model_test.mjs
         if [ -d ../node_modules/esbuild ]; then run "app-model-bridge-test" node tests/app_model_bridge_test.mjs
         else skip "app-model-bridge-test" "node_modules/esbuild"; fi

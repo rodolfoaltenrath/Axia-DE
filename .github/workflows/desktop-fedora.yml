@@ -304,6 +304,17 @@ jobs:
           AXIA_DISKS_AXIA_OUTPUT: ${{ runner.temp }}/axia-disks/axia
           AXIA_DISKS_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-disks/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test disks_runtime -- --ignored --nocapture
+      - name: Rust capture selection and annotation coordinates
+        if: matrix.gpu == 1
+        env:
+          AXIA_SCREENSHOTS_GEOMETRY_OUTPUT: ${{ runner.temp }}/axia-screenshots-geometry
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test screenshots_geometry_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-screenshots-geometry
+          path: ${{ runner.temp }}/axia-screenshots-geometry/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && matrix.gpu == 1
         with:
