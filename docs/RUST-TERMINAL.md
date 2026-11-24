@@ -82,8 +82,21 @@ change. Until then the React window stays the live app.
      carries `text`. Rust's `regex` has no look-around or back-references, unlike the
      JavaScript expressions of the React window: such a pattern is reported as invalid.
      A field's `onKey` hook now also reports Shift.
-   - **3b:** popups (autocomplete, paste and command history, open quickly, edit the title),
-     the composer, the toolbelt, instant replay and copy mode.
+   - **3b (done):** the list popups (autocomplete from the words on screen, command history,
+     paste history, all keyboard driven: arrows cycle, Enter accepts, Escape closes, any other
+     key is swallowed), open quickly (filters the sessions of every window by title and brings
+     the window of the one chosen forward), edit the tab title (empty = automatic), the composer
+     (Enter sends a line, Shift+Enter sends the text unrun, Escape closes), broadcast input to
+     every pane of the tab (typing, paste, composer), the toolbelt (jobs, recent commands,
+     clipboard history, recent folders quoted for `cd`, profiles, notes; it takes 240 px from
+     the panes), instant replay (◀ ▶ and the arrow keys, Escape/Enter back to now; the slider
+     of the React bar is not ported: the position is a counter) and copy mode (its keys go to
+     the engine one job at a time; status 2 copies, any non-zero status ends it). The shared
+     workspace also keeps the recent folders, the command history and the notes. 46 crate tests.
+     More transport: jobs `term.cursorWord`, `term.words`, `term.replay`, `term.copyKey`,
+     `clipboard.history` (→ [text…]); effects `copyMode`, `{kind:"focusWindow",id}`. A `write`
+     effect carries `text` (ordinary strings) or `bytes`/`units` (key mappings). The captured-output
+     section of the toolbelt (profile triggers) waits for the triggers.
    - **3c:** the application menus, the context menu, ❖-click on links, the close guard of the
      window and the Dock menu.
 4. **Preferences.** Profiles, schemes and key bindings; the importer of `iterm.js`

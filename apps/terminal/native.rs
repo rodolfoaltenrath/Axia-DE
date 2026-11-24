@@ -10,7 +10,7 @@
 //! once (`write`, `key`, `mouse`, `wheel`, `focus`, `scroll`, `clear`, `select`, `mark`).
 use crate::native_view::{async_jobs::{Completed, Jobs}, clock, KeyFacts, NativeApp};
 use crate::request as model;
-use crate::workspace::{Dir, Meta, Rect, Removed, Sid, Workspace};
+use crate::workspace::{session_title, Dir, Meta, Rect, Removed, Sid, Workspace};
 use serde_json::{json, Map, Value};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -24,6 +24,9 @@ const MOVE_MS: i64 = 8;
 const TOAST_MS: i64 = 4000;
 const TOASTS_MAX: usize = 4;
 const MATCHES_MAX: usize = 60000;
+const BELT_WIDTH: f64 = 240.;
+const COMMANDS_MAX: usize = 200;
+const DIRS_MAX: usize = 25;
 /// Physical codes of the modifier keys: they never reach a shell on their own.
 const MODIFIER_CODES: [i32; 9] = [29, 97, 42, 54, 56, 100, 125, 126, 58];
 
@@ -64,8 +67,31 @@ struct Toast {
     until: i64,
 }
 /// What a window shows on top of its panes. It lives with the workspace, like the tabs.
+#[derive(Clone)]
+enum Popup {
+    Complete { prefix: String, items: Vec<String>, sel: usize },
+    Paste { items: Vec<String>, raw: Vec<String>, sel: usize },
+    History { items: Vec<String>, sel: usize },
+    Quick { q: String, sel: usize },
+    Title { value: String },
+}
+#[derive(Clone, Default)]
+struct Replay {
+    sid: Sid,
+    index: i64,
+    count: i64,
+    time: i64,
+}
 #[derive(Clone, Default)]
 struct WinUi {
+    popup: Option<Popup>,
+    composer: Option<String>,
+    broadcast: bool,
+    toolbelt: bool,
+    note: String,
+    copy_mode: Option<Sid>,
+    replay: Option<Replay>,
+    clipboard: Vec<String>,
     find: Option<Find>,
     find_focus: u64,
     dialog: Option<Dialog>,
@@ -79,6 +105,9 @@ enum PasteMode {
 }
 #[derive(Default)]
 struct Shell {
+    recent_dirs: Vec<String>,
+    commands: Vec<String>,
+    notes: Vec<String>,
     ui: HashMap<String, WinUi>,
     ws: Workspace,
     sessions: HashMap<Sid, Session>,
@@ -99,6 +128,12 @@ enum Purpose {
 enum Tag {
     Create { purpose: Purpose, profile: String, wid: String },
     Copied,
+    Prefix,
+    Words { prefix: String },
+    PasteList,
+    ClipList,
+    ReplayState { sid: Sid, entering: bool },
+    CopyKey,
     Pasted(PasteMode),
     Output,
     Found,
@@ -266,6 +301,76 @@ impl App {
     }
     fn paste(&mut self, mode: PasteMode) {
         self.jobs.enqueue(Tag::Pasted(mode), "clipboard.read", json!([]));
+    }
+    fn popup_key(&mut self, popup: &Popup, key: &str, now: i64) -> bool {
+        let (len, sel) = match popup {
+            Popup::Complete { items, sel, .. } | Popup::History { items, sel } | Popup::Paste { items, sel, .. } => (items.len(), *sel),
+            // the open-quickly and title popups are fields: they take their own keys
+            _ => return false,
+        };
+        match key {
+            "Escape" => self.ui(|u| u.popup = None),
+            "ArrowUp" | "ArrowDown" => {
+                let next = (sel as i64 + if key == "ArrowUp" { -1 } else { 1 }).rem_euclid(len.max(1) as i64) as usize;
+                self.ui(|u| match u.popup.as_mut() {
+                    Some(Popup::Complete { sel, .. } | Popup::History { sel, .. } | Popup::Paste { sel, .. }) => *sel = next,
+                    _ => {}
+                });
+            }
+            "Enter" => {
+                match popup {
+                    Popup::Complete { prefix, items, sel } => {
+                        if let Some(item) = items.get(*sel) {
+                            let rest: String = item.chars().skip(prefix.chars().count()).collect();
+                            self.to_session("write", json!({"text":rest}));
+                        }
+                    }
+                    Popup::Paste { raw, sel, .. } => {
+                        if let Some(text) = raw.get(*sel) {
+                            self.to_session("paste", json!({"text":text}));
+                        }
+                    }
+                    Popup::History { items, sel } => {
+                        if let Some(cmd) = items.get(*sel) {
+                            self.to_session("write", json!({"text":cmd}));
+                        }
+                    }
+                    _ => {}
+                }
+                self.ui(|u| u.popup = None);
+            }
+            _ => {}
+        }
+        let _ = now;
+        true
+    }
+    fn replay_exit(&mut self) {
+        if let Some(replay) = self.ui(|u| u.replay.take()) {
+            self.jobs.enqueue(Tag::Quiet, "term.replay", json!([replay.sid, "exit"]));
+        }
+    }
+    fn replay_step(&mut self, replay: &Replay, delta: i64) {
+        let index = (replay.index + delta).clamp(0, (replay.count - 1).max(0));
+        self.jobs.enqueue(Tag::ReplayState { sid: replay.sid, entering: false }, "term.replay", json!([replay.sid, index]));
+    }
+    fn quick_items(&self, q: &str) -> Vec<(String, Sid, String)> {
+        let q = q.to_lowercase();
+        shell(|s| {
+            let meta: HashMap<Sid, Meta> = s.sessions.iter().map(|(k, v)| (*k, v.meta.clone())).collect();
+            s.ws.windows()
+                .flat_map(|(wid, w)| w.tabs.iter().flat_map(move |t| t.root.leaves().into_iter().map(move |sid| (wid.clone(), sid))))
+                .map(|(wid, sid)| (wid, sid, session_title(meta.get(&sid))))
+                .filter(|(_, _, title)| title.to_lowercase().contains(&q))
+                .collect()
+        })
+    }
+    /// Gives a pane (of this or another window) the focus.
+    fn focus_anywhere(&mut self, sid: Sid) {
+        let wid = shell(|s| s.ws.find_session(sid).map(|(w, _)| w.to_owned()));
+        self.focus(sid);
+        if let Some(wid) = wid.filter(|w| *w != self.window) {
+            self.effects.push(json!({"kind":"focusWindow","id":wid}));
+        }
     }
     fn find_open(&mut self) {
         let Some(sid) = shell(|s| s.ws.current_sid(&self.window)) else { return };
@@ -438,9 +543,16 @@ impl App {
     }
     /// Input for the focused pane, or for every pane of the tab while broadcasting.
     fn to_session(&mut self, op: &str, args: Value) {
-        if let Some(sid) = shell(|s| s.ws.current_sid(&self.window)) {
-            self.effect(op, sid, args);
+        for sid in self.targets() {
+            self.effect(op, sid, args.clone());
         }
+    }
+    fn targets(&self) -> Vec<Sid> {
+        let all = self.ui(|u| u.broadcast);
+        shell(|s| {
+            let Some(tab) = s.ws.window(&self.window).and_then(|w| w.active_tab()) else { return vec![] };
+            if all { tab.root.leaves() } else { vec![tab.focus] }
+        })
     }
 
     // ---- events ----
@@ -460,7 +572,23 @@ impl App {
             let Some(session) = s.sessions.get_mut(&sid) else { return };
             match kind {
                 "title" => session.meta.title = data.as_str().unwrap_or("").to_owned(),
-                "cwd" => session.meta.cwd = data.as_str().unwrap_or("").to_owned(),
+                "cwd" => {
+                    session.meta.cwd = data.as_str().unwrap_or("").to_owned();
+                    let dir = session.meta.cwd.clone();
+                    if !dir.is_empty() {
+                        s.recent_dirs.retain(|d| *d != dir);
+                        s.recent_dirs.insert(0, dir);
+                        s.recent_dirs.truncate(DIRS_MAX);
+                    }
+                }
+                "run" => {
+                    let cmd = data.as_str().unwrap_or("").to_owned();
+                    if !cmd.is_empty() {
+                        s.commands.retain(|c| *c != cmd);
+                        s.commands.insert(0, cmd);
+                        s.commands.truncate(COMMANDS_MAX);
+                    }
+                }
                 "bell" => session.bell = !active,
                 "badge" => session.badge = data.as_str().unwrap_or("").to_owned(),
                 "command" => session.last_exit = data.as_i64().or_else(|| data.as_str().and_then(|t| t.parse().ok())).unwrap_or(0),
@@ -491,6 +619,51 @@ impl App {
             Tag::Create { purpose, profile, wid } => {
                 if let Some(sid) = done.result.ok().and_then(|v| v.as_i64()) {
                     self.on_created(purpose, profile, wid, sid);
+                }
+            }
+            Tag::Prefix => {
+                let prefix = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+                if let Some(sid) = shell(|s| s.ws.current_sid(&self.window)) {
+                    self.jobs.enqueue(Tag::Words { prefix: prefix.clone() }, "term.words", json!([sid, prefix]));
+                }
+            }
+            Tag::Words { prefix } => {
+                let items: Vec<String> = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
+                    .split('\n').filter(|l| !l.is_empty()).map(str::to_owned).collect();
+                self.ui(|u| u.popup = Some(Popup::Complete { prefix, items, sel: 0 }));
+            }
+            Tag::PasteList => {
+                let raw: Vec<String> = done.result.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default()
+                    .iter().filter_map(|t| t.as_str().map(str::to_owned)).collect();
+                let items = raw.iter().map(|t| t.replace('\n', "⏎ ")).collect();
+                self.ui(|u| u.popup = Some(Popup::Paste { items, raw, sel: 0 }));
+            }
+            Tag::ClipList => {
+                let raw: Vec<String> = done.result.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default()
+                    .iter().filter_map(|t| t.as_str().map(str::to_owned)).collect();
+                self.ui(|u| u.clipboard = raw);
+            }
+            Tag::ReplayState { sid, entering } => match done.result {
+                Ok(r) if r["count"].as_i64().unwrap_or(0) > 0 => {
+                    self.ui(|u| {
+                        u.replay = Some(Replay { sid, index: r["index"].as_i64().unwrap_or(0), count: r["count"].as_i64().unwrap_or(0), time: r["time"].as_i64().unwrap_or(0) });
+                    });
+                }
+                // nothing recorded: say so only when asking for the replay, not when stepping in it
+                Ok(_) if entering => self.toast(json!({"key":"terminal.toast.noReplay"}), clock::now()),
+                _ => {}
+            },
+            Tag::CopyKey => {
+                if let Ok(r) = done.result {
+                    if r["status"].as_i64() == Some(2) {
+                        if let Some(text) = r["text"].as_str().filter(|t| !t.is_empty()) {
+                            self.jobs.enqueue(Tag::Quiet, "clipboard.remember", json!([text]));
+                            self.toast(json!({"key":"terminal.toast.copied"}), clock::now());
+                        }
+                    }
+                    if r["status"].as_i64().unwrap_or(0) != 0 {
+                        self.ui(|u| u.copy_mode = None);
+                    }
                 }
             }
             Tag::Copied => {
@@ -596,7 +769,9 @@ impl App {
         if self.session_profile(sid)["statusBar"] == true { ui::STATUS_BAR } else { 0. }
     }
     fn area(&self) -> Rect {
-        Rect { x: 0., y: 0., w: self.width, h: (self.height - ui::TAB_BAR - self.status_height()).max(0.) }
+        let belt = if self.ui(|u| u.toolbelt) { BELT_WIDTH } else { 0. };
+        let extra = self.ui(|u| u32::from(u.replay.is_some()) as f64 * ui::REPLAY_BAR + u32::from(u.copy_mode.is_some()) as f64 * ui::COPY_BAR);
+        Rect { x: 0., y: 0., w: (self.width - belt).max(0.), h: (self.height - ui::TAB_BAR - self.status_height() - extra).max(0.) }
     }
     fn pane_rect(&self, sid: Sid) -> Option<Rect> {
         let tab = shell(|s| s.ws.window(&self.window).and_then(|w| w.active_tab().cloned()))?;
@@ -698,6 +873,43 @@ impl App {
                 }
             }
             "find" => self.find_open(),
+            "autocomplete" => {
+                if let Some(sid) = sid {
+                    self.jobs.enqueue(Tag::Prefix, "term.cursorWord", json!([sid]));
+                }
+            }
+            "commandHistory" => {
+                let items = shell(|s| s.commands.clone());
+                self.ui(|u| u.popup = Some(Popup::History { items, sel: 0 }));
+            }
+            "pasteHistory" => self.jobs.enqueue(Tag::PasteList, "clipboard.history", json!([])),
+            "openQuickly" => self.ui(|u| u.popup = Some(Popup::Quick { q: String::new(), sel: 0 })),
+            "editTitle" => {
+                let value = shell(|s| s.ws.window(&self.window).and_then(|w| w.active_tab().map(|t| t.title.clone().unwrap_or_default()))).unwrap_or_default();
+                self.ui(|u| u.popup = Some(Popup::Title { value }));
+            }
+            "composer" => self.ui(|u| u.composer = if u.composer.is_some() { None } else { Some(String::new()) }),
+            "broadcast" => self.ui(|u| u.broadcast = !u.broadcast),
+            "toolbelt" => {
+                let open = self.ui(|u| {
+                    u.toolbelt = !u.toolbelt;
+                    u.toolbelt
+                });
+                if open {
+                    self.jobs.enqueue(Tag::ClipList, "clipboard.history", json!([]));
+                }
+            }
+            "copyMode" => {
+                if let Some(sid) = sid {
+                    self.effect("copyMode", sid, json!({"on":true}));
+                    self.ui(|u| u.copy_mode = Some(sid));
+                }
+            }
+            "instantReplay" => {
+                if let Some(sid) = sid {
+                    self.jobs.enqueue(Tag::ReplayState { sid, entering: true }, "term.replay", json!([sid, "enter"]));
+                }
+            }
             "findNext" | "findPrev" => {
                 if let Some(sid) = sid {
                     let delta = if action == "findNext" { -1 } else { 1 };
@@ -803,6 +1015,28 @@ impl App {
             }
             return Some(self.out(now));
         }
+        if let Some(popup) = self.ui(|u| u.popup.clone()) {
+            if self.popup_key(&popup, key, now) {
+                return Some(self.out(now));
+            }
+        }
+        if let Some(csid) = self.ui(|u| u.copy_mode) {
+            // copy mode keeps every key for its own movements
+            let k = if !chr.is_empty() { chr } else if flags & 2 != 0 && !facts.base.is_empty() { facts.base } else { key };
+            if !k.is_empty() && !MODIFIER_CODES.contains(&facts.code) {
+                self.jobs.enqueue(Tag::CopyKey, "term.copyKey", json!([csid, k, flags & 2 != 0]));
+            }
+            return Some(self.out(now));
+        }
+        if let Some(replay) = self.ui(|u| u.replay.clone()) {
+            match key {
+                "Escape" | "Enter" => self.replay_exit(),
+                "ArrowLeft" => self.replay_step(&replay, -1),
+                "ArrowRight" => self.replay_step(&replay, 1),
+                _ => {}
+            }
+            return Some(self.out(now));
+        }
         let event = json!({"code":facts.code,"key":key,"meta":flags & 16 != 0,"ctrl":flags & 2 != 0,"alt":flags & 4 != 0,"shift":facts.shift});
         let modifier = MODIFIER_CODES.contains(&facts.code);
         let profile = self.session_profile(sid);
@@ -856,6 +1090,97 @@ impl App {
                     self.ask_then(&sids, "tab", Confirm::Tab(id.to_owned()), now);
                 }
             }
+            "popupClose" => self.ui(|u| u.popup = None),
+            "quickChange" => self.ui(|u| u.popup = Some(Popup::Quick { q: v["value"].as_str().unwrap_or("").to_owned(), sel: 0 })),
+            "quickKey" => {
+                let delta = if key == "ArrowUp" { -1 } else { 1 };
+                let q = self.ui(|u| match &u.popup { Some(Popup::Quick { q, .. }) => Some(q.clone()), _ => None });
+                if let Some(q) = q {
+                    let len = self.quick_items(&q).len().min(10) as i64;
+                    self.ui(|u| {
+                        if let Some(Popup::Quick { sel, .. }) = u.popup.as_mut() {
+                            *sel = (*sel as i64 + delta).clamp(0, (len - 1).max(0)) as usize;
+                        }
+                    });
+                }
+            }
+            "quickPick" => {
+                let picked = self.ui(|u| match &u.popup { Some(Popup::Quick { q, sel }) => Some((q.clone(), *sel)), _ => None });
+                if let Some((q, sel)) = picked {
+                    let at = key.as_u64().map_or(sel, |i| i as usize);
+                    if let Some((_, sid, _)) = self.quick_items(&q).get(at).cloned() {
+                        self.focus_anywhere(sid);
+                    }
+                }
+                self.ui(|u| u.popup = None);
+            }
+            "titleChange" => self.ui(|u| u.popup = Some(Popup::Title { value: v["value"].as_str().unwrap_or("").to_owned() })),
+            "titleDone" => {
+                let value = self.ui(|u| match u.popup.take() { Some(Popup::Title { value }) => Some(value), _ => None });
+                if let Some(value) = value {
+                    shell(|s| {
+                        if let Some(id) = s.ws.window(&self.window).and_then(|w| w.active_tab().map(|t| t.id.clone())) {
+                            s.ws.set_tab_title(&self.window, &id, value.trim());
+                        }
+                    });
+                }
+            }
+            "composerChange" => self.ui(|u| u.composer = Some(v["value"].as_str().unwrap_or("").to_owned())),
+            "composerKey" => {
+                if let Some(text) = self.ui(|u| u.composer.clone()) {
+                    self.to_session("paste", json!({"text":if v["shift"] == true { text } else { format!("{text}\n") }}));
+                    self.ui(|u| u.composer = Some(String::new()));
+                }
+            }
+            "composerClose" => self.ui(|u| u.composer = None),
+            "beltJob" => {
+                if let Some(sid) = key.as_i64() {
+                    self.focus_anywhere(sid);
+                }
+            }
+            "beltCommand" => {
+                if let Some(cmd) = key.as_u64().and_then(|i| shell(|s| s.commands.get(i as usize).cloned())) {
+                    self.to_session("write", json!({"text":cmd}));
+                }
+            }
+            "beltClip" => {
+                if let Some(text) = key.as_u64().and_then(|i| self.ui(|u| u.clipboard.get(i as usize).cloned())) {
+                    self.to_session("paste", json!({"text":text}));
+                }
+            }
+            "beltDir" => {
+                if let Some(dir) = key.as_u64().and_then(|i| shell(|s| s.recent_dirs.get(i as usize).cloned())) {
+                    self.to_session("write", json!({"text":format!("cd '{}'\r", dir.replace('\'', "'\\''"))}));
+                }
+            }
+            "beltProfile" => {
+                if let Some(id) = key.as_str() {
+                    self.create(Purpose::Tab, id, None);
+                }
+            }
+            "beltNoteDelete" => {
+                if let Some(i) = key.as_u64() {
+                    shell(|s| {
+                        if (i as usize) < s.notes.len() {
+                            s.notes.remove(i as usize);
+                        }
+                    });
+                }
+            }
+            "beltNoteChange" => self.ui(|u| u.note = v["value"].as_str().unwrap_or("").to_owned()),
+            "beltNoteAdd" => {
+                let note = self.ui(|u| std::mem::take(&mut u.note));
+                let note = note.trim().to_owned();
+                if !note.is_empty() {
+                    shell(|s| s.notes.push(note));
+                }
+            }
+            "replayStep" => {
+                if let Some(replay) = self.ui(|u| u.replay.clone()) {
+                    self.replay_step(&replay, key.as_i64().unwrap_or(0));
+                }
+            }
+            "replayExit" => self.replay_exit(),
             "findChange" => {
                 self.ui(|u| {
                     if let Some(find) = u.find.as_mut() {
@@ -1069,13 +1394,60 @@ impl App {
             self.configure_window();
         }
     }
+    fn popup_facts(&self) -> Option<ui::PopupFacts> {
+        let popup = self.ui(|u| u.popup.clone())?;
+        Some(match popup {
+            Popup::Complete { prefix, items, sel } => ui::PopupFacts::List {
+                title: json!({"key":"terminal.popup.complete","params":{"prefix":prefix}}),
+                items,
+                sel,
+                empty: json!({"key":"terminal.popup.completeEmpty"}),
+            },
+            Popup::Paste { items, sel, .. } => ui::PopupFacts::List { title: json!({"key":"terminal.popup.paste"}), items, sel, empty: json!({"key":"terminal.popup.pasteEmpty"}) },
+            Popup::History { items, sel } => ui::PopupFacts::List { title: json!({"key":"terminal.popup.history"}), items, sel, empty: json!({"key":"terminal.popup.historyEmpty"}) },
+            Popup::Quick { q, sel } => {
+                let items = self.quick_items(&q).into_iter().take(10).map(|(_, _, title)| title).collect();
+                ui::PopupFacts::Quick { query: q, items, sel }
+            }
+            Popup::Title { value } => ui::PopupFacts::Title { value },
+        })
+    }
+    fn belt_facts(&self, tab: &crate::workspace::Tab) -> ui::BeltFacts {
+        let (jobs, commands, dirs, notes, profiles_raw) = shell(|s| {
+            let jobs: Vec<(Sid, String, String)> = s.ws.sessions(&self.window).into_iter().map(|sid| {
+                let session = s.sessions.get(&sid).cloned().unwrap_or_default();
+                let sub = if session.info["busy"] == true { format!("▶ {}", session.info["process"].as_str().unwrap_or("")) } else { session.info["shell"].as_str().unwrap_or("").to_owned() };
+                (sid, session_title(Some(&session.meta)), sub)
+            }).collect();
+            (jobs, s.commands.clone(), s.recent_dirs.clone(), s.notes.clone(), ())
+        });
+        let _ = (tab, profiles_raw);
+        let profiles = self.terminal_settings()["profiles"].as_array().cloned().unwrap_or_default().iter().map(|p| {
+            let name = match p["name"].as_str() {
+                Some(n) if !n.is_empty() && !(p["id"] == "default" && n == "Predeterminado") => json!(n),
+                _ => json!({"key":"terminal.profile.default"}),
+            };
+            (p["id"].as_str().unwrap_or("").to_owned(), name)
+        }).collect();
+        let (clipboard, note) = self.ui(|u| (u.clipboard.clone(), u.note.clone()));
+        ui::BeltFacts {
+            jobs,
+            commands,
+            clipboard,
+            dirs: dirs.into_iter().map(|d| if self.home.is_empty() { d } else { d.replacen(&self.home, "~", 1) }).collect(),
+            profiles,
+            notes,
+            note,
+        }
+    }
     fn scene(&mut self, now: i64) -> Value {
         let Some((tabs, active, font)) = shell(|s| {
             let w = s.ws.window(&self.window)?;
             Some((w.tabs.clone(), w.active.clone(), w.font_delta))
         }) else {
             return ui::tree(&ui::Facts { theme: &self.theme, pane_bg: "#000000".into(), width: self.width, tabs: vec![], broadcast: false,
-                panes: vec![], dividers: &[], status: None, find: None, find_focus: 0, dialog: None, toasts: vec![] });
+                panes: vec![], dividers: &[], status: None, find: None, find_focus: 0, dialog: None, toasts: vec![],
+                popup: None, composer: None, belt: None, replay: None, copy_mode: false });
         };
         let _ = font;
         let tab = tabs.iter().find(|t| t.id == active).or_else(|| tabs.first()).cloned().unwrap();
@@ -1130,6 +1502,21 @@ impl App {
             }
         });
         let theme = self.theme.clone();
+        let popup = self.popup_facts();
+        let (composer, copy_mode, replay, belt_on) = self.ui(|u| {
+            (
+                u.composer.clone().map(|text| (text, u.broadcast)),
+                u.copy_mode.is_some(),
+                u.replay.clone().map(|r| ui::ReplayFacts { index: r.index, count: r.count, time: r.time, ago: 0 }),
+                u.toolbelt,
+            )
+        });
+        let belt = belt_on.then(|| self.belt_facts(&tab));
+        let replay = replay.map(|mut r| {
+            r.ago = ((now - r.time) / 1000).max(0);
+            r
+        });
+        let broadcast = self.ui(|u| u.broadcast);
         let (find, dialog, toasts, find_focus) = self.ui(|u| {
             (
                 u.find.clone().map(|f| ui::FindFacts { query: f.query, cs: f.cs, regex: f.regex, count: f.count, index: f.index, error: f.error }),
@@ -1138,8 +1525,8 @@ impl App {
                 u.find_focus,
             )
         });
-        ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast: false, panes, dividers: &dividers, status,
-            find, find_focus, dialog, toasts })
+        ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast, panes, dividers: &dividers, status,
+            find, find_focus, dialog, toasts, popup, composer, belt, replay, copy_mode })
     }
 }
 

@@ -6,6 +6,9 @@ use serde_json::{json, Value};
 
 pub(super) const TAB_BAR: f64 = 36.;
 pub(super) const STATUS_BAR: f64 = 24.;
+pub(super) const REPLAY_BAR: f64 = 40.;
+pub(super) const COPY_BAR: f64 = 24.;
+const BELT: f64 = 240.;
 
 pub(super) struct TabFacts {
     pub id: String,
@@ -40,7 +43,32 @@ pub(super) struct FindFacts {
     pub index: i64,
     pub error: bool,
 }
+pub(super) enum PopupFacts {
+    List { title: Value, items: Vec<String>, sel: usize, empty: Value },
+    Quick { query: String, items: Vec<String>, sel: usize },
+    Title { value: String },
+}
+pub(super) struct ReplayFacts {
+    pub index: i64,
+    pub count: i64,
+    pub time: i64,
+    pub ago: i64,
+}
+pub(super) struct BeltFacts {
+    pub jobs: Vec<(i64, String, String)>,
+    pub commands: Vec<String>,
+    pub clipboard: Vec<String>,
+    pub dirs: Vec<String>,
+    pub profiles: Vec<(String, Value)>,
+    pub notes: Vec<String>,
+    pub note: String,
+}
 pub(super) struct Facts<'a> {
+    pub popup: Option<PopupFacts>,
+    pub composer: Option<(String, bool)>,
+    pub belt: Option<BeltFacts>,
+    pub replay: Option<ReplayFacts>,
+    pub copy_mode: bool,
     pub find: Option<FindFacts>,
     pub find_focus: u64,
     pub dialog: Option<(Value, Value)>,
@@ -332,19 +360,206 @@ fn toasts(f: &Facts) -> Value {
             .collect(),
     )
 }
+fn popup_card(f: &Facts, title: Value, body: Vec<Value>) -> Value {
+    let th = f.theme;
+    let mut children = vec![text(title, json!({"fontSize":11,"fontWeight":600,"color":tok(th,"textDim","#999999"),"marginBottom":8,"paddingHorizontal":2}))];
+    children.extend(body);
+    view(
+        "popup",
+        json!({"position":"absolute","left":0,"right":0,"top":14,"alignItems":"center"}),
+        vec![view(
+            "popup-card",
+            json!({"width":380,"padding":12,"borderRadius":12,"backgroundColor":tok(th,"windowBg","#2a2a2e"),"borderWidth":1,
+                "borderColor":tok(th,"separator","#444444"),"boxShadow":"0 16px 40px rgba(0,0,0,0.45)"}),
+            children,
+        )],
+    )
+}
+fn popup_row(f: &Facts, key: String, label: &str, selected: bool, action: Option<Value>) -> Value {
+    let th = f.theme;
+    let shown = if label.chars().count() > 60 { format!("{}…", label.chars().take(59).collect::<String>()) } else { label.to_owned() };
+    let row = view(
+        json!(key),
+        json!({"paddingHorizontal":8,"height":24,"justifyContent":"center","borderRadius":5,"backgroundColor":if selected {tok(th,"accent","#0a84ff")} else {"transparent"}}),
+        vec![text(json!(shown), json!({"fontSize":12,"whiteSpace":"nowrap","color":if selected {"#ffffff"} else {tok(th,"text","#ffffff")}}))],
+    );
+    match action {
+        Some(action) => click(row, "onClick", action),
+        None => row,
+    }
+}
+fn popup(f: &Facts, p: &PopupFacts) -> Value {
+    let th = f.theme;
+    let dim = tok(th, "textDim", "#999999");
+    match p {
+        PopupFacts::List { title, items, sel, empty } => {
+            let mut body: Vec<Value> = if items.is_empty() {
+                vec![text(empty.clone(), json!({"fontSize":12,"color":dim}))]
+            } else {
+                items.iter().take(12).enumerate().map(|(i, it)| popup_row(f, format!("item-{i}"), it, i == *sel, None)).collect()
+            };
+            body.push(text(json!({"key":"terminal.popup.keys"}), json!({"fontSize":11,"marginTop":8,"paddingHorizontal":2,"color":dim})));
+            popup_card(f, title.clone(), body)
+        }
+        PopupFacts::Quick { query, items, sel } => {
+            let mut body = vec![json!({"kind":"input","key":"quick","value":query,"placeholder":{"key":"terminal.popup.quickPlaceholder"},"autoFocus":true,
+                "change":["quickChange"],"submit":["quickPick"],"cancel":["popupClose"],"keys":["ArrowUp","ArrowDown"],"onKey":["quickKey"],
+                "size":13,"style":{"height":26}})];
+            body.extend(items.iter().enumerate().map(|(i, it)| popup_row(f, format!("item-{i}"), it, i == *sel, Some(json!(["quickPick", i])))));
+            popup_card(f, json!({"key":"terminal.popup.quick"}), body)
+        }
+        PopupFacts::Title { value } => popup_card(
+            f,
+            json!({"key":"terminal.popup.title"}),
+            vec![json!({"kind":"input","key":"title","value":value,"autoFocus":true,"change":["titleChange"],"submit":["titleDone"],"cancel":["popupClose"],
+                "size":13,"style":{"height":26}})],
+        ),
+    }
+}
+fn composer(f: &Facts, value: &str, broadcast: bool) -> Value {
+    let th = f.theme;
+    view(
+        "composer",
+        json!({"position":"absolute","left":12,"right":12,"bottom":12,"padding":10,"borderRadius":10,"backgroundColor":tok(th,"windowBg","#2a2a2e"),
+            "borderWidth":1,"borderColor":tok(th,"accent","#0a84ff"),"boxShadow":"0 10px 30px rgba(0,0,0,0.4)"}),
+        vec![
+            text(
+                json!({"key":if broadcast {"terminal.composer.broadcast"} else {"terminal.composer.hint"}}),
+                json!({"fontSize":11,"marginBottom":6,"color":tok(th,"textDim","#999999")}),
+            ),
+            json!({"kind":"input","key":"composer-input","value":value,"autoFocus":true,"change":["composerChange"],"cancel":["composerClose"],
+                "keys":["Enter"],"onKey":["composerKey"],"size":13,"style":{"height":26}}),
+        ],
+    )
+}
+fn belt_section(f: &Facts, title: &str, rows: Vec<Value>) -> Value {
+    let mut children = vec![text(json!({"key":title}), json!({"fontSize":11,"fontWeight":600,"marginBottom":4,"paddingHorizontal":6,"color":tok(f.theme,"textDim","#999999")}))];
+    children.extend(rows);
+    view(json!(title), json!({"marginBottom":16}), children)
+}
+fn belt_row(f: &Facts, key: String, label: &str, sub: Option<Value>, action: Value) -> Value {
+    let th = f.theme;
+    let shown = if label.chars().count() > 34 { format!("{}…", label.chars().take(33).collect::<String>()) } else { label.to_owned() };
+    let mut children = vec![text(json!(shown), json!({"fontSize":12,"whiteSpace":"nowrap","color":tok(th,"text","#ffffff")}))];
+    if let Some(sub) = sub {
+        children.push(text(sub, json!({"fontSize":11,"whiteSpace":"nowrap","color":tok(th,"textDim","#999999")})));
+    }
+    let mut row = click(view(json!(key), json!({"paddingVertical":4,"paddingHorizontal":6,"borderRadius":6}), children), "onClick", action);
+    row["hoverStyle"] = json!({"backgroundColor":tok(th,"hover","rgba(127,127,127,0.12)")});
+    row
+}
+fn belt(f: &Facts, b: &BeltFacts) -> Value {
+    let th = f.theme;
+    let hint = |key: &str| text(json!({"key":key}), json!({"fontSize":12,"color":tok(th,"textDim","#999999")}));
+    let jobs = b.jobs.iter().map(|(sid, title, sub)| belt_row(f, format!("job-{sid}"), title, Some(json!(sub)), json!(["beltJob", sid]))).collect();
+    let commands = if b.commands.is_empty() { vec![hint("terminal.belt.needsIntegration")] } else {
+        b.commands.iter().take(8).enumerate().map(|(i, c)| belt_row(f, format!("cmd-{i}"), c, Some(json!({"key":"terminal.belt.commandHint"})), json!(["beltCommand", i]))).collect()
+    };
+    let clipboard = if b.clipboard.is_empty() { vec![hint("terminal.belt.clipboardEmpty")] } else {
+        b.clipboard.iter().take(8).enumerate().map(|(i, c)| belt_row(f, format!("clip-{i}"), &c.replace('\n', "⏎ "), None, json!(["beltClip", i]))).collect()
+    };
+    let dirs = if b.dirs.is_empty() { vec![hint("terminal.belt.needsIntegration")] } else {
+        b.dirs.iter().take(8).enumerate().map(|(i, d)| belt_row(f, format!("dir-{i}"), d, None, json!(["beltDir", i]))).collect()
+    };
+    let profiles = b.profiles.iter().map(|(id, name)| {
+        let mut row = belt_row(f, format!("profile-{id}"), "", None, json!(["beltProfile", id]));
+        row["children"] = json!([text(name.clone(), json!({"fontSize":12,"whiteSpace":"nowrap","color":tok(th,"text","#ffffff")}))]);
+        row
+    }).collect();
+    let mut notes: Vec<Value> = b.notes.iter().enumerate().map(|(i, n)| belt_row(f, format!("note-{i}"), n, Some(json!({"key":"terminal.belt.noteHint"})), json!(["beltNoteDelete", i]))).collect();
+    notes.push(json!({"kind":"input","key":"note","value":b.note,"placeholder":{"key":"terminal.belt.addNote"},"change":["beltNoteChange"],"submit":["beltNoteAdd"],
+        "size":13,"style":{"height":26,"marginTop":6}}));
+    view(
+        "belt",
+        json!({"width":BELT,"flexShrink":0,"paddingHorizontal":10,"paddingVertical":12,"overflow":"hidden","backgroundColor":tok(th,"sidebarBg","#2a2a2e")}),
+        vec![
+            view("belt-rule", json!({"position":"absolute","left":0,"top":0,"bottom":0,"width":1,"backgroundColor":tok(th,"separator","#444444")}), vec![]),
+            belt_section(f, "terminal.belt.jobs", jobs),
+            belt_section(f, "terminal.belt.commands", commands),
+            belt_section(f, "terminal.belt.clipboard", clipboard),
+            belt_section(f, "terminal.belt.dirs", dirs),
+            belt_section(f, "terminal.belt.profiles", profiles),
+            belt_section(f, "terminal.belt.notes", notes),
+        ],
+    )
+}
+fn replay_bar(f: &Facts, r: &ReplayFacts) -> Value {
+    let th = f.theme;
+    let button = |key: &str, label: Value, action: Value, primary: bool| {
+        click(
+            view(
+                key,
+                json!({"height":26,"paddingHorizontal":10,"borderRadius":6,"alignItems":"center","justifyContent":"center",
+                    "backgroundColor":if primary {tok(th,"accent","#0a84ff")} else {"rgba(255,255,255,0.18)"}}),
+                vec![text(label, json!({"fontSize":12,"color":"#ffffff"}))],
+            ),
+            "onClick",
+            action,
+        )
+    };
+    let local = clock_label(r.time);
+    view(
+        "replay",
+        json!({"height":REPLAY_BAR,"flexShrink":0,"flexDirection":"row","alignItems":"center","gap":12,"paddingHorizontal":12,"backgroundColor":"#3a1d5c"}),
+        vec![
+            text(json!("Instant Replay"), json!({"fontSize":12,"fontWeight":600,"color":"#ffffff"})),
+            button("back", json!("◀"), json!(["replayStep", -1]), false),
+            text(json!(format!("{} / {}", r.index + 1, r.count.max(1))), json!({"fontSize":12,"color":"#ffffff"})),
+            button("forward", json!("▶"), json!(["replayStep", 1]), false),
+            text(json!({"key":"terminal.replay.when","params":{"time":local,"s":r.ago}}), json!({"fontSize":12,"color":"#ffffff"})),
+            view("fill", json!({"flex":1}), vec![]),
+            button("exit", json!({"key":"terminal.replay.exit"}), json!(["replayExit"]), true),
+        ],
+    )
+}
+/// HH:MM:SS of a time in milliseconds, in the local zone.
+fn clock_label(ms: i64) -> String {
+    let local = crate::native_view::clock::local(ms);
+    format!("{:02}:{:02}:{:02}", local.tm_hour, local.tm_min, local.tm_sec)
+}
+fn copy_mode_bar(f: &Facts) -> Value {
+    let _ = f;
+    view(
+        "copy-mode",
+        json!({"height":COPY_BAR,"flexShrink":0,"justifyContent":"center","paddingHorizontal":12,"backgroundColor":"#ff9f0a"}),
+        vec![text(json!({"key":"terminal.copyModeBar"}), json!({"fontSize":12,"fontWeight":700,"color":"#000000"}))],
+    )
+}
 pub(super) fn tree(f: &Facts) -> Value {
     let mut area: Vec<Value> = f.panes.iter().map(|p| pane(f, p)).collect();
     area.extend(f.dividers.iter().map(|d| divider(f, d)));
     if let Some(find) = &f.find {
         area.push(find_bar(f, find));
     }
+    if let Some(p) = &f.popup {
+        area.push(popup(f, p));
+    }
+    if let Some((value, broadcast)) = &f.composer {
+        area.push(composer(f, value, *broadcast));
+    }
     if !f.toasts.is_empty() {
         area.push(toasts(f));
     }
     let mut children = vec![
         tab_bar(f),
-        view("panes", json!({"flex":1,"overflow":"hidden","direction":"ltr","backgroundColor":f.pane_bg}), area),
+        view(
+            "body",
+            json!({"flex":1,"flexDirection":"row"}),
+            {
+                let mut row = vec![view("panes", json!({"flex":1,"overflow":"hidden","direction":"ltr","backgroundColor":f.pane_bg}), area)];
+                if let Some(b) = &f.belt {
+                    row.push(belt(f, b));
+                }
+                row
+            },
+        ),
     ];
+    if let Some(r) = &f.replay {
+        children.push(replay_bar(f, r));
+    }
+    if f.copy_mode {
+        children.push(copy_mode_bar(f));
+    }
     if let Some(status) = &f.status {
         children.push(status_bar(f, status));
     }

@@ -17,11 +17,17 @@ struct Service {
     output: Option<String>,
     logical: String,
     found: Value,
+    prefix: String,
+    words: String,
+    history: Vec<String>,
+    replay: Value,
+    copy_key: Value,
 }
 impl Service {
     fn new() -> Self {
         Self { token: 0, ready: Default::default(), calls: vec![], next_sid: 100, pending: None, events: vec![], infos: HashMap::new(), fx: vec![], tree: Value::Null,
-            copy_text: String::new(), clip: String::new(), output: None, logical: String::new(), found: json!({"count":0,"index":-1}) }
+            copy_text: String::new(), clip: String::new(), output: None, logical: String::new(), found: json!({"count":0,"index":-1}),
+            prefix: String::new(), words: String::new(), history: vec![], replay: json!({"count":0}), copy_key: json!({"status":0}) }
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
         match method {
@@ -38,6 +44,11 @@ impl Service {
             "clipboard.read" => json!({"kind":"text","text":self.clip}),
             "term.selectOutput" => self.output.clone().map_or(Value::Null, |o| json!(o)),
             "term.logicalText" => json!(self.logical),
+            "term.cursorWord" => json!(self.prefix),
+            "term.words" => json!(self.words),
+            "clipboard.history" => json!(self.history),
+            "term.replay" => self.replay.clone(),
+            "term.copyKey" => self.copy_key.clone(),
             "term.search" | "term.searchMove" | "term.setMatches" => self.found.clone(),
             _ => Value::Null,
         }
@@ -559,4 +570,226 @@ fn the_find_bar_follows_the_focused_pane() {
     split_window(&mut app, &mut service, &mut now);
     assert_eq!(last_call(&service, "term.search"), json!([102, "x", false]), "the search moves to the new pane");
     assert!(service.calls.iter().any(|(m, a)| m == "term.search" && a == &json!([101, "", false])), "and is cleared in the old one");
+}
+
+fn second_window(service: &mut Service, now: &mut i64) -> App {
+    let mut other = App::default();
+    let mut input = sync_input(true);
+    input["args"]["__nativeWindow"] = json!("terminal#2");
+    let reply = other.request_at(&input, *now);
+    service.absorb(&reply);
+    service.drive(&mut other, now);
+    other
+}
+fn writes(service: &mut Service, op: &str) -> Vec<String> {
+    service.take_fx(op).iter().map(|f| f["text"].as_str().unwrap_or("").to_owned()).collect()
+}
+
+#[test]
+fn autocomplete_offers_the_words_on_screen_and_types_the_rest_of_the_one_chosen() {
+    let (mut app, mut now, mut service) = start();
+    service.prefix = "gi".into();
+    service.words = "git\ngit-lfs\n\ngist".into();
+    app.run("autocomplete", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.words"), json!([101, "gi"]));
+    let tree = text(&service.tree);
+    assert!(tree.contains("terminal.popup.complete") && tree.contains("git-lfs") && tree.contains("terminal.popup.keys"), "{tree}");
+    service.fx.clear();
+    service.key(&mut app, now, "ArrowDown", "", 0, facts(108, "", false)).expect("the popup takes the arrows");
+    service.key(&mut app, now, "Enter", "", 0, facts(28, "", false)).expect("and Enter");
+    assert_eq!(writes(&mut service, "write"), ["t-lfs"], "only what the prefix lacks is typed");
+    assert!(!text(&service.tree).contains("terminal.popup.complete"), "the popup closes");
+    service.prefix = "zz".into();
+    service.words = String::new();
+    app.run("autocomplete", now);
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("terminal.popup.completeEmpty"));
+    service.fx.clear();
+    service.key(&mut app, now, "a", "a", 0, facts(30, "a", false)).expect("a list popup swallows typing");
+    assert!(service.take_fx("key").is_empty());
+    service.key(&mut app, now, "Escape", "", 0, facts(1, "", false)).unwrap();
+    assert!(!text(&service.tree).contains("terminal.popup"));
+}
+#[test]
+fn command_history_lists_the_newest_first_without_repeats_and_types_the_choice() {
+    let (mut app, mut now, mut service) = start();
+    for cmd in ["ls -la", "cargo test", "ls -la"] {
+        service.events.push(json!({"sid":101,"type":"run","data":cmd}));
+    }
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    app.run("commandHistory", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    let tree = text(&service.tree);
+    assert!(tree.find("ls -la").unwrap() < tree.find("cargo test").unwrap(), "the repeated command moved to the front: {tree}");
+    assert_eq!(tree.matches("ls -la").count(), 1);
+    service.fx.clear();
+    service.key(&mut app, now, "ArrowDown", "", 0, facts(108, "", false)).unwrap();
+    service.key(&mut app, now, "Enter", "", 0, facts(28, "", false)).unwrap();
+    assert_eq!(writes(&mut service, "write"), ["cargo test"], "typed, not run");
+}
+#[test]
+fn paste_history_shows_lines_flattened_and_pastes_the_original_text() {
+    let (mut app, mut now, mut service) = start();
+    service.history = vec!["one\ntwo".into(), "three".into()];
+    app.run("pasteHistory", now);
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("one⏎ two"), "a line break is shown as ⏎");
+    service.fx.clear();
+    service.key(&mut app, now, "Enter", "", 0, facts(28, "", false)).unwrap();
+    assert_eq!(writes(&mut service, "paste"), ["one\ntwo"], "the text goes back as it was copied");
+}
+#[test]
+fn open_quickly_finds_sessions_in_any_window_and_brings_their_window_forward() {
+    let (mut app, mut now, mut service) = start();
+    let mut other = second_window(&mut service, &mut now);
+    service.events.push(json!({"sid":101,"type":"title","data":"notes"}));
+    service.events.push(json!({"sid":102,"type":"title","data":"server logs"}));
+    now += 300;
+    service.send(&mut other, now, json!({"cmd":"noop"}));
+    service.drive(&mut other, &mut now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    app.run("openQuickly", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(text(&service.tree).contains("terminal.popup.quick") && text(&service.tree).contains("server logs"), "{}", text(&service.tree));
+    service.send(&mut app, now, json!({"cmd":"quickChange","value":"LOG"}));
+    let tree = text(&service.tree);
+    assert!(tree.contains("server logs") && tree.contains("\"item-0\"") && !tree.contains("\"item-1\""), "the filter ignores case and leaves one match");
+    service.fx.clear();
+    service.send(&mut app, now, json!({"cmd":"quickPick"}));
+    assert_eq!(shell(|s| s.ws.current_sid("terminal#2")), Some(102));
+    assert!(service.fx.iter().any(|f| f["kind"] == "focusWindow" && f["id"] == "terminal#2"), "a session of another window brings it forward");
+    assert!(!text(&service.tree).contains("terminal.popup.quick"));
+}
+#[test]
+fn the_tab_title_can_be_set_by_hand_and_cleared_back_to_automatic() {
+    let (mut app, mut now, mut service) = start();
+    app.run("editTitle", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(text(&service.tree).contains("terminal.popup.title"));
+    service.send(&mut app, now, json!({"cmd":"titleChange","value":"  deploy "}));
+    let reply = service.send(&mut app, now, json!({"cmd":"titleDone"}));
+    assert!(text(&service.tree).contains("deploy") && !text(&service.tree).contains("terminal.popup.title"));
+    let _ = reply;
+    app.run("editTitle", now);
+    service.send(&mut app, now, json!({"cmd":"titleChange","value":""}));
+    service.send(&mut app, now, json!({"cmd":"titleDone"}));
+    assert!(text(&service.tree).contains("Terminal") && !text(&service.tree).contains("deploy"), "empty means automatic again");
+    now += 1;
+    let _ = now;
+}
+#[test]
+fn the_composer_sends_a_line_or_just_the_text_and_broadcast_reaches_every_pane() {
+    let (mut app, mut now, mut service) = start();
+    app.run("composer", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(text(&service.tree).contains("terminal.composer.hint"));
+    service.send(&mut app, now, json!({"cmd":"composerChange","value":"echo hi"}));
+    service.fx.clear();
+    service.send(&mut app, now, json!({"cmd":"composerKey","key":"Enter","shift":false}));
+    assert_eq!(writes(&mut service, "paste"), ["echo hi\n"], "Enter sends the line");
+    service.send(&mut app, now, json!({"cmd":"composerChange","value":"half"}));
+    service.send(&mut app, now, json!({"cmd":"composerKey","key":"Enter","shift":true}));
+    assert_eq!(writes(&mut service, "paste"), ["half"], "Shift+Enter leaves it unrun");
+    // with broadcast on, every pane of the tab gets the same input
+    split_window(&mut app, &mut service, &mut now);
+    app.run("broadcast", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(text(&service.tree).contains("terminal.broadcasting") && text(&service.tree).contains("terminal.composer.broadcast"));
+    service.send(&mut app, now, json!({"cmd":"composerChange","value":"date"}));
+    service.fx.clear();
+    service.send(&mut app, now, json!({"cmd":"composerKey","key":"Enter","shift":false}));
+    let pasted = service.take_fx("paste");
+    assert_eq!(pasted.iter().map(|f| f["sid"].as_i64().unwrap()).collect::<Vec<_>>(), [101, 102]);
+    service.key(&mut app, now, "a", "a", 0, facts(30, "a", false)).unwrap();
+    assert_eq!(service.take_fx("key").len(), 2, "typing reaches both panes too");
+    service.send(&mut app, now, json!({"cmd":"composerClose"}));
+    assert!(!text(&service.tree).contains("terminal.composer"));
+}
+#[test]
+fn the_toolbelt_lists_jobs_commands_directories_and_notes_and_makes_room() {
+    let (mut app, mut now, mut service) = start();
+    let wide = app.pane_rect(101).unwrap().w;
+    service.history = vec!["copied text".into()];
+    service.events.push(json!({"sid":101,"type":"run","data":"make"}));
+    service.events.push(json!({"sid":101,"type":"cwd","data":"/home/test/it's"}));
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    app.run("toolbelt", now);
+    service.drive(&mut app, &mut now);
+    let tree = text(&service.tree);
+    for needle in ["terminal.belt.jobs", "terminal.belt.commands", "make", "terminal.belt.clipboard", "copied text", "terminal.belt.dirs", "~/it's", "terminal.belt.profiles", "terminal.belt.notes"] {
+        assert!(tree.contains(needle), "the toolbelt shows {needle}: {tree}");
+    }
+    assert_eq!(app.pane_rect(101).unwrap().w, wide - 240., "the panes give the toolbelt its 240 px");
+    service.fx.clear();
+    service.send(&mut app, now, json!({"cmd":"beltCommand","key":0}));
+    service.send(&mut app, now, json!({"cmd":"beltClip","key":0}));
+    service.send(&mut app, now, json!({"cmd":"beltDir","key":0}));
+    assert_eq!(writes(&mut service, "write"), ["make", "cd '/home/test/it'\\''s'\r"], "commands are typed and folders are quoted");
+    assert_eq!(writes(&mut service, "paste"), ["copied text"]);
+    service.send(&mut app, now, json!({"cmd":"beltProfile","key":"default"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(sessions(&app).len(), 2, "a profile row opens a tab");
+    service.send(&mut app, now, json!({"cmd":"beltNoteChange","value":"  call back "}));
+    service.send(&mut app, now, json!({"cmd":"beltNoteAdd"}));
+    assert!(text(&service.tree).contains("call back"));
+    service.send(&mut app, now, json!({"cmd":"beltNoteDelete","key":0}));
+    assert!(!text(&service.tree).contains("call back"), "a note goes when clicked");
+    app.run("toolbelt", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert_eq!(app.pane_rect(102).unwrap().w, wide, "closing it gives the room back");
+}
+#[test]
+fn instant_replay_steps_through_the_recorded_screens_and_goes_back_to_now() {
+    let (mut app, mut now, mut service) = start();
+    service.replay = json!({"count":0});
+    app.run("instantReplay", now);
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("terminal.toast.noReplay") && !text(&service.tree).contains("Instant Replay"));
+    service.replay = json!({"count":5,"index":4,"time":1000});
+    now += 5000;
+    app.run("instantReplay", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.replay"), json!([101, "enter"]));
+    let tree = text(&service.tree);
+    assert!(tree.contains("Instant Replay") && tree.contains("5 / 5") && tree.contains("terminal.replay.when"), "{tree}");
+    service.replay = json!({"count":5,"index":3,"time":900});
+    service.fx.clear();
+    service.key(&mut app, now, "ArrowLeft", "", 0, facts(105, "", false)).expect("the replay takes the arrows");
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.replay"), json!([101, 3]));
+    assert!(text(&service.tree).contains("4 / 5"));
+    service.key(&mut app, now, "a", "a", 0, facts(30, "a", false)).unwrap();
+    assert!(service.take_fx("key").is_empty(), "nothing reaches the shell while replaying");
+    service.key(&mut app, now, "Escape", "", 0, facts(1, "", false)).unwrap();
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.replay"), json!([101, "exit"]));
+    assert!(!text(&service.tree).contains("Instant Replay"), "back to now");
+}
+#[test]
+fn copy_mode_hands_its_keys_to_the_engine_and_copies_what_it_selects() {
+    let (mut app, mut now, mut service) = start();
+    service.fx.clear();
+    app.run("copyMode", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(service.take_fx("copyMode")[0]["on"], true);
+    assert!(text(&service.tree).contains("terminal.copyModeBar"));
+    service.copy_key = json!({"status":0});
+    service.key(&mut app, now, "j", "j", 0, facts(36, "j", false)).expect("copy mode takes every key");
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.copyKey"), json!([101, "j", false]));
+    assert!(text(&service.tree).contains("terminal.copyModeBar"), "status 0 keeps moving");
+    service.key(&mut app, now, "v", "", 2, facts(47, "v", false)).unwrap();
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.copyKey"), json!([101, "v", true]), "Ctrl uses the base key");
+    assert!(service.take_fx("key").is_empty(), "no key reached the shell");
+    service.copy_key = json!({"status":2,"text":"picked text"});
+    service.key(&mut app, now, "y", "y", 0, facts(21, "y", false)).unwrap();
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "clipboard.remember"), json!(["picked text"]));
+    assert!(text(&service.tree).contains("terminal.toast.copied") && !text(&service.tree).contains("terminal.copyModeBar"), "copied, and copy mode ends");
 }
