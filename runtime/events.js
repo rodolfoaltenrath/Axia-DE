@@ -133,7 +133,7 @@ globalThis.__lordKey = (code, value, key, chr, base, flags) => {
     const views = typeof lord !== 'undefined' ? lord.nativeViews : null;
     if (ev.down && views) {
       const flags = (ev.ctrl ? 2 : 0) | (ev.alt ? 4 : 0) | (ev.altgr ? 8 : 0) | (ev.meta ? 16 : 0);
-      if (views.key((ev.ctrl || ev.meta) && ev.base ? ev.base : ev.key, ev.char || '', flags)) { globalThis.__lordNativeView?.(); return; }
+      if (views.key((ev.ctrl || ev.meta) && ev.base ? ev.base : ev.key, ev.char || '', flags, ev.code, ev.base || '', ev.repeat)) { globalThis.__lordNativeView?.(); return; }
     }
     for (const fn of listeners[ev.down ? 'keydown' : 'keyup']) { try { fn(ev); } catch (e) { console.error('key listener:', e); } }
   });

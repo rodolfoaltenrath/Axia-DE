@@ -33,7 +33,15 @@ change. Until then the React window stays the live app.
      font steps, saved arrangements and live layouts rebuilt with new or surviving sessions,
      pane and divider rectangles in flex order, neighbor pane for keyboard navigation).
      Sessions are numbers the transport creates and tells the model about. 12 unit tests.
-   - **2b: the scene and the session service.** Tab bar, pane tree (terminal nodes with
+   - **2b-1 (done): the key path.** A native app used to get only (key, char, modifiers) from the
+     shell, which cannot express what a terminal needs: the physical code for shortcuts, the
+     base key under Ctrl/Meta, auto-repeat. `NativeApp::key_event(key, chr, flags, code, base,
+     repeat)` carries them (default: it calls `key`, so no other app changes); the chain is
+     `events.js` → `lord.nativeViews.key` (optional extra arguments) → `axia_view_key_event` →
+     `Host::key_event`. Key-up events are still not delivered to native views.
+     Test: `native_view::tests::keyboard_apps_receive_the_physical_code…`; the focus, Spotlight
+     and screenshot-selector runtime tests pass on the rebuilt compositor.
+   - **2b-2: the scene and the session service.** Tab bar, pane tree (terminal nodes with
      their dividers), status bar; `term.create/close/configure/info` as services.
 3. **Bars and dialogs.** Search, toolbelt, context menu, replay, autocomplete, paste and
    command history, the Dock menu.

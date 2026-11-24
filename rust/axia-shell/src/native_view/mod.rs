@@ -434,17 +434,31 @@ pub unsafe extern "C" fn axia_view_gesture(
 /// A key after the shell's shortcuts: the focused native text field takes it.
 #[no_mangle]
 pub unsafe extern "C" fn axia_view_key(key: *const c_char, chr: *const c_char, flags: i32) -> i32 {
-    let (key, chr) = (text(key).to_owned(), text(chr).to_owned());
+    route_key(text(key).to_owned(), text(chr).to_owned(), flags, -1, String::new(), false)
+}
+/// The same key with its physical code, its base key and whether it repeats (what a terminal needs).
+#[no_mangle]
+pub unsafe extern "C" fn axia_view_key_event(
+    key: *const c_char,
+    chr: *const c_char,
+    flags: i32,
+    code: i32,
+    base: *const c_char,
+    repeat: i32,
+) -> i32 {
+    route_key(text(key).to_owned(), text(chr).to_owned(), flags, code, text(base).to_owned(), repeat != 0)
+}
+fn route_key(key: String, chr: String, flags: i32, code: i32, base: String, repeat: bool) -> i32 {
     let handles: Vec<_> = handles().into_iter().rev().collect();
     // An overlay's field wins over an application's keyboard controller. If it
     // declines a key, give it back to the shell, never to a window underneath.
     for &handle in &handles {
         if with_host(handle, |h| h.owns_text_input()) == Some(true) {
-            return i32::from(with_host(handle, |h| h.key(&key, &chr, flags)) == Some(true));
+            return i32::from(with_host(handle, |h| h.key_event(&key, &chr, flags, code, &base, repeat)) == Some(true));
         }
     }
     for handle in handles {
-        if with_host(handle, |h| h.key(&key, &chr, flags)) == Some(true) {
+        if with_host(handle, |h| h.key_event(&key, &chr, flags, code, &base, repeat)) == Some(true) {
             return 1;
         }
     }

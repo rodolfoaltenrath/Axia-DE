@@ -101,14 +101,19 @@ static JSValue f_paste(JSContext *c, JSValueConst t, int argc, JSValueConst *arg
     return JS_UNDEFINED;
 }
 
-/* key(key, char, flags) → true if a focused native text field took it */
+/* key(key, char, flags[, code, base, repeat]) → true if a focused native text field or a keyboard
+ * controller took it. code, base and repeat are optional (-1, "", 0). */
 static JSValue f_key(JSContext *c, JSValueConst t, int argc, JSValueConst *argv) {
     (void)t;
     if (argc < 3) return JS_FALSE;
     const char *k = JS_ToCString(c, argv[0]), *ch = JS_ToCString(c, argv[1]);
-    int32_t flags = 0;
+    int32_t flags = 0, code = -1, repeat = 0;
     JS_ToInt32(c, &flags, argv[2]);
-    int used = k && ch ? axia_view_key(k, ch, flags) : 0;
+    if (argc > 3 && JS_IsNumber(argv[3])) JS_ToInt32(c, &code, argv[3]);
+    const char *base = argc > 4 && JS_IsString(argv[4]) ? JS_ToCString(c, argv[4]) : NULL;
+    if (argc > 5) { int r = JS_ToBool(c, argv[5]); repeat = r > 0; }
+    int used = k && ch ? axia_view_key_event(k, ch, flags, code, base ? base : "", repeat) : 0;
+    if (base) JS_FreeCString(c, base);
     if (k) JS_FreeCString(c, k);
     if (ch) JS_FreeCString(c, ch);
     return JS_NewBool(c, used);

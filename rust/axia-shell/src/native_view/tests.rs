@@ -1405,6 +1405,40 @@ fn terminal_nodes_show_the_session_the_app_names_and_follow_it_when_it_changes()
     scene::destroy(mount);
 }
 
+struct KeyProbe {
+    seen: Rc<RefCell<Vec<(String, String, i32, i32, String, bool)>>>,
+}
+impl NativeApp for KeyProbe {
+    fn request(&mut self, input: &Value) -> Value {
+        if input["cmd"] == "sync" { json!({"tree":{"kind":"view","children":[]}}) } else { json!({}) }
+    }
+    fn key_event(&mut self, key: &str, chr: &str, flags: i32, code: i32, base: &str, repeat: bool) -> Option<Value> {
+        self.seen.borrow_mut().push((key.into(), chr.into(), flags, code, base.into(), repeat));
+        (key != "ignored").then(|| json!({}))
+    }
+}
+#[test]
+fn keyboard_apps_receive_the_physical_code_the_base_key_and_the_repeat_flag() {
+    let mount=scene::create(scene::VIEW);
+    let seen=Rc::new(RefCell::new(Vec::new()));
+    let mut host=Host::new(mount,Box::new(KeyProbe{seen:seen.clone()}),"",None);
+    host.facts(json!({}));
+    assert!(host.key_event("c","c",2,46,"c",false), "Ctrl+C reaches the app with its physical code");
+    assert!(host.key_event("a","a",0,30,"a",true), "an auto-repeat says so");
+    assert!(host.key("b","b",0), "the plain path keeps working for apps that do not care");
+    assert!(!host.key_event("ignored","",0,99,"",false), "a key the app declines goes back to the shell");
+    assert_eq!(
+        *seen.borrow(),
+        vec![
+            ("c".to_owned(),"c".to_owned(),2,46,"c".to_owned(),false),
+            ("a".to_owned(),"a".to_owned(),0,30,"a".to_owned(),true),
+            ("b".to_owned(),"b".to_owned(),0,-1,String::new(),false),
+            ("ignored".to_owned(),String::new(),0,99,String::new(),false),
+        ]
+    );
+    drop(host);scene::destroy(mount);
+}
+
 #[test]
 fn removing_a_focused_subtree_releases_keyboard_ownership_and_the_blink_timer() {
     for portal in [false,true] {

@@ -60,4 +60,10 @@ pub trait NativeApp {
     fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
         None
     }
+    /// A key with what the plain form drops: the physical key code (-1 when unknown), the key
+    /// without the effect of the modifiers (`base`, "" when unknown) and whether it is an
+    /// auto-repeat. Apps that care (a terminal) override this; the others see `key`.
+    fn key_event(&mut self, key: &str, chr: &str, flags: i32, _code: i32, _base: &str, _repeat: bool) -> Option<Value> {
+        self.key(key, chr, flags)
+    }
 }
