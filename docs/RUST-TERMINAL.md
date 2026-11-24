@@ -41,8 +41,33 @@ change. Until then the React window stays the live app.
      `Host::key_event`. Key-up events are still not delivered to native views.
      Test: `native_view::tests::keyboard_apps_receive_the_physical_code…`; the focus, Spotlight
      and screenshot-selector runtime tests pass on the rebuilt compositor.
-   - **2b-2: the scene and the session service.** Tab bar, pane tree (terminal nodes with
-     their dividers), status bar; `term.create/close/configure/info` as services.
+   - **2b-1b (done):** Shift is not in the key flags (the text fields read the shifted name), so
+     `key_event` takes a `KeyFacts { code, base, repeat, shift }`.
+   - **2b-2 (done): the window.** `native.rs` / `native_ui.rs`, compiled into
+     `axia-app-terminal` and not registered (the React window is still the live app). One
+     workspace per shell session (a `thread_local`) shared by every window: a window mounted
+     again finds its tabs and shells. It has the tab bar (numbers, bell/activity/failed marks,
+     close, new tab), the pane tree as absolutely placed `terminal` nodes with draggable
+     dividers, badges and inactive dimming, the status bar, the window title, keyboard focus
+     that follows the window and the active pane, the key chain of `index.jsx` (key
+     mappings, shortcut actions, then the key as bytes) and the mouse (pane-local, coalesced,
+     capture while dragging; the wheel is three lines a notch). Actions done: tabs and panes
+     (new, split, close with a five-second undo, next/previous, by direction, move, pane to
+     tab, equalize, zoom), font size, timestamps, scrolling, marks, clear/reset, select all.
+     29 crate tests (12 for the window).
+     **Transport contract** for stage 6: jobs `term.create` ([{cwd,scrollback}] → id),
+     `term.configure` ([sid,config]), `term.close` ([sid]), `term.infos` ([[sid…]] →
+     [{sid,info}]), `term.events` (→ [{sid,type,data}], buffered while no window is mounted);
+     synchronous effects `{kind:"term",op,sid,…}`: `write` (`bytes` or UTF-16 `units`), `key`
+     (`key,char,base,mods`), `mouse` (`type,x,y,button,mods`; `rememberCopy` on release: a
+     result of 3 means "remember the clipboard"), `wheel`, `focus`, `scroll`, `clear`,
+     `select`, `mark`; and `{kind:"closeWindow",id}`.
+     **Not yet**: the actions that need the clipboard, popups or bars (copy/paste, find,
+     toolbelt, composer, copy mode, replay, command and paste history, titles, logging), links
+     on ❖-click, the context menu, the application menus and the close confirmation for busy
+     shells (stage 3), broadcast input, tmux (stage 5), saving arrangements and the live
+     layout. A session whose last window closed during its undo window is only closed by the
+     next window that mounts; the session-level service of stage 6 must run that timer.
 3. **Bars and dialogs.** Search, toolbelt, context menu, replay, autocomplete, paste and
    command history, the Dock menu.
 4. **Preferences.** Profiles, schemes and key bindings; the importer of `iterm.js`

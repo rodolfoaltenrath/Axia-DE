@@ -304,6 +304,7 @@ dependencies = [
 name = "axia-app-terminal"
 version = "0.1.0"
 dependencies = [
+ "axia-native",
  "serde_json",
 ]
 

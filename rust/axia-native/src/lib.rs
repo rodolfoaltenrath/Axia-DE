@@ -1,6 +1,6 @@
 //! Shared app contracts. Scene ownership and platform adapters stay in axia-shell.
 mod app;
-pub use app::NativeApp;
+pub use app::{KeyFacts, NativeApp};
 pub mod async_jobs;
 pub mod civil_date;
 pub mod clock;

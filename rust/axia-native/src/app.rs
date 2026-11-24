@@ -1,6 +1,22 @@
 use serde_json::Value;
 /// What a native view needs from an app: the request interface of compiled apps
 /// and the RGBA pixels of the rasters its trees name.
+/// What a key carries beyond its name, its character and the Ctrl, Alt, AltGr and Super flags:
+/// the physical key code (-1 when unknown), the key without the effect of the modifiers
+/// (`base`, "" when unknown), whether it is an auto-repeat, and Shift (which `flags` leave out
+/// because the text fields read the shifted name instead).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KeyFacts<'a> {
+    pub code: i32,
+    pub base: &'a str,
+    pub repeat: bool,
+    pub shift: bool,
+}
+impl Default for KeyFacts<'_> {
+    fn default() -> Self {
+        Self { code: -1, base: "", repeat: false, shift: false }
+    }
+}
 pub trait NativeApp {
     /// Protect sensitive native content before its tree is reconciled or painted.
     fn capture_protected(&self) -> bool { false }
@@ -60,10 +76,9 @@ pub trait NativeApp {
     fn key(&mut self, _key: &str, _chr: &str, _flags: i32) -> Option<Value> {
         None
     }
-    /// A key with what the plain form drops: the physical key code (-1 when unknown), the key
-    /// without the effect of the modifiers (`base`, "" when unknown) and whether it is an
-    /// auto-repeat. Apps that care (a terminal) override this; the others see `key`.
-    fn key_event(&mut self, key: &str, chr: &str, flags: i32, _code: i32, _base: &str, _repeat: bool) -> Option<Value> {
+    /// A key with what the plain form drops (see `KeyFacts`). Apps that care (a terminal)
+    /// override this; the others see `key`.
+    fn key_event(&mut self, key: &str, chr: &str, flags: i32, _facts: &KeyFacts) -> Option<Value> {
         self.key(key, chr, flags)
     }
 }

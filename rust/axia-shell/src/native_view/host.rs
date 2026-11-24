@@ -1726,17 +1726,17 @@ impl Host {
     }
     /// Keys for the focused field. Shortcuts with Ctrl, Alt or Super pass, except paste.
     pub fn key(&mut self, key: &str, chr: &str, flags: i32) -> bool {
-        self.key_event(key, chr, flags, -1, "", false)
+        self.key_event(key, chr, flags, &axia_native::KeyFacts::default())
     }
-    /// The same, with the physical key code, the base key and the repeat flag for apps that use them.
-    pub fn key_event(&mut self, key: &str, chr: &str, flags: i32, code: i32, base: &str, repeat: bool) -> bool {
+    /// The same, with the physical key code, the base key, the repeat flag and Shift for apps that use them.
+    pub fn key_event(&mut self, key: &str, chr: &str, flags: i32, facts: &axia_native::KeyFacts) -> bool {
         if self.update_model_focus() { self.sync(); }
         self.hide_tip();
         if !self.window_focused || self.icon_mode().is_some() {
             return false;
         }
         if self.field == 0 {
-            let Some(reply) = self.app.key_event(key, chr, flags, code, base, repeat) else {
+            let Some(reply) = self.app.key_event(key, chr, flags, facts) else {
                 return false;
             };
             self.queue(&reply);
@@ -1771,7 +1771,7 @@ impl Host {
             secure,
         );
         if !out.handled {
-            if let Some(reply) = self.app.key_event(key, chr, flags, code, base, repeat) {
+            if let Some(reply) = self.app.key_event(key, chr, flags, facts) {
                 // A shortcut can transfer focus from a search field to a custom editor.
                 if self.app.text_input() { self.blur(); }
                 self.queue(&reply);
