@@ -1369,6 +1369,43 @@ fn compositor_preview_nodes_bind_sources_and_copy_documents_only_when_the_handle
 }
 
 #[test]
+fn terminal_nodes_show_the_session_the_app_names_and_follow_it_when_it_changes() {
+    let mount=scene::create(scene::VIEW);
+    let tree=Rc::new(RefCell::new(json!({"kind":"view","events":{"onWheel":["wheel"]},"children":[
+        {"kind":"terminal","key":"pane-a","session":7,"style":{"flex":1}},
+        {"kind":"terminal","key":"pane-b","session":9,"style":{"flex":1}}]})));
+    let mut host=Host::new(mount,Box::new(SurfaceProbe{tree:tree.clone(),log:Default::default()}),"",None);
+    host.facts(json!({}));
+    let nodes=children(children(mount)[0]);
+    assert_eq!(nodes.len(),2,"both sessions are on the scene");
+    unsafe {
+        let (a,b)=(crate::runtime::node_get(nodes[0]),crate::runtime::node_get(nodes[1]));
+        assert_eq!(((*a).kind,(*a).term),(scene::TERM,7));
+        assert_eq!(((*b).kind,(*b).term),(scene::TERM,9));
+        // A routine sync keeps the same nodes and bindings: nothing is created or rebound.
+        host.facts(json!({"again":true}));
+        assert_eq!(children(children(mount)[0]),nodes);
+        // The pane shows another session (a tab switch): the node stays, its session changes.
+        tree.borrow_mut()["children"][0]["session"]=json!(12);
+        host.facts(json!({"switched":true}));
+        assert_eq!(children(children(mount)[0]),nodes);
+        assert_eq!((*a).term,12);
+        // A closed session is session 0 and a malformed id is ignored like it.
+        tree.borrow_mut()["children"][0]["session"]=json!(0);
+        tree.borrow_mut()["children"][1]["session"]=json!("seven");
+        host.facts(json!({"closed":true}));
+        assert_eq!(((*a).term,(*b).term),(0,0));
+        // The same node count after the pane tree shrinks: the removed pane's node is gone.
+        tree.borrow_mut()["children"].as_array_mut().unwrap().pop();
+        host.facts(json!({"shrunk":true}));
+        assert_eq!(children(children(mount)[0]).len(),1);
+    }
+    drop(host);
+    assert!(children(mount).is_empty(),"the host releases every terminal node it created");
+    scene::destroy(mount);
+}
+
+#[test]
 fn removing_a_focused_subtree_releases_keyboard_ownership_and_the_blink_timer() {
     for portal in [false,true] {
         let mount=scene::create(scene::VIEW);let layer=scene::create(scene::VIEW);

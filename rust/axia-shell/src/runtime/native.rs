@@ -7,6 +7,8 @@ pub const VIEW: i32 = 0;
 pub const TEXT: i32 = 1;
 pub const IMAGE: i32 = 2;
 pub const MEDIA: i32 = 6;
+/// A terminal session drawn by the compositor's terminal renderer (NODE_TERM).
+pub const TERM: i32 = 4;
 const RAW: i32 = 3;
 /// A converted style value (crate::css_style), as the renderer sends it to `lord.setStyle`.
 #[derive(Clone, Debug, PartialEq)]
@@ -251,6 +253,23 @@ pub fn set_media_source(id: i32, source: i32) -> bool {
         #[cfg(test)]
         { node.term = source.max(0); }
         super::node_invalidate(node);
+        true
+    }
+}
+/// Bind a terminal node to its session. Cells, cursor, selection and images are painted by the
+/// session itself; the view adapter only names which session the node shows.
+pub fn set_terminal_session(id: i32, session: i32) -> bool {
+    let session = session.max(0);
+    unsafe {
+        let Some(node) = super::node_get(id).as_mut().filter(|n| n.kind == TERM) else { return false; };
+        if node.term == session { return true; }
+        #[cfg(not(test))]
+        {
+            extern "C" { fn js_term_node(node: *mut std::ffi::c_void, session: i32); }
+            js_term_node((node as *mut Node).cast(), session);
+        }
+        #[cfg(test)]
+        { node.term = session; super::node_invalidate(node); }
         true
     }
 }

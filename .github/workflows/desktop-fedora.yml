@@ -304,6 +304,9 @@ jobs:
           AXIA_DISKS_AXIA_OUTPUT: ${{ runner.temp }}/axia-disks/axia
           AXIA_DISKS_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-disks/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test disks_runtime -- --ignored --nocapture
+      - name: Native tree showing real terminal sessions
+        if: matrix.gpu == 1
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test terminal_node_runtime -- --ignored --nocapture
       - name: Native PDF viewer with the real document helper
         if: matrix.gpu == 1
         env:

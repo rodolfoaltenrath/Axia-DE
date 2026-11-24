@@ -33,6 +33,8 @@ enum Kind {
     Text,
     Image,
     Media,
+    /// A terminal session of the compositor's terminal renderer, by session id.
+    Terminal,
     DocumentImage,
     MailImage,
     Raster,
@@ -49,6 +51,7 @@ fn kind_of(v: &Value) -> Kind {
         Some("text") => Kind::Text,
         Some("image") => Kind::Image,
         Some("media") => Kind::Media,
+        Some("terminal") => Kind::Terminal,
         Some("documentImage") => Kind::DocumentImage,
         Some("mailImage") => Kind::MailImage,
         Some("raster") => Kind::Raster,
@@ -764,6 +767,7 @@ impl Host {
             Kind::Text => scene::TEXT,
             Kind::Image | Kind::Raster | Kind::DocumentImage | Kind::MailImage => scene::IMAGE,
             Kind::Media => scene::MEDIA,
+            Kind::Terminal => scene::TERM,
             _ => scene::VIEW,
         };
         m.node = scene::create(node_kind);
@@ -896,6 +900,14 @@ impl Host {
                         scene::set_image_pixels(m.node, w, h, data);
                     }
                     m.image = (id, generation);
+                }
+            }
+            Kind::Terminal => {
+                m.style(0, style);
+                let session = spec["session"].as_i64().and_then(|id| i32::try_from(id).ok()).unwrap_or(0).max(0);
+                if session != m.bound {
+                    scene::set_terminal_session(m.node, session);
+                    m.bound = session;
                 }
             }
             Kind::Media | Kind::DocumentImage => {

@@ -226,10 +226,7 @@ static JSValue f_set_prop(JSContext *c, JSValueConst this_val, int argc, JSValue
     } else if (n && key && !strcmp(key, "session") && n->type == NODE_TERM) {
         int32_t id = 0;
         if (JS_IsNumber(argv[2])) JS_ToInt32(c, &id, argv[2]);
-        n->term = id;
-        Session *s = term_get(id);
-        if (s) s->node = n->id;
-        node_invalidate(n);
+        js_term_node(n, id);
     } else if (n && key && !strcmp(key, "media") && n->type == NODE_MEDIA) {
         int32_t id = 0;                     /* lord.media source (video, photo, screenshot, camera) */
         if (JS_IsNumber(argv[2])) JS_ToInt32(c, &id, argv[2]);
@@ -433,6 +430,15 @@ static char *load_code(const char *path, size_t *len, int *refused) {
         fprintf(stderr, "js: %s not loaded: %s\n", path, why);
     }
     return src;
+}
+
+/* A terminal node shows one session: the `session` prop of React and the `terminal` widget of a
+ * native view (Rust) bind it here. */
+void js_term_node(Node *n, int id) {
+    n->term = id;
+    Session *s = term_get(id);
+    if (s) s->node = n->id;
+    node_invalidate(n);
 }
 
 /* A new context with the whole `lord` object of a session (or of the login screen). */

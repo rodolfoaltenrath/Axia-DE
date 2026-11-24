@@ -29,6 +29,8 @@ void   js_wl_event(int id, const char *type, const char *json);
 void   js_before_exit(void);             /* __lordBeforeExit(): the session's last word, once */
 void   js_media_event(int id, const char *type, const char *json);
 void   js_term_event(int id, const char *type, const char *data);
+struct Node;
+void   js_term_node(struct Node *n, int id);   /* bind a terminal node to its session (js.c) */
 void   js_sound_event(const char *type, const char *json);
 void   js_net_event(const char *what);
 void   js_disk_event(const char *what);      /* Disks app: something changed (disk/disk.c) */
