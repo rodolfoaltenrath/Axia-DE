@@ -16,6 +16,10 @@ const GAP: f64 = 14.;
 const THUMB_WIDTH: f64 = 116.;
 const SIDEBAR_HEADER: f64 = 38.;
 const THUMB_BUDGET: f64 = 8. * 1024. * 1024.;
+const MESSAGE_MS: i64 = 3500;
+const SELECT_THROTTLE_MS: i64 = 50;
+const DOUBLE_CLICK_MS: i64 = 400;
+const FIND_DEBOUNCE_MS: i64 = 350;
 
 enum Tag {
     Recent,
@@ -25,6 +29,19 @@ enum Tag {
     Render { token: u64, thumb: bool, epoch: u64, started: i64 },
     Release,
     Close,
+    Info { page: usize, stamp: Value, epoch: u64 },
+    Select { token: u64, page: usize, epoch: u64 },
+    Events(u64),
+    Ignore,
+}
+struct Drag {
+    page: usize,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    moved: bool,
+    last: i64,
 }
 #[derive(Clone, PartialEq)]
 enum Zoom {
@@ -86,6 +103,18 @@ pub struct App {
     recent_requested: bool,
     title: Option<String>,
     last_tree: Value,
+    info: HashMap<usize, Option<Value>>,
+    hits: Option<Value>,
+    find_query: String,
+    find_due: Option<i64>,
+    find_focus: u64,
+    goto: Option<String>,
+    selection: Option<Value>,
+    drag: Option<Drag>,
+    capture: Option<bool>,
+    last_click: i64,
+    events_due: i64,
+    events_pending: bool,
 }
 impl Default for App {
     fn default() -> Self {
@@ -134,6 +163,18 @@ impl Default for App {
             recent_requested: false,
             title: None,
             last_tree: Value::Null,
+            info: HashMap::new(),
+            hits: None,
+            find_query: String::new(),
+            find_due: None,
+            find_focus: 0,
+            goto: None,
+            selection: None,
+            drag: None,
+            capture: None,
+            last_click: 0,
+            events_due: 0,
+            events_pending: false,
         }
     }
 }
@@ -203,7 +244,14 @@ impl App {
         self.sidebar_key = None;
         self.outline_state = 0;
         self.message = None;
-        let _ = now;
+        self.info.clear();
+        self.hits = None;
+        self.selection = None;
+        self.drag = None;
+        self.goto = None;
+        self.events_pending = false;
+        self.events_due = now + 250;
+        self.find_due = (!self.find_query.is_empty()).then_some(now);
         self.jobs.enqueue(Tag::Open(self.epoch), "pdf.open", json!([path, self.password]));
     }
     fn apply(&mut self, done: crate::native_view::async_jobs::Completed<Tag>, now: i64) {
@@ -286,8 +334,53 @@ impl App {
                     None => self.jobs.enqueue(Tag::Release, "pdf.release", json!([image])),
                 }
             }
+            (Tag::Info { page, stamp, epoch }, Ok(info)) if epoch == self.epoch => {
+                let reply = ask(&mut self.model, json!({"cmd":"edit","op":"infoReply","page":page,"stamp":stamp,"info":info}));
+                if let Some(value) = reply.filter(|v| !v.is_null()) {
+                    self.info.insert(page, Some(value));
+                }
+            }
+            (Tag::Info { page, epoch, .. }, Err(_)) if epoch == self.epoch => {
+                self.info.insert(page, Some(json!({"links":[],"fields":[],"notes":[]})));
+            }
+            (Tag::Select { token, page, epoch }, Ok(result)) if epoch == self.epoch => {
+                let reply = ask(&mut self.model, json!({"cmd":"viewer","op":"selectionReply","token":token,"page":page,"result":result}));
+                if let Some(value) = reply.filter(|v| !v.is_null()) {
+                    self.selection = Some(value);
+                }
+            }
+            (Tag::Events(epoch), result) if epoch == self.epoch => {
+                self.events_pending = false;
+                for event in result.ok().and_then(|r| r.as_array().cloned()).unwrap_or_default() {
+                    self.event(&event, now);
+                }
+            }
             _ => {}
         }
+    }
+    /// What the helper pushed: search results page by page, search end, a crashed reader.
+    fn event(&mut self, event: &Value, now: i64) {
+        match event["kind"].as_str() {
+            Some("find") => {
+                let reply = ask(&mut self.model, json!({"cmd":"viewer","op":"findAppend","token":event["token"],"page":event["page"],"rects":event["rects"]}));
+                if let Some(reply) = reply.filter(|r| !r.is_null()) {
+                    self.hits = reply["hits"].as_object().map(|_| reply["hits"].clone());
+                    if let (Some(page), false) = (reply["go"]["page"].as_u64(), reply["go"].is_null()) {
+                        let rect = reply["go"]["rect"].clone();
+                        self.go_page(page as usize, Some(&rect));
+                    }
+                }
+            }
+            Some("findDone") => {
+                let reply = ask(&mut self.model, json!({"cmd":"viewer","op":"findFinish","token":event["token"]}));
+                if let Some(hits) = reply.filter(|h| h.is_object()) {
+                    self.hits = Some(hits);
+                }
+            }
+            Some("crash") => self.error = json!({"key":"pdf.crashed"}),
+            _ => {}
+        }
+        let _ = now;
     }
     fn release(&mut self, thumb: bool, keys: &Value) {
         let map = if thumb { &mut self.thumb_images } else { &mut self.images };
@@ -381,6 +474,11 @@ impl App {
             }
         }
         self.frames = state["frames"].as_array().cloned().unwrap_or_default();
+        if let (Some(first), Some(last)) = (state["first"].as_u64(), state["last"].as_i64().filter(|l| *l >= 0)) {
+            for page in first as usize..=last as usize {
+                self.want_info(page);
+            }
+        }
         let (rot, invert) = (self.rot, self.invert);
         let mut keep = vec![];
         for job in state["renders"].as_array().into_iter().flatten() {
@@ -393,6 +491,129 @@ impl App {
             self.jobs.cancel(|tag| matches!(tag, Tag::Render { token, thumb: false, .. } if tokens.contains(token)));
         }
         self.thumbnails(now);
+    }
+    fn want_info(&mut self, page: usize) {
+        let Some(doc) = self.doc else { return };
+        if self.info.contains_key(&page) {
+            return;
+        }
+        self.info.insert(page, None);
+        if let Some(stamp) = ask(&mut self.model, json!({"cmd":"edit","op":"infoStart","page":page})) {
+            self.jobs.enqueue(Tag::Info { page, stamp, epoch: self.epoch }, "pdf.pageInfo", json!([doc, page]));
+        }
+    }
+    fn set_message(&mut self, caption: Value, now: i64) {
+        self.message = Some((caption, now + MESSAGE_MS));
+    }
+    fn timers(&mut self, now: i64) {
+        if self.find_due.is_some_and(|due| due <= now) {
+            self.find_due = None;
+            self.run_find();
+        }
+        if self.doc.is_some() && !self.events_pending && now >= self.events_due {
+            let searching = self.hits.as_ref().is_some_and(|h| h["done"] != true);
+            self.events_pending = true;
+            self.events_due = now + if searching { 100 } else { 1000 };
+            if let Some(doc) = self.doc {
+                self.jobs.enqueue(Tag::Events(self.epoch), "pdf.events", json!([doc]));
+            }
+        }
+    }
+    fn run_find(&mut self) {
+        let Some(doc) = self.doc else { return };
+        let Some(ticket) = ask(&mut self.model, json!({"cmd":"viewer","op":"findStart","query":self.find_query})) else { return };
+        self.hits = ticket["hits"].as_object().map(|_| ticket["hits"].clone());
+        if let (Some(query), Some(token)) = (ticket["query"].as_str(), ticket["token"].as_u64()) {
+            self.events_due = 0;
+            self.jobs.enqueue(Tag::Ignore, "pdf.find", json!([doc, query, token]));
+        }
+    }
+    fn next_hit(&mut self, delta: i64) {
+        let Some(reply) = ask(&mut self.model, json!({"cmd":"viewer","op":"findNext","delta":delta})).filter(|r| !r.is_null()) else { return };
+        self.hits = Some(reply["hits"].clone());
+        if let Some(page) = reply["go"]["page"].as_u64() {
+            let rect = reply["go"]["rect"].clone();
+            self.go_page(page as usize, Some(&rect));
+        }
+    }
+    fn select(&mut self, page: usize, from: [f64; 2], to: [f64; 2], style: i64) {
+        let Some(doc) = self.doc else { return };
+        let Some(token) = ask(&mut self.model, json!({"cmd":"viewer","op":"selectionStart"})).and_then(|t| t.as_u64()) else { return };
+        self.jobs.enqueue(
+            Tag::Select { token, page, epoch: self.epoch },
+            "pdf.select",
+            json!([doc, page, from[0], from[1], to[0], to[1], style]),
+        );
+    }
+    fn clear_selection(&mut self) {
+        ask(&mut self.model, json!({"cmd":"viewer","op":"selectionClear"}));
+        self.selection = None;
+    }
+    fn hit(&mut self, x: f64, y: f64) -> Option<Value> {
+        let origin = if self.side.is_some() && self.doc.is_some() { ui::SIDEBAR } else { 0. };
+        ask(&mut self.model, json!({"cmd":"view","op":"hit","x":x - origin,"y":y - ui::TOOLBAR})).filter(|v| !v.is_null())
+    }
+    fn item_at(&mut self, hit: &Value, list: &str) -> Option<Value> {
+        let page = hit["page"].as_u64()? as usize;
+        let items = self.info.get(&page)?.as_ref()?[list].clone();
+        let index = ask(&mut self.model, json!({"cmd":"viewer","op":"hitItem","items":items,"x":hit["x"],"y":hit["y"]}))?.as_i64()?;
+        items.get(usize::try_from(index).ok()?).cloned()
+    }
+    fn pointer_down(&mut self, v: &Value, now: i64) {
+        if v["button"].as_i64() == Some(2) {
+            return;
+        }
+        let Some(hit) = self.hit(number(&v["x"], -1.), number(&v["y"], -1.)) else {
+            self.clear_selection();
+            return;
+        };
+        if let Some(link) = self.item_at(&hit, "links") {
+            if let Some(page) = link["page"].as_i64().filter(|p| *p >= 0) {
+                self.go_page(page as usize, None);
+            } else if let Some(uri) = link["uri"].as_str() {
+                self.jobs.enqueue(Tag::Ignore, "clipboard.write", json!([uri]));
+                let shown: String = uri.chars().take(80).collect();
+                self.set_message(json!({"key":"pdf.linkCopied","params":{"uri":shown}}), now);
+            }
+            return;
+        }
+        let (page, x, y) = (hit["page"].as_u64().unwrap_or(0) as usize, number(&hit["x"], 0.), number(&hit["y"], 0.));
+        self.drag = Some(Drag { page, x0: x, y0: y, x1: x, y1: y, moved: false, last: 0 });
+        self.clear_selection();
+        self.capture = Some(true);
+    }
+    fn pointer_move(&mut self, v: &Value, now: i64) {
+        let Some(hit) = self.drag.as_ref().map(|d| d.page).and(self.hit(number(&v["x"], -1.), number(&v["y"], -1.))) else { return };
+        let Some(drag) = self.drag.as_mut() else { return };
+        if hit["page"].as_u64() != Some(drag.page as u64) {
+            return;
+        }
+        drag.x1 = number(&hit["x"], drag.x1);
+        drag.y1 = number(&hit["y"], drag.y1);
+        drag.moved = true;
+        if now - drag.last > SELECT_THROTTLE_MS {
+            drag.last = now;
+            let (page, from, to) = (drag.page, [drag.x0, drag.y0], [drag.x1, drag.y1]);
+            self.select(page, from, to, 0);
+        }
+    }
+    fn drag_end(&mut self, now: i64) {
+        self.capture = Some(false);
+        let Some(drag) = self.drag.take() else { return };
+        if !drag.moved {
+            if now - self.last_click < DOUBLE_CLICK_MS {
+                self.select(drag.page, [drag.x0, drag.y0], [drag.x0 + 0.5, drag.y0 + 0.5], 1);
+            }
+            self.last_click = now;
+            return;
+        }
+        self.select(drag.page, [drag.x0, drag.y0], [drag.x1, drag.y1], 0);
+    }
+    fn copy_selection(&mut self, now: i64) {
+        if let Some(text) = self.selection.as_ref().and_then(|s| s["text"].as_str()).filter(|t| !t.is_empty()).map(str::to_owned) {
+            self.jobs.enqueue(Tag::Ignore, "clipboard.write", json!([text]));
+            self.set_message(json!({"key":"pdf.copied"}), now);
+        }
     }
     fn want(&mut self, thumb: bool, page: u64, width: f64, rot: i64, invert: bool, priority: i64, now: i64) {
         let Some(doc) = self.doc else { return };
@@ -485,7 +706,7 @@ impl App {
     }
     pub fn key_at(&mut self, key: &str, chr: &str, flags: i32, now: i64) -> Option<Value> {
         let event = json!({"key":key,"base":key,"char":chr,"shift":flags & 1 != 0,"ctrl":flags & 2 != 0,"alt":flags & 4 != 0,"meta":flags & 16 != 0});
-        let action = ask(&mut self.model, json!({"cmd":"viewer","op":"key","editing":false,"hasDoc":self.doc.is_some(),"event":event}))?;
+        let action = ask(&mut self.model, json!({"cmd":"viewer","op":"key","editing":self.goto.is_some(),"hasDoc":self.doc.is_some(),"event":event}))?;
         let action = action.as_str()?.to_owned();
         let last = self.pages.saturating_sub(1);
         let height = self.view_size().1;
@@ -496,7 +717,23 @@ impl App {
             "zoomOut" => self.zoom_step(-1),
             "zoomActual" => self.set_zoom(Zoom::Scale(1.)),
             "zoomWidth" => self.set_zoom(Zoom::Width),
-            "escape" => self.message = None,
+            "escape" => {
+                self.message = None;
+                self.clear_selection();
+                ask(&mut self.model, json!({"cmd":"viewer","op":"findStart","query":""}));
+                self.hits = None;
+                self.find_due = None;
+            }
+            "find" => self.find_focus += 1,
+            "copy" => self.copy_selection(now),
+            "selectAll" => {
+                if let Some([w, h]) = self.filled_sizes().get(self.page).copied() {
+                    self.select(self.page, [0., 0.], [w, h], 0);
+                }
+            }
+            "goto" => self.goto = Some(String::new()),
+            "nextHit" => self.next_hit(1),
+            "previousHit" => self.next_hit(-1),
             "pageDown" | "down" | "pageUp" | "up" => {
                 let forward = action == "pageDown" || action == "down";
                 if self.single {
@@ -547,6 +784,34 @@ impl App {
             "invert" => self.invert = !self.invert,
             "mode" => self.single = key == "single",
             "wheel" => self.wheel(v, now),
+            "down" => self.pointer_down(v, now),
+            "pointerMove" => self.pointer_move(v, now),
+            "dragEnd" => self.drag_end(now),
+            "findChange" => {
+                self.find_query = v["value"].as_str().unwrap_or("").to_owned();
+                self.find_due = Some(now + FIND_DEBOUNCE_MS);
+            }
+            "findSubmit" => {
+                self.find_due = None;
+                if self.hits.as_ref().is_some_and(|h| h["list"].as_array().is_some_and(|l| !l.is_empty())) {
+                    self.next_hit(1);
+                } else {
+                    self.run_find();
+                }
+            }
+            "gotoOpen" => {
+                if self.doc.is_some() {
+                    self.goto = Some(String::new());
+                }
+            }
+            "gotoChange" => self.goto = Some(v["value"].as_str().unwrap_or("").to_owned()),
+            "gotoSubmit" => {
+                let value = self.goto.take().and_then(|t| t.trim().parse::<f64>().ok());
+                if let Some(page) = value.filter(|n| *n >= 1. && n.is_finite()) {
+                    self.go_page(page as usize - 1, None);
+                }
+            }
+            "gotoCancel" => self.goto = None,
             "open" => {
                 if let Some(path) = key.as_str() {
                     self.password.clear();
@@ -586,7 +851,11 @@ impl App {
             self.layout();
             self.viewport(now);
         }
+        self.timers(now);
         let mut out = json!({});
+        if let Some(on) = self.capture.take() {
+            out["capture"] = json!(on);
+        }
         if let Some(effect) = self.jobs.pump(now) {
             out["effect"] = effect;
         }
@@ -635,6 +904,61 @@ impl App {
             self.message = None;
         }
     }
+    fn rect_view(&mut self, rect: &Value, page: usize, sizes: &[[f64; 2]]) -> Option<Value> {
+        let size = sizes.get(page).copied()?;
+        ask(&mut self.model, json!({"cmd":"rect","rect":rect,"size":size,"rot":self.rot,"scale":self.scale}))
+    }
+    /// Search hits, the text selection and form field outlines of one visible page.
+    fn overlays(&mut self, page: usize, sizes: &[[f64; 2]]) -> Vec<Value> {
+        let mut nodes = vec![];
+        let node = |key: String, r: &Value, style: Value| {
+            let mut base = json!({"position":"absolute","left":r["left"],"top":r["top"],"width":r["width"],"height":r["height"],"pointerEvents":"none"});
+            for (k, v) in style.as_object().into_iter().flatten() {
+                base[k] = v.clone();
+            }
+            ui::view(json!(key), base, vec![])
+        };
+        let current = self.hits.as_ref().and_then(|h| h["cur"].as_u64()).unwrap_or(0);
+        let hits: Vec<(usize, Value)> = self
+            .hits
+            .as_ref()
+            .and_then(|h| h["list"].as_array())
+            .map(|list| list.iter().enumerate().filter(|(_, h)| h["page"].as_u64() == Some(page as u64)).map(|(i, h)| (i, h["rect"].clone())).collect())
+            .unwrap_or_default();
+        for (i, rect) in hits {
+            if let Some(r) = self.rect_view(&rect, page, sizes) {
+                let color = if i as u64 == current { "rgba(255,149,0,0.55)" } else { "rgba(255,214,10,0.42)" };
+                nodes.push(node(format!("hit-{i}"), &r, json!({"borderRadius":2,"backgroundColor":color})));
+            }
+        }
+        let rects: Vec<Value> = self
+            .selection
+            .as_ref()
+            .filter(|s| s["page"].as_u64() == Some(page as u64))
+            .and_then(|s| s["rects"].as_array().cloned())
+            .unwrap_or_default();
+        for (i, rect) in rects.iter().enumerate() {
+            if let Some(r) = self.rect_view(rect, page, sizes) {
+                nodes.push(node(format!("selection-{i}"), &r, json!({"backgroundColor":"rgba(10,132,255,0.32)"})));
+            }
+        }
+        let fields: Vec<Value> = self.info.get(&page).and_then(|i| i.as_ref()).and_then(|i| i["fields"].as_array().cloned()).unwrap_or_default();
+        for (i, field) in fields.iter().enumerate() {
+            if matches!(field["f"]["type"].as_str(), Some("other" | "push")) {
+                continue;
+            }
+            let readonly = field["f"]["ro"] == true;
+            if let Some(r) = self.rect_view(&field["r"], page, sizes) {
+                nodes.push(node(
+                    format!("field-{i}"),
+                    &r,
+                    json!({"backgroundColor":if readonly {"transparent"} else {"rgba(10,132,255,0.10)"},
+                        "borderWidth":if readonly {0} else {1},"borderColor":"rgba(10,132,255,0.45)"}),
+                ));
+            }
+        }
+        nodes
+    }
     fn scene(&mut self, _now: i64) -> Value {
         let (view_w, view_h) = self.view_size();
         let mut images = HashMap::new();
@@ -679,10 +1003,33 @@ impl App {
             let height = (view_h * view_h / self.layout_height).max(30.);
             ((view_h - height) * (self.offset / self.max_offset), height)
         });
-        let status = match &self.message {
-            Some((message, _)) => message.clone(),
-            None => json!(self.doc_title),
+        let sizes = self.filled_sizes();
+        let mut overlays: HashMap<u64, Vec<Value>> = HashMap::new();
+        for frame in &frames {
+            let Some(page) = frame["page"].as_u64() else { continue };
+            overlays.insert(page, self.overlays(page as usize, &sizes));
+        }
+        let hit_count = self.hits.as_ref().and_then(|h| h["list"].as_array().map(Vec::len));
+        let searching = self.hits.as_ref().is_some_and(|h| h["done"] != true);
+        let selected = self.selection.as_ref().and_then(|s| s["text"].as_str()).map(|t| t.chars().count()).filter(|n| *n > 0);
+        let status = if let Some((message, _)) = &self.message {
+            message.clone()
+        } else if let (Some(hits), Some(count)) = (&self.hits, hit_count) {
+            if count > 0 {
+                json!({"key":"pdf.matches","params":{"cur":hits["cur"].as_u64().unwrap_or(0) + 1,"count":count}})
+            } else if searching {
+                json!({"key":"pdf.searchingText"})
+            } else {
+                json!({"key":"pdf.noMatches"})
+            }
+        } else if let Some(count) = selected {
+            json!({"key":"pdf.selected","params":{"count":count}})
+        } else {
+            json!(self.doc_title)
         };
+        let status_more = hit_count.is_some_and(|c| c > 0) && searching;
+        let goto = self.goto.clone();
+        let find_query = self.find_query.clone();
         let theme = self.theme.clone();
         let error = self.error.clone();
         let password = self.password.clone();
@@ -707,6 +1054,11 @@ impl App {
             frames: frames_ref,
             images: &page_images,
             scrollbar,
+            overlays: &overlays,
+            goto: goto.as_deref(),
+            find_query: &find_query,
+            find_focus: self.find_focus,
+            status_more,
             recent: self.recent.as_deref(),
             sidebar,
             view_h,

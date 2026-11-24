@@ -149,6 +149,18 @@ pass). Helper services the transport must provide in stage 4: `pdf.open`
 `pdf.render` (`{image,w,h}`), `pdf.outline`, `pdf.release`, `pdf.close`, `pdf.recent`.
 A render result discarded by `Jobs::cancel` must have its image released by the lease.
 
+Stage 2 status: page info (links, form fields), link following (internal pages, URIs
+copied), text drag selection with the Rust throttle and double-click word selection,
+copy and select-all, search (debounced field, hits streamed page by page, next/previous,
+status text), go-to-page, and the overlay nodes for hits, selection and field outlines
+are in the window. Further transport services for stage 4: `pdf.pageInfo`
+(`{links,fields,notes}`), `pdf.select` (`[doc,page,x0,y0,x1,y1,style]` →
+`{text,rects}`), `pdf.find` (`[doc,query,token]`; acknowledged at once, results
+arrive as `pdf.events` items `{kind:"find",token,page,rects}` then
+`{kind:"findDone",token}`), `pdf.events` (`[doc]` → list; also `{kind:"crash"}`) and
+the existing `clipboard.write`. Field editing, annotation tools, undo, save, print
+and menus remain for stage 3.
+
 Contract notes for the window: frames come from `{"cmd":"view","op":"viewport"}`
 (`first`/`last`/`currentPage`/`frames`/`renders`); cache admission from
 `{"cmd":"cache","op":"begin"|"complete"|"fail"|"drop"|"invalidate"|"best"}` whose

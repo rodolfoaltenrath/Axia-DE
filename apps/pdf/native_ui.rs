@@ -27,6 +27,11 @@ pub(super) struct Facts<'a> {
     pub frames: &'a [Value],
     pub images: &'a std::collections::HashMap<u64, i64>,
     pub scrollbar: Option<(f64, f64)>,
+    pub overlays: &'a std::collections::HashMap<u64, Vec<Value>>,
+    pub goto: Option<&'a str>,
+    pub find_query: &'a str,
+    pub find_focus: u64,
+    pub status_more: bool,
     pub recent: Option<&'a [(String, String)]>,
     pub sidebar: Value,
     pub view_h: f64,
@@ -87,7 +92,11 @@ fn toolbar(f: &Facts) -> Value {
     };
     let mut items = vec![
         tool(f, "sidebar", "◫", json!(["toggleSide"]), "pdf.tool.sidebar", f.side.is_some(), false),
-        view("page-label", json!({"paddingHorizontal":4,"overflow":"hidden","flexShrink":1}), vec![page_label]),
+        match f.goto {
+            Some(value) => json!({"kind":"input","key":"goto","value":value,"placeholder":label("pdf.goPlaceholder"),"autoFocus":true,
+                "change":["gotoChange"],"submit":["gotoSubmit"],"cancel":["gotoCancel"],"size":13,"style":{"width":96,"height":26}}),
+            None => click(view("page-label", json!({"paddingHorizontal":4,"overflow":"hidden","flexShrink":1}), vec![page_label]), json!(["gotoOpen"])),
+        },
         view("spacer", json!({"flex":1}), vec![]),
         view(
             "zoom",
@@ -109,6 +118,13 @@ fn toolbar(f: &Facts) -> Value {
         items.push(tool(f, "rotate", "↻", json!(["rotate",1]), "pdf.rotateRight", false, !f.has_doc));
         items.push(tool(f, "invert", "◐", json!(["invert"]), "pdf.invert", f.invert, !f.has_doc));
     }
+    let find_width = if f.width < 760. { 130 } else { 180 };
+    items.push(if f.has_doc {
+        json!({"kind":"input","key":format!("find-{}",f.find_focus),"value":f.find_query,"placeholder":label("pdf.find"),
+            "autoFocus":f.find_focus > 0,"change":["findChange"],"submit":["findSubmit"],"size":13,"style":{"width":find_width,"height":26}})
+    } else {
+        view("find-space", json!({"width":find_width}), vec![])
+    });
     items.push(view(
         "toolbar-rule",
         json!({"position":"absolute","left":0,"right":0,"bottom":0,"height":1,"backgroundColor":tok(t,"separator","#444444"),"pointerEvents":"none"}),
@@ -214,6 +230,7 @@ fn pages(f: &Facts) -> Vec<Value> {
                 children.push(json!({"kind":"documentImage","key":"image","image":image,
                     "style":{"position":"absolute","left":0,"top":0,"width":w,"height":h,"objectFit":"fill"}}));
             }
+            children.extend(f.overlays.get(&page).cloned().unwrap_or_default());
             view(
                 json!(format!("page-{page}")),
                 json!({"position":"absolute","left":frame["left"],"top":frame["top"],"width":w,"height":h,
@@ -232,7 +249,13 @@ fn status(f: &Facts) -> Value {
             "backgroundColor":if t["mode"] == "dark" {"rgba(0,0,0,0.12)"} else {"rgba(0,0,0,0.03)"}}),
         vec![
             view("status-rule", json!({"position":"absolute","left":0,"right":0,"top":0,"height":1,"backgroundColor":tok(t,"separator","#444444")}), vec![]),
-            text(f.status.clone(), json!({"flex":1,"fontSize":11,"color":dim,"whiteSpace":"nowrap","overflow":"hidden"})),
+            view("status-text", json!({"flex":1,"flexDirection":"row","overflow":"hidden"}), {
+                let mut parts = vec![text(f.status.clone(), json!({"fontSize":11,"color":dim,"whiteSpace":"nowrap"}))];
+                if f.status_more {
+                    parts.push(text(json!("…"), json!({"fontSize":11,"color":dim})));
+                }
+                parts
+            }),
             text(label(if f.single { "pdf.view.single" } else { "pdf.view.continuous" }), json!({"fontSize":11,"color":dim})),
         ],
     )
@@ -264,6 +287,7 @@ pub(super) fn tree(f: &Facts) -> Value {
         content,
     );
     area["events"]["onWheel"] = json!(["wheel"]);
+    area["events"]["onMouseDown"] = json!(["down"]);
     let mut body = vec![];
     if f.side.is_some() && f.has_doc {
         body.push(view("sidebar", json!({"width":SIDEBAR,"flexShrink":0}), vec![f.sidebar.clone()]));

@@ -10,10 +10,13 @@ struct Helper {
     password: Option<&'static str>,
     next_image: i64,
     pending: Option<Value>,
+    events: Vec<Value>,
+    tree: Value,
+    exact: bool,
 }
 impl Helper {
     fn new(pages: usize) -> Self {
-        Self { token: 0, ready: Default::default(), calls: vec![], pages: vec![[612., 792.]; pages], password: None, next_image: 100, pending: None }
+        Self { token: 0, ready: Default::default(), calls: vec![], pages: vec![[612., 792.]; pages], password: None, next_image: 100, pending: None, events: vec![], tree: Value::Null, exact: false }
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
         match method {
@@ -27,6 +30,12 @@ impl Helper {
                 json!({"image":self.next_image,"w":args[2].as_f64().unwrap().round(),"h":(args[2].as_f64().unwrap() * 1.3).round()})
             }
             "pdf.outline" => json!({"items":[{"title":"Intro","page":0,"kids":[]},{"title":"End","page":2,"kids":[]}]}),
+            "pdf.pageInfo" => json!({
+                "links":[{"r":[0,0,100,50],"page":2},{"r":[0,60,100,20],"uri":"https://example.test/a"}],
+                "fields":[{"r":[10,100,50,20],"f":{"id":1,"type":"text","ro":false,"value":""}}],
+                "notes":[]}),
+            "pdf.select" => json!({"text":"hello","rects":[[10,200,30,10]]}),
+            "pdf.events" => Value::Array(std::mem::take(&mut self.events)),
             "pdf.recent" => json!([{"name":"a.pdf","path":"/home/test/a.pdf"},{"name":"b.pdf","path":"/home/test/b.pdf"}]),
             _ => Value::Null,
         }
@@ -36,7 +45,15 @@ impl Helper {
         if let Some(effect) = reply.get("effect") {
             self.pending = Some(effect.clone());
         }
+        if let Some(tree) = reply.get("tree") {
+            self.tree = tree.clone();
+        }
         reply
+    }
+    fn absorb_tree(&mut self, reply: &Value) {
+        if let Some(tree) = reply.get("tree") {
+            self.tree = tree.clone();
+        }
     }
     fn send(&mut self, app: &mut App, now: i64, input: Value) -> Value {
         let reply = app.request_at(&input, now);
@@ -48,19 +65,31 @@ impl Helper {
     }
     /// Runs the host side of every effect the app asks for until it is quiet.
     fn drive(&mut self, app: &mut App, now: &mut i64) -> Value {
-        let mut last = json!({});
+        self.drive_for(app, now, 0)
+    }
+    /// Lets exactly `ms` milliseconds pass (a search that has not ended keeps polling forever).
+    fn pass(&mut self, app: &mut App, now: &mut i64, ms: i64) -> Value {
+        self.exact = true;
+        let reply = self.drive_for(app, now, ms);
+        self.exact = false;
+        reply
+    }
+    /// Like `drive`, but lets at least `min` milliseconds pass so timers (debounce, polling) fire.
+    fn drive_for(&mut self, app: &mut App, now: &mut i64, min: i64) -> Value {
+        let begin = *now;
         for _ in 0..400 {
             *now += 60;
+            if self.exact && *now - begin >= min && self.pending.is_none() {
+                return json!({"tree":self.tree});
+            }
             let reply = match self.pending.take() {
                 Some(effect) => json!({"effect":effect}),
                 None => app.request_at(&json!({"cmd":"noop"}), *now),
             };
-            if reply.get("tree").is_some() {
-                last = reply.clone();
-            }
+            self.absorb_tree(&reply);
             let Some(effect) = reply.get("effect") else {
-                if !app.jobs.busy() {
-                    return last;
+                if !app.jobs.busy() && app.find_due.is_none() && *now - begin >= min {
+                    return json!({"tree":self.tree});
                 }
                 continue;
             };
@@ -95,9 +124,6 @@ impl Helper {
                 }
             };
             let reply = app.request_at(&json!({"cmd":"next","result":result}), *now);
-            if reply.get("tree").is_some() {
-                last = reply.clone();
-            }
             self.absorb(reply);
         }
         panic!("the window never settled");
@@ -235,4 +261,95 @@ fn the_icon_is_a_scene_of_the_requested_size() {
     let icon = app.request_at(&json!({"cmd":"icon","size":64}), 0);
     assert_eq!(icon["style"]["width"], 64.);
     assert!(tree_text(&icon).contains("PDF"));
+}
+
+/// Pointer position over a page point, in the window's own coordinates.
+fn over(app: &App, page: usize, x: f64, y: f64) -> (f64, f64) {
+    let frame = app.frames.iter().find(|f| f["page"] == page).expect("page is visible");
+    let ax = if app.side.is_some() { ui::SIDEBAR } else { 0. };
+    (ax + frame["left"].as_f64().unwrap() + x * app.scale, ui::TOOLBAR + frame["top"].as_f64().unwrap() + y * app.scale)
+}
+fn pointer(app: &mut App, helper: &mut Helper, now: i64, cmd: &str, at: (f64, f64)) -> Value {
+    helper.send(app, now, json!({"cmd":cmd,"x":at.0,"y":at.1,"button":0}))
+}
+#[test]
+fn page_links_and_form_fields_come_from_the_helper_and_links_are_followed() {
+    let (mut app, mut now, mut helper) = start(4, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    let reply = helper.drive(&mut app, &mut now);
+    assert!(helper.count("pdf.pageInfo") >= 1);
+    assert!(tree_text(&reply["tree"]).contains("field-0"), "an editable field is outlined");
+    let at = over(&app, 0, 10., 10.);
+    pointer(&mut app, &mut helper, now, "down", at);
+    helper.drive(&mut app, &mut now);
+    assert_eq!(app.page, 2, "an internal link goes to its page");
+    let at = over(&app, app.page, 10., 70.);
+    pointer(&mut app, &mut helper, now, "down", at);
+    let reply = helper.drive(&mut app, &mut now);
+    assert!(helper.calls.iter().any(|(m, a)| m == "clipboard.write" && a[0] == "https://example.test/a"));
+    assert!(tree_text(&reply["tree"]).contains("pdf.linkCopied"), "the person is told the link was copied");
+}
+#[test]
+fn dragging_selects_text_and_copying_sends_it_to_the_clipboard() {
+    let (mut app, mut now, mut helper) = start(2, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    let start_at = over(&app, 0, 20., 300.);
+    let down = pointer(&mut app, &mut helper, now, "down", start_at);
+    assert_eq!(down["capture"], true, "the drag follows the pointer wherever it goes");
+    now += 80;
+    let to = over(&app, 0, 120., 320.);
+    pointer(&mut app, &mut helper, now, "pointerMove", to);
+    let end = pointer(&mut app, &mut helper, now, "dragEnd", to);
+    assert_eq!(end["capture"], false);
+    let reply = helper.drive(&mut app, &mut now);
+    assert!(helper.count("pdf.select") >= 1);
+    assert!(tree_text(&reply["tree"]).contains("selection-0"));
+    assert!(tree_text(&reply["tree"]).contains("pdf.selected"));
+    assert!(helper.key(&mut app, "c", "c", 16, now).is_some());
+    let reply = helper.drive(&mut app, &mut now);
+    assert!(helper.calls.iter().any(|(m, a)| m == "clipboard.write" && a[0] == "hello"));
+    assert!(tree_text(&reply["tree"]).contains("pdf.copied"));
+    helper.key(&mut app, "Escape", "", 0, now);
+    assert!(app.selection.is_none(), "Escape clears the selection");
+}
+#[test]
+fn search_streams_hits_page_by_page_goes_to_the_first_and_cycles() {
+    let (mut app, mut now, mut helper) = start(4, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    helper.send(&mut app, now, json!({"cmd":"findChange","value":"hello"}));
+    helper.pass(&mut app, &mut now, 600);
+    let (_, args) = helper.calls.iter().rev().find(|(m, _)| m == "pdf.find").cloned().expect("the search was debounced then sent");
+    assert_eq!(args[1], "hello");
+    let token = args[2].clone();
+    helper.events.push(json!({"kind":"find","token":token,"page":2,"rects":[[5,5,20,10],[5,40,20,10]]}));
+    let reply = helper.pass(&mut app, &mut now, 600);
+    assert_eq!(app.page, 2, "the first hit brings its page into view");
+    assert!(tree_text(&reply["tree"]).contains("hit-0"));
+    assert!(tree_text(&reply["tree"]).contains("pdf.matches"));
+    helper.events.push(json!({"kind":"findDone","token":token}));
+    helper.events.push(json!({"kind":"find","token":999,"page":1,"rects":[[1,1,1,1]]}));
+    helper.pass(&mut app, &mut now, 600);
+    assert_eq!(app.hits.as_ref().unwrap()["list"].as_array().unwrap().len(), 2, "results of an old search are ignored");
+    assert_eq!(app.hits.as_ref().unwrap()["done"], true);
+    helper.key(&mut app, "g", "g", 16, now);
+    assert_eq!(app.hits.as_ref().unwrap()["cur"], 1);
+    helper.key(&mut app, "g", "g", 16 | 1, now);
+    assert_eq!(app.hits.as_ref().unwrap()["cur"], 0);
+    helper.key(&mut app, "Escape", "", 0, now);
+    assert!(app.hits.is_none(), "Escape ends the search");
+}
+#[test]
+fn go_to_page_opens_a_field_and_a_valid_number_navigates() {
+    let (mut app, mut now, mut helper) = start(6, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    assert!(helper.key(&mut app, "g", "g", 16 | 4, now).is_some());
+    let reply = helper.drive(&mut app, &mut now);
+    assert!(tree_text(&reply["tree"]).contains("pdf.goPlaceholder"));
+    helper.send(&mut app, now, json!({"cmd":"gotoChange","value":"4"}));
+    helper.send(&mut app, now, json!({"cmd":"gotoSubmit"}));
+    assert_eq!(app.page, 3);
+    assert!(app.goto.is_none());
+    helper.send(&mut app, now, json!({"cmd":"gotoOpen"}));
+    helper.send(&mut app, now, json!({"cmd":"gotoChange","value":"nope"}));
+    helper.send(&mut app, now, json!({"cmd":"gotoSubmit"}));
+    assert_eq!(app.page, 3, "an invalid number goes nowhere");
 }
