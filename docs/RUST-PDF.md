@@ -139,6 +139,16 @@ Stages (each committed with tests; the JSX window stays the live app until stage
    `index.jsx`, `sidebar.jsx`, the JS adapters and `manifest.json`, runtime test
    with the real `axia-doc` helper and a generated PDF.
 
+Stage 1 status: `native.rs` and `native_ui.rs` are the core window (document open,
+password/error/welcome states, toolbar, status bar, sidebar scene, page rasters,
+wheel/keyboard/zoom/rotation/mode/page navigation, outline loading, icon). They are
+compiled into `axia-app-pdf` but not registered, so the JSX window is still the live
+app. `native_window_tests.rs` drives the window with a fake helper (47 crate tests
+pass). Helper services the transport must provide in stage 4: `pdf.open`
+(`{doc,pages,title,sizes}` or an error `password`/`invalid`/message), `pdf.sizes`,
+`pdf.render` (`{image,w,h}`), `pdf.outline`, `pdf.release`, `pdf.close`, `pdf.recent`.
+A render result discarded by `Jobs::cancel` must have its image released by the lease.
+
 Contract notes for the window: frames come from `{"cmd":"view","op":"viewport"}`
 (`first`/`last`/`currentPage`/`frames`/`renders`); cache admission from
 `{"cmd":"cache","op":"begin"|"complete"|"fail"|"drop"|"invalidate"|"best"}` whose
