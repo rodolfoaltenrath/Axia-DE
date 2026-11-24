@@ -1745,7 +1745,8 @@ impl Host {
         }
         // "keys": ["ArrowDown", …] with "onKey": ["key"]: the keys a field passes on to the app
         // (the arrows and Enter of a search that lists results) as `["key", name]` with the modifiers.
-        if let Some((action, extra)) = self.field_key(key, flags) {
+        // Shift is not among `flags` (the field reads the shifted name), but a key hook reports it.
+        if let Some((action, extra)) = self.field_key(key, flags | i32::from(facts.shift)) {
             self.dispatch(&action, extra);
             return true;
         }

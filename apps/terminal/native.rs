@@ -21,6 +21,9 @@ const INFO_MS: i64 = 1500;
 const EVENTS_MS: i64 = 250;
 const UNDO_MS: i64 = 5000;
 const MOVE_MS: i64 = 8;
+const TOAST_MS: i64 = 4000;
+const TOASTS_MAX: usize = 4;
+const MATCHES_MAX: usize = 60000;
 /// Physical codes of the modifier keys: they never reach a shell on their own.
 const MODIFIER_CODES: [i32; 9] = [29, 97, 42, 54, 56, 100, 125, 126, 58];
 
@@ -34,8 +37,49 @@ struct Session {
     last_exit: i64,
     info: Value,
 }
+#[derive(Clone, Default)]
+struct Find {
+    sid: Sid,
+    query: String,
+    cs: bool,
+    regex: bool,
+    count: i64,
+    index: i64,
+    error: bool,
+}
+#[derive(Clone)]
+enum Confirm {
+    Pane(Sid),
+    Tab(String),
+}
+#[derive(Clone)]
+struct Dialog {
+    text: Value,
+    detail: Value,
+    confirm: Confirm,
+}
+#[derive(Clone)]
+struct Toast {
+    text: Value,
+    until: i64,
+}
+/// What a window shows on top of its panes. It lives with the workspace, like the tabs.
+#[derive(Clone, Default)]
+struct WinUi {
+    find: Option<Find>,
+    find_focus: u64,
+    dialog: Option<Dialog>,
+    toasts: Vec<Toast>,
+}
+#[derive(Clone, Copy)]
+enum PasteMode {
+    Plain,
+    OneLine,
+    Escaped,
+}
 #[derive(Default)]
 struct Shell {
+    ui: HashMap<String, WinUi>,
     ws: Workspace,
     sessions: HashMap<Sid, Session>,
     /// Closed panes waiting out their undo window: (session, closes at).
@@ -54,6 +98,11 @@ enum Purpose {
 }
 enum Tag {
     Create { purpose: Purpose, profile: String, wid: String },
+    Copied,
+    Pasted(PasteMode),
+    Output,
+    Found,
+    Logical { query: String, cs: bool, sid: Sid },
     Quiet,
     Infos,
     Events,
@@ -145,7 +194,113 @@ impl NativeApp for App {
         self.key_at(key, chr, flags, facts, clock::now())
     }
 }
+/// The matches of a regular expression in the logical lines of a session, as the engine takes
+/// them: (line, first character, character count) triples, at most MATCHES_MAX numbers.
+fn regex_matches(text: &str, query: &str, case_sensitive: bool) -> Option<Vec<i64>> {
+    let re = regex::RegexBuilder::new(query).case_insensitive(!case_sensitive).unicode(true).build().ok()?;
+    let mut trip: Vec<i64> = vec![];
+    for (i, line) in text.split('\n').enumerate() {
+        if line.is_empty() || trip.len() >= MATCHES_MAX {
+            continue;
+        }
+        for m in re.find_iter(line) {
+            if m.as_str().is_empty() {
+                continue;
+            }
+            if trip.len() >= MATCHES_MAX {
+                break;
+            }
+            trip.extend([i as i64, line[..m.start()].chars().count() as i64, m.as_str().chars().count() as i64]);
+        }
+    }
+    Some(trip)
+}
 impl App {
+    fn ui<R>(&self, f: impl FnOnce(&mut WinUi) -> R) -> R {
+        shell(|s| f(s.ui.entry(self.window.clone()).or_default()))
+    }
+    fn toast(&mut self, text: Value, now: i64) {
+        self.ui(|u| {
+            u.toasts.push(Toast { text, until: now + TOAST_MS });
+            let extra = u.toasts.len().saturating_sub(TOASTS_MAX);
+            u.toasts.drain(..extra);
+        });
+    }
+    /// Closing something that runs a program asks first (the profile can turn that off).
+    fn ask_then(&mut self, sids: &[Sid], what: &str, confirm: Confirm, now: i64) {
+        let mut busy: Vec<String> = vec![];
+        for sid in sids {
+            let (alive, running, process) = shell(|s| {
+                s.sessions.get(sid).map(|x| (x.info["alive"] == true, x.info["busy"] == true, x.info["process"].as_str().unwrap_or("").to_owned()))
+            })
+            .unwrap_or_default();
+            if alive && running && self.session_profile(*sid)["confirmClose"] == true && !busy.contains(&process) {
+                busy.push(process);
+            }
+        }
+        if busy.is_empty() {
+            self.confirmed(confirm, now);
+            return;
+        }
+        self.ui(|u| {
+            u.dialog = Some(Dialog {
+                text: json!({"key":format!("terminal.dialog.close.{what}")}),
+                detail: json!({"key":"terminal.dialog.busy","params":{"list":busy.join(", ")}}),
+                confirm,
+            })
+        });
+    }
+    fn confirmed(&mut self, confirm: Confirm, now: i64) {
+        match confirm {
+            Confirm::Pane(sid) => {
+                self.close_pane(sid, now);
+                self.toast(json!({"key":"terminal.toast.paneClosed"}), now);
+            }
+            Confirm::Tab(id) => self.close_tab(&id),
+        }
+    }
+    fn copy(&mut self) {
+        if let Some(sid) = shell(|s| s.ws.current_sid(&self.window)) {
+            self.jobs.enqueue(Tag::Copied, "term.copy", json!([sid]));
+        }
+    }
+    fn paste(&mut self, mode: PasteMode) {
+        self.jobs.enqueue(Tag::Pasted(mode), "clipboard.read", json!([]));
+    }
+    fn find_open(&mut self) {
+        let Some(sid) = shell(|s| s.ws.current_sid(&self.window)) else { return };
+        let fresh = self.ui(|u| {
+            u.find_focus += 1;
+            if u.find.is_none() {
+                u.find = Some(Find { sid, index: -1, ..Default::default() });
+                true
+            } else {
+                false
+            }
+        });
+        let _ = fresh;
+    }
+    /// Searches the current query in the session of the bar.
+    fn find_run(&mut self) {
+        let Some(find) = self.ui(|u| u.find.clone()) else { return };
+        if find.query.is_empty() {
+            self.jobs.enqueue(Tag::Found, "term.search", json!([find.sid, "", false]));
+        } else if find.regex {
+            self.jobs.enqueue(Tag::Logical { query: find.query, cs: find.cs, sid: find.sid }, "term.logicalText", json!([find.sid]));
+        } else {
+            self.jobs.enqueue(Tag::Found, "term.search", json!([find.sid, find.query, find.cs]));
+        }
+    }
+    fn find_move(&mut self, delta: i64) {
+        if let Some(find) = self.ui(|u| u.find.clone()) {
+            self.jobs.enqueue(Tag::Found, "term.searchMove", json!([find.sid, delta]));
+        }
+    }
+    fn find_close(&mut self) {
+        if let Some(find) = self.ui(|u| u.find.take()) {
+            self.jobs.enqueue(Tag::Quiet, "term.search", json!([find.sid, "", false]));
+        }
+    }
     // ---- settings and profiles ----
 
     fn raw(&self) -> &Value {
@@ -338,6 +493,53 @@ impl App {
                     self.on_created(purpose, profile, wid, sid);
                 }
             }
+            Tag::Copied => {
+                if let Some(text) = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).filter(|t| !t.is_empty()) {
+                    self.jobs.enqueue(Tag::Quiet, "clipboard.remember", json!([text]));
+                }
+            }
+            Tag::Pasted(mode) => {
+                let text = done.result.ok().and_then(|v| v["text"].as_str().map(str::to_owned)).unwrap_or_default();
+                let text = match mode {
+                    PasteMode::Plain => text,
+                    PasteMode::OneLine => text.split('\n').map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" "),
+                    PasteMode::Escaped => format!("'{}'", text.replace('\'', "'\\''")),
+                };
+                if !text.is_empty() {
+                    self.to_session("paste", json!({"text":text}));
+                }
+            }
+            Tag::Output => {
+                match done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).filter(|t| !t.is_empty()) {
+                    Some(text) => {
+                        self.jobs.enqueue(Tag::Quiet, "clipboard.remember", json!([text]));
+                        self.toast(json!({"key":"terminal.toast.outputCopied"}), clock::now());
+                    }
+                    None => self.toast(json!({"key":"terminal.toast.noOutput"}), clock::now()),
+                }
+            }
+            Tag::Found => {
+                if let Ok(found) = done.result {
+                    self.ui(|u| {
+                        if let Some(find) = u.find.as_mut() {
+                            find.count = found["count"].as_i64().unwrap_or(0);
+                            find.index = found["index"].as_i64().unwrap_or(-1);
+                            find.error = found["error"] == true;
+                        }
+                    });
+                }
+            }
+            Tag::Logical { query, cs, sid } => {
+                let text = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+                match regex_matches(&text, &query, cs) {
+                    Some(trip) => self.jobs.enqueue(Tag::Found, "term.setMatches", json!([sid, trip])),
+                    None => self.ui(|u| {
+                        if let Some(find) = u.find.as_mut() {
+                            (find.count, find.index, find.error) = (0, -1, true);
+                        }
+                    }),
+                }
+            }
             Tag::Infos => {
                 self.infos_pending = false;
                 if let Ok(list) = done.result {
@@ -355,6 +557,22 @@ impl App {
     }
     fn timers(&mut self, now: i64) {
         self.expire_closed(now);
+        self.ui(|u| u.toasts.retain(|t| t.until > now));
+        // the find bar follows the focused pane
+        let current = shell(|s| s.ws.current_sid(&self.window));
+        let moved = self.ui(|u| match (&mut u.find, current) {
+            (Some(find), Some(sid)) if find.sid != sid => {
+                let old = find.sid;
+                find.sid = sid;
+                (find.count, find.index) = (0, -1);
+                Some(old)
+            }
+            _ => None,
+        });
+        if let Some(old) = moved {
+            self.jobs.enqueue(Tag::Quiet, "term.search", json!([old, "", false]));
+            self.find_run();
+        }
         let sids = shell(|s| s.ws.sessions(&self.window));
         if sids.is_empty() {
             return;
@@ -461,13 +679,29 @@ impl App {
             }
             "closePane" => {
                 if let Some(sid) = sid {
-                    self.close_pane(sid, now);
+                    self.ask_then(&[sid], "pane", Confirm::Pane(sid), now);
                 }
             }
             "closeTab" => {
-                let id = shell(|s| s.ws.window(&self.window).and_then(|w| w.active_tab().map(|t| t.id.clone())));
-                if let Some(id) = id {
-                    self.close_tab(&id);
+                let found = shell(|s| s.ws.window(&self.window).and_then(|w| w.active_tab().map(|t| (t.id.clone(), t.root.leaves()))));
+                if let Some((id, sids)) = found {
+                    self.ask_then(&sids, "tab", Confirm::Tab(id), now);
+                }
+            }
+            "copy" => self.copy(),
+            "paste" => self.paste(PasteMode::Plain),
+            "pasteOneLine" => self.paste(PasteMode::OneLine),
+            "pasteEscaped" => self.paste(PasteMode::Escaped),
+            "selectOutput" => {
+                if let Some(sid) = sid {
+                    self.jobs.enqueue(Tag::Output, "term.selectOutput", json!([sid]));
+                }
+            }
+            "find" => self.find_open(),
+            "findNext" | "findPrev" => {
+                if let Some(sid) = sid {
+                    let delta = if action == "findNext" { -1 } else { 1 };
+                    self.jobs.enqueue(if self.ui(|u| u.find.is_some()) { Tag::Found } else { Tag::Quiet }, "term.searchMove", json!([sid, delta]));
                 }
             }
             "nextPane" => self.cycle_pane(1),
@@ -497,14 +731,15 @@ impl App {
             }
             "undoClose" => {
                 let window = self.window.clone();
-                if let Some((_, sid)) = shell(|s| {
+                let back = shell(|s| {
                     let back = s.ws.undo_close(&window);
                     if let Some((_, sid)) = &back {
                         s.closing.retain(|(c, _)| c != sid);
                     }
                     back
-                }) {
-                    let _ = sid;
+                });
+                if back.is_none() {
+                    self.toast(json!({"key":"terminal.toast.nothingToUndo"}), now);
                 }
             }
             "zoomIn" | "zoomOut" | "zoomReset" => {
@@ -558,6 +793,16 @@ impl App {
 
     fn key_at(&mut self, key: &str, chr: &str, flags: i32, facts: &KeyFacts, now: i64) -> Option<Value> {
         let sid = shell(|s| s.ws.current_sid(&self.window))?;
+        if let Some(dialog) = self.ui(|u| u.dialog.clone()) {
+            // a dialog takes every key: Escape cancels, Enter confirms
+            if key == "Escape" {
+                self.ui(|u| u.dialog = None);
+            } else if key == "Enter" {
+                self.ui(|u| u.dialog = None);
+                self.confirmed(dialog.confirm, now);
+            }
+            return Some(self.out(now));
+        }
         let event = json!({"code":facts.code,"key":key,"meta":flags & 16 != 0,"ctrl":flags & 2 != 0,"alt":flags & 4 != 0,"shift":facts.shift});
         let modifier = MODIFIER_CODES.contains(&facts.code);
         let profile = self.session_profile(sid);
@@ -607,7 +852,39 @@ impl App {
             }
             "closeTab" => {
                 if let Some(id) = key.as_str() {
-                    self.close_tab(id);
+                    let sids = shell(|s| s.ws.window(&self.window).and_then(|w| w.tabs.iter().find(|t| t.id == id).map(|t| t.root.leaves()))).unwrap_or_default();
+                    self.ask_then(&sids, "tab", Confirm::Tab(id.to_owned()), now);
+                }
+            }
+            "findChange" => {
+                self.ui(|u| {
+                    if let Some(find) = u.find.as_mut() {
+                        find.query = v["value"].as_str().unwrap_or("").to_owned();
+                    }
+                });
+                self.find_run();
+            }
+            "findCs" | "findRegex" => {
+                let regex = v["cmd"] == "findRegex";
+                self.ui(|u| {
+                    if let Some(find) = u.find.as_mut() {
+                        if regex { find.regex = !find.regex } else { find.cs = !find.cs }
+                    }
+                });
+                self.find_run();
+            }
+            "findMove" => self.find_move(key.as_i64().unwrap_or(0).signum()),
+            "findKey" => match key.as_str() {
+                Some("ArrowUp") => self.find_move(-1),
+                Some("ArrowDown") => self.find_move(1),
+                Some("Enter") => self.find_move(if v["shift"] == true { 1 } else { -1 }),
+                _ => {}
+            },
+            "findClose" => self.find_close(),
+            "dialogCancel" => self.ui(|u| u.dialog = None),
+            "dialogConfirm" => {
+                if let Some(dialog) = self.ui(|u| u.dialog.take()) {
+                    self.confirmed(dialog.confirm, now);
                 }
             }
             "newTab" => {
@@ -798,7 +1075,7 @@ impl App {
             Some((w.tabs.clone(), w.active.clone(), w.font_delta))
         }) else {
             return ui::tree(&ui::Facts { theme: &self.theme, pane_bg: "#000000".into(), width: self.width, tabs: vec![], broadcast: false,
-                panes: vec![], dividers: &[], status: None });
+                panes: vec![], dividers: &[], status: None, find: None, find_focus: 0, dialog: None, toasts: vec![] });
         };
         let _ = font;
         let tab = tabs.iter().find(|t| t.id == active).or_else(|| tabs.first()).cloned().unwrap();
@@ -853,7 +1130,16 @@ impl App {
             }
         });
         let theme = self.theme.clone();
-        ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast: false, panes, dividers: &dividers, status })
+        let (find, dialog, toasts, find_focus) = self.ui(|u| {
+            (
+                u.find.clone().map(|f| ui::FindFacts { query: f.query, cs: f.cs, regex: f.regex, count: f.count, index: f.index, error: f.error }),
+                u.dialog.clone().map(|d| (d.text, d.detail)),
+                u.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+                u.find_focus,
+            )
+        });
+        ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast: false, panes, dividers: &dividers, status,
+            find, find_focus, dialog, toasts })
     }
 }
 

@@ -32,7 +32,19 @@ pub(super) struct StatusFacts {
     pub size: (i64, i64),
     pub clock: String,
 }
+pub(super) struct FindFacts {
+    pub query: String,
+    pub cs: bool,
+    pub regex: bool,
+    pub count: i64,
+    pub index: i64,
+    pub error: bool,
+}
 pub(super) struct Facts<'a> {
+    pub find: Option<FindFacts>,
+    pub find_focus: u64,
+    pub dialog: Option<(Value, Value)>,
+    pub toasts: Vec<Value>,
     pub theme: &'a Value,
     pub pane_bg: String,
     pub width: f64,
@@ -224,15 +236,120 @@ fn status_bar(f: &Facts, s: &StatusFacts) -> Value {
         children,
     )
 }
+fn small_button(f: &Facts, key: &str, label: &str, action: Value, on: bool) -> Value {
+    let th = f.theme;
+    click(
+        view(
+            key,
+            json!({"minWidth":26,"height":22,"paddingHorizontal":4,"borderRadius":5,"alignItems":"center","justifyContent":"center",
+                "backgroundColor":if on {tok(th,"hover","rgba(127,127,127,0.25)")} else {"transparent"}}),
+            vec![text(json!(label), json!({"fontSize":12,"color":if on {tok(th,"accent","#0a84ff")} else {tok(th,"text","#ffffff")}}))],
+        ),
+        "onClick",
+        action,
+    )
+}
+fn find_bar(f: &Facts, find: &FindFacts) -> Value {
+    let th = f.theme;
+    let label = if find.error {
+        json!({"key":"terminal.find.badRegex"})
+    } else if find.count > 0 {
+        json!({"key":"terminal.find.position","params":{"i":find.count - find.index,"n":find.count}})
+    } else if !find.query.is_empty() {
+        json!({"key":"terminal.find.none"})
+    } else {
+        json!("")
+    };
+    view(
+        "find",
+        json!({"position":"absolute","right":12,"top":8,"flexDirection":"row","alignItems":"center","gap":4,"padding":6,"borderRadius":10,
+            "backgroundColor":tok(th,"windowBg","#2a2a2e"),"borderWidth":1,"borderColor":tok(th,"separator","#444444"),
+            "boxShadow":"0 6px 18px rgba(0,0,0,0.35)"}),
+        vec![
+            json!({"kind":"input","key":format!("find-{}",f.find_focus),"value":find.query,"placeholder":{"key":"terminal.find.placeholder"},
+                "autoFocus":true,"change":["findChange"],"cancel":["findClose"],"keys":["Enter","ArrowUp","ArrowDown"],"onKey":["findKey"],
+                "size":13,"style":{"width":200,"height":26}}),
+            text(label, json!({"width":88,"fontSize":11,"textAlign":"center","color":tok(th,"textDim","#999999")})),
+            small_button(f, "up", "↑", json!(["findMove",-1]), false),
+            small_button(f, "down", "↓", json!(["findMove",1]), false),
+            small_button(f, "case", "Aa", json!(["findCs"]), find.cs),
+            small_button(f, "regex", ".*", json!(["findRegex"]), find.regex),
+            small_button(f, "close", "✕", json!(["findClose"]), false),
+        ],
+    )
+}
+fn dialog(f: &Facts, title: &Value, detail: &Value) -> Value {
+    let th = f.theme;
+    let button = |key: &str, label: &str, action: &str, primary: bool| {
+        click(
+            view(
+                key,
+                json!({"height":28,"paddingHorizontal":14,"borderRadius":6,"alignItems":"center","justifyContent":"center",
+                    "backgroundColor":if primary {tok(th,"accent","#0a84ff")} else {tok(th,"control","#3a3a3e")}}),
+                vec![text(json!({"key":label}), json!({"fontSize":13,"color":if primary {"#ffffff"} else {tok(th,"text","#ffffff")}}))],
+            ),
+            "onClick",
+            json!([action]),
+        )
+    };
+    let mut overlay = view(
+        "dialog",
+        json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0,"alignItems":"center","justifyContent":"center","backgroundColor":"rgba(0,0,0,0.35)"}),
+        vec![view(
+            "card",
+            json!({"width":340,"padding":20,"borderRadius":12,"backgroundColor":tok(th,"windowBg","#2a2a2e"),"borderWidth":1,
+                "borderColor":tok(th,"separator","#444444"),"boxShadow":"0 20px 50px rgba(0,0,0,0.5)"}),
+            vec![
+                text(title.clone(), json!({"fontSize":15,"fontWeight":600,"color":tok(th,"text","#ffffff")})),
+                text(detail.clone(), json!({"fontSize":13,"marginTop":6,"color":tok(th,"textDim","#999999")})),
+                view(
+                    "buttons",
+                    json!({"flexDirection":"row","justifyContent":"flex-end","gap":8,"marginTop":20}),
+                    vec![button("cancel", "terminal.dialog.cancel", "dialogCancel", false), button("confirm", "terminal.dialog.close", "dialogConfirm", true)],
+                ),
+            ],
+        )],
+    );
+    overlay["events"]["onMouseDown"] = json!(["noop"]);
+    overlay
+}
+fn toasts(f: &Facts) -> Value {
+    let th = f.theme;
+    view(
+        "toasts",
+        json!({"position":"absolute","right":14,"bottom":10,"gap":6,"alignItems":"flex-end","pointerEvents":"none"}),
+        f.toasts
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                view(
+                    json!(format!("toast-{i}")),
+                    json!({"maxWidth":340,"paddingHorizontal":12,"paddingVertical":8,"borderRadius":9,"backgroundColor":tok(th,"windowBg","#2a2a2e"),
+                        "borderWidth":1,"borderColor":tok(th,"separator","#444444"),"boxShadow":"0 8px 22px rgba(0,0,0,0.4)"}),
+                    vec![text(t.clone(), json!({"fontSize":12,"color":tok(th,"text","#ffffff")}))],
+                )
+            })
+            .collect(),
+    )
+}
 pub(super) fn tree(f: &Facts) -> Value {
     let mut area: Vec<Value> = f.panes.iter().map(|p| pane(f, p)).collect();
     area.extend(f.dividers.iter().map(|d| divider(f, d)));
+    if let Some(find) = &f.find {
+        area.push(find_bar(f, find));
+    }
+    if !f.toasts.is_empty() {
+        area.push(toasts(f));
+    }
     let mut children = vec![
         tab_bar(f),
         view("panes", json!({"flex":1,"overflow":"hidden","direction":"ltr","backgroundColor":f.pane_bg}), area),
     ];
     if let Some(status) = &f.status {
         children.push(status_bar(f, status));
+    }
+    if let Some((title, detail)) = &f.dialog {
+        children.push(dialog(f, title, detail));
     }
     view("terminal", json!({"flex":1,"backgroundColor":f.pane_bg}), children)
 }

@@ -12,10 +12,16 @@ struct Service {
     infos: HashMap<i64, Value>,
     fx: Vec<Value>,
     tree: Value,
+    copy_text: String,
+    clip: String,
+    output: Option<String>,
+    logical: String,
+    found: Value,
 }
 impl Service {
     fn new() -> Self {
-        Self { token: 0, ready: Default::default(), calls: vec![], next_sid: 100, pending: None, events: vec![], infos: HashMap::new(), fx: vec![], tree: Value::Null }
+        Self { token: 0, ready: Default::default(), calls: vec![], next_sid: 100, pending: None, events: vec![], infos: HashMap::new(), fx: vec![], tree: Value::Null,
+            copy_text: String::new(), clip: String::new(), output: None, logical: String::new(), found: json!({"count":0,"index":-1}) }
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
         match method {
@@ -28,6 +34,11 @@ impl Service {
                 Some(json!({"sid":sid,"info":self.infos.get(&sid).cloned().unwrap_or(json!({"process":"","busy":false,"cols":80,"rows":24,"cwd":"/home/test","shell":"bash"}))}))
             }).collect::<Vec<_>>()),
             "term.events" => Value::Array(std::mem::take(&mut self.events)),
+            "term.copy" => json!(self.copy_text),
+            "clipboard.read" => json!({"kind":"text","text":self.clip}),
+            "term.selectOutput" => self.output.clone().map_or(Value::Null, |o| json!(o)),
+            "term.logicalText" => json!(self.logical),
+            "term.search" | "term.searchMove" | "term.setMatches" => self.found.clone(),
             _ => Value::Null,
         }
     }
@@ -369,4 +380,183 @@ fn the_icon_is_a_scene_of_the_requested_size() {
     let icon = app.request_at(&json!({"cmd":"icon","size":48}), 0);
     assert_eq!(icon["style"]["width"], 48.);
     assert!(text(&icon).contains(">_"));
+}
+
+fn last_call(service: &Service, method: &str) -> Value {
+    service.calls.iter().rev().find(|(m, _)| m == method).map(|(_, a)| a.clone()).unwrap_or(Value::Null)
+}
+fn split_window(app: &mut App, service: &mut Service, now: &mut i64) {
+    app.run("splitRight", *now);
+    service.send(app, *now, json!({"cmd":"noop"}));
+    service.drive(app, now);
+}
+
+#[test]
+fn copy_sends_the_selection_to_the_clipboard_history_and_paste_reads_it_back() {
+    let (mut app, mut now, mut service) = start();
+    service.copy_text = "selected words".into();
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(app.run("copy", now));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "clipboard.remember"), json!(["selected words"]));
+    service.copy_text.clear();
+    let before = service.count("clipboard.remember");
+    app.run("copy", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(service.count("clipboard.remember"), before, "an empty selection copies nothing");
+    service.fx.clear();
+    service.clip = "ls -la\n".into();
+    app.run("paste", now);
+    service.drive(&mut app, &mut now);
+    let pasted = service.take_fx("paste");
+    assert_eq!((pasted[0]["sid"].as_i64(), pasted[0]["text"].as_str()), (Some(101), Some("ls -la\n")), "paste is bracketed by the engine, so the text goes as it is");
+}
+#[test]
+fn paste_variants_flatten_lines_or_quote_the_text_for_the_shell() {
+    let (mut app, mut now, mut service) = start();
+    service.clip = "  first \n\n  second\n third ".into();
+    app.run("pasteOneLine", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(service.take_fx("paste")[0]["text"], "first second third");
+    service.clip = "it's here".into();
+    app.run("pasteEscaped", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(service.take_fx("paste")[0]["text"], "'it'\\''s here'");
+    service.clip.clear();
+    app.run("paste", now);
+    service.drive(&mut app, &mut now);
+    assert!(service.take_fx("paste").is_empty(), "an empty clipboard pastes nothing");
+}
+#[test]
+fn selecting_the_last_output_copies_it_or_says_there_is_none() {
+    let (mut app, mut now, mut service) = start();
+    service.output = Some("build finished".into());
+    app.run("selectOutput", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "clipboard.remember"), json!(["build finished"]));
+    assert!(text(&service.tree).contains("terminal.toast.outputCopied"));
+    service.output = None;
+    now += 5000;
+    app.run("selectOutput", now);
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("terminal.toast.noOutput"), "no marked output: the person is told why");
+}
+#[test]
+fn closing_a_pane_that_runs_a_program_asks_first_and_an_idle_one_closes_at_once() {
+    let (mut app, mut now, mut service) = start();
+    split_window(&mut app, &mut service, &mut now);
+    // idle shells close without asking, and say how to undo
+    app.run("closePane", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert_eq!(sessions(&app), [101]);
+    assert!(text(&service.tree).contains("terminal.toast.paneClosed") && !text(&service.tree).contains("terminal.dialog"));
+    app.run("undoClose", now);
+    // a program is running in the focused pane
+    service.infos.insert(102, json!({"alive":true,"busy":true,"process":"sleep","cols":80,"rows":24}));
+    now += 2000;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    app.run("closePane", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    let tree = text(&service.tree);
+    assert!(tree.contains("terminal.dialog.close.pane") && tree.contains("terminal.dialog.busy") && tree.contains("sleep"), "{tree}");
+    assert_eq!(sessions(&app).len(), 2, "nothing closed yet");
+    // Escape cancels
+    service.key(&mut app, now, "Escape", "", 0, facts(1, "", false)).expect("the dialog takes the key");
+    assert!(!text(&service.tree).contains("terminal.dialog.close.pane"));
+    assert_eq!(sessions(&app).len(), 2);
+    // the Close button confirms
+    app.run("closePane", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.send(&mut app, now, json!({"cmd":"dialogConfirm"}));
+    assert_eq!(sessions(&app), [101]);
+    // Enter confirms too, and a dialog takes keys that would have gone to the shell
+    service.infos.insert(101, json!({"alive":true,"busy":true,"process":"vim","cols":80,"rows":24}));
+    now += 2000;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    app.run("closeTab", now);
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(text(&service.tree).contains("terminal.dialog.close.tab"));
+    service.fx.clear();
+    service.key(&mut app, now, "a", "a", 0, facts(30, "a", false)).expect("the dialog swallows typing");
+    assert!(service.take_fx("key").is_empty());
+    service.key(&mut app, now, "Enter", "", 0, facts(28, "", false)).unwrap();
+    assert!(sessions(&app).is_empty(), "Enter closes the tab");
+}
+#[test]
+fn toasts_stay_four_seconds_and_at_most_four_at_a_time() {
+    let (mut app, mut now, mut service) = start();
+    for _ in 0..6 {
+        app.run("undoClose", now);
+    }
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert_eq!(text(&service.tree).matches("terminal.toast.nothingToUndo").count(), 4, "the oldest ones make room");
+    now += 4100;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    assert!(!text(&service.tree).contains("terminal.toast"), "they leave by themselves");
+}
+#[test]
+fn the_find_bar_searches_moves_and_closes_with_the_engine() {
+    let (mut app, mut now, mut service) = start();
+    service.key(&mut app, now, "f", "f", 16, facts(33, "f", false)).expect("❖F opens the bar");
+    assert!(text(&service.tree).contains("terminal.find.placeholder"));
+    service.found = json!({"count":3,"index":0});
+    service.send(&mut app, now, json!({"cmd":"findChange","value":"foo"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.search"), json!([101, "foo", false]));
+    assert!(text(&service.tree).contains("terminal.find.position"), "the position is shown");
+    service.send(&mut app, now, json!({"cmd":"findKey","key":"Enter","shift":false}));
+    assert_eq!(last_call(&service, "term.searchMove").as_array().map(|a| a.len()), None, "jobs run on the next drive");
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.searchMove"), json!([101, -1]), "Enter goes to the previous match");
+    service.send(&mut app, now, json!({"cmd":"findKey","key":"Enter","shift":true}));
+    service.send(&mut app, now, json!({"cmd":"findMove","key":-5}));
+    service.drive(&mut app, &mut now);
+    let moves: Vec<Value> = service.calls.iter().filter(|(m, _)| m == "term.searchMove").map(|(_, a)| a[1].clone()).collect();
+    assert_eq!(moves, [json!(-1), json!(1), json!(-1)], "Shift+Enter reverses and a move is a single step");
+    service.send(&mut app, now, json!({"cmd":"findCs"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.search"), json!([101, "foo", true]), "case sensitivity searches again");
+    // no results
+    service.found = json!({"count":0,"index":-1});
+    service.send(&mut app, now, json!({"cmd":"findChange","value":"zzz"}));
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("terminal.find.none"));
+    service.send(&mut app, now, json!({"cmd":"findClose"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.search"), json!([101, "", false]), "closing clears the highlights");
+    assert!(!text(&service.tree).contains("terminal.find.placeholder"));
+}
+#[test]
+fn regular_expression_search_hands_the_engine_line_start_and_length_triples() {
+    let (mut app, mut now, mut service) = start();
+    app.run("find", now);
+    service.logical = "foo\nbar Foo foo\n\nñandú foo".into();
+    service.found = json!({"count":4,"index":3});
+    service.send(&mut app, now, json!({"cmd":"findRegex"}));
+    service.send(&mut app, now, json!({"cmd":"findChange","value":"fo+"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.logicalText"), json!([101]));
+    assert_eq!(last_call(&service, "term.setMatches"), json!([101, [0, 0, 3, 1, 4, 3, 1, 8, 3, 3, 6, 3]]), "characters, not bytes: ñandú counts five");
+    // case sensitive: the capital F no longer matches
+    service.send(&mut app, now, json!({"cmd":"findCs"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.setMatches"), json!([101, [0, 0, 3, 1, 8, 3, 3, 6, 3]]));
+    // an invalid pattern is reported, not searched
+    let before = service.count("term.setMatches");
+    service.send(&mut app, now, json!({"cmd":"findChange","value":"("}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(service.count("term.setMatches"), before);
+    assert!(text(&service.tree).contains("terminal.find.badRegex"));
+}
+#[test]
+fn the_find_bar_follows_the_focused_pane() {
+    let (mut app, mut now, mut service) = start();
+    app.run("find", now);
+    service.send(&mut app, now, json!({"cmd":"findChange","value":"x"}));
+    service.drive(&mut app, &mut now);
+    split_window(&mut app, &mut service, &mut now);
+    assert_eq!(last_call(&service, "term.search"), json!([102, "x", false]), "the search moves to the new pane");
+    assert!(service.calls.iter().any(|(m, a)| m == "term.search" && a == &json!([101, "", false])), "and is cleared in the old one");
 }

@@ -68,8 +68,24 @@ change. Until then the React window stays the live app.
      shells (stage 3), broadcast input, tmux (stage 5), saving arrangements and the live
      layout. A session whose last window closed during its undo window is only closed by the
      next window that mounts; the session-level service of stage 6 must run that timer.
-3. **Bars and dialogs.** Search, toolbelt, context menu, replay, autocomplete, paste and
-   command history, the Dock menu.
+3. **Bars and dialogs.**
+   - **3a (done):** toasts (four at most, four seconds), the close confirmation for panes and
+     tabs that run a program (Escape cancels, Enter confirms, the dialog takes every key),
+     copy, paste, paste on one line, paste quoted for the shell, select the last output, and the
+     find bar (plain search by the engine; regular expressions in Rust over the logical lines,
+     handed to the engine as (line, first character, length) triples; case, next/previous,
+     Shift+Enter, follows the focused pane). The workspace entry of a window now also keeps
+     what it shows on top of the panes. 37 crate tests.
+     New transport jobs: `term.copy`, `term.selectOutput`, `term.search`, `term.searchMove`,
+     `term.logicalText`, `term.setMatches`, `clipboard.read` (→ {text}), and
+     `clipboard.remember` (put the text on the clipboard and in its history). The `paste` effect
+     carries `text`. Rust's `regex` has no look-around or back-references, unlike the
+     JavaScript expressions of the React window: such a pattern is reported as invalid.
+     A field's `onKey` hook now also reports Shift.
+   - **3b:** popups (autocomplete, paste and command history, open quickly, edit the title),
+     the composer, the toolbelt, instant replay and copy mode.
+   - **3c:** the application menus, the context menu, ❖-click on links, the close guard of the
+     window and the Dock menu.
 4. **Preferences.** Profiles, schemes and key bindings; the importer of `iterm.js`
    (JSON profiles, `.itermcolors`, the iTerm2 plist) in Rust.
 5. **tmux.** The control-mode client of `tmux.js` (`tmux -CC`).
