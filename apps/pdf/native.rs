@@ -3,7 +3,7 @@
 //! the scene. The transport only runs the helper calls Rust names (`pdf.open`,
 //! `pdf.sizes`, `pdf.render`, `pdf.outline`, `pdf.release`, `pdf.close`, `pdf.recent`)
 //! and keeps document and raster handles in the window's lease.
-use crate::native_view::{async_jobs::Jobs, clock, NativeApp};
+use crate::native_view::{async_jobs::Jobs, clock, i18n::I18n, NativeApp};
 use crate::Model;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -20,6 +20,7 @@ const MESSAGE_MS: i64 = 3500;
 const SELECT_THROTTLE_MS: i64 = 50;
 const DOUBLE_CLICK_MS: i64 = 400;
 const FIND_DEBOUNCE_MS: i64 = 350;
+const TOOL_COLORS: [&str; 5] = ["#ffd60a", "#30d158", "#64d2ff", "#ff6482", "#bf5af2"];
 
 enum Tag {
     Recent,
@@ -30,8 +31,9 @@ enum Tag {
     Release,
     Close,
     Info { page: usize, stamp: Value, epoch: u64 },
-    Select { token: u64, page: usize, epoch: u64 },
+    Select { token: u64, page: usize, epoch: u64, highlight: Option<String> },
     Events(u64),
+    Edit { ticket: u64, epoch: u64 },
     Ignore,
 }
 struct Drag {
@@ -42,6 +44,7 @@ struct Drag {
     y1: f64,
     moved: bool,
     last: i64,
+    ink: bool,
 }
 #[derive(Clone, PartialEq)]
 enum Zoom {
@@ -115,6 +118,14 @@ pub struct App {
     last_click: i64,
     events_due: i64,
     events_pending: bool,
+    tool: String,
+    color: usize,
+    edit_state: Value,
+    ink: Option<Value>,
+    i18n: I18n,
+    locale_revision: u64,
+    window: String,
+    menus: Value,
 }
 impl Default for App {
     fn default() -> Self {
@@ -175,6 +186,14 @@ impl Default for App {
             last_click: 0,
             events_due: 0,
             events_pending: false,
+            tool: "select".into(),
+            color: 0,
+            edit_state: Value::Null,
+            ink: None,
+            i18n: I18n::default(),
+            locale_revision: 0,
+            window: String::new(),
+            menus: Value::Null,
         }
     }
 }
@@ -198,6 +217,9 @@ impl NativeApp for App {
     }
     fn set_native_appearance(&mut self, theme: Rc<Value>) {
         self.theme = theme;
+    }
+    fn resources(&mut self, assets: &str, home: Option<&str>) {
+        self.i18n = I18n::new(assets, home);
     }
     fn refresh_ms(&self) -> Option<f64> {
         self.booted.then_some(if self.jobs.busy() { 50. } else { 250. })
@@ -250,6 +272,8 @@ impl App {
         self.drag = None;
         self.goto = None;
         self.events_pending = false;
+        self.edit_state = Value::Null;
+        self.ink = None;
         self.events_due = now + 250;
         self.find_due = (!self.find_query.is_empty()).then_some(now);
         self.jobs.enqueue(Tag::Open(self.epoch), "pdf.open", json!([path, self.password]));
@@ -343,11 +367,22 @@ impl App {
             (Tag::Info { page, epoch, .. }, Err(_)) if epoch == self.epoch => {
                 self.info.insert(page, Some(json!({"links":[],"fields":[],"notes":[]})));
             }
-            (Tag::Select { token, page, epoch }, Ok(result)) if epoch == self.epoch => {
+            (Tag::Select { token, page, epoch, highlight }, Ok(result)) if epoch == self.epoch => {
+                if let Some(color) = highlight {
+                    self.edit("highlightReply", json!({"token":token,"page":page,"result":result,"color":color}), now);
+                    return;
+                }
                 let reply = ask(&mut self.model, json!({"cmd":"viewer","op":"selectionReply","token":token,"page":page,"result":result}));
                 if let Some(value) = reply.filter(|v| !v.is_null()) {
                     self.selection = Some(value);
                 }
+            }
+            (Tag::Edit { ticket, epoch }, result) if epoch == self.epoch => {
+                let (ok, message) = match result {
+                    Ok(_) => (true, String::new()),
+                    Err(message) => (false, message),
+                };
+                self.edit("complete", json!({"ticket":ticket,"ok":ok,"message":message}), now);
             }
             (Tag::Events(epoch), result) if epoch == self.epoch => {
                 self.events_pending = false;
@@ -378,9 +413,12 @@ impl App {
                 }
             }
             Some("crash") => self.error = json!({"key":"pdf.crashed"}),
+            Some("action") => {
+                let action = &event["action"];
+                self.command(&json!({"cmd":action[0],"key":action[1]}), now);
+            }
             _ => {}
         }
-        let _ = now;
     }
     fn release(&mut self, thumb: bool, keys: &Value) {
         let map = if thumb { &mut self.thumb_images } else { &mut self.images };
@@ -536,11 +574,11 @@ impl App {
             self.go_page(page as usize, Some(&rect));
         }
     }
-    fn select(&mut self, page: usize, from: [f64; 2], to: [f64; 2], style: i64) {
+    fn select(&mut self, page: usize, from: [f64; 2], to: [f64; 2], style: i64, highlight: Option<String>) {
         let Some(doc) = self.doc else { return };
         let Some(token) = ask(&mut self.model, json!({"cmd":"viewer","op":"selectionStart"})).and_then(|t| t.as_u64()) else { return };
         self.jobs.enqueue(
-            Tag::Select { token, page, epoch: self.epoch },
+            Tag::Select { token, page, epoch: self.epoch, highlight },
             "pdf.select",
             json!([doc, page, from[0], from[1], to[0], to[1], style]),
         );
@@ -559,26 +597,50 @@ impl App {
         let index = ask(&mut self.model, json!({"cmd":"viewer","op":"hitItem","items":items,"x":hit["x"],"y":hit["y"]}))?.as_i64()?;
         items.get(usize::try_from(index).ok()?).cloned()
     }
+    fn frame_of(&self, page: usize) -> Option<(f64, f64)> {
+        let frame = self.frames.iter().find(|f| f["page"].as_u64() == Some(page as u64))?;
+        Some((frame["left"].as_f64()?, frame["top"].as_f64()?))
+    }
     fn pointer_down(&mut self, v: &Value, now: i64) {
         if v["button"].as_i64() == Some(2) {
             return;
         }
+        self.edit("fieldCancel", json!({}), now);
         let Some(hit) = self.hit(number(&v["x"], -1.), number(&v["y"], -1.)) else {
             self.clear_selection();
             return;
         };
-        if let Some(link) = self.item_at(&hit, "links") {
-            if let Some(page) = link["page"].as_i64().filter(|p| *p >= 0) {
-                self.go_page(page as usize, None);
-            } else if let Some(uri) = link["uri"].as_str() {
-                self.jobs.enqueue(Tag::Ignore, "clipboard.write", json!([uri]));
-                let shown: String = uri.chars().take(80).collect();
-                self.set_message(json!({"key":"pdf.linkCopied","params":{"uri":shown}}), now);
-            }
-            return;
-        }
         let (page, x, y) = (hit["page"].as_u64().unwrap_or(0) as usize, number(&hit["x"], 0.), number(&hit["y"], 0.));
-        self.drag = Some(Drag { page, x0: x, y0: y, x1: x, y1: y, moved: false, last: 0 });
+        match self.tool.as_str() {
+            "note" => {
+                self.edit("noteOpen", json!({"point":hit}), now);
+                return;
+            }
+            "ink" => {
+                self.drag = Some(Drag { page, x0: x, y0: y, x1: x, y1: y, moved: false, last: 0, ink: true });
+                self.edit("inkStart", json!({"point":hit}), now);
+                self.capture = Some(true);
+                return;
+            }
+            "select" => {
+                if let Some(field) = self.item_at(&hit, "fields").filter(|f| f["f"]["ro"] != true) {
+                    self.edit("fieldOpen", json!({"page":page,"field":field}), now);
+                    return;
+                }
+                if let Some(link) = self.item_at(&hit, "links") {
+                    if let Some(target) = link["page"].as_i64().filter(|p| *p >= 0) {
+                        self.go_page(target as usize, None);
+                    } else if let Some(uri) = link["uri"].as_str() {
+                        self.jobs.enqueue(Tag::Ignore, "clipboard.write", json!([uri]));
+                        let shown: String = uri.chars().take(80).collect();
+                        self.set_message(json!({"key":"pdf.linkCopied","params":{"uri":shown}}), now);
+                    }
+                    return;
+                }
+            }
+            _ => {}
+        }
+        self.drag = Some(Drag { page, x0: x, y0: y, x1: x, y1: y, moved: false, last: 0, ink: false });
         self.clear_selection();
         self.capture = Some(true);
     }
@@ -588,26 +650,139 @@ impl App {
         if hit["page"].as_u64() != Some(drag.page as u64) {
             return;
         }
+        if drag.ink {
+            let scale = self.scale;
+            self.edit("inkAppend", json!({"point":hit,"scale":scale}), now);
+            return;
+        }
         drag.x1 = number(&hit["x"], drag.x1);
         drag.y1 = number(&hit["y"], drag.y1);
         drag.moved = true;
         if now - drag.last > SELECT_THROTTLE_MS {
             drag.last = now;
             let (page, from, to) = (drag.page, [drag.x0, drag.y0], [drag.x1, drag.y1]);
-            self.select(page, from, to, 0);
+            self.select(page, from, to, 0, None);
         }
     }
     fn drag_end(&mut self, now: i64) {
         self.capture = Some(false);
         let Some(drag) = self.drag.take() else { return };
+        if drag.ink {
+            return;
+        }
         if !drag.moved {
             if now - self.last_click < DOUBLE_CLICK_MS {
-                self.select(drag.page, [drag.x0, drag.y0], [drag.x0 + 0.5, drag.y0 + 0.5], 1);
+                self.select(drag.page, [drag.x0, drag.y0], [drag.x0 + 0.5, drag.y0 + 0.5], 1, None);
             }
             self.last_click = now;
             return;
         }
-        self.select(drag.page, [drag.x0, drag.y0], [drag.x1, drag.y1], 0);
+        let highlight = (self.tool == "highlight").then(|| TOOL_COLORS[self.color].to_owned());
+        self.select(drag.page, [drag.x0, drag.y0], [drag.x1, drag.y1], 0, highlight);
+    }
+    // ---- editing ----
+
+    /// Sends one edit operation and applies the packet it returns.
+    fn edit(&mut self, op: &str, mut facts: Value, now: i64) -> Option<Value> {
+        facts["cmd"] = json!("edit");
+        facts["op"] = json!(op);
+        let packet = ask(&mut self.model, facts).filter(|p| !p.is_null())?;
+        self.apply_packet(&packet, now);
+        Some(packet)
+    }
+    fn apply_packet(&mut self, packet: &Value, now: i64) {
+        if packet["state"].is_object() {
+            self.edit_state = packet["state"].clone();
+        }
+        let delta = &packet["ink"];
+        match delta["kind"].as_str() {
+            Some("replace") => self.ink = delta["value"].as_object().map(|_| delta["value"].clone()),
+            Some("stroke") => {
+                if let Some(ink) = self.ink.as_mut() {
+                    ink["page"] = delta["page"].clone();
+                    if let Some(strokes) = ink["strokes"].as_array_mut() {
+                        strokes.push(delta["point"].clone());
+                    }
+                }
+            }
+            Some("point") => {
+                if let Some(stroke) = self.ink.as_mut().and_then(|i| i["strokes"].as_array_mut()).and_then(|s| s.last_mut()).and_then(|s| s.as_array_mut()) {
+                    stroke.extend(delta["point"].as_array().cloned().unwrap_or_default());
+                }
+            }
+            _ => {}
+        }
+        if packet["clearSelection"] == true {
+            self.selection = None;
+        }
+        if let Some(page) = packet["invalidate"]["page"].as_u64() {
+            ask(&mut self.model, json!({"cmd":"cache","op":"invalidate","page":page}));
+            ask(&mut self.thumbs, json!({"cmd":"cache","op":"invalidate","page":page}));
+            if packet["invalidate"]["refresh"] == true {
+                self.info.remove(&(page as usize));
+            }
+        }
+        let notice = &packet["notice"];
+        if let Some(key) = notice["key"].as_str() {
+            let error = match notice["code"].as_str() {
+                Some(code) => json!({"key":format!("docs.err.{code}")}),
+                None => json!(notice["message"].as_str().unwrap_or("")),
+            };
+            self.set_message(json!({"key":key,"params":{"error":error}}), now);
+        }
+        if let Some(name) = packet["saved"].as_str() {
+            self.set_message(json!({"key":"pdf.saved","params":{"name":name}}), now);
+        }
+        let effect = &packet["effect"];
+        if let (Some(ticket), Some(kind), Some(doc)) = (effect["ticket"].as_u64(), effect["kind"].as_str(), self.doc) {
+            let payload = &effect["payload"];
+            let (method, args) = match kind {
+                "annot" => ("pdf.annot", json!([doc, payload])),
+                "field" => ("pdf.setField", json!([doc, payload["id"], payload["value"]])),
+                "undo" => ("pdf.undo", json!([doc, effect["page"]])),
+                "save" => ("pdf.save", json!([doc, payload["path"]])),
+                _ => return,
+            };
+            self.jobs.enqueue(Tag::Edit { ticket, epoch: self.epoch }, method, args);
+        }
+    }
+    fn finish_ink(&mut self, now: i64) {
+        let color = TOOL_COLORS[self.color];
+        self.edit("inkFinish", json!({"color":color}), now);
+    }
+    fn set_tool(&mut self, tool: &str, now: i64) {
+        self.tool = tool.to_owned();
+        if tool != "ink" && self.ink.is_some() {
+            self.finish_ink(now);
+        }
+    }
+    fn save_copy(&mut self, now: i64) {
+        let (Some(path), Some(_)) = (self.path.clone(), self.doc) else { return };
+        let file = std::path::Path::new(&path);
+        let dir = file.parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let base = if name.len() >= 4 && name[name.len() - 4..].eq_ignore_ascii_case(".pdf") { name[..name.len() - 4].to_owned() } else { name };
+        let first = self.i18n.caption(&json!({"key":"pdf.copyName","params":{"name":base}}));
+        let mut chosen = first.clone();
+        for n in 2..200 {
+            if !std::path::Path::new(&format!("{dir}/{chosen}.pdf")).exists() {
+                break;
+            }
+            chosen = format!("{first} {n}");
+        }
+        self.edit("save", json!({"path":format!("{dir}/{chosen}.pdf"),"name":format!("{chosen}.pdf")}), now);
+    }
+    fn print(&mut self) {
+        if let (Some(doc), Some(path)) = (self.doc, &self.path) {
+            let title = basename(path);
+            self.jobs.enqueue(Tag::Ignore, "pdf.print", json!([doc, title]));
+        }
+    }
+    fn show_in_files(&mut self) {
+        if let Some(path) = &self.path {
+            let parent = path.rsplit_once('/').map(|(dir, _)| dir.to_owned()).unwrap_or_default();
+            self.jobs.enqueue(Tag::Ignore, "windows.open", json!(["files", {"new":true,"args":{"path":parent}}]));
+        }
     }
     fn copy_selection(&mut self, now: i64) {
         if let Some(text) = self.selection.as_ref().and_then(|s| s["text"].as_str()).filter(|t| !t.is_empty()).map(str::to_owned) {
@@ -706,34 +881,50 @@ impl App {
     }
     pub fn key_at(&mut self, key: &str, chr: &str, flags: i32, now: i64) -> Option<Value> {
         let event = json!({"key":key,"base":key,"char":chr,"shift":flags & 1 != 0,"ctrl":flags & 2 != 0,"alt":flags & 4 != 0,"meta":flags & 16 != 0});
-        let action = ask(&mut self.model, json!({"cmd":"viewer","op":"key","editing":self.goto.is_some(),"hasDoc":self.doc.is_some(),"event":event}))?;
+        let editing = self.goto.is_some() || self.edit_state["note"].is_object() || self.edit_state["field"].is_object();
+        let action = ask(&mut self.model, json!({"cmd":"viewer","op":"key","editing":editing,"hasDoc":self.doc.is_some(),"event":event}))?;
         let action = action.as_str()?.to_owned();
+        if !self.perform(&action, now) {
+            return None;
+        }
+        Some(self.request_at(&json!({"cmd":"noop"}), now))
+    }
+    /// A viewer action, from a key or from a menu item.
+    fn perform(&mut self, action: &str, now: i64) -> bool {
         let last = self.pages.saturating_sub(1);
         let height = self.view_size().1;
-        match action.as_str() {
+        match action {
             "rotateLeft" => self.rotate(-1),
             "rotateRight" => self.rotate(1),
             "zoomIn" => self.zoom_step(1),
             "zoomOut" => self.zoom_step(-1),
             "zoomActual" => self.set_zoom(Zoom::Scale(1.)),
             "zoomWidth" => self.set_zoom(Zoom::Width),
+            "zoomPage" => self.set_zoom(Zoom::Page),
             "escape" => {
                 self.message = None;
                 self.clear_selection();
                 ask(&mut self.model, json!({"cmd":"viewer","op":"findStart","query":""}));
                 self.hits = None;
                 self.find_due = None;
+                self.set_tool("select", now);
             }
             "find" => self.find_focus += 1,
             "copy" => self.copy_selection(now),
             "selectAll" => {
                 if let Some([w, h]) = self.filled_sizes().get(self.page).copied() {
-                    self.select(self.page, [0., 0.], [w, h], 0);
+                    self.select(self.page, [0., 0.], [w, h], 0, None);
                 }
             }
             "goto" => self.goto = Some(String::new()),
             "nextHit" => self.next_hit(1),
             "previousHit" => self.next_hit(-1),
+            "save" | "saveCopy" => self.save_copy(now),
+            "print" => self.print(),
+            "showInFiles" => self.show_in_files(),
+            "undo" => {
+                self.edit("undo", json!({}), now);
+            }
             "pageDown" | "down" | "pageUp" | "up" => {
                 let forward = action == "pageDown" || action == "down";
                 if self.single {
@@ -749,9 +940,9 @@ impl App {
             "previousPage" => self.go_page(self.page.saturating_sub(1), None),
             "firstPage" => self.go_page(0, None),
             "lastPage" => self.go_page(last, None),
-            _ => return None,
+            _ => return false,
         }
-        Some(self.request_at(&json!({"cmd":"noop"}), now))
+        true
     }
     fn pick_path(&self, args: &Value) -> Option<String> {
         let path = args["path"].as_str().filter(|p| !p.is_empty())?;
@@ -812,6 +1003,40 @@ impl App {
                 }
             }
             "gotoCancel" => self.goto = None,
+            "do" => {
+                if let Some(action) = key.as_str() {
+                    self.perform(action, now);
+                }
+            }
+            "sideToggle" => {
+                let wanted = key.as_str().map(str::to_owned);
+                self.side = if self.side == wanted { None } else { wanted };
+            }
+            "tool" => {
+                let wanted = key.as_str().unwrap_or("select");
+                let next = if wanted == "ink" && self.tool == "ink" { "select" } else { wanted };
+                self.set_tool(next, now);
+            }
+            "color" => self.color = (key.as_u64().unwrap_or(0) as usize).min(TOOL_COLORS.len() - 1),
+            "fieldChange" => {
+                self.edit("fieldChange", json!({"value":v["value"]}), now);
+            }
+            "fieldCommit" => {
+                let facts = if key.is_number() { json!({"value":key}) } else { json!({}) };
+                self.edit("fieldCommit", facts, now);
+            }
+            "fieldCancel" => {
+                self.edit("fieldCancel", json!({}), now);
+            }
+            "noteChange" => {
+                self.edit("noteChange", json!({"value":v["value"]}), now);
+            }
+            "noteCommit" => {
+                self.edit("noteCommit", json!({}), now);
+            }
+            "noteCancel" => {
+                self.edit("noteCancel", json!({}), now);
+            }
             "open" => {
                 if let Some(path) = key.as_str() {
                     self.password.clear();
@@ -852,6 +1077,7 @@ impl App {
             self.viewport(now);
         }
         self.timers(now);
+        self.sync_menus();
         let mut out = json!({});
         if let Some(on) = self.capture.take() {
             out["capture"] = json!(on);
@@ -877,12 +1103,20 @@ impl App {
         if v["context"]["theme"].is_object() {
             self.theme = Rc::new(v["context"]["theme"].clone());
         }
+        let revision = v["context"]["localeRevision"].as_u64().unwrap_or(0);
+        if revision != self.locale_revision {
+            self.i18n.invalidate();
+            self.locale_revision = revision;
+            self.menus = Value::Null;
+        }
+        self.i18n.lang = v["lang"].as_str().unwrap_or("en").into();
         self.width = number(&v["context"]["width"], self.width).max(1.);
         self.height = number(&v["context"]["height"], self.height).max(1.);
         if !self.booted {
             if let Some(owner) = v["args"]["__nativeOwner"].as_i64().filter(|i| *i > 0) {
                 self.booted = true;
                 self.jobs.bind(owner);
+                self.window = v["args"]["__nativeWindow"].as_str().unwrap_or("").to_owned();
                 self.home = v["context"]["home"].as_str().map(str::to_owned).or_else(|| std::env::var("HOME").ok()).unwrap_or_default();
                 if let Some(path) = self.pick_path(&v["args"]) {
                     self.nonce = v["args"]["nonce"].clone();
@@ -903,6 +1137,130 @@ impl App {
         if self.message.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.message = None;
         }
+    }
+    fn menu_item(&mut self, key: &str, hint: &str, action: Value, disabled: bool, checked: Option<bool>) -> Value {
+        let mut item = json!({"label":self.i18n.caption(&json!({"key":format!("pdf.{key}")})),"action":action});
+        if !hint.is_empty() {
+            item["hint"] = json!(hint);
+        }
+        if disabled {
+            item["disabled"] = json!(true);
+        }
+        if let Some(on) = checked {
+            item["checked"] = json!(on);
+        }
+        item
+    }
+    fn build_menus(&mut self) -> Value {
+        let (doc, path) = (self.doc.is_some(), self.path.is_some());
+        let undo = self.edit_state["history"].as_array().is_some_and(|h| !h.is_empty());
+        let copy = self.selection.as_ref().and_then(|s| s["text"].as_str()).is_some_and(|t| !t.is_empty());
+        let (single, side, zoom, invert) = (self.single, self.side.clone(), self.zoom.clone(), self.invert);
+        let top = |app: &mut App, key: &str| app.i18n.caption(&json!({"key":format!("pdf.{key}")}));
+        let file = vec![
+            self.menu_item("menu.saveCopy", "❖S", json!(["do", "saveCopy"]), !doc, None),
+            self.menu_item("menu.print", "❖P", json!(["do", "print"]), !doc, None),
+            self.menu_item("menu.showInFiles", "", json!(["do", "showInFiles"]), !path, None),
+        ];
+        let edit = vec![
+            self.menu_item("menu.undo", "❖Z", json!(["do", "undo"]), !undo, None),
+            self.menu_item("menu.copy", "❖C", json!(["do", "copy"]), !copy, None),
+            self.menu_item("menu.find", "❖F", json!(["do", "find"]), false, None),
+        ];
+        let view = vec![
+            self.menu_item("view.continuous", "", json!(["mode", "continuous"]), false, Some(!single)),
+            self.menu_item("view.single", "", json!(["mode", "single"]), false, Some(single)),
+            json!("-"),
+            self.menu_item("side.thumbs", "", json!(["sideToggle", "thumbs"]), false, Some(side.as_deref() == Some("thumbs"))),
+            self.menu_item("side.outline", "", json!(["sideToggle", "outline"]), false, Some(side.as_deref() == Some("outline"))),
+            json!("-"),
+            self.menu_item("zoom.in", "❖+", json!(["do", "zoomIn"]), false, None),
+            self.menu_item("zoom.out", "❖−", json!(["do", "zoomOut"]), false, None),
+            self.menu_item("zoom.actual", "❖0", json!(["do", "zoomActual"]), false, None),
+            self.menu_item("zoom.width", "❖9", json!(["do", "zoomWidth"]), false, Some(zoom == Zoom::Width)),
+            self.menu_item("zoom.page", "", json!(["do", "zoomPage"]), false, Some(zoom == Zoom::Page)),
+            json!("-"),
+            self.menu_item("rotateRight", "❖R", json!(["do", "rotateRight"]), false, None),
+            self.menu_item("rotateLeft", "❖⇧R", json!(["do", "rotateLeft"]), false, None),
+            self.menu_item("invert", "", json!(["invert"]), false, Some(invert)),
+        ];
+        let go = vec![
+            self.menu_item("go.page", "❖⌥G", json!(["do", "goto"]), false, None),
+            self.menu_item("go.first", "", json!(["do", "firstPage"]), false, None),
+            self.menu_item("go.last", "", json!(["do", "lastPage"]), false, None),
+        ];
+        json!([
+            {"label":top(self, "menu.file"),"items":file},
+            {"label":top(self, "menu.edit"),"items":edit},
+            {"label":top(self, "menu.view"),"items":view},
+            {"label":top(self, "menu.go"),"items":go},
+        ])
+    }
+    fn sync_menus(&mut self) {
+        if self.window.is_empty() || !self.booted {
+            return;
+        }
+        let menus = self.build_menus();
+        if menus != self.menus {
+            self.menus = menus.clone();
+            self.jobs.enqueue(Tag::Ignore, "windows.menus", json!([self.window, menus]));
+        }
+    }
+    fn editors(&mut self, sizes: &[[f64; 2]], view_w: f64) -> Vec<Value> {
+        let mut nodes = vec![];
+        let dim = self.theme["textDim"].as_str().unwrap_or("#999999").to_owned();
+        let field = self.edit_state["field"].clone();
+        if let (Some(page), true) = (field["page"].as_u64(), field.is_object()) {
+            if let (Some(v), Some((left, top))) = (self.rect_view(&field["r"], page as usize, sizes), self.frame_of(page as usize)) {
+                let (l, t) = (left + number(&v["left"], 0.), top + number(&v["top"], 0.));
+                let (w, h) = (number(&v["width"], 0.), number(&v["height"], 0.));
+                if field["f"]["type"] == "text" {
+                    nodes.push(json!({"kind":"input","key":"field-editor","value":field["value"],"autoFocus":true,
+                        "change":["fieldChange"],"submit":["fieldCommit"],"cancel":["fieldCancel"],
+                        "size":(h * 0.6).clamp(10., 18.),
+                        "style":{"position":"absolute","left":l,"top":t,"width":w.max(60.),"height":h.max(22.)}}));
+                } else {
+                    let selected = field["f"]["value"].as_i64().unwrap_or(-1);
+                    let rows: Vec<Value> = field["f"]["items"].as_array().into_iter().flatten().take(20).enumerate().map(|(i, item)| {
+                        let chosen = selected == i as i64;
+                        ui::click(
+                            ui::view(
+                                json!(format!("choice-{i}")),
+                                json!({"height":24,"paddingHorizontal":8,"justifyContent":"center",
+                                    "backgroundColor":if chosen {self.theme["accent"].as_str().unwrap_or("#0a84ff")} else {"transparent"}}),
+                                vec![ui::text(item.clone(), json!({"fontSize":12,"color":if chosen {"#ffffff"} else {self.theme["text"].as_str().unwrap_or("#ffffff")}}))],
+                            ),
+                            json!(["fieldCommit", i]),
+                        )
+                    }).collect();
+                    nodes.push(ui::view(
+                        "field-choices",
+                        json!({"position":"absolute","left":l,"top":t + h,"width":w.max(140.),"maxHeight":200,"borderRadius":6,"overflow":"hidden",
+                            "backgroundColor":self.theme["windowBg"].as_str().unwrap_or("#2a2a2e"),"borderWidth":1,
+                            "borderColor":self.theme["separator"].as_str().unwrap_or("#444444"),"boxShadow":"0 8px 22px rgba(0,0,0,0.35)"}),
+                        rows,
+                    ));
+                }
+            }
+        }
+        let note = self.edit_state["note"].clone();
+        if let (Some(page), true) = (note["page"].as_u64(), note.is_object()) {
+            let point = json!([note["x"], note["y"], 1, 1]);
+            if let (Some(v), Some((left, top))) = (self.rect_view(&point, page as usize, sizes), self.frame_of(page as usize)) {
+                nodes.push(ui::view(
+                    "note-editor",
+                    json!({"position":"absolute","left":(view_w - 250.).min(left + number(&v["left"], 0.)).max(0.),"top":top + number(&v["top"], 0.),
+                        "width":240,"padding":8,"gap":6,"borderRadius":8,"backgroundColor":"#fff6b0","boxShadow":"0 8px 22px rgba(0,0,0,0.35)"}),
+                    vec![
+                        json!({"kind":"input","key":"note-input","value":note["text"],"autoFocus":true,"placeholder":{"key":"pdf.notePlaceholder"},
+                            "change":["noteChange"],"submit":["noteCommit"],"cancel":["noteCancel"],"size":13,"style":{"height":26}}),
+                        ui::text(json!({"key":"pdf.noteHint"}), json!({"fontSize":10,"color":"#6b5d00"})),
+                    ],
+                ));
+            }
+        }
+        let _ = dim;
+        nodes
     }
     fn rect_view(&mut self, rect: &Value, page: usize, sizes: &[[f64; 2]]) -> Option<Value> {
         let size = sizes.get(page).copied()?;
@@ -931,6 +1289,27 @@ impl App {
                 nodes.push(node(format!("hit-{i}"), &r, json!({"borderRadius":2,"backgroundColor":color})));
             }
         }
+        let ink: Vec<(usize, f64, f64)> = self
+            .ink
+            .as_ref()
+            .filter(|i| i["page"].as_u64() == Some(page as u64))
+            .and_then(|i| i["strokes"].as_array())
+            .map(|strokes| {
+                strokes
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(si, s)| s.as_array().into_iter().flat_map(move |s| s.chunks(2).map(move |c| (si, c))))
+                    .filter_map(|(si, c)| Some((si, c.first()?.as_f64()?, c.get(1)?.as_f64()?)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let skip = ink.len().saturating_sub(1500);
+        for (n, (si, x, y)) in ink.into_iter().enumerate().skip(skip) {
+            if let Some(r) = self.rect_view(&json!([x - 1.1, y - 1.1, 2.2, 2.2]), page, sizes) {
+                nodes.push(node(format!("ink-{si}-{n}"), &r, json!({"borderRadius":r["width"],"backgroundColor":TOOL_COLORS[self.color]})));
+            }
+        }
+        let selection_color = if self.tool == "highlight" { format!("{}88", TOOL_COLORS[self.color]) } else { "rgba(10,132,255,0.32)".to_owned() };
         let rects: Vec<Value> = self
             .selection
             .as_ref()
@@ -939,7 +1318,7 @@ impl App {
             .unwrap_or_default();
         for (i, rect) in rects.iter().enumerate() {
             if let Some(r) = self.rect_view(rect, page, sizes) {
-                nodes.push(node(format!("selection-{i}"), &r, json!({"backgroundColor":"rgba(10,132,255,0.32)"})));
+                nodes.push(node(format!("selection-{i}"), &r, json!({"backgroundColor":selection_color})));
             }
         }
         let fields: Vec<Value> = self.info.get(&page).and_then(|i| i.as_ref()).and_then(|i| i["fields"].as_array().cloned()).unwrap_or_default();
@@ -1027,6 +1406,17 @@ impl App {
         } else {
             json!(self.doc_title)
         };
+        let status = if status.as_str() == Some(self.doc_title.as_str()) {
+            match self.tool.as_str() {
+                "ink" => json!({"key":"pdf.inkHint"}),
+                "note" => json!({"key":"pdf.noteTool"}),
+                "highlight" => json!({"key":"pdf.highlightHint"}),
+                _ => status,
+            }
+        } else {
+            status
+        };
+        let editors = self.editors(&sizes, view_w);
         let status_more = hit_count.is_some_and(|c| c > 0) && searching;
         let goto = self.goto.clone();
         let find_query = self.find_query.clone();
@@ -1059,6 +1449,11 @@ impl App {
             find_query: &find_query,
             find_focus: self.find_focus,
             status_more,
+            tool: &self.tool,
+            color: self.color,
+            colors: &TOOL_COLORS,
+            dirty: self.edit_state["dirty"] == true,
+            editors: &editors,
             recent: self.recent.as_deref(),
             sidebar,
             view_h,

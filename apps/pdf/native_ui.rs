@@ -32,6 +32,11 @@ pub(super) struct Facts<'a> {
     pub find_query: &'a str,
     pub find_focus: u64,
     pub status_more: bool,
+    pub tool: &'a str,
+    pub color: usize,
+    pub colors: &'a [&'a str],
+    pub dirty: bool,
+    pub editors: &'a [Value],
     pub recent: Option<&'a [(String, String)]>,
     pub sidebar: Value,
     pub view_h: f64,
@@ -116,7 +121,37 @@ fn toolbar(f: &Facts) -> Value {
     ];
     if !narrow {
         items.push(tool(f, "rotate", "↻", json!(["rotate",1]), "pdf.rotateRight", false, !f.has_doc));
+    }
+    let tools = [("select", "I", "pdf.tool.select"), ("highlight", "▬", "pdf.tool.highlight"), ("ink", "✎", "pdf.tool.ink"), ("note", "▤", "pdf.tool.note")];
+    items.push(view(
+        "tools",
+        json!({"flexDirection":"row","alignItems":"center"}),
+        tools.iter().map(|(name, glyph, tip)| tool(f, name, glyph, json!(["tool", name]), tip, f.tool == *name, !f.has_doc)).collect(),
+    ));
+    if f.tool == "highlight" || f.tool == "ink" {
+        let ring = tok(t, "text", "#ffffff");
+        items.push(view(
+            "colors",
+            json!({"flexDirection":"row","gap":4}),
+            f.colors
+                .iter()
+                .enumerate()
+                .map(|(i, c)| {
+                    click(
+                        view(
+                            json!(format!("color-{i}")),
+                            json!({"width":14,"height":14,"borderRadius":7,"backgroundColor":c,"borderWidth":2,"borderColor":if f.color == i {ring} else {"transparent"}}),
+                            vec![],
+                        ),
+                        json!(["color", i]),
+                    )
+                })
+                .collect(),
+        ));
+    }
+    if !narrow {
         items.push(tool(f, "invert", "◐", json!(["invert"]), "pdf.invert", f.invert, !f.has_doc));
+        items.push(tool(f, "print", "⎙", json!(["do", "print"]), "pdf.menu.print", false, !f.has_doc));
     }
     let find_width = if f.width < 760. { 130 } else { 180 };
     items.push(if f.has_doc {
@@ -256,6 +291,11 @@ fn status(f: &Facts) -> Value {
                 }
                 parts
             }),
+            if f.dirty {
+                text(label("pdf.unsaved"), json!({"fontSize":11,"color":"#ff9f0a"}))
+            } else {
+                view("clean", json!({"width":0}), vec![])
+            },
             text(label(if f.single { "pdf.view.single" } else { "pdf.view.continuous" }), json!({"fontSize":11,"color":dim})),
         ],
     )
@@ -264,6 +304,7 @@ pub(super) fn tree(f: &Facts) -> Value {
     let t = f.theme;
     let dark = t["mode"] == "dark";
     let mut content = pages(f);
+    content.extend(f.editors.iter().cloned());
     if !f.path {
         content.push(welcome(f));
     } else if f.need_pass {

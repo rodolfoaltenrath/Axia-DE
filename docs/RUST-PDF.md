@@ -161,6 +161,17 @@ arrive as `pdf.events` items `{kind:"find",token,page,rects}` then
 the existing `clipboard.write`. Field editing, annotation tools, undo, save, print
 and menus remain for stage 3.
 
+Stage 3 status: the highlight, ink and note tools with their colors, in-place text and
+choice field editors, undo, save a copy (never the original; numbered when the name
+exists), print, the "unsaved" indicator, annotation failure notices, and the four app
+menus (published once through `windows.menus`; clicks come back as `{kind:"action",
+action:[cmd,key]}` items of `pdf.events`) are in the window. Edit effects reach the
+helper as `pdf.annot` (`[doc,annotation]`), `pdf.setField` (`[doc,id,value]`),
+`pdf.undo` (`[doc,page]`) and `pdf.save` (`[doc,path]`), each acknowledged by its
+completion (an error string is the failure message); also `pdf.print` (`[doc,title]`) and
+`windows.open` (Show in Files). Only the registration stage remains: manifest, transport
+(`runtime/native_pdf_services.js`), removal of the JSX/JS files and the real-helper test.
+
 Contract notes for the window: frames come from `{"cmd":"view","op":"viewport"}`
 (`first`/`last`/`currentPage`/`frames`/`renders`); cache admission from
 `{"cmd":"cache","op":"begin"|"complete"|"fail"|"drop"|"invalidate"|"best"}` whose

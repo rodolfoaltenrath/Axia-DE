@@ -13,12 +13,16 @@ struct Helper {
     events: Vec<Value>,
     tree: Value,
     exact: bool,
+    fail: Vec<&'static str>,
 }
 impl Helper {
     fn new(pages: usize) -> Self {
-        Self { token: 0, ready: Default::default(), calls: vec![], pages: vec![[612., 792.]; pages], password: None, next_image: 100, pending: None, events: vec![], tree: Value::Null, exact: false }
+        Self { token: 0, ready: Default::default(), calls: vec![], pages: vec![[612., 792.]; pages], password: None, next_image: 100, pending: None, events: vec![], tree: Value::Null, exact: false, fail: vec![] }
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
+        if self.fail.contains(&method) {
+            return json!({"error":"boom"});
+        }
         match method {
             "pdf.open" => match (self.password, args[1].as_str()) {
                 (Some(want), Some(given)) if want != given => json!({"error":"password"}),
@@ -352,4 +356,142 @@ fn go_to_page_opens_a_field_and_a_valid_number_navigates() {
     helper.send(&mut app, now, json!({"cmd":"gotoChange","value":"nope"}));
     helper.send(&mut app, now, json!({"cmd":"gotoSubmit"}));
     assert_eq!(app.page, 3, "an invalid number goes nowhere");
+}
+
+fn annotations(helper: &Helper) -> Vec<Value> {
+    helper.calls.iter().filter(|(m, _)| m == "pdf.annot").map(|(_, a)| a[1].clone()).collect()
+}
+fn drag(app: &mut App, helper: &mut Helper, now: &mut i64, page: usize, from: (f64, f64), to: (f64, f64)) {
+    let a = over(app, page, from.0, from.1);
+    pointer(app, helper, *now, "down", a);
+    *now += 80;
+    let b = over(app, page, to.0, to.1);
+    pointer(app, helper, *now, "pointerMove", b);
+    pointer(app, helper, *now, "dragEnd", b);
+}
+#[test]
+fn highlighting_text_queues_one_annotation_marks_the_document_dirty_and_refreshes_the_page() {
+    let (mut app, mut now, mut helper) = start(2, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    let before = helper.count("pdf.pageInfo");
+    helper.send(&mut app, now, json!({"cmd":"tool","key":"highlight"}));
+    drag(&mut app, &mut helper, &mut now, 0, (20., 300.), (120., 320.));
+    let reply = helper.drive(&mut app, &mut now);
+    let notes = annotations(&helper);
+    assert_eq!(notes.len(), 1, "the final selection becomes a single highlight");
+    assert_eq!(notes[0]["type"], "highlight");
+    assert_eq!(notes[0]["color"], "#ffd60a");
+    assert!(app.selection.is_none(), "the selection is consumed by the highlight");
+    assert!(tree_text(&reply["tree"]).contains("pdf.unsaved"), "the document has unsaved changes");
+    assert!(helper.count("pdf.pageInfo") > before, "the page facts are read again after the change");
+    helper.send(&mut app, now, json!({"cmd":"color","key":2}));
+    assert_eq!(app.color, 2);
+}
+#[test]
+fn ink_strokes_are_drawn_live_and_added_when_the_tool_changes() {
+    let (mut app, mut now, mut helper) = start(1, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    helper.send(&mut app, now, json!({"cmd":"tool","key":"ink"}));
+    let a = over(&app, 0, 30., 400.);
+    pointer(&mut app, &mut helper, now, "down", a);
+    for step in 1..=3 {
+        let at = over(&app, 0, 30. + 12. * f64::from(step), 400. + 8. * f64::from(step));
+        pointer(&mut app, &mut helper, now, "pointerMove", at);
+    }
+    helper.send(&mut app, now, json!({"cmd":"dragEnd"}));
+    assert!(tree_text(&helper.tree).contains("ink-0-"), "the stroke in progress is on the page");
+    assert_eq!(annotations(&helper).len(), 0, "nothing is sent while drawing");
+    helper.send(&mut app, now, json!({"cmd":"tool","key":"select"}));
+    helper.drive(&mut app, &mut now);
+    let notes = annotations(&helper);
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0]["type"], "ink");
+    assert_eq!(notes[0]["strokes"][0].as_array().unwrap().len(), 8, "four points of one stroke");
+    assert!(app.ink.is_none());
+}
+#[test]
+fn a_note_is_typed_in_a_small_editor_and_committed_with_its_text() {
+    let (mut app, mut now, mut helper) = start(1, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    helper.send(&mut app, now, json!({"cmd":"tool","key":"note"}));
+    let at = over(&app, 0, 200., 200.);
+    let reply = pointer(&mut app, &mut helper, now, "down", at);
+    assert!(tree_text(&reply["tree"]).contains("note-editor"));
+    helper.send(&mut app, now, json!({"cmd":"noteChange","value":"  Check this  "}));
+    let reply = helper.send(&mut app, now, json!({"cmd":"noteCommit"}));
+    assert!(!tree_text(&reply["tree"]).contains("note-editor"), "the editor closes");
+    helper.drive(&mut app, &mut now);
+    let notes = annotations(&helper);
+    assert_eq!(notes[0]["type"], "note");
+    assert_eq!(notes[0]["text"], "Check this", "the text is trimmed");
+    helper.send(&mut app, now, json!({"cmd":"down","x":at.0,"y":at.1,"button":0}));
+    helper.send(&mut app, now, json!({"cmd":"noteCancel"}));
+    assert!(app.edit_state["note"].is_null(), "cancelling keeps nothing");
+}
+#[test]
+fn a_text_field_is_edited_in_place_and_written_through_the_helper() {
+    let (mut app, mut now, mut helper) = start(1, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    let at = over(&app, 0, 20., 110.);
+    let reply = pointer(&mut app, &mut helper, now, "down", at);
+    assert!(tree_text(&reply["tree"]).contains("field-editor"), "the field opens an editor over the page");
+    helper.send(&mut app, now, json!({"cmd":"fieldChange","value":"abc"}));
+    helper.send(&mut app, now, json!({"cmd":"fieldCommit"}));
+    helper.drive(&mut app, &mut now);
+    assert!(helper.calls.iter().any(|(m, a)| m == "pdf.setField" && a == &json!([7, 1, "abc"])));
+    let pointer_elsewhere = over(&app, 0, 300., 500.);
+    pointer(&mut app, &mut helper, now, "down", at);
+    pointer(&mut app, &mut helper, now, "down", pointer_elsewhere);
+    assert!(app.edit_state["field"].is_null(), "a click elsewhere closes the editor");
+}
+#[test]
+fn undo_save_and_print_use_the_helper_and_report_their_outcome() {
+    let (mut app, mut now, mut helper) = start(1, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    helper.send(&mut app, now, json!({"cmd":"tool","key":"highlight"}));
+    drag(&mut app, &mut helper, &mut now, 0, (20., 300.), (120., 320.));
+    helper.drive(&mut app, &mut now);
+    assert!(helper.key(&mut app, "z", "z", 16, now).is_some());
+    helper.drive(&mut app, &mut now);
+    assert!(helper.calls.iter().any(|(m, a)| m == "pdf.undo" && a == &json!([7, 0])));
+    assert_eq!(app.edit_state["history"], json!([]));
+    assert!(helper.key(&mut app, "s", "s", 16, now).is_some());
+    let reply = helper.drive(&mut app, &mut now);
+    let (_, args) = helper.calls.iter().find(|(m, _)| m == "pdf.save").cloned().expect("a copy is saved");
+    assert!(args[1].as_str().unwrap().starts_with("/home/test/") && args[1].as_str().unwrap().ends_with(".pdf"));
+    assert_ne!(args[1], "/home/test/report.pdf", "the original is never overwritten");
+    assert!(tree_text(&reply["tree"]).contains("pdf.saved"));
+    assert!(helper.key(&mut app, "p", "p", 16, now).is_some());
+    helper.drive(&mut app, &mut now);
+    assert!(helper.calls.iter().any(|(m, a)| m == "pdf.print" && a == &json!([7, "report.pdf"])));
+}
+#[test]
+fn a_rejected_annotation_is_reported_and_keeps_the_document_clean() {
+    let (mut app, mut now, mut helper) = start(1, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.fail.push("pdf.annot");
+    helper.drive(&mut app, &mut now);
+    helper.send(&mut app, now, json!({"cmd":"tool","key":"highlight"}));
+    drag(&mut app, &mut helper, &mut now, 0, (20., 300.), (120., 320.));
+    let reply = helper.drive(&mut app, &mut now);
+    assert!(tree_text(&reply["tree"]).contains("pdf.annotError"));
+    assert_eq!(app.edit_state["dirty"], false);
+}
+#[test]
+fn menus_are_published_once_and_their_clicks_arrive_as_events() {
+    let (mut app, mut now, mut helper) = start(3, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    let published: Vec<&(String, Value)> = helper.calls.iter().filter(|(m, _)| m == "windows.menus").collect();
+    assert!(!published.is_empty());
+    let menus = &published.last().unwrap().1[1];
+    assert_eq!(menus.as_array().unwrap().len(), 4, "File, Edit, View and Go");
+    assert_eq!(app.window, "pdf");
+    let count = published.len();
+    helper.drive(&mut app, &mut now);
+    assert_eq!(helper.count("windows.menus"), count, "unchanged menus are not published again");
+    let before = app.pct;
+    helper.events.push(json!({"kind":"action","action":["do","zoomIn"]}));
+    helper.events.push(json!({"kind":"action","action":["mode","single"]}));
+    helper.pass(&mut app, &mut now, 1200);
+    assert!(app.pct > before && app.single, "menu actions run like their keys and buttons");
+    assert!(helper.count("windows.menus") > count, "checked items follow the state");
 }
