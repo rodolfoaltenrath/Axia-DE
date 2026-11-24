@@ -102,10 +102,10 @@ annotation/form drafts and mutation ordering, raster-cache policy, thumbnail
 layout/scrolling and bookmark expansion now live in
 `apps/pdf/{model,geometry,navigation,viewer_model,edit_model,cache_model,sidebar_model}.rs`.
 `sidebar_ui.rs` builds the sidebar's native widgets, mounted through the existing
-`shell:tree` host; its JSX adapter only supplies the mount and helper/cache transport.
-The main PDF window remains React. Its JS adapters keep helper promises and image handles on the
-host side; each cache has a separate Rust model through `lord.nativeApps.create('pdf')`.
-The cache preserves progressive previews, generations, LRU and release effects.
+`shell:tree` host. The PDF window itself is the compiled Rust view `apps/pdf/native.rs`
+(scene in `native_ui.rs`); helper promises and raster handles stay in the window's lease inside
+`runtime/native_pdf_services.js`. The cache preserves progressive previews, generations, LRU and
+release effects.
 See `docs/RUST-PDF.md` for the frozen-reference tests and current migration boundary.
 
 Each remaining app is a folder `apps/<id>/` with two files. Apps don't depend on the theme: any theme shows

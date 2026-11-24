@@ -46,6 +46,8 @@ import { smart, smartSummaries } from '../sdk/smart.js';
 import { diskServices } from './native_disk_services.js';
 import { captureApp } from './native_capture.js';
 import { vaultServices } from './native_vault_services.js';
+import { pdfServices } from './native_pdf_services.js';
+import { pdf } from '../sdk/pdf.js';
 import { vaultAvailable, vaultRequest, onVaultEvent } from '../sdk/vault.js';
 import { requestPermission } from '../sdk/privacy.js';
 import { clipboard } from '../sdk/clipboard.js';
@@ -69,6 +71,7 @@ function stopWatch(id) {
 const methods = {
   ...diskServices({ disks, admin, fs, systemInfo, smart, smartSummaries, events: owner => bridge.events(owner) }),
   ...vaultServices({ vaultRequest, onVaultEvent, requestPermission, clipboard, events: owner => bridge.events(owner) }),
+  ...pdfServices({ pdf, releaseImage, fs, print, events: owner => bridge.events(owner) }),
   ...sysinfoServices({ systemInfo, codeStatus, admin, session: { canPower, restart: () => askPower('reboot') }, fs, userDirs, wm, workArea, launchApp, bluetooth }),
   'files.pick': { run: ([options], owner) => pickFile(options, owner) },
   ...pimServices({ request: mailRequest, onEvent: onMailEvent, pick: () => lord.broker?.pick(false, ''),

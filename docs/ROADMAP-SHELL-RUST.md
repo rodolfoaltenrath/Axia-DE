@@ -96,8 +96,8 @@ brilho e energia, método de entrada, aparência.
 
 **Ainda em JavaScript:**
 
-- 7 apps: `editor`, `mail`, `passwords`, `pdf`, `player`,
-  `screenshots`, `terminal`.
+- 4 apps: `editor`, `mail`, `player`, `terminal`. (`screenshots`, `passwords` e `pdf` já
+  não têm JSX nem JS na pasta; ficam só os adaptadores de sessão em `runtime/`.)
 - `sdk/`: 122 arquivos JS/JSX na árvore de 2026-11-23. A divisão histórica da Fase 0 está em
   `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
 - `themes/default/` (a montagem da shell) e `runtime/` (reconciler React e eventos).
@@ -701,7 +701,7 @@ Fatias de interface (cada uma completa, com seus chamadores):
 - [ ] Manter como configurações: modo claro/escuro, cor de destaque e papéis de
       parede, e tudo o que o usuário já escolhe hoje.
 
-## Fase 5: os 9 apps que ainda são JSX
+## Fase 5: os apps que ainda são JSX
 
 Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
 
@@ -726,7 +726,10 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       janelas e o I/O de captura/gravação passam pelo adaptador de sessão
       `runtime/native_capture.js` (sem política nem interface), a ser removido na Fase 6.
       Ver [RUST-SCREENSHOTS.md](RUST-SCREENSHOTS.md).
-- [ ] `pdf`
+- [x] `pdf`: janela nativa completa (estados, barra, sidebar, páginas, seleção,
+      busca, anotações, campos, desfazer, salvar cópia, impressão e menus); JSX, os
+      adaptadores JS e o manifesto JSON retirados. Serviços do helper em
+      `runtime/native_pdf_services.js`. Ver [RUST-PDF.md](RUST-PDF.md).
 - [ ] `player`
 - [ ] `terminal` (já usa um nó nativo próprio para o conteúdo)
 - [ ] `mail` (exibição de HTML)

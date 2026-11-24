@@ -126,6 +126,7 @@ pub struct App {
     locale_revision: u64,
     window: String,
     menus: Value,
+    remembered: Value,
 }
 impl Default for App {
     fn default() -> Self {
@@ -194,6 +195,7 @@ impl Default for App {
             locale_revision: 0,
             window: String::new(),
             menus: Value::Null,
+            remembered: Value::Null,
         }
     }
 }
@@ -944,6 +946,38 @@ impl App {
         }
         true
     }
+    /// What this window had when it was last mounted (the same window remounting, e.g. a theme change).
+    fn restore(&mut self, saved: &Value, dark: bool) {
+        if !saved.is_object() {
+            return;
+        }
+        self.zoom = match &saved["zoom"] {
+            Value::String(s) if s == "page" => Zoom::Page,
+            Value::Number(n) => n.as_f64().filter(|z| z.is_finite() && *z > 0.).map(Zoom::Scale).unwrap_or(Zoom::Width),
+            _ => Zoom::Width,
+        };
+        self.single = saved["mode"] == "single";
+        match &saved["side"] {
+            Value::Null if saved.get("side").is_some() => self.side = None,
+            Value::String(s) if s == "thumbs" || s == "outline" => self.side = Some(s.clone()),
+            _ => {}
+        }
+        self.invert = dark && saved["invert"] == true;
+        self.remembered = self.window_state();
+    }
+    fn window_state(&self) -> Value {
+        json!({"path":self.path,"zoom":self.zoom.json(),"mode":self.mode(),"side":self.side,"invert":self.invert})
+    }
+    fn remember(&mut self) {
+        if self.window.is_empty() || !self.booted {
+            return;
+        }
+        let state = self.window_state();
+        if state != self.remembered {
+            self.remembered = state.clone();
+            self.jobs.enqueue(Tag::Ignore, "windows.state", json!([self.window, state]));
+        }
+    }
     fn pick_path(&self, args: &Value) -> Option<String> {
         let path = args["path"].as_str().filter(|p| !p.is_empty())?;
         Some(if path.starts_with('/') { path.to_owned() } else { format!("{}/{path}", self.home) })
@@ -1078,6 +1112,7 @@ impl App {
         }
         self.timers(now);
         self.sync_menus();
+        self.remember();
         let mut out = json!({});
         if let Some(on) = self.capture.take() {
             out["capture"] = json!(on);
@@ -1088,7 +1123,8 @@ impl App {
         if let Some(title) = self.title.take() {
             out["title"] = json!(title);
         }
-        if v["cmd"] == "sync" || v["cmd"] == "next" || !self.last_tree.is_null() {
+        // The host only takes the scene from the reply to its own `sync`, which it sends after every event.
+        if v["cmd"] == "sync" {
             let tree = self.scene(now);
             if tree != self.last_tree {
                 self.last_tree = tree.clone();
@@ -1117,9 +1153,11 @@ impl App {
                 self.booted = true;
                 self.jobs.bind(owner);
                 self.window = v["args"]["__nativeWindow"].as_str().unwrap_or("").to_owned();
+                self.restore(&v["args"]["__nativeState"], v["context"]["theme"]["mode"] == "dark");
                 self.home = v["context"]["home"].as_str().map(str::to_owned).or_else(|| std::env::var("HOME").ok()).unwrap_or_default();
-                if let Some(path) = self.pick_path(&v["args"]) {
-                    self.nonce = v["args"]["nonce"].clone();
+                self.nonce = v["args"]["nonce"].clone();
+                let saved = v["args"]["__nativeState"]["path"].as_str().filter(|p| !p.is_empty()).map(str::to_owned);
+                if let Some(path) = saved.or_else(|| self.pick_path(&v["args"])) {
                     self.open(path, now);
                 }
             }

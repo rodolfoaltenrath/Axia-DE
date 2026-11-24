@@ -14,10 +14,11 @@ struct Helper {
     tree: Value,
     exact: bool,
     fail: Vec<&'static str>,
+    sync_input: Value,
 }
 impl Helper {
     fn new(pages: usize) -> Self {
-        Self { token: 0, ready: Default::default(), calls: vec![], pages: vec![[612., 792.]; pages], password: None, next_image: 100, pending: None, events: vec![], tree: Value::Null, exact: false, fail: vec![] }
+        Self { token: 0, ready: Default::default(), calls: vec![], pages: vec![[612., 792.]; pages], password: None, next_image: 100, pending: None, events: vec![], tree: Value::Null, exact: false, fail: vec![], sync_input: sync_input(json!({"__nativeOwner":9,"__nativeWindow":"pdf"})) }
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
         if self.fail.contains(&method) {
@@ -59,13 +60,24 @@ impl Helper {
             self.tree = tree.clone();
         }
     }
+    /// What the host does after every event: ask for the scene again with a `sync`.
+    fn resync(&mut self, app: &mut App, now: i64) {
+        let reply = app.request_at(&self.sync_input.clone(), now);
+        self.absorb(reply);
+    }
     fn send(&mut self, app: &mut App, now: i64, input: Value) -> Value {
-        let reply = app.request_at(&input, now);
-        self.absorb(reply)
+        let mut reply = app.request_at(&input, now);
+        self.absorb(reply.clone());
+        self.resync(app, now);
+        reply["tree"] = self.tree.clone();
+        reply
     }
     fn key(&mut self, app: &mut App, key: &str, chr: &str, flags: i32, now: i64) -> Option<Value> {
-        let reply = app.key_at(key, chr, flags, now)?;
-        Some(self.absorb(reply))
+        let mut reply = app.key_at(key, chr, flags, now)?;
+        self.absorb(reply.clone());
+        self.resync(app, now);
+        reply["tree"] = self.tree.clone();
+        Some(reply)
     }
     /// Runs the host side of every effect the app asks for until it is quiet.
     fn drive(&mut self, app: &mut App, now: &mut i64) -> Value {
@@ -88,7 +100,7 @@ impl Helper {
             }
             let reply = match self.pending.take() {
                 Some(effect) => json!({"effect":effect}),
-                None => app.request_at(&json!({"cmd":"noop"}), *now),
+                None => app.request_at(&self.sync_input.clone(), *now),
             };
             self.absorb_tree(&reply);
             let Some(effect) = reply.get("effect") else {
@@ -129,6 +141,7 @@ impl Helper {
             };
             let reply = app.request_at(&json!({"cmd":"next","result":result}), *now);
             self.absorb(reply);
+            self.resync(app, *now);
         }
         panic!("the window never settled");
     }
@@ -142,13 +155,13 @@ fn start(pages: usize, args: Value) -> (App, i64, Helper) {
     helper.absorb(reply);
     (app, now, helper)
 }
+fn sync_input(args: Value) -> Value {
+    json!({"cmd":"sync","args":args,"context":{"width":980,"height":680,"home":"/home/test",
+        "theme":{"text":"#ffffff","textDim":"#999999","accent":"#0a84ff","separator":"#444444","mode":"dark","windowBg":"#222222"}}})
+}
 fn boot_with_reply(args: Value) -> (App, i64, Value) {
     let mut app = App::default();
-    let reply = app.request_at(
-        &json!({"cmd":"sync","args":args,"context":{"width":980,"height":680,"home":"/home/test",
-            "theme":{"text":"#ffffff","textDim":"#999999","accent":"#0a84ff","separator":"#444444","mode":"dark","windowBg":"#222222"}}}),
-        1000,
-    );
+    let reply = app.request_at(&sync_input(args), 1000);
     (app, 1000, reply)
 }
 fn tree_text(tree: &Value) -> String {
@@ -494,4 +507,29 @@ fn menus_are_published_once_and_their_clicks_arrive_as_events() {
     helper.pass(&mut app, &mut now, 1200);
     assert!(app.pct > before && app.single, "menu actions run like their keys and buttons");
     assert!(helper.count("windows.menus") > count, "checked items follow the state");
+}
+
+#[test]
+fn the_document_zoom_mode_and_sidebar_survive_a_remount_of_the_same_window() {
+    let (mut app, mut now, mut helper) = start(3, json!({"__nativeOwner":9,"__nativeWindow":"pdf","path":"/home/test/report.pdf"}));
+    helper.drive(&mut app, &mut now);
+    helper.send(&mut app, now, json!({"cmd":"mode","key":"single"}));
+    helper.send(&mut app, now, json!({"cmd":"zoom","key":1}));
+    helper.send(&mut app, now, json!({"cmd":"sideToggle","key":"thumbs"}));
+    helper.drive(&mut app, &mut now);
+    let (_, state) = helper.calls.iter().rev().find(|(m, _)| m == "windows.state").cloned().expect("the window state is published");
+    assert_eq!(state[0], "pdf");
+    assert_eq!(state[1]["path"], "/home/test/report.pdf");
+    assert_eq!(state[1]["mode"], "single");
+    assert!(state[1]["side"].is_null());
+    assert!(state[1]["zoom"].is_number());
+    let before = helper.calls.iter().filter(|(m, _)| m == "windows.state").count();
+    helper.drive(&mut app, &mut now);
+    assert_eq!(helper.calls.iter().filter(|(m, _)| m == "windows.state").count(), before, "an unchanged state is not sent again");
+    // the same window mounted again, with what it published
+    let (mut again, mut later, mut helper2) = start(3, json!({"__nativeOwner":10,"__nativeWindow":"pdf","__nativeState":state[1]}));
+    helper2.drive(&mut again, &mut later);
+    assert!(again.single && again.side.is_none());
+    assert_eq!(again.zoom.json(), state[1]["zoom"]);
+    assert_eq!(helper2.calls[0], ("pdf.open".to_string(), json!(["/home/test/report.pdf", ""])));
 }

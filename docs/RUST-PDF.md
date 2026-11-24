@@ -1,6 +1,6 @@
 # PDF viewer migration
 
-The main window remains React. The sidebar's widgets and input mount through
+Historical notes: until stage 4 the main window was React. The sidebar's widgets and input mounted through
 the native Rust host. `geometry.rs` owns page/view transforms,
 rotated sizes, continuous layout and visible-page ranges. `cache_model.rs` owns
 width quantization, render admission/deduplication, generations, progressive
@@ -171,6 +171,16 @@ helper as `pdf.annot` (`[doc,annotation]`), `pdf.setField` (`[doc,id,value]`),
 completion (an error string is the failure message); also `pdf.print` (`[doc,title]`) and
 `windows.open` (Show in Files). Only the registration stage remains: manifest, transport
 (`runtime/native_pdf_services.js`), removal of the JSX/JS files and the real-helper test.
+
+Stage 4 status (done): `manifest.rs` is registered in `rust/native_apps.rs`; the shell mounts
+`axia_app_pdf::App`; `runtime/native_pdf_services.js` provides every service listed above with
+the lease rules (a raster is released once, by Rust, by a discard or by closing the window;
+a window's documents close with it); `index.jsx`, `sidebar.jsx`, `cache.js`, `geometry.js`, `model.js`,
+`sidebar.js`, `viewer.js`, `manifest.json` and the JS-adapter test (`pdf_model_test.mjs`) are gone.
+The frozen JavaScript references remain as fixtures checked by the Rust tests. The host only
+takes the scene from the reply to `sync` (a command or result reply with a tree is ignored), so
+the app builds its scene on `sync` alone. Not carried over: remembering zoom, mode and sidebar
+when the same window remounts (`windowState`).
 
 Contract notes for the window: frames come from `{"cmd":"view","op":"viewport"}`
 (`first`/`last`/`currentPage`/`frames`/`renders`); cache admission from

@@ -13,9 +13,18 @@ selectors and transfer windows still use the React widget adapter, pending
 shell roadmap phase 3. The complete application remains part of the final
 integration audit.
 
-PDF: geometry, navigation, cache, search/selection, annotation/form state and the
-sidebar are Rust. The sidebar mounts native widgets. The main window, page
-overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
+PDF now has only Rust sources in its folder, including its compiled manifest
+(`apps/pdf/manifest.rs`). `native.rs` is the whole window: document states (welcome,
+opening, password, error), toolbar, sidebar, page rasters, wheel/keyboard/zoom/rotation/mode
+navigation, links, text selection and copy, streamed search, go-to-page, highlight/ink/note
+tools, in-place form and note editors, undo, save a copy, print, the unsaved indicator and the
+four application menus; `native_ui.rs` builds the scene. The shared
+`runtime/native_pdf_services.js` (no UI, no policy) runs the helper calls Rust names and keeps
+document sessions and raster handles in the window lease, releasing each raster exactly once.
+Tests: 58 crate tests with a fake helper, a real-host mount test in `axia-shell`,
+`node server/tests/native_pdf_services_test.mjs`, and the GPU CI runtime test
+`pdf_runtime` against the real `axia-doc`. The window does not yet persist its zoom, view
+mode and sidebar across a remount of the same window.
 
 Screenshots now has only Rust sources in its folder, including its compiled
 manifest (`apps/screenshots/manifest.rs`). Its panel, selector, countdown,
@@ -32,7 +41,7 @@ shared `runtime/native_vault_services.js`; the generic native mount publishes
 the vault availability and region and marks the window protected.
 `node server/tests/native_vault_services_test.mjs` covers that boundary.
 Remaining apps (all remain in scope):
-editor, mail, player and terminal, plus PDF above. Existing Rust
+editor, mail, player and terminal. Existing Rust
 models in some of these apps do not count as native-window completion.
 
 Contacts now has only Rust sources, including its manifest, full three-column

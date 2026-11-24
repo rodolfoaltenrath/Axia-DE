@@ -53,6 +53,8 @@ pub mod calendar;
 pub mod screenshots;
 #[path = "../apps/passwords/manifest.rs"]
 pub mod passwords;
+#[path = "../apps/pdf/manifest.rs"]
+pub mod pdf;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -81,7 +83,8 @@ pub fn manifests() -> serde_json::Value {
         contacts::manifest(),
         calendar::manifest(),
         screenshots::manifest(),
-        passwords::manifest()
+        passwords::manifest(),
+        pdf::manifest()
     ])
 }
 #[cfg(test)]

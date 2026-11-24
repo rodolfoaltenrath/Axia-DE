@@ -78,7 +78,7 @@ How it draws:
 - A request that's no longer needed (the page left the view) is canceled before it starts.
 - While a page arrives at the new zoom, whatever version of that page exists is shown, scaled:
   there's never a gap.
-- **Cache** (`apps/pdf/cache.js`): 48 MB of pages and 8 MB of thumbnails per document. On top of
+- **Cache** (`apps/pdf/cache_model.rs`; the raster handles live in `runtime/native_pdf_services.js`): 48 MB of pages and 8 MB of thumbnails per document. On top of
   that there's a 160 MB cap for all the images axia-server keeps (`doc.c`).
 
 ## Archives in Files

@@ -170,9 +170,8 @@ EOF
     # (0.8.5) Monitor → Network's model (sdk/netmodel.js): search tokens, filters, the tree, sorting
     if have node; then run "netmodel-test (sdk/netmodel.js)" node tests/netmodel_test.mjs
     else skip "netmodel-test" "node"; fi
-    # PDF geometry and cache policy: production Rust models with their JS adapters.
     if have node && have cargo && [ -d ../node_modules/esbuild ]; then
-        run "pdf-model-test (Rust geometry/cache + JS adapters)" node tests/pdf_model_test.mjs
+        run "native-pdf-services (document sessions, raster release and streamed search)" node tests/native_pdf_services_test.mjs
         run "native-async-test (compiled app service ownership)" node tests/native_async_test.mjs
         run "native-view-facts-test (scoped subscriptions and React lifecycle)" node tests/native_view_facts_test.mjs
         run "native-async-mount-test (string WM IDs and window lifecycle)" node tests/native_async_mount_test.mjs
@@ -183,7 +182,7 @@ EOF
         run "native-backup-test (status ownership and backup operations)" node tests/native_backup_test.mjs
         run "native-sysinfo-test (private-query lifetime and exact exports)" node tests/native_sysinfo_services_test.mjs
         run "native-disks-test (closed actions and operation lifetime)" node tests/native_disk_services_test.mjs
-    else skip "pdf-model-test" "node, cargo and node_modules/esbuild"; fi
+    else skip "native-async tests" "node, cargo and node_modules/esbuild"; fi
     # (0.8.5) System Information's model (apps/sysinfo/model.rs): GPU layers, CPU reasons, Compatibility
     if have node && have cargo; then
         run "app-model-test-adapter" cargo build --manifest-path ../rust/Cargo.toml --locked --offline --example app-model
