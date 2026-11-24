@@ -11,21 +11,23 @@
 import {
   View, NativeView, Layer,
   useAppWindow, useStore, useWindows, wm, windows,
-  t as tr, media, userDirs, fs, addShortcuts, screenshotLauncher, launchApp, createStore, windowTitle, notify, toast, errorText, dndActive, appNotifyPrefs,
+  t as tr, media, userDirs, fs, addShortcuts, launchApp, createStore, windowTitle, toast, errorText,
 } from '@lordos/sdk';
 import { useEffect, useRef } from 'react';
 import { screen, onScreenChange, displayFor } from '@lordos/runtime';
 import { clearTextFocus, focusToken, restoreFocus } from '../../sdk/components.jsx';
 import { captureBridge } from '../../sdk/nativecapture.js';
+import { notificationBridge } from '../../sdk/nativenotifications.js';
+import { syncNativeCatalog } from '../../sdk/nativecatalog.js';
 
 const APP = 'screenshots';
 const session = createStore({ revision: 0, recording: null, pendingRecord: false, recent: [] });
 function sessionRequest(input) {
   const reply = lord.nativeApps.request(JSON.stringify({ cmd: 'captureSession', ...input }));
   if (reply.state.revision !== session.get().revision) session.set(reply.state);
+  for (const effect of reply.effects || []) captureBridge.perform(effect);
   return reply;
 }
-const recordCurrent = token => sessionRequest({ op: 'recordCurrent', token }).valid;
 
 export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} icon={size} />; }
 
@@ -85,27 +87,16 @@ function captureRequest(input) {
   for (const effect of reply.effects || []) captureBridge.perform(effect);
   return reply.result;
 }
-function cancelCountdown() {
-  const win = wm.get(`${APP}#count`);
-  if (win?.args.captureTicket != null) captureRequest({ action: 'cancel', ticket: win.args.captureTicket });
-  else wm.close(`${APP}#count`, true);
-}
-
-// The screen permission is denied (no answer here means that) or the app is restricted (an exception):
-// nothing is captured, and the person who pressed the key is told why. Do Not Disturb or this app's
-// notification settings would hide a banner, so then it is a toast.
-function refused(err) {
-  const body = errorText(err || { code: 'media.denied.screen', params: { app: tr('apps.screenshots') } });
-  const banner = notify({ app: APP, label: tr('apps.screenshots'), title: tr('screenshots.refused'), body,
-    actions: [{ id: 'privacy', label: tr('screenshots.refused.open'), run: () => wm.open('settings', { args: { section: 'privacy', nonce: Date.now() } }) }] });
-  if (!banner || dndActive() || appNotifyPrefs(APP).style === 'none') toast.set(body);
-}
-async function allowed(ask, current = () => true) {
+async function allowed(ask, ticket) {
   try {
     const got = await ask();
-    if (!got && current()) refused();
+    if (!got) { syncNativeCatalog(); captureRequest({ action: 'refused', ticket }); }
     return got;
-  } catch (e) { if (current()) refused(e); return null; }
+  } catch (error) {
+    const value = error && typeof error === 'object' ? { code: error.code, params: error.params, message: error.message } : error;
+    syncNativeCatalog(); captureRequest({ action: 'refused', ticket, error: value });
+    return null;
+  }
 }
 export const capture = {
   full: () => captureRequest({ action: 'start', mode: 'full' }),
@@ -119,23 +110,19 @@ async function runCaptureWork(effect) {
   if (mode === 'record') {
     const target = outputTarget('record');
     const path = target.path;
-    const id = await allowed(() => media.screenRecord(APP, path, { mic: target.mic, appName: target.appName }), () => recordCurrent(token));
+    const id = await allowed(() => media.screenRecord(APP, path, { mic: target.mic, appName: target.appName }), ticket);
     if (!id) { releaseOutput(target); sessionRequest({ op: 'recordFailed', token }); return; }
-    if (!sessionRequest({ op: 'recordReady', token, id, path }).accepted) { media.stop(id); media.close(id); releaseOutput(target); return; }
+    if (!sessionRequest({ op: 'recordReady', token, id, path, output: target.id }).accepted) { media.stop(id); media.close(id); releaseOutput(target); return; }
     const off = media.on(id, (type, d) => {
-      if (type === 'done' || type === 'closed') {
-        off();
-        const result = sessionRequest({ op: 'recordDone', id, ok: type === 'done' && !!d?.ok, path: d?.path });
-        if (result.completed) wm.close(`${APP}#rec`, true);
-        media.close(id); releaseOutput(target);
-      }
+      const result = sessionRequest({ op: 'recordEvent', id, type, data: d });
+      if (result.terminal) { off(); media.close(id); }
     });
     const rid = wm.open(APP, { instance: 'rec' });
     wm.setPip(rid, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
     return;
   }
   const signature = displaySignature();
-  const handle = await allowed(() => media.screenshot(APP, mode === 'full' ? undefined : { x: 0, y: 0, w: screen.width, h: screen.height }), current);
+  const handle = await allowed(() => media.screenshot(APP, mode === 'full' ? undefined : { x: 0, y: 0, w: screen.width, h: screen.height }), ticket);
   if (!handle) { captureRequest({ action: 'cancel', ticket }); return; }
   if (!captureRequest({ action: 'accept', ticket })?.valid) { media.close(handle); return; }
   if (mode === 'full') {
@@ -152,7 +139,13 @@ async function runCaptureWork(effect) {
   } catch (error) { media.close(handle); throw error; }
 }
 captureBridge.perform = effect => {
-  if (effect.op === 'hide') { for (const id of effect.ids) wm.close(id, true); }
+  if (effect.kind === 'notificationAction') { captureRequest({ action: 'noticeAction', id: effect.id, index: effect.index }); return; }
+  if (effect.op === 'notifications') { for (const item of effect.effects || []) notificationBridge.perform?.(item); }
+  else if (effect.op === 'toast') toast.set(effect.text);
+  else if (effect.op === 'launch') launchApp(effect.app);
+  else if (effect.op === 'open') wm.open(effect.app, { args: effect.args });
+  else if (effect.op === 'close') wm.close(effect.id, true);
+  else if (effect.op === 'hide') { for (const id of effect.ids) wm.close(id, true); }
   else if (effect.op === 'closeCountdown') {
     if (wm.get(`${APP}#count`)?.args.captureTicket === effect.ticket) wm.close(`${APP}#count`, true);
   } else if (effect.op === 'countdown') {
@@ -170,25 +163,12 @@ captureBridge.perform = effect => {
   });
 };
 
-// global shortcuts
-const hasMedia = () => typeof lord !== 'undefined' && !!lord.media;
-// the screenshot app chosen in Settings → Default Apps, when it isn't this one: the keys open it
-const other = () => screenshotLauncher();
-const usable = () => !!other() || hasMedia();
-const orOther = (fn) => () => { const id = other(); if (id) launchApp(id); else fn(); };
-const captureFull = orOther(() => capture.full());
-const captureArea = orOther(() => capture.area('area'));
-// a recording in progress is this app's, whatever is chosen now: the key still stops it
-const openPanelOrStop = () => { if (session.get().recording || session.get().pendingRecord) capture.record(); else orOther(() => wm.open(APP))(); };
-addShortcuts([
-  // Cancel before a focused app's text field receives Escape; keep other keys
-  // available while the person prepares the screen during the countdown.
-  { id: 'capture.cancel', keys: ['Escape'], when: () => !!wm.get(`${APP}#count`), run: cancelCountdown },
-  { id: 'capture.full', keys: ['Meta+Shift+3'], when: usable, run: captureFull, label: 'shell.shortcuts.captureFull', group: 'system' },
-  { id: 'capture.selector', keys: ['PrintScreen'], when: usable, run: captureArea, label: 'shell.shortcuts.captureSelector', group: 'system' },
-  { id: 'capture.area', keys: ['Meta+Shift+4'], when: usable, run: captureArea, label: 'shell.shortcuts.captureArea', group: 'system' },
-  { id: 'capture.panel', keys: ['Meta+Shift+5'], when: usable, run: openPanelOrStop, label: 'shell.shortcuts.capturePanel', group: 'system' },
-]);
+// The SDK transports bindings; Rust owns keys, availability and routing.
+if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) addShortcuts(captureRequest({ action: 'bindings' }).map(binding => ({
+  ...binding,
+  when: () => !!captureRequest({ action: 'shortcutUsable', key: binding.id, media: media.available() })?.enabled,
+  run: () => captureRequest({ action: 'shortcut', key: binding.id, media: media.available() }),
+})));
 
 // ---- the app's windows ----
 

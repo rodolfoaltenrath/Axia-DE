@@ -2,6 +2,8 @@
 pub mod auxiliary;
 #[path = "../../../apps/screenshots/editor_view.rs"]
 pub mod editor_view;
+#[path = "../../../apps/screenshots/feedback.rs"]
+pub mod feedback;
 #[path = "../../../apps/screenshots/geometry.rs"]
 pub mod geometry;
 #[path = "../../../apps/screenshots/markup.rs"]
@@ -14,6 +16,8 @@ pub mod panel;
 pub mod selector;
 #[path = "../../../apps/screenshots/session.rs"]
 pub mod session;
+#[path = "../../../apps/screenshots/shortcuts.rs"]
+pub mod shortcuts;
 #[derive(Default)]
 pub struct Model {
     pub editor: markup::Editor,

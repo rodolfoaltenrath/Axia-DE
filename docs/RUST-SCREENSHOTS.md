@@ -349,8 +349,34 @@ below the SDK; image/crop/protected-window PNG checks use the real compositor.
 These results do not establish a causal performance improvement or physical
 recording. The previously documented isolated facts-fixture limitation remains.
 
-This is still a partial app migration. Refusal presentation,
-external-app/global shortcut routing and SDK image/recording operations remain
+## Native shortcuts, refusal and recording events
+
+`shortcuts.rs` supplies capture key metadata and validates the selected desktop
+application. The resident service reads the current preference for each key:
+PrintScreen opens the area/window/monitor/desktop selector, direct screen capture
+retains its separate key, and the panel key stops/cancels this app's recording
+before considering an external application. Escape is scoped to the current
+countdown and still precedes a focused native text field. JavaScript transports
+the native bindings and effects; registration is restricted to the root session.
+
+`feedback.rs` formats refusal notices with the native locale and structured
+error parameters. The resident owner deduplicates each attempt, ignores
+superseded replies, and uses the native notification service/preferences for
+delivery and toast fallback (DND, hidden banners or blocked delivery). The
+Privacy action belongs to native notice identities and opens Settings without
+changing the capture permission. The SDK notification bridge retains ordinary
+application callbacks and their original receiver.
+
+The session model classifies recording events. `done` with explicit success is
+required to append a video; `closed`, failed results and terminal `state`
+messages clear the matching recording without inventing a saved result.
+Progress/error messages alone do not prematurely terminate it. Duplicate/old
+events cannot clear a newer source. The resident service owns accepted sources'
+output reservations, releases them at terminal completion, and chooses when to
+close the badge. The SDK still subscribes to the media source and executes its
+close operation, preserving microphone-indicator cleanup.
+
+This is still a partial app migration. SDK image/recording operations remain
 in the transport, along with compiled metadata and wrapper removal below. The
 thumbnail-to-editor handoff still has its existing short transport timeout.
 
@@ -376,13 +402,12 @@ dimensions and display transforms instead of assuming a 100% single display.
 
 - Compiled metadata and removal of the JSX/JSON entry points. All app scenes
   are native, including the panel, selector, editor and auxiliary windows.
-- Complete the resident controller's I/O and permission presentation: privacy
-  action/toast fallback, chosen external screenshot app and global shortcuts,
-  including stop-recording priority. Window hiding, editor preservation,
-  generation checks, countdown and cancellation are now native.
-- Move the remaining recording event transport and stop/error handling into the
-  native controller. Recording identity/generations, matching completion and
-  recent results already belong to Rust; preserve SDK device-indicator cleanup.
+- Complete the resident controller's remaining I/O transport. Shortcut routing,
+  refusal presentation, privacy actions, window hiding, editor preservation,
+  generation checks, countdown and cancellation are native.
+- Move the remaining recording subscription and stop/close-call transport into
+  native services. Event classification, identity/generations, terminal cleanup
+  and recent results belong to Rust; preserve SDK device-indicator cleanup.
 - Native image/file services: filename policy, output reservations and result
   folding are native, along with the markup scene, input, tools, colors,
   thickness, preview operations, undo and result deadlines. Migrate the remaining

@@ -296,3 +296,160 @@ fn output_completion_uses_native_preferences_and_records_only_successful_new_ima
     );
     assert_eq!(result["capture"]["recent"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn native_shortcuts_route_fresh_preferences_and_keep_our_recording_priority() {
+    let (home, mut session) = fixture("shortcuts", 0);
+    let now = Instant::now();
+    let key = |session: &Session, id: &str| {
+        command(
+            session,
+            json!({"action":"shortcut","key":id,"media":true}),
+            now,
+        )
+    };
+    crate::settings::with(&home.0, |s| {
+        s.set("screenshotApp", &json!("org.capture.desktop"));
+    });
+    assert_eq!(
+        key(&session, "capture.selector")["effects"][0]["app"],
+        "desktop:org.capture"
+    );
+    assert_eq!(key(&session, "capture.panel")["effects"][0]["op"], "launch");
+    command(&session, json!({"action":"start","mode":"record"}), now);
+    let cancelled = key(&session, "capture.panel");
+    assert_eq!(cancelled["capture"]["pendingRecord"], false);
+    command(&session, json!({"action":"start","mode":"record"}), now);
+    let work = tick(&mut session, now + Duration::from_millis(220));
+    session.capture_service().borrow_mut().session(
+        &json!({"op":"recordReady","token":work[0]["recordToken"],"id":7}),
+        1000,
+    );
+    assert_eq!(key(&session, "capture.panel")["effects"][0]["id"], 7);
+    crate::settings::with(&home.0, |s| {
+        s.set("screenshotApp", &json!("lordos-screenshots.desktop"));
+    });
+    assert_eq!(
+        command(
+            &session,
+            json!({"action":"shortcutUsable","key":"capture.full","media":false}),
+            now
+        )["result"]["enabled"],
+        false
+    );
+    assert_eq!(
+        key(&session, "capture.selector")["result"]
+            .get("ticket")
+            .is_some(),
+        true
+    );
+    assert_eq!(
+        tick(&mut session, now + Duration::from_millis(160))[0]["mode"],
+        "area"
+    );
+}
+
+#[test]
+fn refusal_uses_native_delivery_policy_deduplicates_and_owns_privacy_actions() {
+    let (home, mut session) = fixture("refusal", 0);
+    let now = Instant::now();
+    let notifications = session.notification_service();
+    notifications.borrow_mut().bind_settings(&home.0);
+    let mut first_id = 0;
+    for (prefs, fallback) in [
+        (json!({}), false),
+        (json!({"dnd":true}), true),
+        (json!({"apps":{"screenshots":{"style":"none"}}}), true),
+        (json!({"apps":{"screenshots":{"allow":false}}}), true),
+    ] {
+        crate::settings::with(&home.0, |s| {
+            s.set("notifications", &prefs);
+        });
+        let begin = command(&session, json!({"action":"start","mode":"full"}), now);
+        let ticket = begin["result"]["ticket"].clone();
+        tick(&mut session, now + Duration::from_millis(160));
+        let result = command(&session, json!({"action":"refused","ticket":ticket}), now);
+        let effects = result["effects"].as_array().unwrap();
+        assert_eq!(effects.iter().any(|e| e["op"] == "toast"), fallback);
+        let history = notifications
+            .borrow_mut()
+            .command(&json!({"action":"snapshot"}), now)["result"]["history"]
+            .clone();
+        if first_id == 0 {
+            first_id = history[0]["id"].as_u64().unwrap();
+        }
+        assert_eq!(
+            command(&session, json!({"action":"refused","ticket":ticket}), now)["effects"],
+            json!([])
+        );
+    }
+    let action = command(
+        &session,
+        json!({"action":"noticeAction","id":first_id,"index":0}),
+        now,
+    );
+    assert_eq!(action["effects"][0]["app"], "settings");
+    assert_eq!(action["effects"][0]["args"]["section"], "privacy");
+    assert_eq!(
+        command(
+            &session,
+            json!({"action":"noticeAction","id":first_id,"index":1}),
+            now
+        )["effects"],
+        json!([])
+    );
+    assert_eq!(
+        command(&session, json!({"action":"refused","ticket":0}), now)["effects"],
+        json!([])
+    );
+}
+
+#[test]
+fn terminal_recording_state_releases_its_output_without_touching_a_new_source() {
+    let (_home, mut session) = fixture("terminal-output", 0);
+    let now = Instant::now();
+    let owner = session.capture_service();
+    let target = |service: &mut Service| {
+        let mut reply = service.output(&json!({"op":"begin","kind":"record"}), 1000);
+        while reply.get("effect").is_some() {
+            let result = if reply["effect"]["op"] == "dirs" {
+                json!({"pictures":"/home/test/Pictures"})
+            } else if reply["effect"]["op"] == "stat" {
+                json!({"exists":false})
+            } else {
+                Value::Null
+            };
+            reply = service.output(
+                &json!({"op":"next","id":reply["id"],"step":reply["step"],"result":result}),
+                1000,
+            );
+        }
+        reply
+    };
+    command(&session, json!({"action":"start","mode":"record"}), now);
+    let first = tick(&mut session, now + Duration::from_millis(220));
+    let output = target(&mut owner.borrow_mut());
+    owner.borrow_mut().session(
+        &json!({"op":"recordReady","token":first[0]["recordToken"],"id":7,"output":output["id"]}),
+        1000,
+    );
+    let failed = owner.borrow_mut().session(
+        &json!({"op":"recordEvent","id":7,"type":"state","data":{"state":"failed"}}),
+        2000,
+    );
+    assert_eq!(failed["terminal"], true);
+    assert_eq!(failed["state"]["recent"], json!([]));
+    assert!(owner.borrow().record_outputs.is_empty());
+    command(&session, json!({"action":"start","mode":"record"}), now);
+    let next = tick(&mut session, now + Duration::from_millis(220));
+    let replacement = target(&mut owner.borrow_mut());
+    assert_eq!(output["target"]["path"], replacement["target"]["path"]);
+    owner.borrow_mut().session(&json!({"op":"recordReady","token":next[0]["recordToken"],"id":8,"output":replacement["id"]}),2000);
+    let old = owner.borrow_mut().session(
+        &json!({"op":"recordEvent","id":7,"type":"done","data":{"ok":true}}),
+        3000,
+    );
+    assert_eq!(old["completed"], false);
+    assert_eq!(old["state"]["recording"]["id"], 8);
+    assert_eq!(owner.borrow().record_outputs.len(), 1);
+}

@@ -22,6 +22,7 @@ import { nativeAppRequest } from './nativeappmodel.js';
 import { notificationBridge } from './nativenotifications.js';
 import { settingsBridge } from './nativesettings.js';
 import { syncNativeCatalog } from './nativecatalog.js';
+import { captureBridge } from './nativecapture.js';
 
 const appHost = typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__;
 
@@ -68,7 +69,10 @@ function perform(effect) {
     if (callback) callback.onClose = null;
     try { close?.(effect.reason); } catch (e) { console.error('notify onClose:', e); }
   } else if (effect.kind === 'notificationAction') {
-    try { callbacks.get(effect.id)?.actions[effect.index]?.run?.(); } catch (e) { console.error('notify:', e); }
+    try {
+      const action = callbacks.get(effect.id)?.actions[effect.index];
+      if (action?.run) action.run(); else captureBridge.perform?.(effect);
+    } catch (e) { console.error('notify:', e); }
   }
 }
 notificationBridge.perform = perform;

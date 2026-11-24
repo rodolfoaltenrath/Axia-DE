@@ -720,8 +720,9 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       ferramentas e histórico do editor, ícone, seletor PrintScreen e janelas
       auxiliares, painel, interface do editor e estado/histórico da gravação em
       Rust. Controlador residente com prazos, cancelamento, gerações e política
-      de nomes/destinos dos arquivos em Rust;
-      I/O de captura/gravação, permissões, atalhos, metadados compilados e seus
+      de nomes/destinos dos arquivos em Rust; recusas, roteamento de atalhos e
+      classificação dos eventos de gravação também nativos.
+      I/O de captura/gravação, metadados compilados e seus
       transportes ainda em migração.
       Ver [RUST-SCREENSHOTS.md](RUST-SCREENSHOTS.md).
 - [ ] `pdf`

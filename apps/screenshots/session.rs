@@ -35,6 +35,18 @@ impl State {
         let mut reply = json!({});
         let token = input["token"].as_u64();
         match input["op"].as_str().unwrap_or("") {
+            "recordEvent" => {
+                let kind = input["type"].as_str().unwrap_or("");
+                let data = &input["data"];
+                let terminal = matches!(kind, "done" | "closed")
+                    || kind == "state" && matches!(data["state"].as_str(), Some("done" | "failed"));
+                reply = if terminal {
+                    self.request(&json!({"op":"recordDone","id":input["id"],"ok":kind=="done" && data["ok"]==true,"path":data["path"]}),now)
+                } else {
+                    json!({"completed":false})
+                };
+                reply["terminal"] = json!(terminal);
+            }
             "recordAction" => {
                 if let Some(rec) = &self.recording {
                     reply = json!({"action":"stop","id":rec.id});
@@ -107,6 +119,40 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn terminal_events_require_an_explicit_success_before_adding_a_video() {
+        for (kind, data, success) in [
+            ("state", json!({"state":"failed"}), false),
+            ("state", json!({"state":"done"}), false),
+            ("closed", json!({"crashed":true}), false),
+            ("done", json!({"ok":false}), false),
+            ("done", json!({"ok":true,"path":"/finished.mp4"}), true),
+        ] {
+            let mut state = State::default();
+            let token = state.request(&json!({"op":"recordAction"}), 0)["token"].clone();
+            state.request(
+                &json!({"op":"recordReady","token":token,"id":7,"path":"/pending.mp4"}),
+                1,
+            );
+            let progress=state.request(&json!({"op":"recordEvent","id":7,"type":"error","data":{"message":"media.noHelper"}}),2);
+            assert_eq!(progress["terminal"], false);
+            assert!(progress["state"]["recording"].is_object());
+            let result = state.request(
+                &json!({"op":"recordEvent","id":7,"type":kind,"data":data}),
+                3,
+            );
+            assert_eq!(result["terminal"], true);
+            assert_eq!(result["completed"], true);
+            assert!(result["state"]["recording"].is_null());
+            assert_eq!(state.recent.len(), usize::from(success));
+            let duplicate = state.request(
+                &json!({"op":"recordEvent","id":7,"type":"done","data":{"ok":true}}),
+                4,
+            );
+            assert_eq!(duplicate["completed"], false);
+            assert_eq!(state.recent.len(), usize::from(success));
+        }
+    }
     #[test]
     fn cancelled_permission_results_cannot_replace_a_new_recording() {
         let mut state = State::default();

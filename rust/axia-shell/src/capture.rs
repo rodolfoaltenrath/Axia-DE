@@ -3,6 +3,8 @@
 use crate::winmodel::Session;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
+#[path = "capture_policy.rs"]
+mod policy;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -16,6 +18,7 @@ struct Pending {
     mode: String,
     record: Option<u64>,
     restore_record: Option<i64>,
+    reported: bool,
     phase: Phase,
     due: Option<Instant>,
 }
@@ -30,6 +33,8 @@ pub(crate) struct Service {
     output_i18n: axia_native::i18n::I18n,
     output_revision: Option<u64>,
     outputs: axia_app_screenshots::output::Outputs,
+    record_outputs: std::collections::BTreeMap<i64, u64>,
+    refusal_ids: std::collections::BTreeSet<u64>,
 }
 impl Service {
     pub(crate) fn bind_settings(&mut self, home: &str) {
@@ -45,13 +50,7 @@ impl Service {
     pub(crate) fn output(&mut self, input: &Value, wall: i64) -> Value {
         match input["op"].as_str() {
             Some("begin") => {
-                let locale = crate::locale::reader(&self.home, &self.assets);
-                let locale = locale.read();
-                if self.output_revision != Some(locale.revision) {
-                    self.output_i18n.invalidate();
-                    self.output_revision = Some(locale.revision);
-                }
-                self.output_i18n.lang = locale.lang.clone();
+                self.sync_presentation();
                 let prefs = self
                     .preferences
                     .as_ref()
@@ -87,7 +86,28 @@ impl Service {
         {
             return json!({"accepted":false,"state":self.state.snapshot()});
         }
-        let reply = self.state.request(input, wall);
+        let mut reply = self.state.request(input, wall);
+        if input["op"] == "recordReady" && reply["accepted"] == true {
+            if let (Some(id), Some(output)) = (input["id"].as_i64(), input["output"].as_u64()) {
+                self.record_outputs.insert(id, output);
+            }
+        }
+        if input["op"] == "recordEvent" && reply["terminal"] == true
+            || input["op"] == "recordDone" && reply["completed"] == true
+        {
+            if let Some(output) = input["id"]
+                .as_i64()
+                .and_then(|id| self.record_outputs.remove(&id))
+            {
+                self.outputs.release(output);
+            }
+        }
+        if matches!(input["op"].as_str(), Some("recordEvent" | "recordDone"))
+            && reply["completed"] == true
+        {
+            reply["effects"] =
+                json!([{"kind":"capturePipeline","op":"close","id":"screenshots#rec"}]);
+        }
         if matches!(input["op"].as_str(), Some("recordReady" | "recordFailed"))
             && self
                 .pending
@@ -127,6 +147,16 @@ impl Service {
         let mut effects = Vec::new();
         let mut result = json!({});
         match input["action"].as_str().unwrap_or("") {
+            "bindings" => return json!({"result":axia_app_screenshots::shortcuts::bindings()}),
+            "shortcutUsable" | "shortcut" => return self.shortcut(windows, input, wall, now),
+            "refused" => return self.refused(windows, input, wall, now),
+            "noticeAction" => {
+                let valid = input["id"]
+                    .as_u64()
+                    .is_some_and(|id| self.refusal_ids.contains(&id))
+                    && input["index"] == 0;
+                return json!({"effects":if valid {vec![json!({"kind":"capturePipeline","op":"open","app":"settings","args":{"section":"privacy","nonce":wall}})]}else{Vec::new()}});
+            }
             "start" => {
                 let Some(mode) = input["mode"]
                     .as_str()
@@ -183,6 +213,7 @@ impl Service {
                     mode: mode.into(),
                     record,
                     restore_record,
+                    reported: false,
                     phase: Phase::Hide,
                     due: Some(
                         now + Duration::from_millis(if mode == "record" { 220 } else { 160 }),
