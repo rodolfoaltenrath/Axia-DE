@@ -730,10 +730,26 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       busca, anotações, campos, desfazer, salvar cópia, impressão e menus); JSX, os
       adaptadores JS e o manifesto JSON retirados. Serviços do helper em
       `runtime/native_pdf_services.js`. Ver [RUST-PDF.md](RUST-PDF.md).
-- [ ] `player`
-- [ ] `terminal` (já usa um nó nativo próprio para o conteúdo)
-- [ ] `mail` (exibição de HTML)
-- [ ] `editor` (edição de texto complexa)
+- [ ] `terminal` (em andamento; plano e contrato de transporte em
+      [RUST-TERMINAL.md](RUST-TERMINAL.md)). Feito e commitado: nó nativo do terminal (1), modelo
+      do workspace (2a), caminho de teclas (2b-1), janela com abas/painéis/divisores/teclado/mouse
+      (2b), toasts, confirmação de fechar, copiar/colar e busca (3a), popups, compositor,
+      broadcast, toolbelt, replay e modo de cópia (3b), menus, menu de contexto, links, guarda de
+      fechar e linhas digitadas (3c), importador do iTerm2 (4a). Falta:
+      - **4b** janela nativa de Preferências (perfis, seções geral/cores/texto/janela/terminal/
+        teclas/gatilhos, editor de teclas, painel de importação usando `iterm.rs`, persistência
+        via `settings.patch`, `reconfigureAll`); ler `Preferences.jsx` (linhas 330–611 ainda
+        não revistas) antes de desenhar. Portar também os gatilhos de perfil (a seção de saída
+        capturada do toolbelt depende deles) e salvar/restaurar arranjos e layout vivo.
+      - **5** cliente tmux em modo de controle (`tmux.js`, `tmux -CC`).
+      - **6** `manifest.rs` (+ `dockActions`), registro em `rust/native_apps.rs`,
+        `runtime/native_terminal_services.js`, remoção de `index.jsx`, `Chrome.jsx`,
+        `Panes.jsx`, `Preferences.jsx`, `iterm.js`, `keys.js`, `profiles.js`, `state.js`,
+        `tmux.js` e `manifest.json`, atualizar as listas do catálogo compilado e o teste
+        GPU com shell real.
+- [ ] `player` (por último, do zero)
+- [ ] `mail` (exibição de HTML; por último)
+- [ ] `editor` (edição de texto complexa; por último)
 - [x] `passwords` (processo isolado; fronteira de segurança mantida): metadados
       compilados, JSX e manifesto JSON retirados. Cofre, arquivos escolhidos,
       FIDO e área de transferência secreta passam por

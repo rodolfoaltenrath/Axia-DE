@@ -128,6 +128,14 @@ change. Until then the React window stays the live app.
    (the `term.*` calls Rust names, session lifetime in the window lease), removal of the
    JSX/JS, the real-shell runtime test.
 
+## Resume here
+
+Stages 1–4a are committed on `main` (not pushed; the owner pushes when everything is done). The
+next step is 4b. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
+axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
+of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
+Co-Authored-By trailer.
+
 ## Notes for the next stages
 
 - **Shared state.** `state.js` keeps every window's tabs at module level so minimizing a
