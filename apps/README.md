@@ -106,7 +106,7 @@ layout/scrolling and bookmark expansion now live in
 The main PDF window remains React. Its JS adapters keep helper promises and image handles on the
 host side; each cache has a separate Rust model through `lord.nativeApps.create('pdf')`.
 The cache preserves progressive previews, generations, LRU and release effects.
-See `apps/pdf/README.md` for the frozen-reference tests and current migration boundary.
+See `docs/RUST-PDF.md` for the frozen-reference tests and current migration boundary.
 
 Each remaining app is a folder `apps/<id>/` with two files. Apps don't depend on the theme: any theme shows
 them with its own colors (via `useTheme()`).
