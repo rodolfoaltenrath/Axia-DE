@@ -459,19 +459,28 @@ const TRAY_XML: &str = r#"<node><interface name="org.kde.StatusNotifierItem">
 <method name="GetLayout"><arg type="i" direction="in"/><arg type="i" direction="in"/><arg type="as" direction="in"/><arg type="u" direction="out"/><arg type="(ia{sv}av)" direction="out"/></method>
 <method name="Event"><arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="in"/><arg type="u" direction="in"/></method></interface></node>"#;
 
-fn newest_test_binary(deps: &Path) -> Result<PathBuf> {
+/// The newest `axia_shell-*` test executable under `debug`. Older cargo leaves it in `deps/`; newer
+/// cargo (split build directory) keeps it in `build/axia-shell/<hash>/out/`, so both are searched.
+fn newest_test_binary(debug: &Path) -> Result<PathBuf> {
+    let mut folders = vec![debug.join("deps")];
+    for hashed in super::entries(&debug.join("build/axia-shell")) {
+        folders.push(hashed.path().join("out"));
+    }
     let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
-    for entry in super::entries(deps) {
-        let (name, path) = (entry.file_name().to_string_lossy().into_owned(), entry.path());
-        let executable = std::os::unix::fs::PermissionsExt::mode(&entry.metadata().map_err(|e| e.to_string())?.permissions()) & 0o111 != 0;
-        if name.starts_with("axia_shell-") && path.extension().is_none() && path.is_file() && executable {
-            let modified = entry.metadata().and_then(|m| m.modified()).map_err(|e| e.to_string())?;
-            if best.as_ref().is_none_or(|(t, _)| modified > *t) {
-                best = Some((modified, path));
+    for folder in &folders {
+        for entry in super::entries(folder) {
+            let (name, path) = (entry.file_name().to_string_lossy().into_owned(), entry.path());
+            let meta = entry.metadata().map_err(|e| e.to_string())?;
+            let executable = std::os::unix::fs::PermissionsExt::mode(&meta.permissions()) & 0o111 != 0;
+            if name.starts_with("axia_shell-") && path.extension().is_none() && path.is_file() && executable {
+                let modified = meta.modified().map_err(|e| e.to_string())?;
+                if best.as_ref().is_none_or(|(t, _)| modified > *t) {
+                    best = Some((modified, path));
+                }
             }
         }
     }
-    best.map(|(_, p)| p).ok_or_else(|| format!("no axia_shell test binary in {}: build it first", deps.display()))
+    best.map(|(_, p)| p).ok_or_else(|| format!("no axia_shell test binary in {}: build it first", debug.display()))
 }
 
 pub fn execute(repo: &Path, args: &[String]) -> Result<ExitCode> {
@@ -529,8 +538,7 @@ pub fn execute(repo: &Path, args: &[String]) -> Result<ExitCode> {
         (lib.g_timeout_add)(40, register_app, data);
     }
 
-    let deps = repo.join("server/build/rust/debug/deps");
-    let binary = newest_test_binary(&deps)?;
+    let binary = newest_test_binary(&repo.join("server/build/rust/debug"))?;
     let cache = std::env::temp_dir().join(format!("axia-network-tray-check-{}", std::process::id()));
     at(&cache, std::fs::create_dir_all(&cache))?;
     let output_file = cache.join("output.txt");
@@ -610,5 +618,24 @@ mod tests {
     fn without_a_built_test_binary_the_check_says_what_to_build() {
         let dir = crate::TestDir::new("net-tray-empty");
         assert!(newest_test_binary(&dir.0).unwrap_err().contains("build it first"));
+    }
+
+    #[test]
+    fn the_test_binary_is_found_in_either_cargo_layout() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::TestDir::new("net-tray-layouts");
+        let old = dir.0.join("deps");
+        let new = dir.0.join("build/axia-shell/abc123/out");
+        for folder in [&old, &new] {
+            std::fs::create_dir_all(folder).unwrap();
+        }
+        let write = |path: &Path, mode: u32| {
+            std::fs::write(path, "x").unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        write(&new.join("axia_shell-abc123"), 0o755);
+        write(&new.join("axia_shell-abc123.d"), 0o755);
+        write(&old.join("axia_shell-def456"), 0o644);
+        assert_eq!(newest_test_binary(&dir.0).unwrap(), new.join("axia_shell-abc123"));
     }
 }
