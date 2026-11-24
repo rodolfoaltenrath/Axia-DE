@@ -116,8 +116,13 @@ change. Until then the React window stays the live app.
      A repeated Dock click with identical args is seen once until `sdk/dock.js` adds a nonce.
      Transport: jobs `windows.menus`, `windows.guard`, `windows.open`, `term.urlAt`, `term.log`
      (→ path or null), `term.export` (→ path or null); the lease event `closeRequested`.
-4. **Preferences.** Profiles, schemes and key bindings; the importer of `iterm.js`
-   (JSON profiles, `.itermcolors`, the iTerm2 plist) in Rust.
+4. **Preferences.**
+   - **4a (done): the importer.** `iterm.rs` is `iterm.js` in Rust: profile JSON and Dynamic
+     Profiles, `.itermcolors` (XML), the full iTerm2 preferences (XML plist and a bounds-checked
+     `bplist00` reader, with a depth/cycle guard), Display P3 → sRGB, key combinations and
+     actions, triggers, working directory, fonts. The caller injects the translator, the font
+     lookup (PostScript name → family) and the id generator through `Env`. 12 unit tests.
+   - **4b (next):** the native Preferences window (profiles, sections, key editor, import panel).
 5. **tmux.** The control-mode client of `tmux.js` (`tmux -CC`).
 6. **Registration and removal.** `manifest.rs`, `runtime/native_terminal_services.js`
    (the `term.*` calls Rust names, session lifetime in the window lease), removal of the
