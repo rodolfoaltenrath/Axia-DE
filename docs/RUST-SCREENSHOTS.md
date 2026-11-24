@@ -1,7 +1,7 @@
 # Screenshots migration
 
-The app is still in migration. `apps/screenshots/index.jsx` retains
-capture/recording/image transport and window mounting. The icon and visual selector
+The app folder has only Rust sources. `runtime/native_capture.js` carries the
+capture/recording/image transport and window mounting (no policy, no scene). The icon and visual selector
 are native Rust views in `selector.rs`; `auxiliary.rs` owns the thumbnail,
 countdown and recording indicator scenes and their deadlines. `editor_view.rs`
 owns the markup scene and calls `geometry` and `markup::Editor` directly in Rust.

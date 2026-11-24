@@ -220,3 +220,30 @@ fn coordinate_overflow_is_rejected_instead_of_serialized_as_null() {
         );
     }
 }
+
+#[test]
+fn two_models_keep_independent_caches_searches_and_edit_queues() {
+    let (mut a, mut b) = (Model::default(), Model::default());
+    let call = |m: &mut Model, value: Value| m.request(&value);
+    call(&mut a, json!({"cmd":"cache","op":"invalidate","page":0}));
+    let key = json!({"cmd":"cache","op":"key","page":0,"width":48,"rot":0,"inv":false});
+    assert_eq!(call(&mut a, key.clone())["value"], "0|64|0|0|1");
+    assert_eq!(call(&mut b, key.clone())["value"], "0|64|0|0|0");
+    let ticket = call(&mut a, json!({"cmd":"viewer","op":"findStart","query":"same"}));
+    call(&mut b, json!({"cmd":"viewer","op":"reset"}));
+    assert_eq!(
+        call(&mut a, json!({"cmd":"viewer","op":"findAppend","token":ticket["token"],"page":0,"rects":[[1,2,3,4]]}))["go"]["page"],
+        0
+    );
+    call(&mut a, json!({"cmd":"edit","op":"open","pages":2}));
+    call(&mut b, json!({"cmd":"edit","op":"open","pages":2}));
+    let mutation = call(
+        &mut a,
+        json!({"cmd":"edit","op":"annotate","annotation":{"page":0,"type":"highlight","rects":[[1,2,3,4]],"color":"#ffd60a"}}),
+    );
+    let finish = json!({"cmd":"edit","op":"complete","ticket":mutation["effect"]["ticket"],"ok":true});
+    assert!(call(&mut b, finish.clone()).is_null(), "another model's ticket completes nothing here");
+    assert_eq!(call(&mut a, finish)["state"]["history"], json!([0]));
+    drop(a);
+    assert_eq!(call(&mut b, key)["value"], "0|64|0|0|0", "dropping one model leaves the other intact");
+}

@@ -1,4 +1,4 @@
-//! The unlocked window (apps/passwords/index.jsx): a source list (search, sections, categories,
+//! The unlocked window (formerly the React window): a source list (search, sections, categories,
 //! tags), the item list and the detail pane; under 960 px the columns get narrower.
 use super::glyphs::glyph;
 use super::ui::*;

@@ -1,7 +1,7 @@
-//! Passwords drawn by Rust (apps/passwords/*.jsx, one to one), in the app's own isolated
+//! Passwords drawn by Rust (a one-to-one port of the former React window), in the app's own isolated
 //! process (axia-server --app passwords): secrets reach this process only as they did the JS
 //! version (a value the user asks to see, copy or edit), never the shell. Every vault call goes
-//! through the window's async bridge (apps/passwords/native.js) to axia-vault; files are
+//! through the window's async bridge (runtime/native_vault_services.js) to axia-vault; files are
 //! descriptors the system dialog opened, kept by the bridge and named here by an id.
 mod detail;
 mod glyphs;

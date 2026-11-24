@@ -1,38 +1,18 @@
-//! Real scene/host tests: Rust model -> FFI -> generic native tree -> input effects.
+//! Real scene/host tests: Rust model -> generic native tree -> input effects.
 use super::{children, node_with_text, scene, Host};
-use crate::native_apps_host::{
-    axia_native_app_free, axia_native_app_new, axia_native_app_reply_free, axia_native_app_request,
-    NativeApp,
-};
 use serde_json::{json, Value};
-use std::ffi::{CStr, CString};
 
-struct Model(*mut NativeApp);
+struct Model(std::cell::RefCell<axia_app_pdf::Model>);
 impl Model {
     fn new() -> Self {
-        let id = CString::new("pdf").unwrap();
-        let model = Self(unsafe { axia_native_app_new(id.as_ptr()) });
-        assert!(!model.0.is_null());
-        model
+        Self(Default::default())
     }
     fn request(&self, op: &str, mut facts: Value) -> Value {
         facts["cmd"] = json!("sidebar");
         facts["op"] = json!(op);
-        let text = CString::new(facts.to_string()).unwrap();
-        unsafe {
-            let result = axia_native_app_request(self.0, text.as_ptr());
-            let reply: Value = serde_json::from_slice(CStr::from_ptr(result).to_bytes()).unwrap();
-            axia_native_app_reply_free(result);
-            assert!(reply["error"].is_null(), "{reply}");
-            reply
-        }
-    }
-}
-impl Drop for Model {
-    fn drop(&mut self) {
-        unsafe {
-            axia_native_app_free(self.0);
-        }
+        let reply = self.0.borrow_mut().request(&facts);
+        assert!(reply["error"].is_null(), "{reply}");
+        reply
     }
 }
 fn facts(tree: Value) -> Value {

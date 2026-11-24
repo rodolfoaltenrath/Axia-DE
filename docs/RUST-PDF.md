@@ -71,7 +71,7 @@ history into the production source, retaining no alternative JS policy.
 
 `rust/axia-shell/tests/fixtures/pdf_geometry.json` freezes 312 results from the
 pre-migration JS at `eca7b122` (seed 1731). `pdf_cache_trace.json` freezes 13
-snapshots of the previous cache under `server/tests/pdf_cache_scenario.mjs`,
+snapshots of the previous cache under the retired `server/tests/pdf_cache_scenario.mjs` (recoverable from history),
 including deduplication, LRU, cancellation, late results, invalidation and close.
 They are reference artifacts; normal tests do not regenerate them. Additional
 Rust/JS tests exercise ABI registration, model isolation, host failure cleanup,
@@ -113,9 +113,9 @@ updates preserve the last valid frame state; nonfinite derived geometry is rejec
 
 ## Native window plan
 
-The remaining React code is `apps/pdf/index.jsx` (the window), `sidebar.jsx` and the
+The React code that stage 4 retired was `apps/pdf/index.jsx` (the window), `sidebar.jsx` and the
 JS adapters `viewer.js`, `cache.js`, `geometry.js`, `sidebar.js`, `model.js`. The
-policy is already Rust (`Model::request`); the window must become a compiled
+policy was already Rust (`Model::request`); the window must become a compiled
 `NativeApp` (`id: "pdf"`, isolated helper I/O through `runtime/native_pdf_services.js`)
 that calls the same `Model` commands the adapters send today. The compiled-app
 policy test requires every file under `apps/pdf/` to be Rust, so JSX, JS and the
