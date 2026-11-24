@@ -25,8 +25,16 @@ change. Until then the React window stays the live app.
    Tests: `native_view::tests::terminal_nodes_*` (host) and the GPU CI runtime test
    `terminal_node_runtime` (real sessions told apart by their profile background, two
    panes, rebinding, release in light and dark at two widths).
-2. **Window base.** Windows, tabs, the pane tree, sessions and the status bar, with the
-   state of `state.js` as a Rust model.
+2. **Window base.**
+   - **2a (done): the workspace model.** `workspace.rs` is the tree/tab part of `state.js`
+     with no I/O: windows → tabs → pane trees → session ids (new tab after the active one,
+     split at the focused pane, which tab is active after a close, undo of a closed pane with
+     its expiry, pane to tab, zoom, equalize, tab titles from the session title/folder/program,
+     font steps, saved arrangements and live layouts rebuilt with new or surviving sessions,
+     pane and divider rectangles in flex order, neighbor pane for keyboard navigation).
+     Sessions are numbers the transport creates and tells the model about. 12 unit tests.
+   - **2b: the scene and the session service.** Tab bar, pane tree (terminal nodes with
+     their dividers), status bar; `term.create/close/configure/info` as services.
 3. **Bars and dialogs.** Search, toolbelt, context menu, replay, autocomplete, paste and
    command history, the Dock menu.
 4. **Preferences.** Profiles, schemes and key bindings; the importer of `iterm.js`
@@ -37,6 +45,19 @@ change. Until then the React window stays the live app.
    JSX/JS, the real-shell runtime test.
 
 ## Notes for the next stages
+
+- **Shared state.** `state.js` keeps every window's tabs at module level so minimizing a
+  window (which unmounts its view) loses nothing. The Rust model must outlive a view the same
+  way: one workspace per shell session (a `thread_local`, as Notes keeps its session), the view
+  of a window reading and changing its entry.
+- **Input is not a job.** `Jobs` runs one call and polls its result every 50 ms and the lease
+  accepts 32 in flight; key bytes, mouse moves and wheel steps would pile up. Session input
+  (`term.write/mouse/wheel/focus/scroll`) goes out as synchronous effects the mount executes
+  at once (as the capture transport does), and only calls with an answer (`create`, `info`,
+  `text`, `search`) are jobs. Mouse moves are coalesced by the model.
+- **Events.** `term.onAny` (title, cwd, bell, badge, output, command, exit…) lives in the
+  session today. The transport must keep listening while no window is mounted and hand the
+  events to the Rust model, which updates titles and the attention marks.
 
 - The window needs the keyboard before the shell does: `NativeApp::key` receives the
   keys the focused native window sees; Rust resolves them with `keys.rs` and the transport
