@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PATHS: [&str; 33] = [
+const PATHS: [&str; 34] = [
     ".cargo",
     "server",
     "rust",
@@ -16,7 +16,9 @@ const PATHS: [&str; 33] = [
     "assets",
     "third_party",
     "tests",
-    "tools/desktop",
+    // include_str! in apps/sysinfo and the code-signing test read these two at build time.
+    "tools/hwreport/hwreport.schema.json",
+    "tools/release/lordos-release.pub.pem",
     "packaging/desktop",
     "packaging/rpm",
     "packaging/systemd",
@@ -103,8 +105,7 @@ mod tests {
             "server/build",
             "rust/target",
             "rust/axia-shell",
-            "tools/desktop/__pycache__",
-            "tools",
+            "packaging/desktop/__pycache__",
         ] {
             fs::create_dir_all(repo.join(sub)).unwrap();
         }
@@ -113,9 +114,9 @@ mod tests {
             "server/main.c",
             "rust/target/binary",
             "rust/axia-shell/lib.rs",
-            "tools/desktop/__pycache__/a.pyc",
-            "tools/desktop/kept.txt",
-            "tools/desktop/old.rpm",
+            "packaging/desktop/__pycache__/a.pyc",
+            "packaging/desktop/kept.txt",
+            "packaging/desktop/old.rpm",
         ] {
             fs::write(repo.join(file), "x").unwrap();
         }
@@ -140,7 +141,7 @@ mod tests {
         for kept in [
             "axia-de-1.0/server/main.c",
             "axia-de-1.0/rust/axia-shell/lib.rs",
-            "axia-de-1.0/tools/desktop/kept.txt",
+            "axia-de-1.0/packaging/desktop/kept.txt",
             "axia-de-1.0/server/link -> main.c",
         ] {
             assert!(list.contains(kept), "{kept} missing from:\n{list}");
