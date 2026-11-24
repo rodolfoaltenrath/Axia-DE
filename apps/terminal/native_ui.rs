@@ -63,7 +63,17 @@ pub(super) struct BeltFacts {
     pub notes: Vec<String>,
     pub note: String,
 }
+pub(super) enum MenuRow {
+    Item { label: Value, hint: String, action: Value, disabled: bool },
+    Separator,
+}
+pub(super) struct MenuFacts {
+    pub x: f64,
+    pub y: f64,
+    pub rows: Vec<MenuRow>,
+}
 pub(super) struct Facts<'a> {
+    pub menu: Option<MenuFacts>,
     pub popup: Option<PopupFacts>,
     pub composer: Option<(String, bool)>,
     pub belt: Option<BeltFacts>,
@@ -525,6 +535,48 @@ fn copy_mode_bar(f: &Facts) -> Value {
         vec![text(json!({"key":"terminal.copyModeBar"}), json!({"fontSize":12,"fontWeight":700,"color":"#000000"}))],
     )
 }
+fn context_menu(f: &Facts, m: &MenuFacts) -> Value {
+    let th = f.theme;
+    let rows: Vec<Value> = m.rows.iter().enumerate().map(|(i, row)| match row {
+        MenuRow::Separator => view(
+            json!(format!("sep-{i}")),
+            json!({"height":1,"marginVertical":4,"marginHorizontal":8,"backgroundColor":tok(th,"separator","#444444")}),
+            vec![],
+        ),
+        MenuRow::Item { label, hint, action, disabled } => {
+            let mut children = vec![text(
+                label.clone(),
+                json!({"flex":1,"fontSize":13,"color":if *disabled {tok(th,"textDim","#999999")} else {tok(th,"text","#ffffff")}}),
+            )];
+            if !hint.is_empty() {
+                children.push(text(json!(hint), json!({"fontSize":11,"color":tok(th,"textDim","#999999")})));
+            }
+            let mut node = view(
+                json!(format!("row-{i}")),
+                json!({"height":24,"marginHorizontal":5,"paddingHorizontal":10,"borderRadius":5,"flexDirection":"row","alignItems":"center"}),
+                children,
+            );
+            node["events"]["onClick"] = if *disabled { json!(["noop"]) } else { action.clone() };
+            if !*disabled {
+                node["hoverStyle"] = json!({"backgroundColor":tok(th,"accent","#0a84ff")});
+            }
+            node
+        }
+    }).collect();
+    let mut overlay = view(
+        "context-menu",
+        json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0}),
+        vec![view(
+            "menu-card",
+            json!({"position":"absolute","left":m.x.max(0.).min((f.width - 240.).max(0.)),"top":m.y.max(0.),"width":230,"paddingVertical":5,"borderRadius":9,
+                "backgroundColor":tok(th,"windowBg","#2a2a2e"),"borderWidth":1,"borderColor":tok(th,"separator","#444444"),
+                "boxShadow":"0 12px 32px rgba(0,0,0,0.45)"}),
+            rows,
+        )],
+    );
+    overlay["events"]["onMouseDown"] = json!(["menuClose"]);
+    overlay
+}
 pub(super) fn tree(f: &Facts) -> Value {
     let mut area: Vec<Value> = f.panes.iter().map(|p| pane(f, p)).collect();
     area.extend(f.dividers.iter().map(|d| divider(f, d)));
@@ -562,6 +614,9 @@ pub(super) fn tree(f: &Facts) -> Value {
     }
     if let Some(status) = &f.status {
         children.push(status_bar(f, status));
+    }
+    if let Some(menu) = &f.menu {
+        children.push(context_menu(f, menu));
     }
     if let Some((title, detail)) = &f.dialog {
         children.push(dialog(f, title, detail));

@@ -8,7 +8,7 @@
 //! mounted), `term.configure`/`term.close`/`term.copy`-style calls with no answer. Input is NOT
 //! a job: key bytes, mouse and wheel leave as `effects` of kind `term` that the mount runs at
 //! once (`write`, `key`, `mouse`, `wheel`, `focus`, `scroll`, `clear`, `select`, `mark`).
-use crate::native_view::{async_jobs::{Completed, Jobs}, clock, KeyFacts, NativeApp};
+use crate::native_view::{async_jobs::{Completed, Jobs}, clock, i18n::I18n, KeyFacts, NativeApp};
 use crate::request as model;
 use crate::workspace::{session_title, Dir, Meta, Rect, Removed, Sid, Workspace};
 use serde_json::{json, Map, Value};
@@ -39,6 +39,8 @@ struct Session {
     activity: bool,
     last_exit: i64,
     info: Value,
+    /// Text typed once the shell has shown its prompt (a profile's, or an ssh line from another app).
+    pending_text: String,
 }
 #[derive(Clone, Default)]
 struct Find {
@@ -54,6 +56,7 @@ struct Find {
 enum Confirm {
     Pane(Sid),
     Tab(String),
+    Window,
 }
 #[derive(Clone)]
 struct Dialog {
@@ -75,6 +78,13 @@ enum Popup {
     Quick { q: String, sel: usize },
     Title { value: String },
 }
+/// A pane's context menu: where it opened and for which pane.
+#[derive(Clone)]
+struct PaneMenu {
+    sid: Sid,
+    x: f64,
+    y: f64,
+}
 #[derive(Clone, Default)]
 struct Replay {
     sid: Sid,
@@ -84,6 +94,7 @@ struct Replay {
 }
 #[derive(Clone, Default)]
 struct WinUi {
+    menu: Option<PaneMenu>,
     popup: Option<Popup>,
     composer: Option<String>,
     broadcast: bool,
@@ -128,6 +139,9 @@ enum Purpose {
 enum Tag {
     Create { purpose: Purpose, profile: String, wid: String },
     Copied,
+    Url { sid: Sid, x: f64, y: f64, mods: i64 },
+    Log { on: bool },
+    Export,
     Prefix,
     Words { prefix: String },
     PasteList,
@@ -170,6 +184,12 @@ pub struct App {
     last_move: (Sid, i64, i64, i64),
     close_window: bool,
     last_tree: Value,
+    i18n: I18n,
+    locale_revision: u64,
+    menus: Value,
+    guard: Option<bool>,
+    last_args: Value,
+    first_typed: Option<String>,
 }
 impl Default for App {
     fn default() -> Self {
@@ -196,6 +216,12 @@ impl Default for App {
             last_move: (0, 0, 0, 0),
             close_window: false,
             last_tree: Value::Null,
+            i18n: I18n::default(),
+            locale_revision: 0,
+            menus: Value::Null,
+            guard: None,
+            last_args: Value::Null,
+            first_typed: None,
         }
     }
 }
@@ -211,6 +237,9 @@ impl NativeApp for App {
     }
     fn uses_preferences(&self) -> bool {
         true
+    }
+    fn resources(&mut self, assets: &str, home: Option<&str>) {
+        self.i18n = I18n::new(assets, home);
     }
     fn sync_with_preferences(&mut self, v: &Value, preferences: &Value) -> Value {
         self.settings = preferences["terminal"].clone();
@@ -228,6 +257,10 @@ impl NativeApp for App {
     fn key_event(&mut self, key: &str, chr: &str, flags: i32, facts: &KeyFacts) -> Option<Value> {
         self.key_at(key, chr, flags, facts, clock::now())
     }
+}
+/// The only lines another app may leave typed in a new window: `ssh` or `sftp` to a host.
+fn ssh_line(text: &str) -> bool {
+    regex::Regex::new(r"^(ssh|sftp)( -[pP] \d{1,5})? [A-Za-z0-9_][A-Za-z0-9._@-]{0,300}$").map(|re| re.is_match(text)).unwrap_or(false)
 }
 /// The matches of a regular expression in the logical lines of a session, as the engine takes
 /// them: (line, first character, character count) triples, at most MATCHES_MAX numbers.
@@ -279,7 +312,7 @@ impl App {
         }
         self.ui(|u| {
             u.dialog = Some(Dialog {
-                text: json!({"key":format!("terminal.dialog.close.{what}")}),
+                text: json!({"key":if what == "window" { "terminal.dialog.closeWindow".to_owned() } else { format!("terminal.dialog.close.{what}") }}),
                 detail: json!({"key":"terminal.dialog.busy","params":{"list":busy.join(", ")}}),
                 confirm,
             })
@@ -292,6 +325,7 @@ impl App {
                 self.toast(json!({"key":"terminal.toast.paneClosed"}), now);
             }
             Confirm::Tab(id) => self.close_tab(&id),
+            Confirm::Window => self.effects.push(json!({"kind":"closeWindow","id":self.window,"force":true})),
         }
     }
     fn copy(&mut self) {
@@ -473,6 +507,7 @@ impl App {
         }
     }
     fn on_created(&mut self, purpose: Purpose, profile: String, wid: String, sid: Sid) {
+        let purpose_kind = if matches!(purpose, Purpose::Window) { 'w' } else { 'o' };
         let placed = shell(|s| {
             let ok = match purpose {
                 Purpose::Window => {
@@ -488,6 +523,17 @@ impl App {
             ok
         });
         if placed {
+            let profile_id = shell(|s| s.sessions.get(&sid).map(|x| x.profile.clone())).unwrap_or_default();
+            let typed = self.first_typed.take().filter(|_| matches!(purpose_kind, 'w'));
+            let initial = self.profile(&profile_id)["initialText"].as_str().unwrap_or("").to_owned();
+            let pending = typed.unwrap_or(initial);
+            if !pending.is_empty() {
+                shell(|s| {
+                    if let Some(session) = s.sessions.get_mut(&sid) {
+                        session.pending_text = pending;
+                    }
+                });
+            }
             self.configure(sid);
         } else {
             // the window went away while the session was starting
@@ -561,6 +607,19 @@ impl App {
         self.focused && shell(|s| s.ws.window(&self.window).and_then(|w| w.active_sid())) == Some(sid)
     }
     fn on_event(&mut self, event: &Value) {
+        match event["kind"].as_str() {
+            Some("action") => {
+                let action = &event["action"];
+                self.command(&json!({"cmd":action[0],"key":action[1]}), clock::now());
+                return;
+            }
+            Some("closeRequested") => {
+                let sids = shell(|s| s.ws.sessions(&self.window));
+                self.ask_then(&sids, "window", Confirm::Window, clock::now());
+                return;
+            }
+            _ => {}
+        }
         let (Some(sid), Some(kind)) = (event["sid"].as_i64(), event["type"].as_str()) else { return };
         let data = &event["data"];
         let active = self.is_active(sid);
@@ -568,6 +627,7 @@ impl App {
             self.remove_session(sid);
             return;
         }
+        let mut pending: Option<String> = None;
         shell(|s| {
             let Some(session) = s.sessions.get_mut(&sid) else { return };
             match kind {
@@ -596,10 +656,18 @@ impl App {
                     if !active {
                         session.activity = true;
                     }
+                    let text = std::mem::take(&mut session.pending_text);
+                    if !text.is_empty() {
+                        pending = Some(text);
+                    }
                 }
                 _ => {}
             }
         });
+        // the shell has shown something (its prompt): the text meant for it goes in now
+        if let Some(text) = pending {
+            self.effect("write", sid, json!({"text":text.replace("\\n", "\r").replace('\n', "\r")}));
+        }
     }
     fn on_infos(&mut self, list: &Value) {
         shell(|s| {
@@ -620,6 +688,35 @@ impl App {
                 if let Some(sid) = done.result.ok().and_then(|v| v.as_i64()) {
                     self.on_created(purpose, profile, wid, sid);
                 }
+            }
+            Tag::Url { sid, x, y, mods } => {
+                match done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).filter(|u| !u.is_empty()) {
+                    Some(url) => self.open_link(sid, &url),
+                    None => {
+                        // not a link: the click goes to the program, as a plain click would
+                        self.effect("mouse", sid, json!({"type":"down","x":x,"y":y,"button":0,"mods":mods}));
+                        self.mouse = Some(sid);
+                        self.capture = Some(true);
+                    }
+                }
+            }
+            Tag::Log { on } => {
+                let path = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).filter(|p| !p.is_empty());
+                let shown = path.map(|p| if self.home.is_empty() { p } else { p.replacen(&self.home, "~", 1) });
+                let toast = match (on, shown) {
+                    (true, Some(path)) => json!({"key":"terminal.toast.logging","params":{"path":path}}),
+                    (true, None) => json!({"key":"terminal.toast.logFailed"}),
+                    (false, _) => json!({"key":"terminal.toast.logStopped"}),
+                };
+                self.toast(toast, clock::now());
+            }
+            Tag::Export => {
+                let path = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).filter(|p| !p.is_empty());
+                let toast = match path {
+                    Some(p) => json!({"key":"terminal.toast.saved","params":{"path":if self.home.is_empty() { p } else { p.replacen(&self.home, "~", 1) }}}),
+                    None => json!({"key":"terminal.toast.saveFailed"}),
+                };
+                self.toast(toast, clock::now());
             }
             Tag::Prefix => {
                 let prefix = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
@@ -787,6 +884,38 @@ impl App {
 
     // ---- actions ----
 
+    /// A link clicked with Ctrl or Super: folders and files of the home folder open in Files, anything
+    /// else is copied (there is no browser).
+    fn open_link(&mut self, sid: Sid, url: &str) {
+        let home = self.home.clone();
+        let mut path = match url.strip_prefix("file://") {
+            Some(rest) => {
+                let rest = rest.find('/').map_or("", |i| &rest[i..]);
+                rest.to_owned()
+            }
+            None => url.to_owned(),
+        };
+        if let Some(rest) = path.strip_prefix('~') {
+            path = format!("{home}{rest}");
+        } else if let Some(rest) = path.strip_prefix("./") {
+            let cwd = shell(|s| s.sessions.get(&sid).map(|x| x.info["cwd"].as_str().unwrap_or("").to_owned())).unwrap_or_default();
+            let cwd = if cwd.is_empty() { home.clone() } else { cwd };
+            path = format!("{cwd}/{rest}");
+        }
+        let inside = !home.is_empty() && (path == home || path.starts_with(&format!("{home}/")));
+        if path.starts_with('/') && inside {
+            let dir = if std::path::Path::new(&path).is_dir() {
+                path
+            } else {
+                std::path::Path::new(&path).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or(home)
+            };
+            self.jobs.enqueue(Tag::Quiet, "windows.open", json!(["files", {"args":{"path":dir}}]));
+            return;
+        }
+        self.jobs.enqueue(Tag::Quiet, "clipboard.remember", json!([url]));
+        let shown = if url.chars().count() > 60 { format!("{}…", url.chars().take(57).collect::<String>()) } else { url.to_owned() };
+        self.toast(json!({"key":"terminal.toast.linkCopied","params":{"url":shown}}), clock::now());
+    }
     fn go_pane(&mut self, dx: i32, dy: i32) {
         let area = self.area();
         let target = shell(|s| {
@@ -861,6 +990,18 @@ impl App {
                 let found = shell(|s| s.ws.window(&self.window).and_then(|w| w.active_tab().map(|t| (t.id.clone(), t.root.leaves()))));
                 if let Some((id, sids)) = found {
                     self.ask_then(&sids, "tab", Confirm::Tab(id), now);
+                }
+            }
+            "newWindow" => self.jobs.enqueue(Tag::Quiet, "windows.open", json!(["terminal", {"new":true}])),
+            "logSession" => {
+                if let Some(sid) = sid {
+                    let on = !shell(|s| s.sessions.get(&sid).is_some_and(|x| x.info["logging"] == true));
+                    self.jobs.enqueue(Tag::Log { on }, "term.log", json!([sid, on]));
+                }
+            }
+            "exportText" => {
+                if let Some(sid) = sid {
+                    self.jobs.enqueue(Tag::Export, "term.export", json!([sid]));
                 }
             }
             "copy" => self.copy(),
@@ -1090,6 +1231,24 @@ impl App {
                     self.ask_then(&sids, "tab", Confirm::Tab(id.to_owned()), now);
                 }
             }
+            "do" => {
+                if let Some(action) = key.as_str() {
+                    self.ui(|u| u.menu = None);
+                    self.run(action, now);
+                }
+            }
+            "newTabWith" => {
+                if let Some(id) = key.as_str() {
+                    self.create(Purpose::Tab, id, None);
+                }
+            }
+            "paneMenu" => {
+                let Some(sid) = key.as_i64() else { return };
+                self.focus(sid);
+                let (x, y) = (number(&v["x"], 0.), number(&v["y"], 0.));
+                self.ui(|u| u.menu = Some(PaneMenu { sid, x, y }));
+            }
+            "menuClose" => self.ui(|u| u.menu = None),
             "popupClose" => self.ui(|u| u.popup = None),
             "quickChange" => self.ui(|u| u.popup = Some(Popup::Quick { q: v["value"].as_str().unwrap_or("").to_owned(), sel: 0 })),
             "quickKey" => {
@@ -1219,10 +1378,17 @@ impl App {
                 let Some(sid) = key.as_i64() else { return };
                 self.focus(sid);
                 if v["button"].as_i64() == Some(2) {
+                    self.command(&json!({"cmd":"paneMenu","key":sid,"x":v["x"],"y":v["y"]}), now);
                     return;
                 }
                 if let Some((x, y)) = self.local(sid, v) {
-                    self.effect("mouse", sid, json!({"type":"down","x":x,"y":y,"button":v["button"].as_i64().unwrap_or(0),"mods":Self::mods(v)}));
+                    let mods = Self::mods(v);
+                    if v["button"].as_i64().unwrap_or(0) == 0 && (v["ctrl"] == true || v["meta"] == true) {
+                        // a link under the pointer opens; otherwise the click is the program's
+                        self.jobs.enqueue(Tag::Url { sid, x, y, mods }, "term.urlAt", json!([sid, x, y]));
+                        return;
+                    }
+                    self.effect("mouse", sid, json!({"type":"down","x":x,"y":y,"button":v["button"].as_i64().unwrap_or(0),"mods":mods}));
                     self.mouse = Some(sid);
                     self.capture = Some(true);
                 }
@@ -1325,6 +1491,8 @@ impl App {
             return;
         }
         self.timers(now);
+        self.sync_menus();
+        self.sync_guard();
         let wanted = if self.focused { shell(|s| s.ws.current_sid(&self.window)) } else { None };
         if wanted != self.focus_sid {
             if let Some(old) = self.focus_sid {
@@ -1369,6 +1537,13 @@ impl App {
         if v["context"]["theme"].is_object() {
             self.theme = Rc::new(v["context"]["theme"].clone());
         }
+        let revision = v["context"]["localeRevision"].as_u64().unwrap_or(0);
+        if revision != self.locale_revision {
+            self.i18n.invalidate();
+            self.locale_revision = revision;
+            self.menus = Value::Null;
+        }
+        self.i18n.lang = v["lang"].as_str().unwrap_or("en").into();
         self.width = number(&v["context"]["width"], self.width).max(1.);
         self.height = number(&v["context"]["height"], self.height).max(1.);
         self.focused = v["context"]["focused"].as_bool().unwrap_or(self.focused);
@@ -1376,6 +1551,13 @@ impl App {
             self.settings = v["settings"]["terminal"].clone();
         }
         if self.booted {
+            let args = &v["args"];
+            if *args != self.last_args {
+                self.last_args = args.clone();
+                if args["action"] == "newTab" {
+                    self.run("newTab", now);
+                }
+            }
             return;
         }
         let Some(owner) = v["args"]["__nativeOwner"].as_i64().filter(|i| *i > 0) else { return };
@@ -1386,13 +1568,135 @@ impl App {
         self.info_due = now + INFO_MS;
         self.events_due = now;
         let known = shell(|s| s.ws.window(&self.window).is_some());
+        self.last_args = v["args"].clone();
         if !known {
             let id = self.default_profile();
             let cwd = v["args"]["cwd"].as_str().filter(|d| d.starts_with('/')).map(str::to_owned);
+            // another app can leave an ssh or sftp line typed, never run
+            let typed = v["args"]["typed"].as_str().filter(|t| ssh_line(t)).map(str::to_owned);
+            self.first_typed = typed;
             self.create(Purpose::Window, &id, cwd);
         } else {
             self.configure_window();
         }
+    }
+    fn bindings(&self) -> Value {
+        model(&json!({"cmd":"bindings","shortcuts":self.raw()["shortcuts"]}))
+    }
+    /// The first shortcut of an action as the menus show it (`bindings` is a list of [action, [combo…]]).
+    fn hint(&self, bindings: &Value, action: &str) -> String {
+        let first = bindings
+            .as_array()
+            .and_then(|list| list.iter().find(|entry| entry[0] == action))
+            .map_or(Value::Null, |entry| entry[1][0].clone());
+        if first.is_null() {
+            return String::new();
+        }
+        model(&json!({"cmd":"comboLabel","value":first})).as_str().unwrap_or("").to_owned()
+    }
+    fn action_item(&mut self, bindings: &Value, action: &str, checked: Option<bool>, disabled: bool) -> Value {
+        let mut item = json!({"label":self.i18n.caption(&json!({"key":format!("terminal.action.{action}")})),"action":["do", action]});
+        let hint = self.hint(bindings, action);
+        if !hint.is_empty() {
+            item["hint"] = json!(hint);
+        }
+        if let Some(on) = checked {
+            item["checked"] = json!(on);
+        }
+        if disabled {
+            item["disabled"] = json!(true);
+        }
+        item
+    }
+    fn plain_items(&mut self, bindings: &Value, actions: &[&str]) -> Vec<Value> {
+        actions.iter().map(|a| if *a == "-" { json!("-") } else { self.action_item(bindings, a, None, false) }).collect()
+    }
+    fn build_menus(&mut self) -> Value {
+        let b = self.bindings();
+        let (zoomed, multi, timestamps) = shell(|s| {
+            let w = s.ws.window(&self.window);
+            let tab = w.and_then(|w| w.active_tab());
+            (tab.is_some_and(|t| t.zoom), tab.is_some_and(|t| t.root.leaves().len() > 1), w.is_some_and(|w| w.timestamps))
+        });
+        let (broadcast, composer, toolbelt) = self.ui(|u| (u.broadcast, u.composer.is_some(), u.toolbelt));
+        let mut shell_menu = self.plain_items(&b, &["newTab", "newWindow", "-", "splitRight", "splitDown", "-"]);
+        shell_menu.push(self.action_item(&b, "broadcast", Some(broadcast), false));
+        shell_menu.push(self.action_item(&b, "composer", Some(composer), false));
+        shell_menu.extend(self.plain_items(&b, &["-", "logSession", "exportText", "-", "closePane", "closeTab", "undoClose"]));
+        let edit = self.plain_items(&b, &["copy", "paste", "pasteHistory", "pasteOneLine", "pasteEscaped", "-", "copyMode", "commandHistory", "-",
+            "selectAll", "selectOutput", "-", "find", "findNext", "findPrev", "-", "autocomplete", "clearBuffer", "reset"]);
+        let mut view = self.plain_items(&b, &["zoomIn", "zoomOut", "zoomReset", "-"]);
+        view.push(self.action_item(&b, "maximizePane", Some(zoomed), !multi));
+        view.push(self.action_item(&b, "equalize", None, !multi));
+        view.push(self.action_item(&b, "paneToTab", None, !multi));
+        view.extend(self.plain_items(&b, &["-", "instantReplay", "prevMark", "nextMark", "setMark", "-"]));
+        view.push(self.action_item(&b, "timestamps", Some(timestamps), false));
+        view.push(self.action_item(&b, "toolbelt", Some(toolbelt), false));
+        view.extend(self.plain_items(&b, &["openQuickly", "editTitle"]));
+        let profiles: Vec<Value> = self.terminal_settings()["profiles"].as_array().cloned().unwrap_or_default().iter().map(|p| {
+            let name = match p["name"].as_str() {
+                Some(n) if !n.is_empty() && !(p["id"] == "default" && n == "Predeterminado") => n.to_owned(),
+                _ => self.i18n.caption(&json!({"key":"terminal.profile.default"})),
+            };
+            json!({"label":self.i18n.caption(&json!({"key":"terminal.menu.newTabWith","params":{"name":name}})),"action":["newTabWith", p["id"]]})
+        }).collect();
+        let top = |app: &mut App, key: &str| app.i18n.caption(&json!({"key":format!("terminal.menu.{key}")}));
+        json!([
+            {"label":top(self, "shell"),"items":shell_menu},
+            {"label":top(self, "edit"),"items":edit},
+            {"label":top(self, "view"),"items":view},
+            {"label":top(self, "profiles"),"items":profiles},
+        ])
+    }
+    fn sync_menus(&mut self) {
+        if self.window.is_empty() || !self.booted || shell(|s| s.ws.window(&self.window).is_none()) {
+            return;
+        }
+        let menus = self.build_menus();
+        if menus != self.menus {
+            self.menus = menus.clone();
+            self.jobs.enqueue(Tag::Quiet, "windows.menus", json!([self.window, menus]));
+        }
+    }
+    /// The window may not close while a program runs: the transport asks Rust first.
+    fn sync_guard(&mut self) {
+        let sids = shell(|s| s.ws.sessions(&self.window));
+        if sids.is_empty() {
+            return;
+        }
+        let busy = sids.iter().any(|sid| {
+            let running = shell(|s| s.sessions.get(sid).is_some_and(|x| x.info["alive"] == true && x.info["busy"] == true));
+            running && self.session_profile(*sid)["confirmClose"] == true
+        });
+        if self.guard != Some(busy) {
+            self.guard = Some(busy);
+            self.jobs.enqueue(Tag::Quiet, "windows.guard", json!([self.window, busy]));
+        }
+    }
+    fn menu_facts(&self) -> Option<ui::MenuFacts> {
+        let menu = self.ui(|u| u.menu.clone())?;
+        let selection = shell(|s| s.sessions.get(&menu.sid).is_some_and(|x| x.info["hasSelection"] == true));
+        let bindings = self.bindings();
+        let row = |action: &str, disabled: bool| ui::MenuRow::Item {
+            label: json!({"key":format!("terminal.action.{action}")}),
+            hint: self.hint(&bindings, action),
+            action: json!(["do", action]),
+            disabled,
+        };
+        let rows = vec![
+            row("copy", !selection),
+            row("paste", false),
+            ui::MenuRow::Separator,
+            row("splitRight", false),
+            row("splitDown", false),
+            ui::MenuRow::Separator,
+            row("selectAll", false),
+            row("clearBuffer", false),
+            row("find", false),
+            ui::MenuRow::Separator,
+            row("closePane", false),
+        ];
+        Some(ui::MenuFacts { x: menu.x, y: menu.y, rows })
     }
     fn popup_facts(&self) -> Option<ui::PopupFacts> {
         let popup = self.ui(|u| u.popup.clone())?;
@@ -1447,7 +1751,7 @@ impl App {
         }) else {
             return ui::tree(&ui::Facts { theme: &self.theme, pane_bg: "#000000".into(), width: self.width, tabs: vec![], broadcast: false,
                 panes: vec![], dividers: &[], status: None, find: None, find_focus: 0, dialog: None, toasts: vec![],
-                popup: None, composer: None, belt: None, replay: None, copy_mode: false });
+                popup: None, composer: None, belt: None, replay: None, copy_mode: false, menu: None });
         };
         let _ = font;
         let tab = tabs.iter().find(|t| t.id == active).or_else(|| tabs.first()).cloned().unwrap();
@@ -1526,7 +1830,7 @@ impl App {
             )
         });
         ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast, panes, dividers: &dividers, status,
-            find, find_focus, dialog, toasts, popup, composer, belt, replay, copy_mode })
+            find, find_focus, dialog, toasts, popup, composer, belt, replay, copy_mode, menu: self.menu_facts() })
     }
 }
 

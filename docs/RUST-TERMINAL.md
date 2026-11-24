@@ -97,8 +97,25 @@ change. Until then the React window stays the live app.
      `clipboard.history` (→ [text…]); effects `copyMode`, `{kind:"focusWindow",id}`. A `write`
      effect carries `text` (ordinary strings) or `bytes`/`units` (key mappings). The captured-output
      section of the toolbelt (profile triggers) waits for the triggers.
-   - **3c:** the application menus, the context menu, ❖-click on links, the close guard of the
-     window and the Dock menu.
+   - **3c (done):** the four application menus (Shell, Edit, View, Profiles: resolved labels,
+     the first shortcut as hint, checked and disabled items; published once and again only when
+     something changes; a click returns as `{kind:"action",action:[cmd,key]}` in `term.events`),
+     the pane's context menu (right click), Ctrl/Super-click on a link (`term.urlAt`: a path
+     in the home folder opens Files, anything else is copied; with no link the click is the
+     program's), the close guard (`windows.guard` [window, busy] tells the transport whether a
+     program holds the window; a refused close arrives as `{kind:"closeRequested"}`, asks, and
+     confirming sends `closeWindow` with `force`), new window, log the session, export the text,
+     an ssh/sftp line another app leaves typed (validated, typed once the shell shows output),
+     the profile's "text on open", and the Dock's new-tab action (the window's `args.action`).
+     52 crate tests.
+     Not ported, on purpose: save/restore arrangements and the live layout (they need the
+     settings store: stage 4/6), full screen, "alert when the command finishes", the
+     Preferences item, the frame of a new window sized from the profile's columns and rows
+     (the shell has no window frame to give), and the Dock's profile entries. The Dock menu is a
+     registration: stage 6 declares `dockActions` in the manifest (new window with `new`, new tab).
+     A repeated Dock click with identical args is seen once until `sdk/dock.js` adds a nonce.
+     Transport: jobs `windows.menus`, `windows.guard`, `windows.open`, `term.urlAt`, `term.log`
+     (→ path or null), `term.export` (→ path or null); the lease event `closeRequested`.
 4. **Preferences.** Profiles, schemes and key bindings; the importer of `iterm.js`
    (JSON profiles, `.itermcolors`, the iTerm2 plist) in Rust.
 5. **tmux.** The control-mode client of `tmux.js` (`tmux -CC`).

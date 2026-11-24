@@ -22,12 +22,16 @@ struct Service {
     history: Vec<String>,
     replay: Value,
     copy_key: Value,
+    url: Option<String>,
+    log_path: Option<String>,
+    export_path: Option<String>,
 }
 impl Service {
     fn new() -> Self {
         Self { token: 0, ready: Default::default(), calls: vec![], next_sid: 100, pending: None, events: vec![], infos: HashMap::new(), fx: vec![], tree: Value::Null,
             copy_text: String::new(), clip: String::new(), output: None, logical: String::new(), found: json!({"count":0,"index":-1}),
-            prefix: String::new(), words: String::new(), history: vec![], replay: json!({"count":0}), copy_key: json!({"status":0}) }
+            prefix: String::new(), words: String::new(), history: vec![], replay: json!({"count":0}), copy_key: json!({"status":0}),
+            url: None, log_path: None, export_path: None }
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
         match method {
@@ -48,6 +52,9 @@ impl Service {
             "term.words" => json!(self.words),
             "clipboard.history" => json!(self.history),
             "term.replay" => self.replay.clone(),
+            "term.urlAt" => self.url.clone().map_or(Value::Null, |u| json!(u)),
+            "term.log" => self.log_path.clone().map_or(Value::Null, |p| json!(p)),
+            "term.export" => self.export_path.clone().map_or(Value::Null, |p| json!(p)),
             "term.copyKey" => self.copy_key.clone(),
             "term.search" | "term.searchMove" | "term.setMatches" => self.found.clone(),
             _ => Value::Null,
@@ -792,4 +799,178 @@ fn copy_mode_hands_its_keys_to_the_engine_and_copies_what_it_selects() {
     service.drive(&mut app, &mut now);
     assert_eq!(last_call(&service, "clipboard.remember"), json!(["picked text"]));
     assert!(text(&service.tree).contains("terminal.toast.copied") && !text(&service.tree).contains("terminal.copyModeBar"), "copied, and copy mode ends");
+}
+
+fn menu_calls(service: &Service) -> Vec<Value> {
+    service.calls.iter().filter(|(m, _)| m == "windows.menus").map(|(_, a)| a[1].clone()).collect()
+}
+fn item<'a>(menus: &'a Value, menu: usize, action: &str) -> &'a Value {
+    menus[menu]["items"].as_array().unwrap().iter()
+        .find(|i| i["action"][1] == action || i["action"][0] == action).unwrap_or_else(|| panic!("menu item {action}"))
+}
+
+#[test]
+fn the_application_menus_follow_the_window_and_their_clicks_come_back_as_events() {
+    let (mut app, mut now, mut service) = start();
+    let published = menu_calls(&service);
+    assert_eq!(published.len(), 1, "the menus are published once");
+    let menus = &published[0];
+    assert_eq!(menus.as_array().unwrap().len(), 4, "Shell, Edit, View and Profiles");
+    assert_eq!(item(menus, 0, "newTab")["action"], json!(["do", "newTab"]));
+    assert_eq!(item(menus, 2, "maximizePane")["disabled"], true, "a single pane cannot be maximized");
+    assert_eq!(item(menus, 0, "broadcast")["checked"], false);
+    assert!(item(menus, 0, "newTab")["hint"].is_string(), "the shortcut is shown next to the item");
+    assert_eq!(menus[3]["items"][0]["action"], json!(["newTabWith", "default"]), "one item per profile");
+    service.drive(&mut app, &mut now);
+    assert_eq!(menu_calls(&service).len(), 1, "an unchanged menu is not published again");
+    // a click arrives with the next batch of events
+    service.events.push(json!({"kind":"action","action":["do","splitRight"]}));
+    service.events.push(json!({"kind":"action","action":["do","broadcast"]}));
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(sessions(&app).len(), 2, "the menu item split the pane");
+    let menus = menu_calls(&service).pop().unwrap();
+    assert_eq!(item(&menus, 0, "broadcast")["checked"], true, "checked items follow the state");
+    assert_eq!(item(&menus, 2, "maximizePane")["disabled"], Value::Null, "two panes can be maximized");
+    service.events.push(json!({"kind":"action","action":["newTabWith","default"]}));
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(sessions(&app).len(), 3, "a profile item opens a tab");
+}
+#[test]
+fn right_click_opens_the_pane_menu_whose_items_run_and_close_it() {
+    let (mut app, mut now, mut service) = start();
+    service.send(&mut app, now, json!({"cmd":"paneDown","key":101,"x":300.,"y":200.,"button":2}));
+    let tree = text(&service.tree);
+    assert!(tree.contains("context-menu") && tree.contains("terminal.action.paste") && tree.contains("terminal.action.closePane"), "{tree}");
+    assert!(service.take_fx("mouse").is_empty(), "the right button is the menu's, not the program's");
+    service.send(&mut app, now, json!({"cmd":"menuClose"}));
+    assert!(!text(&service.tree).contains("context-menu"));
+    service.infos.insert(101, json!({"hasSelection":true,"process":"","busy":false,"cols":80,"rows":24}));
+    now += 2000;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    service.send(&mut app, now, json!({"cmd":"paneDown","key":101,"x":300.,"y":200.,"button":2}));
+    service.send(&mut app, now, json!({"cmd":"do","key":"splitRight"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(sessions(&app).len(), 2, "the item ran");
+    assert!(!text(&service.tree).contains("context-menu"), "and closed the menu");
+}
+#[test]
+fn control_click_opens_links_and_otherwise_stays_a_normal_click() {
+    let (mut app, mut now, mut service) = start();
+    service.fx.clear();
+    service.url = Some("https://example.test/a?b=1".into());
+    service.send(&mut app, now, json!({"cmd":"paneDown","key":101,"x":40.,"y":96.,"button":0,"ctrl":true}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.urlAt"), json!([101, 40., 60.]), "the question is asked in pane coordinates");
+    assert_eq!(last_call(&service, "clipboard.remember"), json!(["https://example.test/a?b=1"]), "a web link is copied (there is no browser)");
+    assert!(text(&service.tree).contains("terminal.toast.linkCopied"));
+    assert!(service.take_fx("mouse").is_empty(), "a link does not click the program");
+    // a path inside the home folder opens Files on its folder
+    service.url = Some("~/docs/readme.txt".into());
+    service.send(&mut app, now, json!({"cmd":"paneDown","key":101,"x":40.,"y":96.,"button":0,"meta":true}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "windows.open"), json!(["files", {"args":{"path":"/home/test/docs"}}]));
+    // no link under the pointer: the click is the program's, and it follows the drag
+    service.url = None;
+    let down = service.send(&mut app, now, json!({"cmd":"paneDown","key":101,"x":40.,"y":96.,"button":0,"ctrl":true}));
+    let _ = down;
+    service.drive(&mut app, &mut now);
+    let mouse = service.take_fx("mouse");
+    assert_eq!((mouse[0]["type"].as_str(), mouse[0]["mods"].as_i64()), (Some("down"), Some(4)));
+    service.send(&mut app, now, json!({"cmd":"dragEnd","x":40.,"y":96.,"button":0}));
+    assert_eq!(service.take_fx("mouse")[0]["type"], "up");
+}
+#[test]
+fn closing_the_window_while_a_program_runs_asks_through_the_close_guard() {
+    let (mut app, mut now, mut service) = start();
+    assert_eq!(last_call(&service, "windows.guard"), json!(["terminal", false]), "an idle window may close");
+    service.infos.insert(101, json!({"alive":true,"busy":true,"process":"make","cols":80,"rows":24}));
+    now += 2000;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "windows.guard"), json!(["terminal", true]), "a running program holds the window");
+    service.events.push(json!({"kind":"closeRequested"}));
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    let tree = text(&service.tree);
+    assert!(tree.contains("terminal.dialog.closeWindow") && tree.contains("make"), "{tree}");
+    service.send(&mut app, now, json!({"cmd":"dialogCancel"}));
+    assert!(!text(&service.tree).contains("terminal.dialog.closeWindow"));
+    assert!(service.fx.iter().all(|f| f["kind"] != "closeWindow"), "cancelled: the window stays");
+    service.events.push(json!({"kind":"closeRequested"}));
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    service.send(&mut app, now, json!({"cmd":"dialogConfirm"}));
+    assert!(service.fx.iter().any(|f| f["kind"] == "closeWindow" && f["force"] == true), "confirmed: the window closes without asking again");
+    service.infos.insert(101, json!({"alive":true,"busy":false,"process":"","cols":80,"rows":24}));
+    now += 2000;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "windows.guard"), json!(["terminal", false]), "the guard lets go when the program ends");
+}
+#[test]
+fn new_window_log_and_export_report_what_happened() {
+    let (mut app, mut now, mut service) = start();
+    assert!(app.run("newWindow", now));
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "windows.open"), json!(["terminal", {"new":true}]));
+    service.log_path = Some("/home/test/logs/s.log".into());
+    app.run("logSession", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.log"), json!([101, true]));
+    assert!(text(&service.tree).contains("~/logs/s.log") && text(&service.tree).contains("terminal.toast.logging"), "the log path is shortened");
+    service.infos.insert(101, json!({"logging":true,"alive":true,"busy":false,"cols":80,"rows":24}));
+    now += 2000;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    app.run("logSession", now);
+    service.drive(&mut app, &mut now);
+    assert_eq!(last_call(&service, "term.log"), json!([101, false]), "the second time it stops");
+    assert!(text(&service.tree).contains("terminal.toast.logStopped"));
+    service.export_path = None;
+    app.run("exportText", now);
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("terminal.toast.saveFailed"));
+    service.export_path = Some("/home/test/out.txt".into());
+    app.run("exportText", now);
+    service.drive(&mut app, &mut now);
+    assert!(text(&service.tree).contains("~/out.txt"));
+}
+#[test]
+fn another_app_can_leave_an_ssh_line_typed_and_a_dock_action_opens_a_tab() {
+    let mut app = App::default();
+    let mut service = Service::new();
+    let mut now = 1000;
+    let mut input = sync_input(true);
+    input["args"]["typed"] = json!("ssh deploy@example.test");
+    let reply = app.request_at(&input, now);
+    service.absorb(&reply);
+    service.drive(&mut app, &mut now);
+    service.fx.clear();
+    service.events.push(json!({"sid":101,"type":"output","data":null}));
+    service.events.push(json!({"sid":101,"type":"output","data":null}));
+    now += 300;
+    service.send(&mut app, now, json!({"cmd":"noop"}));
+    service.drive(&mut app, &mut now);
+    assert_eq!(writes(&mut service, "write"), ["ssh deploy@example.test"], "typed once, when the shell shows its prompt, and not run");
+    // anything else is refused
+    assert!(!ssh_line("rm -rf /") && !ssh_line("ssh host; reboot") && ssh_line("sftp -P 2222 me@host-1.local"));
+    // a quick action of the Dock arrives as the window's args
+    let mut input = sync_input(true);
+    input["args"]["action"] = json!("newTab");
+    let before = service.count("term.create");
+    // the host sends the same args with every sync until the window gets new ones
+    for _ in 0..3 {
+        let reply = app.request_at(&input, now);
+        service.absorb(&reply);
+    }
+    service.drive(&mut app, &mut now);
+    assert_eq!(service.count("term.create"), before + 1, "the Dock's new-tab action opened one tab, however many syncs repeat it");
+    assert_eq!(sessions(&app).len(), 2);
 }
