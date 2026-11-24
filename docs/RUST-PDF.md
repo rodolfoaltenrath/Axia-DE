@@ -110,3 +110,37 @@ Delayed events from an older React render cannot start another search/selection
 against a closed document. Rust request generations separately reject late
 replies, including repeated searches with exactly the same text. Failed viewport
 updates preserve the last valid frame state; nonfinite derived geometry is rejected.
+
+## Native window plan
+
+The remaining React code is `apps/pdf/index.jsx` (the window), `sidebar.jsx` and the
+JS adapters `viewer.js`, `cache.js`, `geometry.js`, `sidebar.js`, `model.js`. The
+policy is already Rust (`Model::request`); the window must become a compiled
+`NativeApp` (`id: "pdf"`, isolated helper I/O through `runtime/native_pdf_services.js`)
+that calls the same `Model` commands the adapters send today. The compiled-app
+policy test requires every file under `apps/pdf/` to be Rust, so JSX, JS and the
+JSON manifest go in the last stage, in one commit with the registry change.
+
+Stages (each committed with tests; the JSX window stays the live app until stage 4):
+
+1. **Core window.** `native.rs` / `native_ui.rs`: welcome list, opening, error and
+   password states, toolbar, status bar, sidebar (reusing `sidebar_ui.rs`), page
+   frames with `documentImage` rasters from `Model` viewport/cache commands,
+   wheel/keyboard/zoom/rotate/mode/page navigation and window state. Document I/O
+   through `Jobs` (`pdf.open`, `pdf.sizes`, `pdf.render`, `pdf.release`,
+   `pdf.close`, `pdf.outline`). Tested with the in-process `Host` and fake services.
+2. **Page overlays and pointer input.** Page info (links, fields, notes), link
+   hits, text-drag selection and copy, search field with hit highlighting, go-to-page.
+3. **Editing.** Highlight/ink/note tools, text/choice form editors, undo, save copy,
+   print, menus (`windows.menus`) and dirty state, using `edit_model.rs` effects.
+4. **Registration.** `manifest.rs`, `rust/native_apps.rs`, `native_view::app`,
+   `runtime/native_pdf_services.js` (doc registry per window lease: open/render/
+   find/select/annot/field/undo/save/print/outline, crash events), removal of
+   `index.jsx`, `sidebar.jsx`, the JS adapters and `manifest.json`, runtime test
+   with the real `axia-doc` helper and a generated PDF.
+
+Contract notes for the window: frames come from `{"cmd":"view","op":"viewport"}`
+(`first`/`last`/`currentPage`/`frames`/`renders`); cache admission from
+`{"cmd":"cache","op":"begin"|"complete"|"fail"|"drop"|"invalidate"|"best"}` whose
+`release` list names images the transport must release; keys and wheel from
+`{"cmd":"viewer","op":"key"|"wheel"}`; sidebar from `{"cmd":"sidebar",...}`.
