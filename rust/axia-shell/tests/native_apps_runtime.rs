@@ -191,6 +191,8 @@ fn real_compiled_app_widgets_and_effects() {
             "about",
             "appabout",
             "calculator",
+            "sysinfo",
+            "disks",
             "characters",
             "clock",
             "files",
