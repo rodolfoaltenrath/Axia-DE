@@ -66,7 +66,7 @@ fn capture_selection_and_annotation_use_native_geometry() {
 const DRIVER: &str = r#"
 import {createElement as h} from 'react';
 import {render,View,shellHasKeyboard} from '@lordos/runtime';
-import Screenshots,{Icon} from '@ROOT@/apps/screenshots/index.jsx';
+import Screenshots,{Icon} from '@ROOT@/runtime/native_capture.js';
 import {configureWindows,wm,useWindows} from '@ROOT@/sdk/windows.js';
 import {AppHost} from '@ROOT@/sdk/components.jsx';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';

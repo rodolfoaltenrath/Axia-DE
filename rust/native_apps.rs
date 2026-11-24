@@ -49,6 +49,10 @@ pub mod settings;
 pub mod contacts;
 #[path = "../apps/calendar/manifest.rs"]
 pub mod calendar;
+#[path = "../apps/screenshots/manifest.rs"]
+pub mod screenshots;
+#[path = "../apps/passwords/manifest.rs"]
+pub mod passwords;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -75,7 +79,9 @@ pub fn manifests() -> serde_json::Value {
         reminders::manifest(),
         settings::manifest(),
         contacts::manifest(),
-        calendar::manifest()
+        calendar::manifest(),
+        screenshots::manifest(),
+        passwords::manifest()
     ])
 }
 #[cfg(test)]
@@ -92,6 +98,22 @@ mod tests {
             assert!(app["size"][1].as_u64().unwrap() >= app["minSize"][1].as_u64().unwrap());
         }
     }
+    /// Every file under a compiled app's folder (subfolders included) is Rust.
+    fn rust_only(folder: &std::path::Path) {
+        for entry in std::fs::read_dir(folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                rust_only(&path);
+                continue;
+            }
+            assert_eq!(
+                path.extension().and_then(|e| e.to_str()),
+                Some("rs"),
+                "{}",
+                path.display()
+            );
+        }
+    }
     #[test]
     fn compiled_app_sources_have_no_legacy_manifest_or_jsx_entrypoint() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -101,15 +123,7 @@ mod tests {
         for app in super::manifests().as_array().unwrap() {
             let id = app["id"].as_str().unwrap();
             let folder = root.join("apps").join(id);
-            for entry in std::fs::read_dir(folder).unwrap() {
-                let path = entry.unwrap().path();
-                assert_eq!(
-                    path.extension().and_then(|e| e.to_str()),
-                    Some("rs"),
-                    "{}",
-                    path.display()
-                );
-            }
+            rust_only(&folder);
         }
     }
 }

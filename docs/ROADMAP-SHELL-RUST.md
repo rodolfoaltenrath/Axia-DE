@@ -716,21 +716,25 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       `axia-hw`; efeitos e eventos passam pelo adaptador da sessão. O helper
       privilegiado ausente no desktop continua pendente, sem restaurar o código
       antigo. Ver [RUST-DISK.md](RUST-DISK.md).
-- [ ] `screenshots`: geometria de seleção, janela sob o ponteiro, coordenadas,
+- [x] `screenshots`: geometria de seleção, janela sob o ponteiro, coordenadas,
       ferramentas e histórico do editor, ícone, seletor PrintScreen e janelas
       auxiliares, painel, interface do editor e estado/histórico da gravação em
       Rust. Controlador residente com prazos, cancelamento, gerações e política
       de nomes/destinos dos arquivos em Rust; recusas, roteamento de atalhos e
       classificação dos eventos de gravação também nativos.
-      I/O de captura/gravação, metadados compilados e seus
-      transportes ainda em migração.
+      Metadados compilados; JSX e manifesto JSON retirados. A montagem das
+      janelas e o I/O de captura/gravação passam pelo adaptador de sessão
+      `runtime/native_capture.js` (sem política nem interface), a ser removido na Fase 6.
       Ver [RUST-SCREENSHOTS.md](RUST-SCREENSHOTS.md).
 - [ ] `pdf`
 - [ ] `player`
 - [ ] `terminal` (já usa um nó nativo próprio para o conteúdo)
 - [ ] `mail` (exibição de HTML)
 - [ ] `editor` (edição de texto complexa)
-- [ ] `passwords` (processo isolado; manter a fronteira de segurança)
+- [x] `passwords` (processo isolado; fronteira de segurança mantida): metadados
+      compilados, JSX e manifesto JSON retirados. Cofre, arquivos escolhidos,
+      FIDO e área de transferência secreta passam por
+      `runtime/native_vault_services.js` (sem UI nem lógica do cofre).
 
 ## Fase 6: sem JavaScript na sessão
 

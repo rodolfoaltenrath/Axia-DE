@@ -1,24 +1,27 @@
-// Screenshots: screen captures and screen recording (a floating capture panel,
-// with our own design).
+// Shared transport for the compiled Screenshots app. No capture policy and no
+// scene lives here: Rust owns selection, input, controls, deadlines, output names,
+// refusals and shortcut routing. This module mounts one Rust view per window
+// instance, lends it media handles and executes the effects Rust returns.
 //
-// Shortcuts (global, also with a Linux app in front):
-//   Print Screen: visual selector       ❖⇧3: direct screen       ❖⇧4: selection
-//   ❖⇧5                 the Screenshots panel (and stop a recording in progress)
-// With another screenshot app chosen in Settings → Default Apps, these keys open that app instead.
-// Protected windows (wm.setProtected) come out black: the server does that, not this app.
-// After each capture a floating thumbnail shows up; a click opens the markup editor (arrow, box,
-// text, blur). They are saved in ~/Pictures/Screenshots or to the clipboard.
-import {
-  View, NativeView, Layer,
-  useAppWindow, useStore, useWindows, wm, windows,
-  t as tr, media, userDirs, fs, addShortcuts, launchApp, createStore, windowTitle, toast, errorText,
-} from '@lordos/sdk';
-import { useEffect, useRef } from 'react';
-import { screen, onScreenChange, displayFor } from '@lordos/runtime';
-import { clearTextFocus, focusToken, restoreFocus } from '../../sdk/components.jsx';
-import { captureBridge } from '../../sdk/nativecapture.js';
-import { notificationBridge } from '../../sdk/nativenotifications.js';
-import { syncNativeCatalog } from '../../sdk/nativecatalog.js';
+// Window instances: panel (default), overlay (area/window/monitor selector),
+// thumb, count, rec and edit<handle>.
+import { createElement as h, useEffect, useRef } from 'react';
+import { View, screen, onScreenChange, displayFor } from '@lordos/runtime';
+import { useAppWindow, clearTextFocus, focusToken, restoreFocus } from '../sdk/components.jsx';
+import { useStore, createStore } from '../sdk/store.js';
+import { windows, wm, useWindows, windowTitle } from '../sdk/windows.js';
+import { t as tr } from '../sdk/i18n.js';
+import { media, userDirs } from '../sdk/media.js';
+import * as fs from '../sdk/fs.js';
+import { addShortcuts } from '../sdk/shortcuts.js';
+import { launchApp } from '../sdk/apps.js';
+import { toast } from '../sdk/clipboard.js';
+import { errorText } from '../sdk/errors.js';
+import { Layer } from '../sdk/layers.js';
+import { NativeView } from '../sdk/nativeview.js';
+import { captureBridge } from '../sdk/nativecapture.js';
+import { notificationBridge } from '../sdk/nativenotifications.js';
+import { syncNativeCatalog } from '../sdk/nativecatalog.js';
 
 const APP = 'screenshots';
 const session = createStore({ revision: 0, recording: null, pendingRecord: false, recent: [] });
@@ -29,7 +32,11 @@ function sessionRequest(input) {
   return reply;
 }
 
-export function Icon({ size }) { return <NativeView manifest={OVERLAY_MANIFEST} icon={size} />; }
+// The overlay and icon are shell surfaces; every other window is an ordinary app view.
+const OVERLAY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true, shell: true };
+const AUXILIARY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true };
+
+export function Icon({ size }) { return h(NativeView, { manifest: OVERLAY_MANIFEST, icon: size }); }
 
 // ---- files ----
 
@@ -76,8 +83,8 @@ async function finish(handle, thumbnail) {
 
 function showThumb(handle, path, thumbnail, output) {
   const id = wm.open(APP, { instance: 'thumb', args: { handle, path, output } });
-  const w = 240, h = 150;
-  wm.setPip(id, thumbnail || { x: lord.screen.width - w - 20, y: lord.screen.height - h - 90, w, h });
+  const w = 240, height = 150;
+  wm.setPip(id, thumbnail || { x: lord.screen.width - w - 20, y: lord.screen.height - height - 90, w, h: height });
 }
 
 // The resident Rust service owns generations and every capture/countdown deadline.
@@ -103,6 +110,21 @@ export const capture = {
   area: (mode = 'area') => captureRequest({ action: 'start', mode }),
   record: () => captureRequest({ action: 'start', mode: 'record' }),
 };
+
+const displaySignature = () => JSON.stringify([screen.width, screen.height, screen.displays]);
+function selectionFacts() {
+  return { screen: { width: screen.width, height: screen.height }, displays: screen.displays, returnWindow: wm.focused(),
+    desktop: wm.desktop(), windows: windows.get().map(w => {
+      const { x, y, w: width, h: height } = w.pip || (w.fullscreen ? displayFor(w) : wm.frame(w));
+      return { app: w.app, desktop: w.desktop, minimized: w.minimized, hidden: w.hidden,
+        sticky: w.sticky, pip: !!w.pip, title: windowTitle(w), frame: { x, y, w: width, h: height } };
+    }) };
+}
+const recordingBadge = () => {
+  const id = wm.open(APP, { instance: 'rec' });
+  wm.setPip(id, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
+};
+
 async function runCaptureWork(effect) {
   const { ticket, mode, recordToken: token } = effect;
   const current = () => !!captureRequest({ action: 'valid', ticket })?.valid;
@@ -117,8 +139,7 @@ async function runCaptureWork(effect) {
       const result = sessionRequest({ op: 'recordEvent', id, type, data: d });
       if (result.terminal) { off(); media.close(id); }
     });
-    const rid = wm.open(APP, { instance: 'rec' });
-    wm.setPip(rid, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
+    recordingBadge();
     return;
   }
   const signature = displaySignature();
@@ -153,36 +174,27 @@ captureBridge.perform = effect => {
     wm.setPip(id, effect.frame);
   } else if (effect.op === 'stop') media.stop(effect.id);
   else if (effect.op === 'restoreRecording') {
-    if (captureRequest({ action: 'restoreRecording', ticket: effect.ticket, id: effect.id })?.valid && !wm.get(`${APP}#rec`)) {
-      const id = wm.open(APP, { instance: 'rec' });
-      wm.setPip(id, { x: lord.screen.width - 210, y: 40, w: 190, h: 44 });
-    }
+    if (captureRequest({ action: 'restoreRecording', ticket: effect.ticket, id: effect.id })?.valid && !wm.get(`${APP}#rec`)) recordingBadge();
   }
   else if (effect.op === 'work') runCaptureWork(effect).catch(error => {
     captureRequest({ action: 'cancel', ticket: effect.ticket }); toast.set(errorText(error));
   });
 };
 
-// The SDK transports bindings; Rust owns keys, availability and routing.
-if (!(typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) addShortcuts(captureRequest({ action: 'bindings' }).map(binding => ({
-  ...binding,
-  when: () => !!captureRequest({ action: 'shortcutUsable', key: binding.id, media: media.available() })?.enabled,
-  run: () => captureRequest({ action: 'shortcut', key: binding.id, media: media.available() }),
-})));
+// Rust owns keys, availability and routing; this only registers the bindings it names.
+let shortcutsInstalled = false;
+function installCaptureShortcuts() {
+  if (shortcutsInstalled || (typeof __AXIA_APP_HOST__ !== 'undefined' && __AXIA_APP_HOST__)) return;
+  shortcutsInstalled = true;
+  addShortcuts(captureRequest({ action: 'bindings' }).map(binding => ({
+    ...binding,
+    when: () => !!captureRequest({ action: 'shortcutUsable', key: binding.id, media: media.available() })?.enabled,
+    run: () => captureRequest({ action: 'shortcut', key: binding.id, media: media.available() }),
+  })));
+}
 
 // ---- the app's windows ----
 
-const OVERLAY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true, shell: true };
-const AUXILIARY_MANIFEST = { id: APP, nativeView: 'rust', appearanceSource: 'native', keyboard: true };
-const displaySignature = () => JSON.stringify([screen.width, screen.height, screen.displays]);
-function selectionFacts() {
-  return { screen: { width: screen.width, height: screen.height }, displays: screen.displays, returnWindow: wm.focused(),
-    desktop: wm.desktop(), windows: windows.get().map(w => {
-      const { x, y, w: width, h } = w.pip || (w.fullscreen ? displayFor(w) : wm.frame(w));
-      return { app: w.app, desktop: w.desktop, minimized: w.minimized, hidden: w.hidden,
-        sticky: w.sticky, pip: !!w.pip, title: windowTitle(w), frame: { x, y, w: width, h } };
-    }) };
-}
 // Mount and resource transport only. Rust owns selection, input, controls and the scene.
 function Overlay({ handle, mode }) {
   const win = useAppWindow();
@@ -216,14 +228,14 @@ function Overlay({ handle, mode }) {
       if (wm.focused() === facts.returnWindow) restoreFocus(returnFocus.current);
     };
   }, [handle]);
-  return <Layer name="overlay"><View style={{ position: 'absolute', left: 0, top: 0, width: facts.screen.width, height: facts.screen.height }}>
-    <NativeView manifest={OVERLAY_MANIFEST} args={{ ...facts, handle, mode }} onEffect={effect => {
+  return h(Layer, { name: 'overlay' }, h(View, { style: { position: 'absolute', left: 0, top: 0, width: facts.screen.width, height: facts.screen.height } },
+    h(NativeView, { manifest: OVERLAY_MANIFEST, args: { ...facts, handle, mode }, onEffect: effect => {
       if (effect.kind !== 'captureSelection') return false;
       if (effect.source !== handle) return true;
       done(effect.rect, effect.thumbnail); return true;
-    }} />
-  </View></Layer>;
+    } })));
 }
+
 function Thumb({ handle, path }) {
   const win = useAppWindow();
   const native = useRef(null);
@@ -231,13 +243,13 @@ function Thumb({ handle, path }) {
     media.view(handle, { fit: 'cover', background: 0xff222222 });
     return () => { if (!windows.get().some(w => w.args?.handle === handle && w.id !== win.id)) media.close(handle); };
   }, [handle]);
-  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'thumbnail', handle, path, output: win.args.output }} onEffect={effect => {
+  return h(NativeView, { manifest: AUXILIARY_MANIFEST, handleRef: native, args: { view: 'thumbnail', handle, path, output: win.args.output }, onEffect: effect => {
     if (effect.kind !== 'captureAuxiliary') return false;
     if (effect.view !== 'thumbnail' || effect.source !== handle) return true;
     if (effect.op === 'edit') {
       try {
-        const w = Math.min(1000, lord.screen.width - 80), h = Math.min(680, lord.screen.height - 140);
-        wm.open(APP, { instance: `edit${handle}`, args: { handle, path }, frame: { x: Math.round((lord.screen.width - w) / 2), y: 60, w, h } });
+        const w = Math.min(1000, lord.screen.width - 80), height = Math.min(680, lord.screen.height - 140);
+        wm.open(APP, { instance: `edit${handle}`, args: { handle, path }, frame: { x: Math.round((lord.screen.width - w) / 2), y: 60, w, h: height } });
         setTimeout(() => { if (wm.get(win.id)?.args.handle === handle) wm.close(win.id, true); }, 50);
       } catch (error) {
         if (native.current) lord.nativeViews.action(native.current, { action: ['retry', handle] });
@@ -245,7 +257,7 @@ function Thumb({ handle, path }) {
       }
     } else if (effect.op === 'expire') wm.close(win.id, true);
     return true;
-  }} />;
+  } });
 }
 
 function Countdown({ secs, start }) {
@@ -259,19 +271,19 @@ function Countdown({ secs, start }) {
       if (wm.focused() === win.args.returnWindow) restoreFocus(returnFocus.current);
     };
   }, [ticket]);
-  return <NativeView manifest={OVERLAY_MANIFEST} args={{ view: 'countdown', secs, start }} onEffect={effect => {
+  return h(NativeView, { manifest: OVERLAY_MANIFEST, args: { view: 'countdown', secs, start }, onEffect: effect => {
     if (effect.kind !== 'captureAuxiliary') return false;
     if (effect.view !== 'countdown' || effect.source !== start) return true;
     if (ticket == null) wm.close(win.id, true);
     else if (effect.op !== 'complete') captureRequest({ action: 'cancel', ticket });
     return true;
-  }} />;
+  } });
 }
 
 function RecBadge() {
   const rec = useStore(session, value => value.recording);
   const native = useRef(null);
-  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native} args={{ view: 'recording', recording: rec }} onEffect={effect => {
+  return h(NativeView, { manifest: AUXILIARY_MANIFEST, handleRef: native, args: { view: 'recording', recording: rec }, onEffect: effect => {
     if (effect.kind !== 'captureAuxiliary') return false;
     if (effect.view === 'recording' && effect.op === 'stop' && rec?.id === effect.source) {
       try {
@@ -282,12 +294,10 @@ function RecBadge() {
       }
     }
     return true;
-  }} />;
+  } });
 }
 
-// ---- markup editor ----
-
-// Native scene; this wrapper only owns image leases and executes SDK I/O.
+// Native scene; this only owns image leases and executes SDK I/O.
 function Editor({ handle, path }) {
   const win = useAppWindow(), native = useRef(null), lease = useRef(null);
   if (!lease.current || lease.current.handle !== handle) {
@@ -324,8 +334,8 @@ function Editor({ handle, path }) {
       if (!owner.closed) toast.set(errorText(error));
     }
   };
-  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native}
-    args={{ view: 'editor', handle, path, info: owner.info }} onEffect={effect => {
+  return h(NativeView, { manifest: AUXILIARY_MANIFEST, handleRef: native,
+    args: { view: 'editor', handle, path, info: owner.info }, onEffect: effect => {
       if (effect.kind !== 'captureEditor') return false;
       if (effect.source !== handle || owner.closed) return true;
       if (effect.op === 'annotate') {
@@ -344,7 +354,7 @@ function Editor({ handle, path }) {
       } else if (effect.op === 'close') wm.close(win.id);
       else if (effect.op === 'save' || effect.op === 'copy') perform(effect);
       return true;
-    }} />;
+    } });
 }
 
 // ---- the panel (main window) ----
@@ -367,8 +377,8 @@ function Panel() {
       { label: tr('screenshots.menu.protect'), onClick: protect },
     ] }]);
   }, []);
-  return <NativeView manifest={AUXILIARY_MANIFEST} handleRef={native}
-    args={{ view: 'panel', session: state, facts: panelFacts() }} onEffect={effect => {
+  return h(NativeView, { manifest: AUXILIARY_MANIFEST, handleRef: native,
+    args: { view: 'panel', session: state, facts: panelFacts() }, onEffect: effect => {
       if (effect.kind !== 'capturePanel') return false;
       if (effect.op === 'capture') {
         if (effect.mode === 'full') capture.full();
@@ -377,17 +387,22 @@ function Panel() {
       } else if (effect.op === 'recent') wm.open(effect.app, { new: true, args: { path: effect.path } });
       else if (effect.op === 'protect') wm.setProtected(effect.id, effect.on);
       return true;
-    }} />;
+    } });
 }
 
 export default function Screenshots() {
   const win = useAppWindow();
   const inst = String(win.id).split('#')[1] || '';
   const a = win.args || {};
-  if (inst === 'overlay' && a.handle) return <Overlay handle={a.handle} mode={a.mode} />;
-  if (inst === 'thumb' && a.handle) return <Thumb handle={a.handle} path={a.path} />;
-  if (inst === 'count') return <Countdown secs={a.secs} start={a.start} />;
-  if (inst === 'rec') return <RecBadge />;
-  if (inst.startsWith('edit') && a.handle) return <Editor handle={a.handle} path={a.path} />;
-  return <Panel />;
+  if (inst === 'overlay' && a.handle) return h(Overlay, { handle: a.handle, mode: a.mode });
+  if (inst === 'thumb' && a.handle) return h(Thumb, { handle: a.handle, path: a.path });
+  if (inst === 'count') return h(Countdown, { secs: a.secs, start: a.start });
+  if (inst === 'rec') return h(RecBadge);
+  if (inst.startsWith('edit') && a.handle) return h(Editor, { handle: a.handle, path: a.path });
+  return h(Panel);
 }
+
+installCaptureShortcuts();
+
+// The compiled registry entry: the generic native mount with this module's windows.
+export function captureApp(app) { return { ...app, Component: Screenshots, Icon }; }

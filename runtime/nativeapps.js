@@ -1,6 +1,6 @@
 // Common mount for compiled apps that use asynchronous SDK services. No app UI
 // is implemented here. Lease a window before mounting Rust; release it on close.
-import { createElement as h, Fragment, useLayoutEffect, useState } from 'react';
+import { createElement as h, Fragment, useEffect, useLayoutEffect, useState } from 'react';
 import { pickFile, NativeFilePicker } from './native_file_picker.js';
 import { View } from '@lordos/runtime';
 import { nativeApp as baseNativeApp } from '../sdk/nativeapps.js';
@@ -44,6 +44,12 @@ import { codeStatus } from '../sdk/codesig.js';
 import { disks } from '../sdk/disks.js';
 import { smart, smartSummaries } from '../sdk/smart.js';
 import { diskServices } from './native_disk_services.js';
+import { captureApp } from './native_capture.js';
+import { vaultServices } from './native_vault_services.js';
+import { vaultAvailable, vaultRequest, onVaultEvent } from '../sdk/vault.js';
+import { requestPermission } from '../sdk/privacy.js';
+import { clipboard } from '../sdk/clipboard.js';
+import { locale } from '../sdk/i18n.js';
 
 // Opaque per-window snapshots chosen by Rust, with the lifetime of useWindowState.
 const nativeWindowStates = new Map();
@@ -62,6 +68,7 @@ function stopWatch(id) {
 }
 const methods = {
   ...diskServices({ disks, admin, fs, systemInfo, smart, smartSummaries, events: owner => bridge.events(owner) }),
+  ...vaultServices({ vaultRequest, onVaultEvent, requestPermission, clipboard, events: owner => bridge.events(owner) }),
   ...sysinfoServices({ systemInfo, codeStatus, admin, session: { canPower, restart: () => askPower('reboot') }, fs, userDirs, wm, workArea, launchApp, bluetooth }),
   'files.pick': { run: ([options], owner) => pickFile(options, owner) },
   ...pimServices({ request: mailRequest, onEvent: onMailEvent, pick: () => lord.broker?.pick(false, ''),
@@ -111,6 +118,7 @@ export function nativeApp(manifest) {
 function localNativeApp(manifest) {
   const app = baseNativeApp(manifest);
   startNativeSession(manifest, NativeAsyncMount);
+  if (manifest.id === 'screenshots') return captureApp(app);
   if (!manifest.asyncServices?.length) return app;
   return { ...app, Component: function NativeAsyncApp() {
     const { args, id } = useAppWindow() || {};
@@ -129,6 +137,9 @@ const nativeDiskFacts={
 function NativeAsyncMount({ manifest, args, window }) {
   const bt = useStore(manifest.id === 'sysinfo' ? bluetooth : noHardwareFacts);
   const diskList = useStore(manifest.id === 'disks' ? nativeDiskFacts : noHardwareFacts);
+  const language = useStore(manifest.id === 'passwords' ? locale : noHardwareFacts);
+  // A protected app's window is black in screenshots, recordings and thumbnails.
+  useEffect(() => { if (manifest.protected && window) wm.setProtected(window, true); }, [window]);
   // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
   // each mounted window gets a fresh one even when the WM reuses its name.
   const [owner] = useState(() => ++ownerSequence);
@@ -141,6 +152,7 @@ function NativeAsyncMount({ manifest, args, window }) {
   return ready ? h(Fragment, null, h(NativeView, { manifest, args: { ...args, __nativeOwner: owner, __nativeWindow: window,
     ...(manifest.id === 'sysinfo' ? { __nativeBluetooth: bt } : {}),
     ...(manifest.id === 'disks' ? { __nativeDisks: diskList } : {}),
+    ...(manifest.id === 'passwords' ? { available: vaultAvailable(), region: language?.region || '' } : {}),
     ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }),
     manifest.asyncServices.includes('files.pick') ? h(NativeFilePicker, { owner }) : null) : h(View, { style: { flex: 1 } });
 }

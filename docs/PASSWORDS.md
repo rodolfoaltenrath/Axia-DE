@@ -492,7 +492,7 @@ whose only verification is built in (fingerprint) are not implemented/tested.
 | `server/mk/vault*.mk` | build and test rules |
 | `sdk/vault.js` | `vaultRequest`, `keyring`, `autofill`, `<AutofillButton>`, `<KeyringPrompt>` |
 | `apps/passwords/native/` | the window, drawn by Rust (native view) in the app process |
-| `apps/passwords/index.jsx` | the window's services: vault requests, events, picked files, the clipboard |
+| `runtime/native_vault_services.js` | the window's services (no UI, no vault logic): vault requests, events, picked files, the clipboard; registered by `runtime/nativeapps.js` from the compiled manifest `apps/passwords/manifest.rs` |
 | `apps/passwords/model.rs`, `data.rs` | categories, field templates, filters and counts |
 | `assets/locales/{en,es,pt}/passwords.json` | texts |
 | `tests/fido-soft/` | software FIDO2 authenticator |

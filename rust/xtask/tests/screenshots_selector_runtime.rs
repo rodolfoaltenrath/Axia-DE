@@ -73,7 +73,7 @@ fn printscreen_selects_area_window_monitor_or_desktop_and_keeps_the_thumbnail() 
 const DRIVER: &str = r#"
 import {createElement as h} from 'react';
 import {render,View,Text,screen,displayFor} from '@lordos/runtime';
-import Screenshots,{Icon} from '@ROOT@/apps/screenshots/index.jsx';
+import Screenshots,{Icon} from '@ROOT@/runtime/native_capture.js';
 import {configureWindows,wm,useWindows,windows} from '@ROOT@/sdk/windows.js';
 import {AppHost,TextInput,hasTextFocus} from '@ROOT@/sdk/components.jsx';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';

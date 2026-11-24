@@ -106,7 +106,7 @@ fn capture_panel_and_session_state_survive_close_and_late_recording_results() {
 const DRIVER: &str = r#"
 import {createElement as h} from 'react';
 import {render,View,Text} from '@lordos/runtime';
-import Screenshots,{capture,Icon} from '@ROOT@/apps/screenshots/index.jsx';
+import Screenshots,{capture,Icon} from '@ROOT@/runtime/native_capture.js';
 import {configureWindows,wm,useWindows,windows,appMenus} from '@ROOT@/sdk/windows.js';
 import {AppHost} from '@ROOT@/sdk/components.jsx';
 import {ThemeProvider} from '@ROOT@/sdk/theme.js';

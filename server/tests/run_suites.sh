@@ -176,6 +176,7 @@ EOF
         run "native-async-test (compiled app service ownership)" node tests/native_async_test.mjs
         run "native-view-facts-test (scoped subscriptions and React lifecycle)" node tests/native_view_facts_test.mjs
         run "native-async-mount-test (string WM IDs and window lifecycle)" node tests/native_async_mount_test.mjs
+        run "native-vault-services (Passwords descriptors, FIDO order and secret clipboard)" node tests/native_vault_services_test.mjs
         run "native-notes-test (native clipboard, menus, input and desktop startup)" node tests/native_notes_test.mjs
         run "native-media-test (native session ownership and permissions)" node tests/native_media_test.mjs
         run "media-device-lifecycle (overlapping capture indicators)" node tests/media_device_lifecycle_test.mjs

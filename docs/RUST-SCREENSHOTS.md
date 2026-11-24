@@ -400,8 +400,11 @@ setting and can return physical primary-display dimensions; it cannot be treated
 as a logical full-desktop image for multi-monitor selection. Check actual source
 dimensions and display transforms instead of assuming a 100% single display.
 
-- Compiled metadata and removal of the JSX/JSON entry points. All app scenes
-  are native, including the panel, selector, editor and auxiliary windows.
+- Done: compiled metadata (`manifest.rs`, registered in `rust/native_apps.rs`)
+  and removal of the JSX/JSON entry points. All app scenes are native,
+  including the panel, selector, editor and auxiliary windows. The window
+  mounting and media/window transport moved unchanged in behavior to the
+  shared `runtime/native_capture.js`; the runtime tests import it directly.
 - Complete the resident controller's remaining I/O transport. Shortcut routing,
   refusal presentation, privacy actions, window hiding, editor preservation,
   generation checks, countdown and cancellation are native.

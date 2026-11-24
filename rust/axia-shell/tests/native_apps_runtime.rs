@@ -212,7 +212,9 @@ fn real_compiled_app_widgets_and_effects() {
             "reminders",
             "settings",
             "contacts",
-            "calendar"
+            "calendar",
+            "screenshots",
+            "passwords"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);

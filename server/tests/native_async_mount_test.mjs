@@ -53,12 +53,15 @@ const stubs={
   'packages.js':`export const isolatedApp=(id,App)=>App;`,
   'mail.js':`export const mailRequest=()=>null;export const onMailEvent=()=>()=>{};`,
   'native_system_services.js':`export const systemServices=()=>({});`,
+  'native_capture.js':`export const captureApp=app=>app;`,
+  'vault.js':`export const vaultAvailable=()=>false,vaultRequest=()=>null,onVaultEvent=()=>()=>{};`,
+  'privacy.js':`export const requestPermission=()=>false;`,
+  'clipboard.js':`export const clipboard={set(){}};`,
+  'i18n.js':`export const locale={get:()=>({region:'BR'}),subscribe:()=>()=>{}};`,
 };
 const result=await build({stdin:{resolveDir:root,contents:`
   import React from 'react'; import {render} from '@lordos/runtime';
   import {nativeApp} from './runtime/nativeapps.js';
-  // The theme imports this module for its icon; it must preserve the shell transport.
-  import './apps/passwords/index.jsx';
   const Context=React.createContext(null);globalThis.__nativeWindowContext=Context;
   const App=nativeApp({id:'logs',asyncServices:['logs.sources','files.pick']}).Component;
   const Sysinfo=nativeApp({id:'sysinfo',asyncServices:['logs.sources']}).Component;
@@ -72,7 +75,8 @@ const result=await build({stdin:{resolveDir:root,contents:`
   name:'native-endpoints',setup(b){
     b.onResolve({filter:/^@lordos\/sdk$/},()=>({path:'passwords-sdk',namespace:'fake-sdk'}));
     b.onResolve({filter:/native_system_services\.js$/},()=>({path:'native_system_services.js',namespace:'fake-sdk'}));
-    b.onResolve({filter:/sdk\/(disks\.js|smart\.js|system\.js|codesig\.js|admin\.js|power\.jsx|hardware\.jsx|apps\.js|packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
+    b.onResolve({filter:/native_capture\.js$/},()=>({path:'native_capture.js',namespace:'fake-sdk'}));
+    b.onResolve({filter:/sdk\/(disks\.js|smart\.js|system\.js|codesig\.js|admin\.js|power\.jsx|hardware\.jsx|apps\.js|packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js|vault\.js|privacy\.js|clipboard\.js|i18n\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
   },
 }]});
@@ -117,4 +121,4 @@ await windows(['disks']);assert.equal(diskListeners.size,1);
 diskState=[{name:'sdb',model:'Replacement USB'}];for(const fn of diskListeners)fn();
 await windows(['disks']);assert.equal(globalThis.__nativeDiskRecords.at(-1)[0].model,'Replacement USB');
 await windows([]);assert.equal(diskListeners.size,0,'closing Disks releases its event subscription');
-console.log('native-async-mount-test: Passwords import preserves shell services; picker selection/cancel, leases and window lifecycle passed');
+console.log('native-async-mount-test: picker selection/cancel, leases and window lifecycle passed');

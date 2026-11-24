@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts, Calendar and Settings have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts, Calendar, Settings, Screenshots and Passwords have compiled
 Rust implementations. Files browser windows and icons always use the native
 host; `filesNativeView` and the React browser path are removed. Its shared
 selectors and transfer windows still use the React widget adapter, pending
@@ -17,8 +17,22 @@ PDF: geometry, navigation, cache, search/selection, annotation/form state and th
 sidebar are Rust. The sidebar mounts native widgets. The main window, page
 overlays, toolbar, dialogs and gesture transport still have JSX; PDF is incomplete.
 
-Remaining apps (all remain in scope): disks,
-editor, mail, passwords, player, screenshots, sysinfo and terminal, plus PDF above. Existing Rust
+Screenshots now has only Rust sources in its folder, including its compiled
+manifest (`apps/screenshots/manifest.rs`). Its panel, selector, countdown,
+recording badge, thumbnail and editor windows are Rust views; the JSX entry
+point and `manifest.json` are gone. The media-handle leases, window-instance
+mounting and effect transport live in the shared `runtime/native_capture.js`
+(no capture policy, no UI), pending the Phase 6 removal of session JavaScript.
+Passwords now has only Rust sources, including its compiled manifest
+(`apps/passwords/manifest.rs`, still `process: isolated`, protected and
+single-window). The vault's requests/events, the descriptors the system dialog
+opened (owned by the window that picked them, used up by one request, closed
+with the window), the FIDO permission order and the secret clipboard are the
+shared `runtime/native_vault_services.js`; the generic native mount publishes
+the vault availability and region and marks the window protected.
+`node server/tests/native_vault_services_test.mjs` covers that boundary.
+Remaining apps (all remain in scope):
+editor, mail, player and terminal, plus PDF above. Existing Rust
 models in some of these apps do not count as native-window completion.
 
 Contacts now has only Rust sources, including its manifest, full three-column
