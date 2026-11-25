@@ -718,10 +718,7 @@ impl App {
         let key = &input["key"];
         match str_value(&input["cmd"]) {
             "icon" => {
-                return Some(
-                    axia_native::icons::app_icon("player", input["size"].as_f64().filter(|s| s.is_finite()).unwrap_or(32.).clamp(1., 512.))
-                        .unwrap_or(Value::Null),
-                )
+                return Some(ui::icon(input["size"].as_f64().unwrap_or(32.)))
             }
             "sync" => return Some(self.sync(input, now)),
             "next" => {

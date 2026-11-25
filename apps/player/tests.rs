@@ -487,3 +487,15 @@ fn the_manifest_names_only_services_the_runtime_provides() {
         assert!(service.starts_with("media.") || service.starts_with("windows."), "{service}");
     }
 }
+
+#[test]
+fn the_icon_is_drawn_by_the_app_and_never_asks_the_registry() {
+    let mut a = app();
+    for size in [18., 48., 84.] {
+        let icon = a.request(&json!({"cmd":"icon","size":size}));
+        assert_eq!(icon["kind"], "view");
+        assert_eq!(icon["style"]["width"], size);
+    }
+    // a size that is not a number falls back to a usable one
+    assert_eq!(a.request(&json!({"cmd":"icon"}))["style"]["width"], 32.);
+}

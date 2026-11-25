@@ -68,6 +68,27 @@ fn fill() -> Value {
     json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0})
 }
 
+/// The app icon: a screen with film perforations and a play triangle. It is drawn here, not
+/// through `axia_native::icons::app_icon`, which asks the registry (this app) first.
+pub(super) fn icon(size: f64) -> Value {
+    let s = if size.is_finite() { size.clamp(1., 512.) } else { 32. };
+    let rect = |id: String, x: f64, y: f64, w: f64, h: f64, r: f64, color: &str| {
+        v(&id, json!({"position":"absolute","left":s*x,"top":s*y,"width":s*w,"height":s*h,"borderRadius":s*r,"backgroundColor":color}), vec![])
+    };
+    let mut kids = vec![rect("screen".into(), 0.14, 0.22, 0.72, 0.56, 0.08, "rgba(20,10,30,0.82)")];
+    for (row, y) in [0.25, 0.7].into_iter().enumerate() {
+        for i in 0..4 {
+            kids.push(rect(format!("hole{row}{i}"), 0.2 + i as f64 * 0.17, y, 0.08, 0.05, 0.015, "rgba(255,255,255,0.35)"));
+        }
+    }
+    kids.extend(tri("play", s * 0.42, s * 0.36, s * 0.24, s * 0.28, &json!("#fff"), ((s / 5.).round() as usize).max(6), false));
+    v(
+        "player-icon",
+        json!({"width":s,"height":s,"borderRadius":s*0.225,"background":"linear-gradient(160deg, #ff7a59, #d6246e)","boxShadow":format!("0 {}px {}px rgba(0,0,0,0.35)",s*0.04,s*0.12),"overflow":"hidden"}),
+        kids,
+    )
+}
+
 // ------------------------------------------------------------------ glyphs
 // Monochrome transport symbols drawn with boxes: the media symbols of the fonts are color
 // emoji. They always point left to right (time runs that way, also in RTL).
