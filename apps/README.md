@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/`, `apps/backup/`, `apps/camera/`, `apps/notes/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/`, `apps/backup/`, `apps/camera/`, `apps/notes/`, `apps/player/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -230,3 +230,12 @@ Rust. `runtime/native_session_widgets.js` only transports Rust widget metadata
 and mounts the common native view; Notes restores desktop cards without opening
 a window. Window leases provide clipboard, input-method and WM I/O through
 shared services, while Rust owns formatting, selection and composition rendering.
+
+Player owns its library, queue and window in Rust: songs, artists, albums and videos, the
+virtual song list, shuffle and repeat, the time and volume bars, `.srt` and in-stream
+subtitles, audio track choice, full screen, picture in picture, file drop, "Open with" and the
+Control Center entry. `apps/player/model.rs` holds the rules (library cache, grouping, subtitles,
+queue, player state); `scan.rs` walks ~/Music and ~/Videos on a worker thread and keeps the same
+`~/.cache/axia/music.json` the JavaScript player wrote. Decoding stays in `axia-media`; the SDK
+services only run the jobs Rust names (`media.*`, `windows.screen`, `windows.pip`). The folder
+contains only Rust source.

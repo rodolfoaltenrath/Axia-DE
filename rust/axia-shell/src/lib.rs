@@ -24,6 +24,7 @@ use axia_app_terminal as terminal_model;
 use axia_app_passwords::passwords_model;
 use axia_app_passwords as passwords_app;
 use axia_app_pdf as pdf_app;
+use axia_app_player as player_app;
 use axia_app_sysinfo as sysinfo_model;
 use axia_app_sysprobe as sysprobe_app;
 use axia_app_reminders as reminders_app;

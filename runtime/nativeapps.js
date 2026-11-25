@@ -16,7 +16,7 @@ import { documentServices } from './native_doc_services.js';
 import { scanServices } from './native_scan_services.js';
 import { fileServices } from './native_fs_services.js';
 import { mediaServices } from './native_media_services.js';
-import { media, userDirs, thumbRev } from '../sdk/media.js';
+import { media, userDirs, thumbRev, nowPlaying } from '../sdk/media.js';
 import { soundState } from '../sdk/sound.js';
 import { backup, backupStatus } from '../sdk/backup.js';
 import { backupServices } from './native_backup_services.js';
@@ -89,11 +89,11 @@ const methods = {
   ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),
   ...fileServices(fs),
   ...scanServices(print),
-  ...mediaServices({ media, userDirs, soundState, thumbRev, events: owner => bridge.events(owner) }),
+  ...mediaServices({ media, userDirs, soundState, thumbRev, nowPlaying, events: owner => bridge.events(owner) }),
   ...settingsServices(settings),
   ...systemServices(owner => bridge.events(owner)),
   ...backupServices({ backup, backupStatus, events: owner => bridge.events(owner) }),
-  ...windowServices(wm, owner => bridge.events(owner)),
+  ...windowServices(wm, owner => bridge.events(owner), () => ({ width: lord.screen.width, height: lord.screen.height })),
   ...inputServices(),
   ...clipboardServices({ clipboard: lord.clipboard || {}, fs }),
   'logs.sources': { run: () => logs.sources() },

@@ -745,7 +745,12 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       - **6** feito: `manifest.rs`, registro, `runtime/native_terminal_services.js`, JSX/JS removidos,
         arranjos, layout vivo e tamanho da janela nova (`restore.rs`). Falta: teste GPU com shell real
         (`terminal_runtime`).
-- [ ] `player` (por último, do zero)
+- [x] `player` (plano e estado em [RUST-PLAYER.md](RUST-PLAYER.md)): janela nativa completa
+      (biblioteca por músicas/artistas/álbuns/vídeos, fila, shuffle e repeat, barras de tempo e
+      volume, legendas `.srt` e da faixa, faixa de áudio, tela cheia, picture in picture, soltar
+      arquivos, "Abrir com" e Central de Controle), registrada e sem JSX, JS nem manifesto JSON.
+      Serviços novos de transporte: `media.probe`, `media.nowPlaying`, `windows.screen`,
+      `windows.pip`. Falta: teste GPU com arquivo real (`player_runtime`) e validação gráfica.
 - [ ] `mail` (exibição de HTML; por último)
 - [ ] `editor` (edição de texto complexa; por último)
 - [x] `passwords` (processo isolado; fronteira de segurança mantida): metadados

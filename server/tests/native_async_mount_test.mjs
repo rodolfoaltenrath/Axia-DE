@@ -37,7 +37,7 @@ const stubs={
   'fs.js':['write','stat','mkdir','copy','jobs','forgetJob','trash','list','rename','volumes','home'].map(name=>`export const ${name}=()=>null;`).join('\n'),
   'doc.js':['fontInfo','fontSample','fontGrid','releaseImage','decodeImage','convertImage','pdfThumb'].map(name=>`export const ${name}=()=>null;`).join('\n'),
   'print.js':`export const print={discover:()=>({scanners:[]}),scanCaps:()=>({}),scan:()=>({}),open:()=>null};`,
-  'media.js':`export const media={};export const userDirs=()=>({music:'/home/test/Music',pictures:'/home/test/Pictures'});export const thumbRev={subscribe:()=>()=>{}};`,
+  'media.js':`export const media={};export const userDirs=()=>({music:'/home/test/Music',pictures:'/home/test/Pictures'});export const thumbRev={subscribe:()=>()=>{}};export const nowPlaying={get:()=>null,set(){}};`,
   'settings.js':`export const settings={get:()=>({}),set(){}};export const useSettings=()=>[{},()=>{}];`,
   'sound.js':`export const soundState={get:()=>({sources:[]}),subscribe:()=>()=>{}};`,
   'backup.js':`export const backup={};export const backupStatus={get:()=>null,subscribe:()=>()=>{}};`,

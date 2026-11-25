@@ -6,7 +6,7 @@ continue. Model-only conversion is an intermediate state, not completion.
 The compositor rebuild and graphical validation are reserved for the end.
 
 Current compiled registry: `rust/native_apps.rs`. About, About App, Calculator,
-Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts, Calendar, Settings, Screenshots and Passwords have compiled
+Characters, Clock, Files, Force Quit, Help, Logs, Fonts, Scanner, Recorder, Backups, Camera, Notes, Photos, Monitor, Store, Sysprobe, Reminders, Contacts, Calendar, Settings, Screenshots, Passwords, PDF, Terminal and Player have compiled
 Rust implementations. Files browser windows and icons always use the native
 host; `filesNativeView` and the React browser path are removed. Its shared
 selectors and transfer windows still use the React widget adapter, pending
@@ -40,8 +40,21 @@ with the window), the FIDO permission order and the secret clipboard are the
 shared `runtime/native_vault_services.js`; the generic native mount publishes
 the vault availability and region and marks the window protected.
 `node server/tests/native_vault_services_test.mjs` covers that boundary.
+Player now has only Rust sources, including its manifest (`apps/player/manifest.rs`) and
+window. Rust owns the library (walk on a worker thread, tag cache compatible with the old
+`music.json`, grouping by artist and album), the queue with shuffle and repeat, the
+virtual song list, the time and volume bars (hit-tested from the layout geometry), `.srt` and
+in-stream subtitles, audio track choice, full screen, picture in picture, file drop, "Open with"
+and the Control Center entry. The shared runtime gained `media.probe`, `media.nowPlaying`,
+`windows.screen` and `windows.pip`, all transport: the entry's buttons come back as window
+events and it leaves with the window. Full screen and picture in picture may mount the window
+again; it saves queue, view, volume and position first and resumes from them. Tests: the model
+and window suites in `apps/player` and `node server/tests/native_media_test.mjs`. A GPU runtime
+test with a real file, the picture in picture frame in the compositor and graphical checks
+remain for the final desktop validation.
+
 Remaining apps (all remain in scope):
-editor, mail, player and terminal. Existing Rust
+editor and mail. Existing Rust
 models in some of these apps do not count as native-window completion.
 
 Contacts now has only Rust sources, including its manifest, full three-column

@@ -1,6 +1,6 @@
 // Transport SDK media events unchanged. Sessions and sound subscriptions belong
 // to a native window; Rust owns playback/recording state and edit policy.
-export function mediaServices({ media, userDirs, soundState, thumbRev, events }) {
+export function mediaServices({ media, userDirs, soundState, thumbRev, events, nowPlaying }) {
   const sessions = new Map();
   const key = (owner, id) => `${owner.id}:${id}`;
   const owned = (owner, id) => sessions.has(key(owner, id));
@@ -57,6 +57,18 @@ export function mediaServices({ media, userDirs, soundState, thumbRev, events })
     'media.close': { run([id], owner) { owner.release(`media:${id}`); } },
     'media.control': { run([id, cmd, value], owner) { return owned(owner, id) ? media.control(id, cmd, value) : false; } },
     'media.stop': { run([id], owner) { return owned(owner, id) ? media.stop(id) : false; } },
+    'media.probe': { run: ([path]) => media.probe(path) },
+    // What Control Center and the media keys show. The entry belongs to this window: its buttons
+    // come back as events, it is replaced by the next call and withdrawn with the window.
+    // A null entry withdraws it.
+    'media.nowPlaying': { run([info], owner) {
+      if (!info || typeof info !== 'object') { owner.release('nowPlaying'); return null; }
+      const act = action => () => owner.emit({ kind: 'nowPlaying', action });
+      const entry = { ...info, toggle: act('toggle'), next: act('next'), prev: act('prev'), stop: act('stop') };
+      owner.retain('nowPlaying', entry, value => { if (nowPlaying.get() === value) nowPlaying.set(null); });
+      if (owner.alive()) nowPlaying.set(entry);
+      return null;
+    } },
     'media.waveform': { run: args => media.waveform(...args) },
     'media.transcode': { run: args => media.transcode(...args) },
   };

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createNativeAsync } from '../../runtime/native_async.js';
 import { mediaServices } from '../../runtime/native_media_services.js';
 import { settingsServices } from '../../runtime/native_settings_services.js';
+import { windowServices } from '../../runtime/native_window_services.js';
 const calls=[],closed=[],listeners=new Map(),soundListeners=new Set();
 let allowRecording;
 const sdk={
@@ -102,4 +103,34 @@ const patched=prefs.start(5,'settings.patch',[{camera:{mirror:false,device:'/dev
 assert.deepEqual(prefs.take(5,[patched])[0].value,{camera:{mirror:false,device:'/dev/video1'}});
 assert.deepEqual(saved,[{camera:{mirror:false,device:'/dev/video1'}}]);prefs.close(5);
 
-console.log('native-media-test: permissions, session ownership, events, export, camera, settings and close passed');
+// Player: probe, the Control Center entry and picture in picture
+let now=null;const probes=[];
+const store={get:()=>now,set:v=>{now=v;}};
+const player=createNativeAsync({...mediaServices({media:{probe:async path=>{probes.push(path);return {duration:5,tags:{title:'T'}};},on:()=>()=>{},close(){}},
+  userDirs:()=>({}),soundState:{get:()=>({}),subscribe:()=>()=>{}},nowPlaying:store,events:owner=>player.events(owner)}),
+  ...windowServices({setPip:(...args)=>pips.push(args)},owner=>player.events(owner),()=>({width:1920,height:1080,extra:1}))});
+const pips=[];
+const playerMethods=['media.probe','media.nowPlaying','media.events','windows.screen','windows.pip'];
+async function call(owner,method,args=[]){const token=player.start(owner,method,args);await flush();return player.take(owner,[token])[0];}
+player.open(1,playerMethods);player.open(2,playerMethods);
+assert.deepEqual((await call(1,'media.probe',['/Music/a.mp3'])).value,{duration:5,tags:{title:'T'}});
+assert.deepEqual(probes,['/Music/a.mp3']);
+await call(1,'media.nowPlaying',[{app:'player',window:'player',title:'A',playing:true}]);
+assert.equal(now.title,'A');
+now.next();now.toggle();
+assert.deepEqual((await call(1,'media.events')).value,[{kind:'nowPlaying',action:'next'},{kind:'nowPlaying',action:'toggle'}]);
+const first=now;await call(1,'media.nowPlaying',[{app:'player',window:'player',title:'B'}]);
+assert.notEqual(now,first);assert.equal(now.title,'B');
+// another window's entry is replaced, and only the owner can withdraw it
+await call(2,'media.nowPlaying',[null]);assert.equal(now.title,'B');
+await call(1,'media.nowPlaying',[null]);assert.equal(now,null);
+await call(1,'media.nowPlaying',[{title:'C'}]);assert.equal(now.title,'C');
+player.close(1);assert.equal(now,null,'the entry leaves with its window');
+assert.deepEqual((await call(2,'windows.screen')).value,{width:1920,height:1080});
+await call(2,'windows.pip',['player',{x:1,y:2,w:400,h:225}]);await call(2,'windows.pip',['player',null]);
+assert.deepEqual(pips,[['player',{x:1,y:2,w:400,h:225}],['player',null]]);
+assert.ok((await call(2,'windows.pip',['player',{x:1,y:2,w:0,h:5}])).error,'a degenerate frame is refused');
+assert.ok((await call(2,'windows.pip',[7,null])).error);
+player.close(2);
+
+console.log('native-media-test: permissions, session ownership, events, export, camera, settings, player and close passed');

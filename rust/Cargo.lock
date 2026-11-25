@@ -234,6 +234,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-app-player"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-app-recorder"
 version = "0.1.0"
 dependencies = [
@@ -477,6 +485,7 @@ dependencies = [
  "axia-app-passwords",
  "axia-app-pdf",
  "axia-app-photos",
+ "axia-app-player",
  "axia-app-recorder",
  "axia-app-reminders",
  "axia-app-scanner",
