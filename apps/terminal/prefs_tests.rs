@@ -50,10 +50,14 @@ impl Service {
             "term.screenText" => json!(self.screen.get(&args[0].as_i64().unwrap_or(0)).cloned().unwrap_or_default()),
             "clipboard.read" => json!({"text":self.clip}),
             "fonts.list" => self.fonts.clone(),
+            "term.tmuxPane" => {
+                self.next_sid += 1;
+                json!(self.next_sid)
+            }
             _ => Value::Null,
         }
     }
-    fn absorb(&mut self, reply: &Value) {
+    pub(super) fn absorb(&mut self, reply: &Value) {
         if let Some(effect) = reply.get("effect") {
             self.pending = Some(effect.clone());
         }

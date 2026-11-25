@@ -230,6 +230,39 @@ impl Workspace {
         let focus = root.leaves().first().copied().unwrap_or(0);
         Tab { id: self.next_id("t"), root, focus, title, zoom: false }
     }
+    /// A split id for a tree someone else builds (tmux's layouts).
+    pub fn new_split_id(&mut self) -> String {
+        self.next_id("s")
+    }
+    /// A tab made elsewhere joins the end of a window and becomes its active tab.
+    pub fn push_tab(&mut self, wid: &str, tab: Tab) -> bool {
+        let Some(w) = self.windows.get_mut(wid) else { return false };
+        w.active = tab.id.clone();
+        w.tabs.push(tab);
+        true
+    }
+    /// A tab takes another tree (tmux changed its layout); the focused pane stays focused while it
+    /// is still there, a new title replaces the old one, `None` keeps it.
+    pub fn set_layout(&mut self, wid: &str, tab: &str, root: Node, title: Option<String>) -> bool {
+        let Some(t) = self.windows.get_mut(wid).and_then(|w| w.tab_mut(tab)) else { return false };
+        let leaves = root.leaves();
+        if !leaves.contains(&t.focus) {
+            t.focus = leaves.first().copied().unwrap_or(t.focus);
+        }
+        t.root = root;
+        if let Some(title) = title {
+            t.title = Some(title).filter(|t| !t.is_empty());
+        }
+        true
+    }
+    /// The pane the user (or tmux) chose in a tab.
+    pub fn set_tab_focus(&mut self, wid: &str, tab: &str, sid: Sid) {
+        if let Some(t) = self.windows.get_mut(wid).and_then(|w| w.tab_mut(tab)) {
+            if t.root.leaves().contains(&sid) {
+                t.focus = sid;
+            }
+        }
+    }
     pub fn find_session(&self, sid: Sid) -> Option<(&str, &str)> {
         self.windows
             .iter()

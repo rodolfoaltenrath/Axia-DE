@@ -18,6 +18,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 mod ui;
 #[path = "triggers.rs"]
 mod triggers;
+#[path = "tmux.rs"]
+mod tmux;
+#[path = "tmux_window.rs"]
+mod tmux_window;
 #[path = "prefs.rs"]
 mod prefs;
 #[path = "prefs_ui.rs"]
@@ -60,6 +64,10 @@ struct Session {
     host: String,
     osc_badge: String,
     auto_from: Option<String>,
+    /// tmux: this session is a gateway (`tmux -CC` runs in it), or the pane `tmux_pane` of the gateway `gateway`.
+    tmux: bool,
+    gateway: Option<Sid>,
+    tmux_pane: i64,
 }
 #[derive(Clone, Default)]
 struct Find {
@@ -145,6 +153,10 @@ struct Shell {
     fonts_asked: bool,
     /// Lines the capture triggers took, newest first: (session, text).
     captured: Vec<(Sid, String)>,
+    /// The `tmux -CC` connections, by the session where tmux runs.
+    gateways: HashMap<Sid, tmux_window::Gateway>,
+    /// Sessions still in control mode when the first window started are taken up once.
+    recovered: bool,
     ws: Workspace,
     sessions: HashMap<Sid, Session>,
     /// Closed panes waiting out their undo window: (session, closes at).
@@ -199,6 +211,8 @@ enum Tag {
     Events,
     Fonts,
     Screen { sid: Sid },
+    TmuxPane { gw: Sid, pane: i64 },
+    TmuxSize { gw: Sid, sid: Sid },
     OscCopy { sid: Sid },
 }
 struct DividerDrag {
@@ -374,7 +388,10 @@ impl App {
                 self.toast(json!({"key":"terminal.toast.paneClosed"}), now);
             }
             Confirm::Tab(id) => self.close_tab(&id),
-            Confirm::Window => self.effects.push(json!({"kind":"closeWindow","id":self.window,"force":true})),
+            Confirm::Window => {
+                self.tmux_window_closing();
+                self.effects.push(json!({"kind":"closeWindow","id":self.window,"force":true}));
+            }
         }
     }
     fn copy(&mut self) {
@@ -591,6 +608,7 @@ impl App {
     }
     /// A session ends (its shell exited or its pane closed for good): out of the tree, closed.
     fn remove_session(&mut self, sid: Sid) {
+        self.tmux_forget(sid);
         let removed = shell(|s| {
             let removed = s.ws.detach(sid);
             s.sessions.remove(&sid);
@@ -606,6 +624,9 @@ impl App {
             shell(|s| s.ws.drop_window(&wid));
             if wid == self.window {
                 self.close_window = true;
+            } else {
+                // another window of the shell lost its last session while this one read the events
+                self.effects.push(json!({"kind":"closeWindow","id":wid}));
             }
         }
     }
@@ -675,6 +696,9 @@ impl App {
         let now = clock::now();
         if kind == "exit" {
             self.remove_session(sid);
+            return;
+        }
+        if self.tmux_event(sid, kind, data, now) {
             return;
         }
         // events that need no session state of their own
@@ -881,6 +905,7 @@ impl App {
         }
     }
     fn on_infos(&mut self, list: &Value) {
+        let infos: Vec<(Sid, bool)> = list.as_array().into_iter().flatten().filter_map(|i| Some((i["sid"].as_i64()?, i["info"]["tmux"] == true))).collect();
         shell(|s| {
             for item in list.as_array().into_iter().flatten() {
                 let Some(sid) = item["sid"].as_i64() else { continue };
@@ -892,6 +917,9 @@ impl App {
                 }
             }
         });
+        if shell(|s| !std::mem::replace(&mut s.recovered, true)) {
+            self.tmux_recover(&infos);
+        }
     }
     fn apply(&mut self, done: Completed<Tag>) {
         match done.tag {
@@ -1033,6 +1061,14 @@ impl App {
                     self.on_event(&event);
                 }
             }
+            Tag::TmuxPane { gw, pane } => {
+                let sid = done.result.ok().and_then(|v| v.as_i64());
+                self.tmux_pane_ready(gw, pane, sid);
+            }
+            Tag::TmuxSize { gw, sid } => {
+                let infos = done.result.unwrap_or(Value::Null);
+                self.tmux_resized(gw, sid, &infos);
+            }
             Tag::Screen { sid } => {
                 shell(|s| {
                     if let Some(x) = s.sessions.get_mut(&sid) {
@@ -1057,6 +1093,7 @@ impl App {
         }
     }
     fn timers(&mut self, now: i64) {
+        self.tmux_timers(now);
         self.expire_closed(now);
         self.ui(|u| u.toasts.retain(|t| t.until > now));
         // the find bar follows the focused pane
@@ -1196,6 +1233,11 @@ impl App {
     /// A shortcut or menu action. False: not handled here (yet), the key goes on.
     fn run(&mut self, action: &str, now: i64) -> bool {
         let sid = shell(|s| s.ws.current_sid(&self.window));
+        if let Some(sid) = sid {
+            if self.tmux_action(action, sid) {
+                return true;
+            }
+        }
         if let Some(n) = action.strip_prefix("tab").and_then(|d| d.parse::<usize>().ok()).filter(|n| (1..=9).contains(n)) {
             let id = shell(|s| s.ws.window(&self.window).and_then(|w| w.tabs.get(n - 1).map(|t| t.id.clone())));
             if let Some(id) = id {
@@ -1424,6 +1466,15 @@ impl App {
         }
         let event = json!({"code":facts.code,"key":key,"meta":flags & 16 != 0,"ctrl":flags & 2 != 0,"alt":flags & 4 != 0,"shift":facts.shift});
         let modifier = MODIFIER_CODES.contains(&facts.code);
+        if shell(|s| s.sessions.get(&sid).is_some_and(|x| x.tmux)) {
+            // the gateway is the command channel: it takes no keys, and Esc lets go of tmux
+            if key == "Escape" {
+                self.tmux_detach(sid);
+            } else if let Some(action) = model(&json!({"cmd":"action","event":event,"shortcuts":self.raw()["shortcuts"]})).as_str().map(str::to_owned) {
+                self.run(&action, now);
+            }
+            return Some(self.out(now));
+        }
         let profile = self.session_profile(sid);
         if !modifier {
             let mapping = model(&json!({"cmd":"keyMapping","event":event,"profile":{"keyMap":profile["keyMap"]},"keyMap":self.raw()["keyMap"]}));
@@ -1624,6 +1675,7 @@ impl App {
             "paneDown" => {
                 let Some(sid) = key.as_i64() else { return };
                 self.focus(sid);
+                self.tmux_focus(sid);
                 if v["button"].as_i64() == Some(2) {
                     self.command(&json!({"cmd":"paneMenu","key":sid,"x":v["x"],"y":v["y"]}), now);
                     return;
@@ -1826,7 +1878,11 @@ impl App {
         self.events_due = now;
         let known = shell(|s| s.ws.window(&self.window).is_some());
         self.last_args = v["args"].clone();
-        if !known {
+        if !known && v["args"]["tmuxGateway"].as_i64().is_some_and(|gw| self.tmux_adopt(gw)) {
+            // the tabs tmux windows became are this window's
+            self.configure_window();
+            self.toast(json!({"key":"terminal.tmux.opened"}), now);
+        } else if !known {
             let id = self.default_profile();
             let cwd = v["args"]["cwd"].as_str().filter(|d| d.starts_with('/')).map(str::to_owned);
             // another app can leave an ssh or sftp line typed, never run
@@ -2050,7 +2106,7 @@ impl App {
             .map(|(sid, rect)| {
                 let session = shell(|s| s.sessions.get(sid).cloned()).unwrap_or_default();
                 let profile = self.profile(&session.profile);
-                ui::PaneFacts { sid: *sid, rect: *rect, dim: multi && !tab.zoom && *sid != tab.focus && profile["dimInactive"] == true, flash: now < session.flash_until, badge: session.badge }
+                ui::PaneFacts { sid: *sid, rect: *rect, dim: multi && !tab.zoom && *sid != tab.focus && profile["dimInactive"] == true, flash: now < session.flash_until, gateway: session.tmux, badge: session.badge }
             })
             .collect();
         let status = (focus_profile["statusBar"] == true).then(|| {
@@ -2117,3 +2173,7 @@ mod prefs_tests;
 #[cfg(test)]
 #[path = "events_tests.rs"]
 mod events_tests;
+
+#[cfg(test)]
+#[path = "tmux_tests.rs"]
+mod tmux_tests;

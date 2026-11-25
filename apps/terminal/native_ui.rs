@@ -24,6 +24,7 @@ pub(super) struct PaneFacts {
     pub rect: Rect,
     pub dim: bool,
     pub flash: bool,
+    pub gateway: bool,
     pub badge: String,
 }
 pub(super) struct StatusFacts {
@@ -217,6 +218,18 @@ fn pane(f: &Facts, p: &PaneFacts) -> Value {
             "dim",
             json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0,"backgroundColor":"rgba(0,0,0,0.28)","pointerEvents":"none"}),
             vec![],
+        ));
+    }
+    if p.gateway {
+        let say = |key: &str, size: u32, weight: u32, color: &str| text(json!({"key":key}), json!({"fontSize":size,"fontWeight":weight,"color":color}));
+        children.push(view(
+            "tmux",
+            json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0,"backgroundColor":"rgba(0,0,0,0.72)","alignItems":"center","justifyContent":"center","gap":6}),
+            vec![
+                say("terminal.tmux.connected", 15, 700, "#ffffff"),
+                say("terminal.tmux.gateway", 12, 400, "rgba(255,255,255,0.7)"),
+                say("terminal.tmux.escape", 12, 400, "rgba(255,255,255,0.7)"),
+            ],
         ));
     }
     if p.flash {

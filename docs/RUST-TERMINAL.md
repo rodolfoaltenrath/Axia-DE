@@ -164,15 +164,34 @@ change. Until then the React window stays the live app.
      window arrangements and the live layout. They store each window's frame, which only the
      window manager knows: stage 6 gives the transport a `windows.frames` call and a frame for
      `windows.open` (`workspace.rs` already rebuilds the layouts).
-5. **tmux.** The control-mode client of `tmux.js` (`tmux -CC`).
+5. **tmux (done).** The control-mode client of `tmux.js` (`tmux -CC`). `tmux.rs` is the pure part:
+   the protocol (`%begin`/`%end` blocks paired with the commands in the order they went out, the
+   notifications), tmux's layout strings and their translation into the binary pane tree of a tab
+   (a split is worth the share of its size, 10202f%–90202f%), and the size to tell tmux. `tmux_window.rs`
+   is the window's side: the session where `tmux -CC` runs is the gateway (its pane shows
+   "tmux connected" and takes no keys; Esc detaches, shortcuts still run); each tmux window is a
+   tab of a Terminal window of its own, opened with `windows.open` `["terminal", {new, tmuxGateway}]` 
+   which takes the tabs when it starts; each pane has a session the server makes, filled with
+   `capture-pane` and the cursor position, and a layout waits until all its panes have one; the
+   window's actions become tmux commands (new tab, splits, close pane/tab, equalize, maximize),
+   clicking a pane selects it in tmux, a resize is told once (`refresh-client -C`) after 150 ms,
+   closing the window detaches, `%exit`/`tmux-end` close the pane sessions (with a toast saying
+   why) and sessions still in control mode after a server restart are taken up again without
+   waiting for the answer to a launch command. Transport added: jobs `term.tmuxPane` ([gateway,
+   pane] → session or null); effects `tmuxCommand` (`cmd`), `feed` (`text`) and `tmuxReady`;
+   events `tmux-start`, `tmux` (whole lines), `tmux-end`, `resize` (the server already sends them);
+   `windows.open` passes its arguments to the new window. A window that loses its last session to
+   an event read by another window is now closed with `{kind:"closeWindow",id}`. 21 more crate
+   tests (121 in all). The server's line batches end with a newline: that is not a blank line, which
+   the JavaScript counted at the end of a block that crossed two batches.
 6. **Registration and removal.** `manifest.rs`, `runtime/native_terminal_services.js`
    (the `term.*` calls Rust names, session lifetime in the window lease), removal of the
    JSX/JS, the real-shell runtime test.
 
 ## Resume here
 
-Stages 1–4c are committed on `main` (not pushed; the owner pushes when everything is done). The
-next step is 5 (tmux), then 6 (which also takes arrangements and the live layout). Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
+Stages 1–5 are committed on `main` (not pushed; the owner pushes when everything is done). The
+next step is 6 (registration and removal, which also takes arrangements and the live layout). Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
 axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
 of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
 Co-Authored-By trailer.
