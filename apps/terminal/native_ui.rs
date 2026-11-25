@@ -23,6 +23,7 @@ pub(super) struct PaneFacts {
     pub sid: i64,
     pub rect: Rect,
     pub dim: bool,
+    pub flash: bool,
     pub badge: String,
 }
 pub(super) struct StatusFacts {
@@ -57,6 +58,7 @@ pub(super) struct ReplayFacts {
 pub(super) struct BeltFacts {
     pub jobs: Vec<(i64, String, String)>,
     pub commands: Vec<String>,
+    pub captured: Vec<(i64, String)>,
     pub clipboard: Vec<String>,
     pub dirs: Vec<String>,
     pub profiles: Vec<(String, Value)>,
@@ -214,6 +216,13 @@ fn pane(f: &Facts, p: &PaneFacts) -> Value {
         children.push(view(
             "dim",
             json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0,"backgroundColor":"rgba(0,0,0,0.28)","pointerEvents":"none"}),
+            vec![],
+        ));
+    }
+    if p.flash {
+        children.push(view(
+            "flash",
+            json!({"position":"absolute","left":0,"top":0,"right":0,"bottom":0,"backgroundColor":"rgba(255,255,255,0.14)","pointerEvents":"none"}),
             vec![],
         ));
     }
@@ -462,6 +471,7 @@ fn belt(f: &Facts, b: &BeltFacts) -> Value {
     let th = f.theme;
     let hint = |key: &str| text(json!({"key":key}), json!({"fontSize":12,"color":tok(th,"textDim","#999999")}));
     let jobs = b.jobs.iter().map(|(sid, title, sub)| belt_row(f, format!("job-{sid}"), title, Some(json!(sub)), json!(["beltJob", sid]))).collect();
+    let captured: Vec<Value> = b.captured.iter().take(8).enumerate().map(|(i, (sid, text))| belt_row(f, format!("captured-{i}"), text, None, json!(["beltJob", sid]))).collect();
     let commands = if b.commands.is_empty() { vec![hint("terminal.belt.needsIntegration")] } else {
         b.commands.iter().take(8).enumerate().map(|(i, c)| belt_row(f, format!("cmd-{i}"), c, Some(json!({"key":"terminal.belt.commandHint"})), json!(["beltCommand", i]))).collect()
     };
@@ -479,18 +489,24 @@ fn belt(f: &Facts, b: &BeltFacts) -> Value {
     let mut notes: Vec<Value> = b.notes.iter().enumerate().map(|(i, n)| belt_row(f, format!("note-{i}"), n, Some(json!({"key":"terminal.belt.noteHint"})), json!(["beltNoteDelete", i]))).collect();
     notes.push(json!({"kind":"input","key":"note","value":b.note,"placeholder":{"key":"terminal.belt.addNote"},"change":["beltNoteChange"],"submit":["beltNoteAdd"],
         "size":13,"style":{"height":26,"marginTop":6}}));
+    let mut sections = vec![
+        view("belt-rule", json!({"position":"absolute","left":0,"top":0,"bottom":0,"width":1,"backgroundColor":tok(th,"separator","#444444")}), vec![]),
+        belt_section(f, "terminal.belt.jobs", jobs),
+        belt_section(f, "terminal.belt.commands", commands),
+    ];
+    if !captured.is_empty() {
+        sections.push(belt_section(f, "terminal.belt.captured", captured));
+    }
+    sections.extend([
+        belt_section(f, "terminal.belt.clipboard", clipboard),
+        belt_section(f, "terminal.belt.dirs", dirs),
+        belt_section(f, "terminal.belt.profiles", profiles),
+        belt_section(f, "terminal.belt.notes", notes),
+    ]);
     view(
         "belt",
         json!({"width":BELT,"flexShrink":0,"paddingHorizontal":10,"paddingVertical":12,"overflow":"hidden","backgroundColor":tok(th,"sidebarBg","#2a2a2e")}),
-        vec![
-            view("belt-rule", json!({"position":"absolute","left":0,"top":0,"bottom":0,"width":1,"backgroundColor":tok(th,"separator","#444444")}), vec![]),
-            belt_section(f, "terminal.belt.jobs", jobs),
-            belt_section(f, "terminal.belt.commands", commands),
-            belt_section(f, "terminal.belt.clipboard", clipboard),
-            belt_section(f, "terminal.belt.dirs", dirs),
-            belt_section(f, "terminal.belt.profiles", profiles),
-            belt_section(f, "terminal.belt.notes", notes),
-        ],
+        sections,
     )
 }
 fn replay_bar(f: &Facts, r: &ReplayFacts) -> Value {

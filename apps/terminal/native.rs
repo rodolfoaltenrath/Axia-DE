@@ -16,6 +16,8 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[path = "native_ui.rs"]
 mod ui;
+#[path = "triggers.rs"]
+mod triggers;
 #[path = "prefs.rs"]
 mod prefs;
 #[path = "prefs_ui.rs"]
@@ -25,6 +27,8 @@ const INFO_MS: i64 = 1500;
 const EVENTS_MS: i64 = 250;
 const UNDO_MS: i64 = 5000;
 const MOVE_MS: i64 = 8;
+const FLASH_MS: i64 = 140;
+const CAPTURED_MAX: usize = 100;
 const TOAST_MS: i64 = 4000;
 const TOASTS_MAX: usize = 4;
 const MATCHES_MAX: usize = 60000;
@@ -45,6 +49,17 @@ struct Session {
     info: Value,
     /// Text typed once the shell has shown its prompt (a profile's, or an ssh line from another app).
     pending_text: String,
+    /// Lines of the screen the triggers already looked at, and whether a look is on its way.
+    seen: std::collections::HashSet<String>,
+    scan_busy: bool,
+    /// "Alert when the command finishes", the last command, the visual-bell flash.
+    alert: bool,
+    last_cmd: String,
+    flash_until: i64,
+    /// `user@host` as the shell reports it, the badge the program set and the profile before a rule changed it.
+    host: String,
+    osc_badge: String,
+    auto_from: Option<String>,
 }
 #[derive(Clone, Default)]
 struct Find {
@@ -128,6 +143,8 @@ struct Shell {
     /// The installed fonts (family, PostScript name, monospaced, color), asked once for the Preferences.
     fonts: Option<Vec<Value>>,
     fonts_asked: bool,
+    /// Lines the capture triggers took, newest first: (session, text).
+    captured: Vec<(Sid, String)>,
     ws: Workspace,
     sessions: HashMap<Sid, Session>,
     /// Closed panes waiting out their undo window: (session, closes at).
@@ -136,6 +153,23 @@ struct Shell {
 thread_local! { static SHELL: RefCell<Shell> = RefCell::new(Shell::default()); }
 fn shell<R>(f: impl FnOnce(&mut Shell) -> R) -> R {
     SHELL.with(|s| f(&mut s.borrow_mut()))
+}
+
+/// What an event leaves to do after the shared state was changed.
+enum Follow {
+    Scan,
+    Rules,
+    Finished(i64, String),
+}
+/// This machine as the profile rules see it: the user and the host name.
+fn local_identity() -> (&'static str, &'static str) {
+    static IDENTITY: std::sync::OnceLock<(String, String)> = std::sync::OnceLock::new();
+    let id = IDENTITY.get_or_init(|| {
+        let user = std::env::var("USER").or_else(|_| std::env::var("LOGNAME")).unwrap_or_default();
+        let host = std::fs::read_to_string("/proc/sys/kernel/hostname").map(|h| h.trim().to_owned()).or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default();
+        (user, host)
+    });
+    (&id.0, &id.1)
 }
 
 #[derive(Clone)]
@@ -164,6 +198,8 @@ enum Tag {
     Infos,
     Events,
     Fonts,
+    Screen { sid: Sid },
+    OscCopy { sid: Sid },
 }
 struct DividerDrag {
     tab: String,
@@ -636,11 +672,35 @@ impl App {
         let (Some(sid), Some(kind)) = (event["sid"].as_i64(), event["type"].as_str()) else { return };
         let data = &event["data"];
         let active = self.is_active(sid);
+        let now = clock::now();
         if kind == "exit" {
             self.remove_session(sid);
             return;
         }
+        // events that need no session state of their own
+        match kind {
+            "notify" => return self.toast_for(sid, json!(data.as_str().unwrap_or("")), now),
+            "attention" => {
+                self.toast_for(sid, json!({"key":"terminal.toast.attention"}), now);
+                self.focus_window_of(sid);
+                return;
+            }
+            "profile" => {
+                let wanted = data.as_str().unwrap_or("");
+                let found = self.terminal_settings()["profiles"].as_array().and_then(|l| l.iter().find(|p| p["name"] == wanted || p["id"] == wanted).cloned());
+                if let Some(id) = found.and_then(|p| p["id"].as_str().map(str::to_owned)) {
+                    self.set_session_profile(sid, &id);
+                }
+                return;
+            }
+            "copy" => return self.jobs.enqueue(Tag::OscCopy { sid }, "clipboard.read", json!([])),
+            _ => {}
+        }
+        let profile = self.session_profile(sid);
+        let bell_on = profile["bell"] != "none";
+        let wants_scan = kind == "output" && profile["triggers"].as_array().is_some_and(|l| l.iter().any(|t| t["enabled"] != false));
         let mut pending: Option<String> = None;
+        let mut follow: Vec<Follow> = vec![];
         shell(|s| {
             let Some(session) = s.sessions.get_mut(&sid) else { return };
             match kind {
@@ -652,19 +712,42 @@ impl App {
                         s.recent_dirs.retain(|d| *d != dir);
                         s.recent_dirs.insert(0, dir);
                         s.recent_dirs.truncate(DIRS_MAX);
+                        follow.push(Follow::Rules);
                     }
+                }
+                "host" => {
+                    session.host = data.as_str().unwrap_or("").to_owned();
+                    follow.push(Follow::Rules);
                 }
                 "run" => {
                     let cmd = data.as_str().unwrap_or("").to_owned();
                     if !cmd.is_empty() {
+                        session.last_cmd = cmd.clone();
                         s.commands.retain(|c| *c != cmd);
                         s.commands.insert(0, cmd);
                         s.commands.truncate(COMMANDS_MAX);
                     }
                 }
-                "bell" => session.bell = !active,
-                "badge" => session.badge = data.as_str().unwrap_or("").to_owned(),
-                "command" => session.last_exit = data.as_i64().or_else(|| data.as_str().and_then(|t| t.parse().ok())).unwrap_or(0),
+                "bell" => {
+                    if bell_on {
+                        session.bell = !active;
+                        session.flash_until = now + FLASH_MS;
+                    }
+                }
+                "badge" => {
+                    session.badge = data.as_str().unwrap_or("").to_owned();
+                    session.osc_badge = session.badge.clone();
+                }
+                "command" => {
+                    let code = data.as_i64().or_else(|| data.as_str().and_then(|t| t.parse().ok())).unwrap_or(0);
+                    session.last_exit = code;
+                    if session.alert {
+                        session.alert = false;
+                        session.flash_until = now + FLASH_MS;
+                        session.bell = !active;
+                        follow.push(Follow::Finished(code, session.last_cmd.clone()));
+                    }
+                }
                 "output" => {
                     if !active {
                         session.activity = true;
@@ -673,6 +756,10 @@ impl App {
                     if !text.is_empty() {
                         pending = Some(text);
                     }
+                    if wants_scan && !session.scan_busy {
+                        session.scan_busy = true;
+                        follow.push(Follow::Scan);
+                    }
                 }
                 _ => {}
             }
@@ -680,6 +767,117 @@ impl App {
         // the shell has shown something (its prompt): the text meant for it goes in now
         if let Some(text) = pending {
             self.effect("write", sid, json!({"text":text.replace("\\n", "\r").replace('\n', "\r")}));
+        }
+        for step in follow {
+            match step {
+                Follow::Scan => self.jobs.enqueue(Tag::Screen { sid }, "term.screenText", json!([sid])),
+                Follow::Rules => self.auto_profile(sid),
+                Follow::Finished(code, cmd) => {
+                    let toast = if cmd.is_empty() {
+                        json!({"key":"terminal.toast.finished","params":{"code":code}})
+                    } else {
+                        json!({"key":"terminal.toast.finishedCmd","params":{"cmd":cmd,"code":code}})
+                    };
+                    self.toast_for(sid, toast, now);
+                }
+            }
+        }
+    }
+    /// The window a session lives in gets the toast (events arrive in whichever window polls).
+    fn toast_for(&mut self, sid: Sid, text: Value, now: i64) {
+        if let Some(wid) = shell(|s| s.ws.find_session(sid).map(|(wid, _)| wid.to_owned())) {
+            shell(|s| {
+                let u = s.ui.entry(wid).or_default();
+                u.toasts.push(Toast { text, until: now + TOAST_MS });
+                let extra = u.toasts.len().saturating_sub(TOASTS_MAX);
+                u.toasts.drain(..extra);
+            });
+        }
+    }
+    fn focus_window_of(&mut self, sid: Sid) {
+        if let Some(wid) = shell(|s| s.ws.find_session(sid).map(|(wid, _)| wid.to_owned())) {
+            self.effects.push(json!({"kind":"focusWindow","id":wid}));
+        }
+    }
+    /// A session takes a profile: its badge (or the one the program set) and its configuration follow.
+    fn set_session_profile(&mut self, sid: Sid, id: &str) {
+        let badge = self.profile(id)["badge"].as_str().unwrap_or("").to_owned();
+        shell(|s| {
+            if let Some(x) = s.sessions.get_mut(&sid) {
+                x.profile = id.to_owned();
+                x.badge = if badge.is_empty() { x.osc_badge.clone() } else { badge };
+            }
+        });
+        self.configure(sid);
+    }
+    /// Automatic profile switching: the rules of the profiles against where the session is.
+    fn auto_profile(&mut self, sid: Sid) {
+        let Some((host, cwd, current, from)) = shell(|s| s.sessions.get(&sid).map(|x| (x.host.clone(), x.meta.cwd.clone(), x.profile.clone(), x.auto_from.clone()))) else { return };
+        let (local_user, local_host) = local_identity();
+        let (user, machine) = triggers::who(&host, local_user, local_host);
+        let profiles = self.terminal_settings()["profiles"].as_array().cloned().unwrap_or_default();
+        let at = triggers::Place { user, host: machine, cwd: &cwd, home: &self.home };
+        let found = triggers::best_profile(&profiles, &at);
+        match found {
+            Some(id) if id != current => {
+                shell(|s| {
+                    if let Some(x) = s.sessions.get_mut(&sid) {
+                        x.auto_from = from.or(Some(current));
+                    }
+                });
+                self.set_session_profile(sid, &id);
+                let name = profiles.iter().find(|p| p["id"] == id.as_str()).map(|p| self.i18n.caption(&prefs::profile_caption(p))).unwrap_or_default();
+                self.toast_for(sid, json!({"key":"terminal.toast.autoProfile","params":{"name":name}}), clock::now());
+            }
+            None => {
+                if let Some(back) = from {
+                    shell(|s| {
+                        if let Some(x) = s.sessions.get_mut(&sid) {
+                            x.auto_from = None;
+                        }
+                    });
+                    self.set_session_profile(sid, &back);
+                }
+            }
+            Some(_) => {}
+        }
+    }
+    /// The screen of a session as the profile's triggers see it: each new line fires them.
+    fn run_triggers(&mut self, sid: Sid, screen: &str, now: i64) {
+        let triggers = self.session_profile(sid)["triggers"].as_array().cloned().unwrap_or_default();
+        let seen = shell(|s| s.sessions.get_mut(&sid).map(|x| std::mem::take(&mut x.seen))).unwrap_or_default();
+        let (actions, lines) = triggers::evaluate(screen, &seen, &triggers);
+        shell(|s| {
+            if let Some(x) = s.sessions.get_mut(&sid) {
+                x.seen = lines;
+            }
+        });
+        for action in actions {
+            match action {
+                triggers::Action::Notify(text) => self.toast_for(sid, json!(text), now),
+                triggers::Action::Bell => shell(|s| {
+                    if let Some(x) = s.sessions.get_mut(&sid) {
+                        x.bell = true;
+                        x.flash_until = now + FLASH_MS;
+                    }
+                }),
+                triggers::Action::Attention(text) => {
+                    self.toast_for(sid, json!(text), now);
+                    self.focus_window_of(sid);
+                }
+                triggers::Action::Send(text) => self.effect("write", sid, json!({"text":text})),
+                triggers::Action::Capture(text) => shell(|s| {
+                    s.captured.insert(0, (sid, text));
+                    s.captured.truncate(CAPTURED_MAX);
+                }),
+                triggers::Action::Highlight { text, fg, bg } => self.jobs.enqueue(Tag::Quiet, "term.highlight", json!([sid, text, fg, bg])),
+                triggers::Action::Mark => self.effect("mark", sid, json!({"what":"set"})),
+                triggers::Action::Title(text) => shell(|s| {
+                    if let Some(x) = s.sessions.get_mut(&sid) {
+                        x.meta.title = text;
+                    }
+                }),
+            }
         }
     }
     fn on_infos(&mut self, list: &Value) {
@@ -833,6 +1031,22 @@ impl App {
                 self.events_pending = false;
                 for event in done.result.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default() {
                     self.on_event(&event);
+                }
+            }
+            Tag::Screen { sid } => {
+                shell(|s| {
+                    if let Some(x) = s.sessions.get_mut(&sid) {
+                        x.scan_busy = false;
+                    }
+                });
+                if let Some(text) = done.result.ok().and_then(|v| v.as_str().map(str::to_owned)) {
+                    self.run_triggers(sid, &text, clock::now());
+                }
+            }
+            Tag::OscCopy { sid } => {
+                if let Some(text) = done.result.ok().and_then(|v| v["text"].as_str().map(str::to_owned)).filter(|t| !t.is_empty()) {
+                    self.jobs.enqueue(Tag::Quiet, "clipboard.remember", json!([text]));
+                    self.toast_for(sid, json!({"key":"terminal.toast.copied"}), clock::now());
                 }
             }
             Tag::Fonts => {
@@ -1022,6 +1236,15 @@ impl App {
                 }
             }
             "preferences" => self.prefs_open(),
+            "alertNextMark" => {
+                if let Some(sid) = sid {
+                    let on = shell(|s| s.sessions.get_mut(&sid).map(|x| {
+                        x.alert = !x.alert;
+                        x.alert
+                    })).unwrap_or(false);
+                    self.toast(json!({"key":if on {"terminal.toast.alertOn"} else {"terminal.toast.alertOff"}}), now);
+                }
+            }
             "copy" => self.copy(),
             "paste" => self.paste(PasteMode::Plain),
             "pasteOneLine" => self.paste(PasteMode::OneLine),
@@ -1656,6 +1879,8 @@ impl App {
         let mut shell_menu = self.plain_items(&b, &["newTab", "newWindow", "-", "splitRight", "splitDown", "-"]);
         shell_menu.push(self.action_item(&b, "broadcast", Some(broadcast), false));
         shell_menu.push(self.action_item(&b, "composer", Some(composer), false));
+        let alert = shell(|s| s.ws.current_sid(&self.window).and_then(|sid| s.sessions.get(&sid)).is_some_and(|x| x.alert));
+        shell_menu.push(self.action_item(&b, "alertNextMark", Some(alert), false));
         shell_menu.extend(self.plain_items(&b, &["-", "logSession", "exportText", "-", "closePane", "closeTab", "undoClose"]));
         let edit = self.plain_items(&b, &["copy", "paste", "pasteHistory", "pasteOneLine", "pasteEscaped", "-", "copyMode", "commandHistory", "-",
             "selectAll", "selectOutput", "-", "find", "findNext", "findPrev", "-", "autocomplete", "clearBuffer", "reset"]);
@@ -1755,6 +1980,7 @@ impl App {
         })
     }
     fn belt_facts(&self, tab: &crate::workspace::Tab) -> ui::BeltFacts {
+        let captured = shell(|s| s.captured.clone());
         let (jobs, commands, dirs, notes, profiles_raw) = shell(|s| {
             let jobs: Vec<(Sid, String, String)> = s.ws.sessions(&self.window).into_iter().map(|sid| {
                 let session = s.sessions.get(&sid).cloned().unwrap_or_default();
@@ -1775,6 +2001,7 @@ impl App {
         ui::BeltFacts {
             jobs,
             commands,
+            captured: captured.into_iter().map(|(sid, text)| (sid, text)).collect(),
             clipboard,
             dirs: dirs.into_iter().map(|d| if self.home.is_empty() { d } else { d.replacen(&self.home, "~", 1) }).collect(),
             profiles,
@@ -1823,7 +2050,7 @@ impl App {
             .map(|(sid, rect)| {
                 let session = shell(|s| s.sessions.get(sid).cloned()).unwrap_or_default();
                 let profile = self.profile(&session.profile);
-                ui::PaneFacts { sid: *sid, rect: *rect, dim: multi && !tab.zoom && *sid != tab.focus && profile["dimInactive"] == true, badge: session.badge }
+                ui::PaneFacts { sid: *sid, rect: *rect, dim: multi && !tab.zoom && *sid != tab.focus && profile["dimInactive"] == true, flash: now < session.flash_until, badge: session.badge }
             })
             .collect();
         let status = (focus_profile["statusBar"] == true).then(|| {
@@ -1886,3 +2113,7 @@ mod tests;
 #[cfg(test)]
 #[path = "prefs_tests.rs"]
 mod prefs_tests;
+
+#[cfg(test)]
+#[path = "events_tests.rs"]
+mod events_tests;

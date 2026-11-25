@@ -79,7 +79,7 @@ fn is_hex(v: &str) -> bool {
     v.len() == 7 && v.starts_with('#') && v[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 /// The name a profile shows: the factory one is translated (also in old settings that called it "Predeterminado").
-fn profile_caption(p: &Value) -> Value {
+pub(super) fn profile_caption(p: &Value) -> Value {
     match p["name"].as_str() {
         Some(n) if !n.is_empty() && !(p["id"] == "default" && n == "Predeterminado") => json!(n),
         _ => json!({"key":"terminal.profile.default"}),

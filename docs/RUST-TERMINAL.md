@@ -145,10 +145,25 @@ change. Until then the React window stays the live app.
      in the settings was ignored by the native window. 17 crate tests (81 in all).
      Transport added: job `fonts.list` ([] → [{family, ps, mono, color}], asked once), and the
      `settings` effect above (stage 6 must run it through the settings store).
-   - **4c (next):** what the JavaScript window did with the profile that is still missing:
-     the trigger engine (`state.js` `evalTriggers`: regex on new lines, the nine actions, the
-     captured-output section of the toolbelt) and saving/restoring window arrangements and the
-     live layout (`saveArrangement`, `restoreArrangement`; `workspace.rs` already rebuilds them).
+   - **4c (done): what a session and its profile do on their own.** `triggers.rs` is pure: the
+     trigger engine (`runTriggers` of `state.js`: a line fires the profile's triggers once while it
+     stays on screen; notify, bell, attention, send, capture, highlight, mark, title and stop;
+     `` in the parameter is a group; a regular expression Rust cannot compile never matches, so
+     look-around is not supported) and the automatic profile rules (`autoProfile`: path, `user@host`,
+     `host`, `user@`, `user@host:/path`, `*` and `**`, the most specific rule wins and the profile
+     before the rules comes back when none fits). The window now follows the events the JavaScript
+     one did: the visual bell (a flash over the pane, off for a silenced profile), `notify`,
+     `attention` (also brings the window forward), `profile` (by name or id), `copy` (the clipboard
+     goes into the history), `host`, the badge a program set (kept when a profile has none), 
+     "Alert when the command finishes" (menu item and action; it says so once, with the command and
+     its code), and the captured-output section of the toolbelt. A trigger scans the screen only
+     when the profile has an enabled trigger, one scan at a time per session. Toasts go to the
+     window that owns the session. 19 more crate tests (100 in all). Transport added: jobs
+     `term.screenText` ([sid] → the visible screen as text, `term.text(sid, "screen")`) and
+     `term.highlight` ([sid, text, fg, bg]). **Not ported here, on purpose:** saving/restoring
+     window arrangements and the live layout. They store each window's frame, which only the
+     window manager knows: stage 6 gives the transport a `windows.frames` call and a frame for
+     `windows.open` (`workspace.rs` already rebuilds the layouts).
 5. **tmux.** The control-mode client of `tmux.js` (`tmux -CC`).
 6. **Registration and removal.** `manifest.rs`, `runtime/native_terminal_services.js`
    (the `term.*` calls Rust names, session lifetime in the window lease), removal of the
@@ -156,8 +171,8 @@ change. Until then the React window stays the live app.
 
 ## Resume here
 
-Stages 1–4b are committed on `main` (not pushed; the owner pushes when everything is done). The
-next step is 4c (trigger engine, arrangements), then 5 and 6. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
+Stages 1–4c are committed on `main` (not pushed; the owner pushes when everything is done). The
+next step is 5 (tmux), then 6 (which also takes arrangements and the live layout). Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
 axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
 of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
 Co-Authored-By trailer.

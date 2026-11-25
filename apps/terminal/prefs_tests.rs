@@ -3,18 +3,21 @@
 //! shell feeds back, configures every session again and captures key combinations.
 use super::*;
 
-struct Service {
+pub(super) struct Service {
     token: u64,
     ready: std::collections::BTreeMap<u64, Value>,
-    calls: Vec<(String, Value)>,
+    pub(super) calls: Vec<(String, Value)>,
     next_sid: i64,
     pending: Option<Value>,
-    fx: Vec<Value>,
-    tree: Value,
+    pub(super) fx: Vec<Value>,
+    pub(super) tree: Value,
+    pub(super) events: Vec<Value>,
+    pub(super) screen: HashMap<i64, String>,
+    pub(super) clip: String,
     /// What the shell holds as `settings.terminal`: every `settings` effect replaces it.
-    settings: Value,
-    home: String,
-    fonts: Value,
+    pub(super) settings: Value,
+    pub(super) home: String,
+    pub(super) fonts: Value,
 }
 impl Service {
     fn new() -> Self {
@@ -26,6 +29,9 @@ impl Service {
             pending: None,
             fx: vec![],
             tree: Value::Null,
+            events: vec![],
+            screen: HashMap::new(),
+            clip: String::new(),
             settings: json!({}),
             home: "/home/test".into(),
             fonts: json!([]),
@@ -40,7 +46,9 @@ impl Service {
             "term.infos" => json!(args[0].as_array().unwrap().iter().filter_map(|s| {
                 Some(json!({"sid":s.as_i64()?,"info":{"process":"","busy":false,"cols":80,"rows":24,"cwd":"/home/test","shell":"bash"}}))
             }).collect::<Vec<_>>()),
-            "term.events" => json!([]),
+            "term.events" => Value::Array(std::mem::take(&mut self.events)),
+            "term.screenText" => json!(self.screen.get(&args[0].as_i64().unwrap_or(0)).cloned().unwrap_or_default()),
+            "clipboard.read" => json!({"text":self.clip}),
             "fonts.list" => self.fonts.clone(),
             _ => Value::Null,
         }
@@ -59,7 +67,7 @@ impl Service {
             self.fx.push(fx.clone());
         }
     }
-    fn count(&self, method: &str) -> usize {
+    pub(super) fn count(&self, method: &str) -> usize {
         self.calls.iter().filter(|(m, _)| m == method).count()
     }
     fn sync_input(&self) -> Value {
@@ -72,19 +80,19 @@ impl Service {
         let reply = app.request_at(&self.sync_input(), now);
         self.absorb(&reply);
     }
-    fn send(&mut self, app: &mut App, now: i64, input: Value) -> Value {
+    pub(super) fn send(&mut self, app: &mut App, now: i64, input: Value) -> Value {
         let reply = app.request_at(&input, now);
         self.absorb(&reply);
         self.resync(app, now);
         reply
     }
-    fn key(&mut self, app: &mut App, now: i64, key: &str, flags: i32, code: i32) -> Option<Value> {
+    pub(super) fn key(&mut self, app: &mut App, now: i64, key: &str, flags: i32, code: i32) -> Option<Value> {
         let reply = app.key_at(key, "", flags, &KeyFacts { code, base: "", repeat: false, shift: false }, now)?;
         self.absorb(&reply);
         self.resync(app, now);
         Some(reply)
     }
-    fn drive(&mut self, app: &mut App, now: &mut i64) {
+    pub(super) fn drive(&mut self, app: &mut App, now: &mut i64) {
         for _ in 0..200 {
             *now += 60;
             let reply = match self.pending.take() {
@@ -134,29 +142,33 @@ impl Service {
         panic!("the window never settled");
     }
     /// The saved profile (the first, unless the settings say otherwise).
-    fn profile(&self, index: usize) -> Value {
+    pub(super) fn profile(&self, index: usize) -> Value {
         self.settings["profiles"][index].clone()
     }
 }
-fn start() -> (App, i64, Service) {
+pub(super) fn start() -> (App, i64, Service) {
+    start_with(json!({}))
+}
+pub(super) fn start_with(settings: Value) -> (App, i64, Service) {
     let mut app = App::default();
     let mut service = Service::new();
+    service.settings = settings;
     let reply = app.request_at(&service.sync_input(), 1000);
     service.absorb(&reply);
     let mut now = 1000;
     service.drive(&mut app, &mut now);
     (app, now, service)
 }
-fn opened() -> (App, i64, Service) {
+pub(super) fn opened() -> (App, i64, Service) {
     let (mut app, mut now, mut service) = start();
     service.send(&mut app, now, json!({"cmd":"do","key":"preferences"}));
     service.drive(&mut app, &mut now);
     (app, now, service)
 }
-fn cmd(service: &mut Service, app: &mut App, now: i64, name: &str, key: Value) -> Value {
+pub(super) fn cmd(service: &mut Service, app: &mut App, now: i64, name: &str, key: Value) -> Value {
     service.send(app, now, json!({"cmd":name,"key":key}))
 }
-fn tree(service: &Service) -> String {
+pub(super) fn tree(service: &Service) -> String {
     service.tree.to_string()
 }
 fn temp_home(name: &str) -> String {
