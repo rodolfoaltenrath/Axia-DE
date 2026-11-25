@@ -18,6 +18,8 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 mod ui;
 #[path = "triggers.rs"]
 mod triggers;
+#[path = "restore.rs"]
+mod restore;
 #[path = "tmux.rs"]
 mod tmux;
 #[path = "tmux_window.rs"]
@@ -157,6 +159,8 @@ struct Shell {
     gateways: HashMap<Sid, tmux_window::Gateway>,
     /// Sessions still in control mode when the first window started are taken up once.
     recovered: bool,
+    /// Surviving shells and the live layout.
+    live: restore::LiveState,
     ws: Workspace,
     sessions: HashMap<Sid, Session>,
     /// Closed panes waiting out their undo window: (session, closes at).
@@ -212,6 +216,10 @@ enum Tag {
     Fonts,
     Screen { sid: Sid },
     TmuxPane { gw: Sid, pane: i64 },
+    Frames { then: restore::FramesThen },
+    Revive { index: usize },
+    LiveList,
+    LiveInfos,
     TmuxSize { gw: Sid, sid: Sid },
     OscCopy { sid: Sid },
 }
@@ -251,6 +259,9 @@ pub struct App {
     first_typed: Option<String>,
     slide: Option<prefs::Slide>,
     reconfig: bool,
+    revive: Option<restore::Revive>,
+    /// The arguments the window started with (a later sync may bring others).
+    boot_args: Value,
 }
 impl Default for App {
     fn default() -> Self {
@@ -285,6 +296,8 @@ impl Default for App {
             first_typed: None,
             slide: None,
             reconfig: false,
+            revive: None,
+            boot_args: Value::Null,
         }
     }
 }
@@ -1083,6 +1096,22 @@ impl App {
                     self.on_event(&event);
                 }
             }
+            Tag::Frames { then } => {
+                let frames = done.result.unwrap_or(Value::Null);
+                self.frames_ready(then, &frames, clock::now());
+            }
+            Tag::Revive { index } => {
+                let sid = done.result.ok().and_then(|v| v.as_i64());
+                self.revive_session(index, sid);
+            }
+            Tag::LiveList => {
+                let sids: Vec<Sid> = done.result.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default().iter().filter_map(Value::as_i64).collect();
+                self.live_listed(sids);
+            }
+            Tag::LiveInfos => {
+                let infos = done.result.unwrap_or(Value::Null);
+                self.live_infos(&infos);
+            }
             Tag::TmuxPane { gw, pane } => {
                 let sid = done.result.ok().and_then(|v| v.as_i64());
                 self.tmux_pane_ready(gw, pane, sid);
@@ -1116,6 +1145,7 @@ impl App {
     }
     fn timers(&mut self, now: i64) {
         self.tmux_timers(now);
+        self.live_tick(now);
         self.expire_closed(now);
         self.ui(|u| u.toasts.retain(|t| t.until > now));
         // the find bar follows the focused pane
@@ -1287,7 +1317,9 @@ impl App {
                     self.ask_then(&sids, "tab", Confirm::Tab(id), now);
                 }
             }
-            "newWindow" => self.jobs.enqueue(Tag::Quiet, "windows.open", json!(["terminal", {"new":true}])),
+            "newWindow" => self.new_window(),
+            "saveArrangement" => self.save_arrangement(),
+            "restoreArrangement" => self.restore_arrangement(),
             "logSession" => {
                 if let Some(sid) = sid {
                     let on = !shell(|s| s.sessions.get(&sid).is_some_and(|x| x.info["logging"] == true));
@@ -1904,17 +1936,21 @@ impl App {
         }
         let known = shell(|s| s.ws.window(&self.window).is_some());
         self.last_args = v["args"].clone();
+        self.boot_args = v["args"].clone();
         if !known && v["args"]["tmuxGateway"].as_i64().is_some_and(|gw| self.tmux_adopt(gw)) {
             // the tabs tmux windows became are this window's
             self.configure_window();
             self.toast(json!({"key":"terminal.tmux.opened"}), now);
+        } else if !known && v["args"]["liveAdopt"] == true && self.live_adopt() {
+            // shells that survived: this window shows the tabs prepared for it
+            self.configure_window();
+        } else if !known && v["args"]["arrangement"].is_object() {
+            self.revive_begin(v["args"]["arrangement"].clone());
+        } else if !known && !shell(|s| s.live.checked) {
+            // the first window of this run: shells left from before come back first
+            self.live_begin();
         } else if !known {
-            let id = self.default_profile();
-            let cwd = v["args"]["cwd"].as_str().filter(|d| d.starts_with('/')).map(str::to_owned);
-            // another app can leave an ssh or sftp line typed, never run
-            let typed = v["args"]["typed"].as_str().filter(|t| ssh_line(t)).map(str::to_owned);
-            self.first_typed = typed;
-            self.create(Purpose::Window, &id, cwd);
+            self.start_fresh();
         } else {
             self.configure_window();
         }
@@ -1963,7 +1999,7 @@ impl App {
         shell_menu.push(self.action_item(&b, "composer", Some(composer), false));
         let alert = shell(|s| s.ws.current_sid(&self.window).and_then(|sid| s.sessions.get(&sid)).is_some_and(|x| x.alert));
         shell_menu.push(self.action_item(&b, "alertNextMark", Some(alert), false));
-        shell_menu.extend(self.plain_items(&b, &["-", "logSession", "exportText", "-", "closePane", "closeTab", "undoClose"]));
+        shell_menu.extend(self.plain_items(&b, &["-", "logSession", "exportText", "-", "saveArrangement", "restoreArrangement", "-", "closePane", "closeTab", "undoClose"]));
         let edit = self.plain_items(&b, &["copy", "paste", "pasteHistory", "pasteOneLine", "pasteEscaped", "-", "copyMode", "commandHistory", "-",
             "selectAll", "selectOutput", "-", "find", "findNext", "findPrev", "-", "autocomplete", "clearBuffer", "reset"]);
         let mut view = self.plain_items(&b, &["zoomIn", "zoomOut", "zoomReset", "-"]);
@@ -2204,3 +2240,7 @@ mod events_tests;
 #[cfg(test)]
 #[path = "tmux_tests.rs"]
 mod tmux_tests;
+
+#[cfg(test)]
+#[path = "restore_tests.rs"]
+mod restore_tests;

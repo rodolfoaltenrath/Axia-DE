@@ -10,6 +10,6 @@ pub fn manifest() -> serde_json::Value {
     "asyncServices":["term.create","term.configure","term.close","term.infos","term.events","term.copy","term.selectOutput",
         "term.search","term.searchMove","term.logicalText","term.setMatches","term.cursorWord","term.words","term.replay",
         "term.copyKey","term.urlAt","term.log","term.export","term.screenText","term.highlight","term.tmuxPane",
-        "clipboard.read","clipboard.history","clipboard.remember","fonts.list","windows.open","windows.menus","windows.guard"],
+        "clipboard.read","clipboard.history","clipboard.remember","fonts.list","windows.open","windows.menus","windows.guard","windows.frames","term.list","term.ackRestored"],
     "calls":{"nativeAsync":["start"]},"reads":{"nativeAsync":["take"]}})
 }

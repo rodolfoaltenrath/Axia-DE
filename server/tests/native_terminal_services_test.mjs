@@ -28,6 +28,7 @@ const guards = new Map();
 const focused = [];
 const wm = {
   setCloseGuard: (id, fn) => { guards.set(id, fn); return () => guards.delete(id); },
+  get: id => (id === 'terminal' ? { x: 1, y: 2, w: 3, h: 4, minimized: false } : undefined),
   focus: id => focused.push(id), toggleMaximize: id => calls.push(['maximize', id]),
 };
 const shortcuts = [];
@@ -90,6 +91,9 @@ assert.equal(await call(2, 'term.selectOutput', [41]), 'copied');
 assert.deepEqual(await call(2, 'clipboard.history', []), ['a', 'b'], 'only text entries');
 await call(2, 'clipboard.remember', ['kept']);
 assert.deepEqual(remembered, ['kept']);
+
+assert.deepEqual(await call(2, 'windows.frames', [['terminal', 'nowhere']]), { terminal: { x: 1, y: 2, w: 3, h: 4 }, nowhere: null }, 'frames of the windows the manager has');
+assert.deepEqual(await call(2, 'term.list', []), [], 'no shells listed means an empty list');
 
 // the close guard: free while idle, otherwise it refuses and asks the window through its events
 await call(2, 'windows.guard', ['terminal', false]);

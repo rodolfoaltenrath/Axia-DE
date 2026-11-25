@@ -192,15 +192,21 @@ the PTY and the mouse/search/selection engine are C (`server/src/term`). Every f
    `closeRequested` from the close guard, `windowGone`). A window that starts is told which windows left
    before it (`__nativeClosed`), so a reused id does not find old tabs. The drop-down window (F12 or ❖`) is
    registered there. Tests: the Node transport test `native_terminal_services_test.mjs`, the crate
-   tests and the registry tests. **Not done yet:** saving and restoring window arrangements and the live
-   layout (they need each window's frame: a `windows.frames` call and `windows.open` with a frame;
-   `workspace.rs` already rebuilds the trees), the GPU runtime test with a real shell
-   (`terminal_runtime`), and sizing a new window from the profile's columns and rows.
+   tests and the registry tests. **Also in stage 6 (`restore.rs`):** saved arrangements ("Save Window Arrangement" and
+   "Restore" in the Shell menu: each window's frame, tabs, trees, folders and profiles, saved as
+   `terminal.arrangement`; a restored window starts with `args.arrangement` and makes one shell per
+   pane); the live layout (saved as `terminal.live` every few seconds, only when it changes; the first
+   window of a run asks `term.list`, puts the shells that are still alive back where they were by their
+   guardian key, gives the ones the layout did not mention a tab each, and opens the other saved windows
+   with `args.liveAdopt`); and the frame of a new window from the default profile's columns and rows.
+   Transport: `windows.frames` ([ids] → {id: {x,y,w,h} or null}), `term.list`, `term.ackRestored`;
+   `windows.open` takes `frame` and `args`. 129 crate tests. **Not done yet:** the GPU runtime test with
+   a real shell (`terminal_runtime`) and the first look at the window on screen.
 
 ## Resume here
 
 Stages 1–6 are committed on `main` (not pushed; the owner pushes when everything is done). The
-next steps are the arrangements and the live layout, and the GPU test with a real shell. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
+next step is the GPU test with a real shell. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
 axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
 of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
 Co-Authored-By trailer.

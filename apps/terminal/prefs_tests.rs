@@ -14,6 +14,8 @@ pub(super) struct Service {
     pub(super) events: Vec<Value>,
     pub(super) screen: HashMap<i64, String>,
     pub(super) clip: String,
+    pub(super) listed: Vec<i64>,
+    pub(super) keys: HashMap<i64, String>,
     /// What the shell holds as `settings.terminal`: every `settings` effect replaces it.
     pub(super) settings: Value,
     pub(super) home: String,
@@ -32,10 +34,23 @@ impl Service {
             events: vec![],
             screen: HashMap::new(),
             clip: String::new(),
+            listed: vec![],
+            keys: HashMap::new(),
             settings: json!({}),
             home: "/home/test".into(),
             fonts: json!([]),
         }
+    }
+    /// A service with shells left over from before: (session, guardian key).
+    pub(super) fn new_for_live(settings: Value, shells: &[(i64, &str)]) -> Self {
+        let mut service = Self::new();
+        service.settings = settings;
+        service.listed = shells.iter().map(|(sid, _)| *sid).collect();
+        service.keys = shells.iter().map(|(sid, key)| (*sid, (*key).to_owned())).collect();
+        service
+    }
+    pub(super) fn boot_input(&self) -> Value {
+        self.sync_input()
     }
     fn answer(&mut self, method: &str, args: &Value) -> Value {
         match method {
@@ -44,8 +59,12 @@ impl Service {
                 json!(self.next_sid)
             }
             "term.infos" => json!(args[0].as_array().unwrap().iter().filter_map(|s| {
-                Some(json!({"sid":s.as_i64()?,"info":{"process":"","busy":false,"cols":80,"rows":24,"cwd":"/home/test","shell":"bash"}}))
+                let sid = s.as_i64()?;
+                Some(json!({"sid":sid,"info":{"process":"","busy":false,"cols":80,"rows":24,"cwd":"/home/test","shell":"bash",
+                    "cellWidth":8,"cellHeight":16,"key":self.keys.get(&sid).cloned().unwrap_or_default()}}))
             }).collect::<Vec<_>>()),
+            "term.list" => json!(self.listed),
+            "windows.frames" => Value::Object(args[0].as_array().unwrap().iter().filter_map(|id| Some((id.as_str()?.to_owned(), json!({"x":10,"y":20,"w":800,"h":500})))).collect()),
             "term.events" => Value::Array(std::mem::take(&mut self.events)),
             "term.screenText" => json!(self.screen.get(&args[0].as_i64().unwrap_or(0)).cloned().unwrap_or_default()),
             "clipboard.read" => json!({"text":self.clip}),
@@ -482,7 +501,7 @@ fn the_import_reads_only_inside_the_home_folder_and_reports_what_it_cannot_read(
     service.send(&mut app, now, json!({"cmd":"pfImportPath","value":"~/Downloads/junk.json"}));
     cmd(&mut service, &mut app, now, "pfImportLoad", json!(null));
     assert!(tree(&service).contains("terminal.prefs.import.failed"), "a file that is not a profile export is an error, not a crash");
-    assert_eq!(service.settings, json!({}), "nothing was saved");
+    assert_eq!(service.settings["profiles"].as_array().map(Vec::len), Some(1), "no profile was added");
     let _ = std::fs::remove_dir_all(&home);
 }
 

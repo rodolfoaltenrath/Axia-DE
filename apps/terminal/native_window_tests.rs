@@ -178,7 +178,7 @@ fn sessions(app: &App) -> Vec<Sid> {
 fn a_new_window_creates_a_configured_session_and_shows_it_in_a_pane() {
     let (app, _, mut service) = start();
     assert_eq!(sessions(&app), [101]);
-    assert_eq!(service.calls[0].0, "term.create");
+    assert!(service.calls.iter().any(|(m, _)| m == "term.create"), "the first window makes its shell");
     assert_eq!(service.count("term.configure"), 1, "the session is configured with its profile colors");
     let config = &service.calls.iter().find(|(m, _)| m == "term.configure").unwrap().1;
     assert_eq!(config[0], 101);

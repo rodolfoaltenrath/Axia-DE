@@ -66,6 +66,10 @@ export function terminalRuntime({ term, clipboard, clipboardHistory, wm, windows
       return sid;
     } },
     'term.configure': { run([sid, config]) { term.configure(sid, config); return null; } },
+    'term.list': { run: () => term.list() || [] },
+    'term.ackRestored': { run() { term.ackRestored(); return null; } },
+    // where the windows are, for what Rust saves and for the size of a new one
+    'windows.frames': { run: ([ids]) => Object.fromEntries((ids || []).map(id => { const w = wm.get(id); return [id, w ? { x: w.x, y: w.y, w: w.w, h: w.h } : null]; })) },
     'term.close': { run([sid]) { owners.delete(sid); term.close(sid); return null; } },
     'term.infos': { run: ([sids]) => (sids || []).map(sid => ({ sid, info: term.info(sid) || null })) },
     'term.events': { run([window], owner) {
