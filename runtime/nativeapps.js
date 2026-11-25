@@ -48,6 +48,10 @@ import { captureApp } from './native_capture.js';
 import { vaultServices } from './native_vault_services.js';
 import { pdfServices } from './native_pdf_services.js';
 import { pdf } from '../sdk/pdf.js';
+import { terminalRuntime } from './native_terminal_services.js';
+import { term } from '../sdk/terminal.js';
+import { clipboardHistory } from '../sdk/clipboard.js';
+import { addShortcuts } from '../sdk/shortcuts.js';
 import { vaultAvailable, vaultRequest, onVaultEvent } from '../sdk/vault.js';
 import { requestPermission } from '../sdk/privacy.js';
 import { clipboard } from '../sdk/clipboard.js';
@@ -68,7 +72,10 @@ function stopWatch(id) {
   watches.delete(id); stop();
   if (--followers === 0) logs.follow(false);
 }
+const terminal = terminalRuntime({ term, clipboard, clipboardHistory, wm, windows, workArea, settings, addShortcuts,
+  events: owner => bridge.events(owner) });
 const methods = {
+  ...terminal.methods,
   ...diskServices({ disks, admin, fs, systemInfo, smart, smartSummaries, events: owner => bridge.events(owner) }),
   ...vaultServices({ vaultRequest, onVaultEvent, requestPermission, clipboard, events: owner => bridge.events(owner) }),
   ...pdfServices({ pdf, releaseImage, fs, print, events: owner => bridge.events(owner) }),
@@ -146,6 +153,8 @@ function NativeAsyncMount({ manifest, args, window }) {
   // WM IDs are strings ("fonts#2"). Rust receives an opaque numeric lease;
   // each mounted window gets a fresh one even when the WM reuses its name.
   const [owner] = useState(() => ++ownerSequence);
+  // windows that left the window manager before this one started: their tabs must not come back
+  const [closedWindows] = useState(() => (manifest.id === 'terminal' ? terminal.takeClosed() : []));
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => {
     bridge.open(owner, manifest.asyncServices);
@@ -156,6 +165,8 @@ function NativeAsyncMount({ manifest, args, window }) {
     ...(manifest.id === 'sysinfo' ? { __nativeBluetooth: bt } : {}),
     ...(manifest.id === 'disks' ? { __nativeDisks: diskList } : {}),
     ...(manifest.id === 'passwords' ? { available: vaultAvailable(), region: language?.region || '' } : {}),
-    ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}) } }),
+    ...(manifest.windowState ? { __nativeState: nativeWindowStates.get(window) || {} } : {}),
+    ...(manifest.id === 'terminal' ? { __nativeClosed: closedWindows } : {}) },
+    onEffect: manifest.id === 'terminal' ? terminal.effect : undefined }),
     manifest.asyncServices.includes('files.pick') ? h(NativeFilePicker, { owner }) : null) : h(View, { style: { flex: 1 } });
 }

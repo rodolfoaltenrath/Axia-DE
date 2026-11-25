@@ -1,15 +1,10 @@
 # Terminal migration
 
-The Terminal app still has a React window (`apps/terminal/index.jsx`, `Chrome.jsx`,
-`Panes.jsx`, `Preferences.jsx`) over JavaScript state (`state.js`, `tmux.js`, `iterm.js`).
-Emulation, drawing, the PTY and the mouse/search/selection engine are C
-(`server/src/term`); profiles, key bindings and the bundled palettes are Rust
-(`model.rs`, `keys.rs`, `data.rs`, `key_data.rs`) behind the thin `profiles.js` and
-`keys.js` transports.
-
-The compiled-app policy test requires every file under `apps/terminal/` to be Rust, so
-the JSX, JS and `manifest.json` leave in the last stage, in one commit with the registry
-change. Until then the React window stays the live app.
+The Terminal is a compiled app: a native window (`native.rs`, `native_ui.rs`, `prefs*.rs`, `tmux*.rs`,
+`triggers.rs`) over the workspace model (`workspace.rs`), with profiles, key bindings, palettes and the
+iTerm2 importer in Rust (`model.rs`, `keys.rs`, `data.rs`, `key_data.rs`, `iterm.rs`). Emulation, drawing,
+the PTY and the mouse/search/selection engine are C (`server/src/term`). Every file under
+`apps/terminal/` is Rust (the compiled-app policy test); the JSX, JS and `manifest.json` left in stage 6.
 
 ## Stages
 
@@ -184,14 +179,28 @@ change. Until then the React window stays the live app.
    an event read by another window is now closed with `{kind:"closeWindow",id}`. 21 more crate
    tests (121 in all). The server's line batches end with a newline: that is not a blank line, which
    the JavaScript counted at the end of a block that crossed two batches.
-6. **Registration and removal.** `manifest.rs`, `runtime/native_terminal_services.js`
-   (the `term.*` calls Rust names, session lifetime in the window lease), removal of the
-   JSX/JS, the real-shell runtime test.
+6. **Registration and removal (done, with what is left below).** `manifest.rs` (a Dock menu with New
+   Window and New Tab, and the transport services), the entry in `rust/native_apps.rs` and in the
+   native-view registry, and `runtime/native_terminal_services.js`. That file is transport only. Its jobs
+   are the `term.*`, `clipboard.*`, `windows.guard` and `fonts.list` calls Rust names. Its effects are the
+   input Rust sends to sessions at once (`kind:"term"`: write, key, paste, mouse, wheel, focus, scroll,
+   clear, select, mark, copyMode, feed, tmuxReady, tmuxCommand), plus `focusWindow` and `toggleMaximize`.
+   Sessions are **not** tied to the window lease (a minimized window is unmounted and its shells go on):
+   a session is made for a window (`term.create [options, window]`) and closes when that window leaves
+   the window manager, or when Rust closes it. Session events are kept (4000 at most) while no window is
+   mounted and come out through `term.events [window]` together with the window's own (menu clicks,
+   `closeRequested` from the close guard, `windowGone`). A window that starts is told which windows left
+   before it (`__nativeClosed`), so a reused id does not find old tabs. The drop-down window (F12 or ❖`) is
+   registered there. Tests: the Node transport test `native_terminal_services_test.mjs`, the crate
+   tests and the registry tests. **Not done yet:** saving and restoring window arrangements and the live
+   layout (they need each window's frame: a `windows.frames` call and `windows.open` with a frame;
+   `workspace.rs` already rebuilds the trees), the GPU runtime test with a real shell
+   (`terminal_runtime`), and sizing a new window from the profile's columns and rows.
 
 ## Resume here
 
-Stages 1–5 are committed on `main` (not pushed; the owner pushes when everything is done). The
-next step is 6 (registration and removal, which also takes arrangements and the live layout). Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
+Stages 1–6 are committed on `main` (not pushed; the owner pushes when everything is done). The
+next steps are the arrangements and the live layout, and the GPU test with a real shell. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
 axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
 of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
 Co-Authored-By trailer.

@@ -172,6 +172,7 @@ EOF
     else skip "netmodel-test" "node"; fi
     if have node && have cargo && [ -d ../node_modules/esbuild ]; then
         run "native-pdf-services (document sessions, raster release and streamed search)" node tests/native_pdf_services_test.mjs
+        run "native-terminal-services (events, session lifetime, close guard and effects)" node tests/native_terminal_services_test.mjs
         run "native-async-test (compiled app service ownership)" node tests/native_async_test.mjs
         run "native-view-facts-test (scoped subscriptions and React lifecycle)" node tests/native_view_facts_test.mjs
         run "native-async-mount-test (string WM IDs and window lifecycle)" node tests/native_async_mount_test.mjs

@@ -127,6 +127,7 @@ pub(crate) fn app(id: &str) -> Option<Box<dyn NativeApp>> {
         // runs in its own isolated process (js_nativeview_register_isolated); the shell only draws its icon
         crate::passwords_app::ID => Some(Box::new(crate::passwords_app::App::default())),
         crate::native_apps::pdf::ID => Some(Box::new(crate::pdf_app::App::default())),
+        crate::native_apps::terminal::ID => Some(Box::new(crate::terminal_model::App::default())),
         "shell:tree" => Some(Box::new(tree::Tree::default())),
         "shell:launcher" => Some(Box::new(launcher::LauncherView::default())),
         "shell:titlebar" => Some(Box::new(titlebar::TitleBar::default())),

@@ -226,7 +226,7 @@ impl App {
             })
         });
         if open {
-            self.jobs.enqueue(Tag::Quiet, "windows.open", json!(["terminal", {"new":true,"tmuxGateway":gw}]));
+            self.jobs.enqueue(Tag::Quiet, "windows.open", json!(["terminal", {"new":true,"args":{"tmuxGateway":gw}}]));
         }
     }
     /// A window just started with `tmuxGateway`: it takes the tabs built for it.
@@ -338,6 +338,18 @@ impl App {
     pub(super) fn tmux_window_closing(&mut self) {
         let gateways: Vec<Sid> = shell(|s| s.gateways.iter().filter(|(_, g)| g.wid.as_deref() == Some(self.window.as_str())).map(|(gw, _)| *gw).collect());
         for gw in gateways {
+            self.tmux_detach(gw);
+        }
+    }
+    /// The Terminal window that showed tmux left the window manager: tmux is let go.
+    pub(super) fn tmux_window_gone(&mut self, wid: &str) {
+        let gateways: Vec<Sid> = shell(|s| s.gateways.iter().filter(|(_, g)| g.wid.as_deref() == Some(wid)).map(|(gw, _)| *gw).collect());
+        for gw in gateways {
+            shell(|s| {
+                if let Some(g) = s.gateways.get_mut(&gw) {
+                    g.wid = None;
+                }
+            });
             self.tmux_detach(gw);
         }
     }

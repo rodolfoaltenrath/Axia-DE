@@ -215,7 +215,8 @@ fn real_compiled_app_widgets_and_effects() {
             "calendar",
             "screenshots",
             "passwords",
-            "pdf"
+            "pdf",
+            "terminal"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);

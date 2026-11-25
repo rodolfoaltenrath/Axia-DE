@@ -7,5 +7,8 @@ pub mod workspace;
 #[path = "../../../apps/terminal/native.rs"]
 mod native;
 pub use native::App;
+#[path = "../../../apps/terminal/manifest.rs"]
+pub mod manifest;
+pub use manifest::ID;
 #[path = "../../../apps/terminal/iterm.rs"]
 pub mod iterm;

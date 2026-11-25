@@ -56,7 +56,7 @@ fn the_gateway_asks_tmux_for_its_windows_and_makes_a_session_per_pane() {
     assert_eq!(asked, [json!([101, 1]), json!([101, 2])], "one session for each pane tmux has");
     assert!(sent(&service, "101:capture-pane -p -e -J -t %1 -S -2000") && sent(&service, "101:capture-pane -p -e -J -t %2 -S -2000"), "{:?}", commands(&service));
     let opened = service.calls.iter().find(|(m, _)| m == "windows.open").map(|(_, a)| a.clone());
-    assert_eq!(opened, Some(json!(["terminal", {"new":true,"tmuxGateway":101}])), "the tmux windows get a Terminal window");
+    assert_eq!(opened, Some(json!(["terminal", {"new":true,"args":{"tmuxGateway":101}}])), "the tmux windows get a Terminal window");
     assert!(tree(&service).contains("terminal.tmux.connected"), "the gateway pane says it is connected");
 }
 

@@ -559,7 +559,7 @@ impl App {
         }
         options.insert("scrollback".into(), profile["scrollback"].clone());
         let profile = profile["id"].as_str().unwrap_or(profile_id).to_owned();
-        self.jobs.enqueue(Tag::Create { purpose, profile, wid: self.window.clone() }, "term.create", json!([Value::Object(options)]));
+        self.jobs.enqueue(Tag::Create { purpose, profile, wid: self.window.clone() }, "term.create", json!([Value::Object(options), self.window]));
     }
     fn configure(&mut self, sid: Sid) {
         let found = shell(|s| s.ws.find_session(sid).and_then(|(wid, _)| s.ws.window(wid).map(|w| (w.timestamps, w.font_delta))));
@@ -681,6 +681,12 @@ impl App {
             Some("action") => {
                 let action = &event["action"];
                 self.command(&json!({"cmd":action[0],"key":action[1]}), clock::now());
+                return;
+            }
+            Some("windowGone") => {
+                if let Some(id) = event["id"].as_str() {
+                    self.forget_window(id);
+                }
                 return;
             }
             Some("closeRequested") => {
@@ -806,6 +812,22 @@ impl App {
                 }
             }
         }
+    }
+    /// A window left the window manager: its tabs, sessions and what it showed go, and tmux is let go.
+    fn forget_window(&mut self, wid: &str) {
+        let sids = shell(|s| {
+            s.ui.remove(wid);
+            s.ws.drop_window(wid)
+        });
+        for sid in sids {
+            self.tmux_forget(sid);
+            shell(|s| {
+                s.sessions.remove(&sid);
+                s.closing.retain(|(c, _)| *c != sid);
+            });
+            self.jobs.enqueue(Tag::Quiet, "term.close", json!([sid]));
+        }
+        self.tmux_window_gone(wid);
     }
     /// The window a session lives in gets the toast (events arrive in whichever window polls).
     fn toast_for(&mut self, sid: Sid, text: Value, now: i64) {
@@ -1123,7 +1145,7 @@ impl App {
         if !self.events_pending && now >= self.events_due {
             self.events_pending = true;
             self.events_due = now + EVENTS_MS;
-            self.jobs.enqueue(Tag::Events, "term.events", json!([]));
+            self.jobs.enqueue(Tag::Events, "term.events", json!([self.window]));
         }
     }
 
@@ -1278,6 +1300,7 @@ impl App {
                 }
             }
             "preferences" => self.prefs_open(),
+            "fullscreen" => self.effects.push(json!({"kind":"toggleMaximize","id":self.window})),
             "alertNextMark" => {
                 if let Some(sid) = sid {
                     let on = shell(|s| s.sessions.get_mut(&sid).map(|x| {
@@ -1876,6 +1899,9 @@ impl App {
         self.home = v["context"]["home"].as_str().map(str::to_owned).or_else(|| std::env::var("HOME").ok()).unwrap_or_default();
         self.info_due = now + INFO_MS;
         self.events_due = now;
+        for id in v["args"]["__nativeClosed"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            self.forget_window(id);
+        }
         let known = shell(|s| s.ws.window(&self.window).is_some());
         self.last_args = v["args"].clone();
         if !known && v["args"]["tmuxGateway"].as_i64().is_some_and(|gw| self.tmux_adopt(gw)) {
@@ -1942,6 +1968,7 @@ impl App {
             "selectAll", "selectOutput", "-", "find", "findNext", "findPrev", "-", "autocomplete", "clearBuffer", "reset"]);
         let mut view = self.plain_items(&b, &["zoomIn", "zoomOut", "zoomReset", "-"]);
         view.push(self.action_item(&b, "maximizePane", Some(zoomed), !multi));
+        view.push(self.action_item(&b, "fullscreen", None, false));
         view.push(self.action_item(&b, "equalize", None, !multi));
         view.push(self.action_item(&b, "paneToTab", None, !multi));
         view.extend(self.plain_items(&b, &["-", "instantReplay", "prevMark", "nextMark", "setMark", "-"]));

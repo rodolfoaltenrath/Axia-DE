@@ -55,9 +55,11 @@ const stubs={
   'native_system_services.js':`export const systemServices=()=>({});`,
   'native_capture.js':`export const captureApp=app=>app;`,
   'pdf.js':`export const pdf={open:async()=>null};`,
+  'terminal.js':`export const term={onAny(){}};`,
+  'shortcuts.js':`export const addShortcuts=()=>{};`,
   'vault.js':`export const vaultAvailable=()=>false,vaultRequest=()=>null,onVaultEvent=()=>()=>{};`,
   'privacy.js':`export const requestPermission=()=>false;`,
-  'clipboard.js':`export const clipboard={set(){}};`,
+  'clipboard.js':`export const clipboard={set(){}};export const clipboardHistory={get:()=>[]};`,
   'i18n.js':`export const locale={get:()=>({region:'BR'}),subscribe:()=>()=>{}};`,
 };
 const result=await build({stdin:{resolveDir:root,contents:`
@@ -77,7 +79,7 @@ const result=await build({stdin:{resolveDir:root,contents:`
     b.onResolve({filter:/^@lordos\/sdk$/},()=>({path:'passwords-sdk',namespace:'fake-sdk'}));
     b.onResolve({filter:/native_system_services\.js$/},()=>({path:'native_system_services.js',namespace:'fake-sdk'}));
     b.onResolve({filter:/native_capture\.js$/},()=>({path:'native_capture.js',namespace:'fake-sdk'}));
-    b.onResolve({filter:/sdk\/(disks\.js|smart\.js|system\.js|codesig\.js|admin\.js|power\.jsx|hardware\.jsx|apps\.js|packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows\.js|pdf\.js|vault\.js|privacy\.js|clipboard\.js|i18n\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
+    b.onResolve({filter:/sdk\/(disks\.js|smart\.js|system\.js|codesig\.js|admin\.js|power\.jsx|hardware\.jsx|apps\.js|packages\.js|mail\.js|rustfiles\.js|widgets\.js|ime\.js|textfocus\.js|nativeapps\.js|nativeview\.js|components\.jsx|logs\.js|fs\.js|doc\.js|print\.js|media\.js|sound\.js|settings\.js|backup\.js|windows.js|pdf.js|terminal.js|shortcuts.js|vault\.js|privacy\.js|clipboard\.js|i18n\.js)$/},a=>({path:path.basename(a.path),namespace:'fake-sdk'}));
     b.onLoad({filter:/.*/,namespace:'fake-sdk'},a=>({contents:stubs[a.path],resolveDir:root,loader:'js'}));
   },
 }]});
