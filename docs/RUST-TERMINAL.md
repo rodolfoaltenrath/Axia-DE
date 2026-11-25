@@ -167,7 +167,7 @@ change. Until then the React window stays the live app.
 5. **tmux (done).** The control-mode client of `tmux.js` (`tmux -CC`). `tmux.rs` is the pure part:
    the protocol (`%begin`/`%end` blocks paired with the commands in the order they went out, the
    notifications), tmux's layout strings and their translation into the binary pane tree of a tab
-   (a split is worth the share of its size, 10202f%–90202f%), and the size to tell tmux. `tmux_window.rs`
+   (a split is worth the share of its size, 10%–90%), and the size to tell tmux. `tmux_window.rs`
    is the window's side: the session where `tmux -CC` runs is the gateway (its pane shows
    "tmux connected" and takes no keys; Esc detaches, shortcuts still run); each tmux window is a
    tab of a Terminal window of its own, opened with `windows.open` `["terminal", {new, tmuxGateway}]` 
