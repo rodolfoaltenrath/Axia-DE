@@ -16,6 +16,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[path = "native_ui.rs"]
 mod ui;
+#[path = "prefs.rs"]
+mod prefs;
+#[path = "prefs_ui.rs"]
+mod prefs_ui;
 
 const INFO_MS: i64 = 1500;
 const EVENTS_MS: i64 = 250;
@@ -107,6 +111,7 @@ struct WinUi {
     find_focus: u64,
     dialog: Option<Dialog>,
     toasts: Vec<Toast>,
+    prefs: Option<prefs::Prefs>,
 }
 #[derive(Clone, Copy)]
 enum PasteMode {
@@ -120,6 +125,9 @@ struct Shell {
     commands: Vec<String>,
     notes: Vec<String>,
     ui: HashMap<String, WinUi>,
+    /// The installed fonts (family, PostScript name, monospaced, color), asked once for the Preferences.
+    fonts: Option<Vec<Value>>,
+    fonts_asked: bool,
     ws: Workspace,
     sessions: HashMap<Sid, Session>,
     /// Closed panes waiting out their undo window: (session, closes at).
@@ -155,6 +163,7 @@ enum Tag {
     Quiet,
     Infos,
     Events,
+    Fonts,
 }
 struct DividerDrag {
     tab: String,
@@ -190,6 +199,8 @@ pub struct App {
     guard: Option<bool>,
     last_args: Value,
     first_typed: Option<String>,
+    slide: Option<prefs::Slide>,
+    reconfig: bool,
 }
 impl Default for App {
     fn default() -> Self {
@@ -222,6 +233,8 @@ impl Default for App {
             guard: None,
             last_args: Value::Null,
             first_typed: None,
+            slide: None,
+            reconfig: false,
         }
     }
 }
@@ -249,7 +262,7 @@ impl NativeApp for App {
         self.booted.then_some(if self.jobs.busy() { 50. } else { 200. })
     }
     fn request(&mut self, input: &Value) -> Value {
-        if input["settings"]["terminal"].is_object() {
+        if input["settings"]["terminal"].is_object() && !self.reconfig {
             self.settings = input["settings"]["terminal"].clone();
         }
         self.request_at(input, clock::now())
@@ -822,6 +835,10 @@ impl App {
                     self.on_event(&event);
                 }
             }
+            Tag::Fonts => {
+                let list = done.result.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default();
+                shell(|s| s.fonts = Some(list));
+            }
             Tag::Quiet => {}
         }
     }
@@ -1004,6 +1021,7 @@ impl App {
                     self.jobs.enqueue(Tag::Export, "term.export", json!([sid]));
                 }
             }
+            "preferences" => self.prefs_open(),
             "copy" => self.copy(),
             "paste" => self.paste(PasteMode::Plain),
             "pasteOneLine" => self.paste(PasteMode::OneLine),
@@ -1145,6 +1163,9 @@ impl App {
     // ---- keyboard ----
 
     fn key_at(&mut self, key: &str, chr: &str, flags: i32, facts: &KeyFacts, now: i64) -> Option<Value> {
+        if self.prefs_open_now() {
+            return Some(self.prefs_key(key, flags, facts, now));
+        }
         let sid = shell(|s| s.ws.current_sid(&self.window))?;
         if let Some(dialog) = self.ui(|u| u.dialog.clone()) {
             // a dialog takes every key: Escape cancels, Enter confirms
@@ -1218,6 +1239,9 @@ impl App {
     // ---- requests ----
 
     fn command(&mut self, v: &Value, now: i64) {
+        if self.prefs_command(v["cmd"].as_str().unwrap_or(""), v) {
+            return;
+        }
         let key = &v["key"];
         match v["cmd"].as_str().unwrap_or("") {
             "tab" => {
@@ -1427,6 +1451,10 @@ impl App {
                 }
             }
             "pointerMove" => {
+                if self.slide.is_some() {
+                    self.slide_to(number(&v["x"], 0.));
+                    return;
+                }
                 if let Some(drag) = &self.drag {
                     let area = self.area();
                     let dir = shell(|s| {
@@ -1448,6 +1476,11 @@ impl App {
             }
             "dragEnd" => {
                 self.capture = Some(false);
+                if self.slide.is_some() {
+                    self.slide_to(number(&v["x"], 0.));
+                    self.slide = None;
+                    return;
+                }
                 if self.drag.take().is_some() {
                     return;
                 }
@@ -1492,6 +1525,7 @@ impl App {
         }
         self.timers(now);
         self.sync_menus();
+        self.pf_flush();
         self.sync_guard();
         let wanted = if self.focused { shell(|s| s.ws.current_sid(&self.window)) } else { None };
         if wanted != self.focus_sid {
@@ -1547,7 +1581,7 @@ impl App {
         self.width = number(&v["context"]["width"], self.width).max(1.);
         self.height = number(&v["context"]["height"], self.height).max(1.);
         self.focused = v["context"]["focused"].as_bool().unwrap_or(self.focused);
-        if v["settings"]["terminal"].is_object() {
+        if v["settings"]["terminal"].is_object() && !self.reconfig {
             self.settings = v["settings"]["terminal"].clone();
         }
         if self.booted {
@@ -1640,6 +1674,9 @@ impl App {
             };
             json!({"label":self.i18n.caption(&json!({"key":"terminal.menu.newTabWith","params":{"name":name}})),"action":["newTabWith", p["id"]]})
         }).collect();
+        let mut profiles = profiles;
+        profiles.push(json!("-"));
+        profiles.push(self.action_item(&b, "preferences", None, false));
         let top = |app: &mut App, key: &str| app.i18n.caption(&json!({"key":format!("terminal.menu.{key}")}));
         json!([
             {"label":top(self, "shell"),"items":shell_menu},
@@ -1694,6 +1731,7 @@ impl App {
             row("clearBuffer", false),
             row("find", false),
             ui::MenuRow::Separator,
+            row("preferences", false),
             row("closePane", false),
         ];
         Some(ui::MenuFacts { x: menu.x, y: menu.y, rows })
@@ -1829,11 +1867,22 @@ impl App {
                 u.find_focus,
             )
         });
-        ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast, panes, dividers: &dividers, status,
-            find, find_focus, dialog, toasts, popup, composer, belt, replay, copy_mode, menu: self.menu_facts() })
+        let mut tree = ui::tree(&ui::Facts { theme: &theme, pane_bg, width: self.width, tabs: tab_facts, broadcast, panes, dividers: &dividers, status,
+            find, find_focus, dialog, toasts, popup, composer, belt, replay, copy_mode, menu: self.menu_facts() });
+        // the Preferences cover the window, above everything else
+        if let Some(prefs) = self.prefs_scene() {
+            if let Some(children) = tree["children"].as_array_mut() {
+                children.push(prefs);
+            }
+        }
+        tree
     }
 }
 
 #[cfg(test)]
 #[path = "native_window_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "prefs_tests.rs"]
+mod prefs_tests;

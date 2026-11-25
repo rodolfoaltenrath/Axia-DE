@@ -122,7 +122,33 @@ change. Until then the React window stays the live app.
      `bplist00` reader, with a depth/cycle guard), Display P3 → sRGB, key combinations and
      actions, triggers, working directory, fonts. The caller injects the translator, the font
      lookup (PostScript name → family) and the id generator through `Env`. 12 unit tests.
-   - **4b (next):** the native Preferences window (profiles, sections, key editor, import panel).
+   - **4b (done): the native Preferences window.** `prefs.rs` (state and commands), `prefs_ui.rs`
+     (the scene) and `prefs_tests.rs`, in the window's own module tree. It is an overlay that
+     covers the window (state per window in `WinUi.prefs`; opened by the `preferences` action,
+     the Profiles menu and the pane's context menu; Done, or Escape one layer at a time, closes
+     it). Sidebar with the profiles (add, duplicate, remove, default ★) and seven sections
+     (general, colors, text, window, terminal, keys, triggers), the form of `Preferences.jsx` with
+     its labels above the controls under 480 px; controls are toggles, segments, steppers,
+     sliders (dragged with the pointer captured), inline pickers, color wells that take
+     `#rrggbb`, scheme cards, key-combination buttons and text fields. Every change goes through
+     one path: whitelisted and range-checked setters (`clean_field`: unknown, locked or
+     mistyped fields and unknown options are refused), the settings updated at once, one
+     `settings` effect (`{"kind":"settings","patch":{"terminal":…}}`) and every session of every
+     window configured again, once per request. A key press while the Preferences are open never
+     reaches the shell: it is captured for a shortcut or a key-map entry (modifiers alone are
+     ignored, Escape cancels, a combination moves to the action that captures it and leaves the
+     others). The import panel reads a file inside the home folder only (8 MiB at most, text or
+     `bplist00`), lists the exports it finds in Downloads, Documents, Desktop and the home,
+     converts with `iterm.rs` (translator, font lookup and ids injected) and applies the picked
+     profiles, replacing the one with the same iTerm2 identity. `keys.rs` now also takes the
+     shortcut overrides as an object (how the settings keep them): before, a shortcut changed
+     in the settings was ignored by the native window. 17 crate tests (81 in all).
+     Transport added: job `fonts.list` ([] → [{family, ps, mono, color}], asked once), and the
+     `settings` effect above (stage 6 must run it through the settings store).
+   - **4c (next):** what the JavaScript window did with the profile that is still missing:
+     the trigger engine (`state.js` `evalTriggers`: regex on new lines, the nine actions, the
+     captured-output section of the toolbelt) and saving/restoring window arrangements and the
+     live layout (`saveArrangement`, `restoreArrangement`; `workspace.rs` already rebuilds them).
 5. **tmux.** The control-mode client of `tmux.js` (`tmux -CC`).
 6. **Registration and removal.** `manifest.rs`, `runtime/native_terminal_services.js`
    (the `term.*` calls Rust names, session lifetime in the window lease), removal of the
@@ -130,8 +156,8 @@ change. Until then the React window stays the live app.
 
 ## Resume here
 
-Stages 1–4a are committed on `main` (not pushed; the owner pushes when everything is done). The
-next step is 4b. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
+Stages 1–4b are committed on `main` (not pushed; the owner pushes when everything is done). The
+next step is 4c (trigger engine, arrangements), then 5 and 6. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
 axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
 of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
 Co-Authored-By trailer.

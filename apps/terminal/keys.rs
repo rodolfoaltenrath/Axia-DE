@@ -42,7 +42,13 @@ fn combo(e: &Value) -> Value {
 }
 fn bindings(custom: &Value) -> Vec<Value> {
     let mut entries = array(data::bindings()).to_vec();
-    for entry in array(custom) {
+    // The settings keep the overrides as an object (action → combinations); the JavaScript
+    // transport hands them over as pairs. Both are the same list.
+    let pairs: Vec<Value> = match custom {
+        Value::Object(map) => map.iter().map(|(action, combos)| json!([action, combos])).collect(),
+        other => array(other).to_vec(),
+    };
+    for entry in &pairs {
         if array(entry).len() != 2 {
             continue;
         }

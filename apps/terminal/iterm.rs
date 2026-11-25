@@ -21,7 +21,7 @@ pub enum Input<'a> {
     Text(&'a str),
     Bytes(&'a [u8]),
 }
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Imported {
     pub profiles: Vec<Value>,
     pub schemes: Vec<Value>,
