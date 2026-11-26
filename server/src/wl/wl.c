@@ -269,20 +269,14 @@ static unsigned now_ms(void) {
 
 /* ---- events for JS ---- */
 
-typedef struct { int id; char type[16]; char json[600]; } Ev;
+typedef struct { int id; char type[16]; char json[1600]; } Ev;
 static Ev evq[64];
 static int nev;
 
-static void json_str(char *out, size_t size, const char *s) {
-    size_t o = 0;
-    for (; *s && o + 7 < size; s++) {
-        unsigned char c = (unsigned char)*s;
-        if (c == '"' || c == '\\') { out[o++] = '\\'; out[o++] = (char)c; }
-        else if (c < 0x20) o += (size_t)snprintf(out + o, size - o, "\\u%04x", c);
-        else out[o++] = (char)c;
-    }
-    out[o] = 0;
-}
+/* the client's names, escaped and copied without ever cutting a character (wayland/names.rs) */
+void axia_wl_json_name(char *out, size_t size, const char *s);
+void axia_wl_copy_name(char *out, size_t size, const char *s);
+static void json_str(char *out, size_t size, const char *s) { axia_wl_json_name(out, size, s); }
 
 static void emit(Surf *s, const char *type, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 static void emit(Surf *s, const char *type, const char *fmt, ...) {
@@ -1735,13 +1729,13 @@ static void top_title(struct wl_client *c, struct wl_resource *r, const char *t)
     (void)c;
     Surf *s = wl_resource_get_user_data(r);
     if (!s) return;
-    snprintf(s->title, sizeof s->title, "%s", t);
+    axia_wl_copy_name(s->title, sizeof s->title, t);
     if (s->mapped) { char e[520]; json_str(e, sizeof e, s->title); emit(s, "title", "{\"title\":\"%s\"}", e); }
 }
 static void top_app_id(struct wl_client *c, struct wl_resource *r, const char *a) {
     (void)c;
     Surf *s = wl_resource_get_user_data(r);
-    if (s) snprintf(s->app_id, sizeof s->app_id, "%s", a);
+    if (s) axia_wl_copy_name(s->app_id, sizeof s->app_id, a);
 }
 /* The app's own bar asked for the window menu (right click on Chromium's tab strip, a GTK
  * headerbar): JS gets where, in screen coordinates, and the theme shows its window menu there. */
@@ -3843,9 +3837,9 @@ int wlx_attach(uint32_t res_id, XWin *w, const XWinInfo *in) {
     if (!s || s->role != R_NONE || s->xw) return 0;
     s->xw = w;
     s->sent_configure = 1;                                  /* no xdg configure: X sizes it */
-    snprintf(s->title, sizeof s->title, "%s", in->title ? in->title : "");
-    snprintf(s->app_id, sizeof s->app_id, "%s", in->app_id ? in->app_id : "");
-    snprintf(s->app_alt, sizeof s->app_alt, "%s", in->app_alt ? in->app_alt : "");
+    axia_wl_copy_name(s->title, sizeof s->title, in->title);
+    axia_wl_copy_name(s->app_id, sizeof s->app_id, in->app_id);
+    axia_wl_copy_name(s->app_alt, sizeof s->app_alt, in->app_alt);
     s->csd = in->csd;
     if (in->popup) { s->role = R_POPUP; s->xpop = 1; s->xx = in->x; s->xy = in->y; }
     else s->role = R_TOPLEVEL;
@@ -3872,7 +3866,7 @@ void wlx_detach(int sid) {
 void wlx_set_title(int sid, const char *t) {
     Surf *s = find(sid);
     if (!s) return;
-    snprintf(s->title, sizeof s->title, "%s", t);
+    axia_wl_copy_name(s->title, sizeof s->title, t);
     if (s->mapped && s->role == R_TOPLEVEL) { char e[520]; json_str(e, sizeof e, s->title); emit(s, "title", "{\"title\":\"%s\"}", e); }
 }
 

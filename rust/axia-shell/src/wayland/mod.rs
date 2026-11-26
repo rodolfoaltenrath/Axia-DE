@@ -1,6 +1,7 @@
 //! Owned compositor protocols. The host calls these on the Wayland/UI thread.
 pub(crate) mod ffi;
 mod gestures;
+mod names;
 pub(crate) mod input;
 mod text_input;
 

@@ -146,12 +146,15 @@ build/obj/wl/wl.o build/wl-activation-test build/wl-fullscreen-test build/wl-inp
 test-platform: build/apps-actions-test build/defaults-test build/settings-hw-test
 test test-platform: build/wl-fullscreen-test build/wl-activation-test
 
-build/wl-activation-test: tests/wl_activation_test.c src/wl/wl.c $(HDR) $(WL_GEN) build/gen/xdg-activation-v1-protocol.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< build/gen/xdg-activation-v1-protocol.o -lwayland-server -lm
+# These tests stand in for parts of the compositor that the Rust library also defines: linked after
+# the test's own object, the library's copies give way to the test's.
+TEST_DOUBLES := -Wl,--allow-multiple-definition
+build/wl-activation-test: tests/wl_activation_test.c src/wl/wl.c $(HDR) $(WL_GEN) build/gen/xdg-activation-v1-protocol.o $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections $(TEST_DOUBLES) -o $@ $< build/gen/xdg-activation-v1-protocol.o $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
 	./$@ || { rm -f $@; exit 1; }
 
-build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lm
+build/wl-fullscreen-test: tests/wl_fullscreen_test.c src/wl/wl.c $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections $(TEST_DOUBLES) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -ldl -lpthread -lm
 	./$@ || { rm -f $@; exit 1; }
 
 test-platform: build/ui-damage-test build/glass-damage-test build/wl-preview-test build/media-preview-test build/portal-files-test build/fsops-test build/battery-refresh-test build/host-power-test build/glass-renderer-test build/seat-test build/platform-admin-test build/keygrab-test build/switcher-ffi-test build/snap-ffi-test build/shadow-ffi-test build/winmodel-ffi-test build/wl-input-region-test build/cpu-cursor-test build/kms-cursor-test $(if $(filter 1,$(SKIP_RUST_TESTS)),,test-rust)
@@ -213,8 +216,8 @@ build/gpu-capture-test: tests/gpu_capture_test.c src/wl/wl.c src/gpu/gpu.c $(HDR
 # Optional surfaceless Mesa probe (mesa-dri-drivers), without opening a display.
 build/gpu-round-test: tests/gpu_round_test.c src/gpu/gpu.c $(HDR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< $(shell pkg-config --libs gbm egl glesv2) -lm
-build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< -lwayland-server -lwayland-client -lm
+build/wl-input-region-test: tests/wl_input_region_test.c src/wl/wl.c $(HDR) $(RUST_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -ffunction-sections -fdata-sections -Wl,--gc-sections $(TEST_DOUBLES) -o $@ $< $(RUST_LIB) $(RUST_NATIVE_LIBS) -lwayland-server -lwayland-client -ldl -lpthread -lm
 test-rust:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST) --target-dir $(abspath $(RUST_TARGET_DIR)) --workspace --exclude axia-bench --exclude xtask --locked --offline
 # Isolated app mode: Rust policies/Wayland with a deterministic compositor and real QuickJS.
