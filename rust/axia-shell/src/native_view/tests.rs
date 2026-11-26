@@ -1324,6 +1324,53 @@ fn a_press_reaches_the_first_listening_surface_and_stops_at_clickable_nodes() {
     scene::destroy(mount);
 }
 
+#[test]
+fn fine_wheels_and_touchpads_reach_listening_lists_and_draw_once_a_frame() {
+    type Log = Rc<RefCell<Vec<Value>>>;
+    struct Ev(Log, Rc<std::cell::Cell<u32>>);
+    impl NativeApp for Ev {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                self.1.set(self.1.get() + 1);
+                // a virtual list that moves itself, with a scroll box inside that has nothing to scroll
+                return json!({"tree":{"kind":"view","children":[{"kind":"view","events":{"onWheel":["wheel"]},"children":[
+                    {"kind":"scroll","children":[{"kind":"text","label":format!("Row {}", self.1.get())}]}]}]}});
+            }
+            if input["cmd"] == "wheel" {
+                self.0.borrow_mut().push(input.clone());
+            }
+            json!({})
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let (log, syncs) = (Log::default(), Rc::new(std::cell::Cell::new(0)));
+    let mut host = Host::new(mount, Box::new(Ev(log.clone(), syncs.clone())), "", None);
+    host.facts(json!({}));
+    let row = node_with_text(mount, &format!("Row {}", syncs.get()));
+    let before = syncs.get();
+    host.gesture("scroll", "begin", row, 0., 0.);
+    for _ in 0..8 {
+        host.gesture("scroll", "update", row, 0., 6.);
+    }
+    host.gesture("scroll", "end", row, 0., 0.);
+    let seen = log.borrow().clone();
+    assert_eq!(seen.len(), 8, "every piece reaches the list, and the empty end does not");
+    assert!(seen.iter().all(|e| e["deltaY"] == 6.0));
+    assert_eq!(seen.iter().filter_map(|e| e["notches"].as_i64()).sum::<i64>(), -1, "48 pixels are one notch");
+    assert_eq!(syncs.get(), before, "nothing is drawn between events of one frame");
+    host.tick(1e18);
+    assert_eq!(syncs.get(), before + 1);
+    // the wheel of a plain mouse still answers at once
+    log.borrow_mut().clear();
+    let row = node_with_text(mount, &format!("Row {}", syncs.get()));
+    host.pointer("wheel", row, 1., 1., -1);
+    assert_eq!(log.borrow()[0]["deltaY"], 48.0);
+    assert_eq!(log.borrow()[0]["notches"], -1);
+    assert_eq!(syncs.get(), before + 2);
+    drop(host);
+    scene::destroy(mount);
+}
+
 struct SurfaceProbe {
     tree: Rc<RefCell<Value>>,
     log: Rc<RefCell<Vec<Value>>>,

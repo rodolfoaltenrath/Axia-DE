@@ -160,3 +160,12 @@ fn window_events_end_in_the_nul_the_json_parser_needs() {
         assert_eq!(message.as_bytes().len(), expected.len() - 1);
     }
 }
+#[test]
+fn a_fine_wheel_scrolls_its_own_part_of_a_notch() {
+    // one notch is 10 units: the whole of it is 48 pixels, an eighth of it 6
+    assert_eq!(client::scroll_of(0, 0, 10 * 256), (0., 48., 1.));
+    assert_eq!(client::scroll_of(0, 0, -(10 * 256) / 8), (0., -6., 1.));
+    assert_eq!(client::scroll_of(-1, 1, 10 * 256), (48., 0., 1.), "horizontal, source not said");
+    assert_eq!(client::scroll_of(1, 0, 3 * 256), (0., 3., 0.), "fingers move pixel by pixel");
+    assert_eq!(client::scroll_of(2, 0, 3 * 256), (0., 3., 1.));
+}

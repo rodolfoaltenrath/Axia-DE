@@ -538,25 +538,34 @@ unsafe extern "C" fn p_button(
     };
     pointer_event(if pressed == 1 { c"down" } else { c"up" }, button);
 }
+/// wl_pointer.axis_source
+const FINGER: i32 = 1;
+const CONTINUOUS: i32 = 2;
+/// What one `axis` event scrolls, in pixels, and whether it comes from a wheel (1) or from
+/// fingers (0), as the shell's gestures name them. A wheel notch is 10 units in the compositor
+/// and 48 pixels in the apps, and a fine wheel sends it in many pieces: each one moves its own
+/// part, not a whole notch.
+pub(super) fn scroll_of(source: i32, axis: u32, value: i32) -> (f64, f64, f64) {
+    let units = f64::from(value) / 256.;
+    let (pixels, wheel) = match source {
+        FINGER => (units, 0.),
+        CONTINUOUS => (units, 1.),
+        _ => (units * 48. / 10., 1.),
+    };
+    if axis == 1 {
+        (pixels, 0., wheel)
+    } else {
+        (0., pixels, wheel)
+    }
+}
 unsafe extern "C" fn p_axis(_data: Proxy, _p: Proxy, _time: u32, axis: u32, value: i32) {
     let s = state();
-    if (*s).axis == 1 {
-        if !(*s).fine {
-            (*s).fine = true;
-            gesture(c"scroll", c"begin", 0., 0., 0., 0.);
-        }
-        let v = value as f64 / 256.;
-        gesture(
-            c"scroll",
-            c"update",
-            if axis == 1 { v } else { 0. },
-            if axis == 1 { 0. } else { v },
-            0.,
-            0.,
-        );
-    } else if axis == 0 {
-        pointer_event(c"wheel", if value > 0 { -1 } else { 1 });
+    if (*s).axis == FINGER && !(*s).fine {
+        (*s).fine = true;
+        gesture(c"scroll", c"begin", 0., 0., 0., 0.);
     }
+    let (dx, dy, wheel) = scroll_of((*s).axis, axis, value);
+    gesture(c"scroll", c"update", dx, dy, wheel, 0.);
 }
 unsafe extern "C" fn p_frame(_data: Proxy, _p: Proxy) {
     (*state()).axis = -1;

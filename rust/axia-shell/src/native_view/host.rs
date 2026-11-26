@@ -274,6 +274,8 @@ pub struct Host {
     width: f32,
     height: f32,
     next_sync: Option<f64>,
+    /// What a fine scroll has not yet added up to a whole notch.
+    wheel_rest: f64,
     hover: i32,
     pressed: i32,
     field: i32,
@@ -346,6 +348,7 @@ impl Host {
             width: 0.,
             height: 0.,
             next_sync: None,
+            wheel_rest: 0.,
             hover: 0,
             pressed: 0,
             field: 0,
@@ -1656,21 +1659,8 @@ impl Host {
             }
             "wheel" if inside => {
                 self.hide_tip();
-                let mods = super::modifiers();
-                let wheel = self.ancestor_event(target, "onWheel");
-                let scroll = self.target(target, |t| matches!(t, Target::Scroll));
-                match (wheel, scroll) {
-                    // Ctrl or Cmd with the wheel is the app's (zoom), or any wheel where nothing scrolls
-                    (Some((_, action)), scroll) if mods & (2 | 16) != 0 || scroll.is_none() => {
-                        let extra = Map::from_iter([
-                            ("deltaY".into(), json!(-(button as f64) * WHEEL_STEP)),
-                            ("notches".into(), json!(button)),
-                        ]);
-                        self.send(&action, extra);
-                        self.sync();
-                    }
-                    (_, Some((node, _))) => self.scroll_by(node, -(button as f64) * WHEEL_STEP),
-                    _ => {}
+                if self.wheel_at(target, 0., -(button as f64) * WHEEL_STEP, i64::from(button)) {
+                    self.sync();
                 }
             }
             _ => {}
@@ -1695,12 +1685,63 @@ impl Host {
             ]));
             return Some(self.mount);
         }
-        if kind == "scroll" && phase != "begin" && self.icon_mode().is_none() {
-            if let Some((node, _)) = self.target(target, |t| matches!(t, Target::Scroll)) {
-                self.scroll_by(node, dy);
+        if kind == "scroll" && self.icon_mode().is_none() {
+            if phase == "begin" {
+                self.wheel_rest = 0.;
+            } else if (dx != 0. || dy != 0.) && dx.is_finite() && dy.is_finite() {
+                self.hide_tip();
+                // whole notches for the views that move line by line, as the shell counts them
+                self.wheel_rest += dy;
+                let steps = (self.wheel_rest / WHEEL_STEP).trunc();
+                self.wheel_rest -= steps * WHEEL_STEP;
+                if self.wheel_at(target, dx, dy, -steps as i64) {
+                    // touchpads and fine wheels send many events a frame: draw once for them all
+                    self.next_sync = Some(now_ms());
+                }
             }
         }
         Some(self.mount)
+    }
+    /// The nearest scrolling list under `node` that has something to scroll: one that shows all
+    /// its content lets the wheel through to the one around it.
+    fn scrollable(&mut self, mut node: i32) -> Option<i32> {
+        for _ in 0..4096 {
+            let (found, _) = self.target(node, |t| matches!(t, Target::Scroll))?;
+            if let Some(m) = find(&mut self.root, found) {
+                let view = scene::frame(m.node).map_or(0., |f| f.3);
+                if scene::frame(m.parts[0]).map_or(0., |f| f.3) > view {
+                    return Some(found);
+                }
+            }
+            node = scene::parent(found);
+        }
+        None
+    }
+    /// A scroll over `target`, from a wheel or a touchpad: the view that listens to the wheel takes
+    /// it (always with Ctrl or Cmd, which zooms; otherwise where nothing scrolls), or else the
+    /// scrolling list moves. True when the app was told and has to be drawn again.
+    fn wheel_at(&mut self, target: i32, delta_x: f64, delta_y: f64, notches: i64) -> bool {
+        let mods = super::modifiers();
+        let wheel = self.ancestor_event(target, "onWheel");
+        let scroll = self.scrollable(target);
+        match (wheel, scroll) {
+            (Some((_, action)), scroll) if mods & (2 | 16) != 0 || scroll.is_none() => {
+                let extra = Map::from_iter([
+                    ("deltaX".into(), json!(delta_x)),
+                    ("deltaY".into(), json!(delta_y)),
+                    ("notches".into(), json!(notches)),
+                ]);
+                self.send(&action, extra);
+                true
+            }
+            (_, Some(node)) => {
+                self.scroll_by(node, delta_y);
+                // an app that follows the offset (onScroll) draws at the next frame too
+                self.next_sync = Some(now_ms());
+                false
+            }
+            _ => false,
+        }
     }
     fn edit(&mut self, text: String) {
         let Some(m) = find(&mut self.root, self.field) else {
