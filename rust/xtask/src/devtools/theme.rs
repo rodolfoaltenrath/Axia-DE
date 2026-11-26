@@ -110,7 +110,7 @@ impl Build<'_> {
                 )
             })
             .collect();
-        let list: Vec<String> = (0..ids.len())
+        let mut list: Vec<String> = (0..ids.len())
             .map(|i| {
                 if isolated[i] {
                     format!("{{ ...M{i}, system: true, isolated: true, Component: isolatedApp(M{i}.id, A{i}.default), Icon: A{i}.Icon }}")
@@ -125,8 +125,10 @@ impl Build<'_> {
         } else {
             String::new()
         };
-        let compiled: Vec<String> = native.iter().map(|app| format!("nativeApp({})", ojson::compact(app))).collect();
-        Ok(format!("{head}{packages}{}\nexport const apps = [\n  {},\n  {}\n];\n", lines.join("\n"), list.join(",\n  "), compiled.join(",\n  ")))
+        // one list: a comma between two separate ones would leave a hole in the array, which the
+        // shell reads as an undefined app, once either of them is empty
+        list.extend(native.iter().map(|app| format!("nativeApp({})", ojson::compact(app))));
+        Ok(format!("{head}{packages}{}\nexport const apps = [\n  {}\n];\n", lines.join("\n"), list.join(",\n  ")))
     }
 
     fn theme(&self, name: &str, apps: &Path) -> Result<()> {
@@ -343,5 +345,11 @@ mod tests {
         assert!(!text.contains("nomanifest"));
         fs::write(repo.0.join("apps/zeta/manifest.json"), "{\"id\":\"zeta\",\"version\":\"1.0\"}").unwrap();
         assert_eq!(build.apps_module(&native).unwrap_err(), "apps/zeta/manifest.json: \"version\" must be semver (e.g. \"0.8.5\"), got \"1.0\"");
+        // with every app compiled, the list starts at the first of them: no hole before it
+        for id in ["alpha", "zeta"] {
+            fs::remove_file(repo.0.join("apps").join(id).join("manifest.json")).unwrap();
+        }
+        let text = build.apps_module(&native).unwrap();
+        assert!(text.ends_with("export const apps = [\n  nativeApp({\"id\":\"calc\",\"x\":[1,2]})\n];\n"), "{text}");
     }
 }
