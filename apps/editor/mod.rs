@@ -53,6 +53,8 @@ const DOUBLE_CLICK_MS: i64 = 400;
 /// A line longer than this is only drawn up to here.
 const DRAWN_COLUMNS: usize = 20_000;
 
+const CELL_RUN: usize = 400;
+
 fn measure(text: &str) -> f64 {
     measure_text(text, FONT, MONO)
 }
@@ -1049,7 +1051,8 @@ impl App {
             self.height = height;
         }
         self.focused = context["focused"] != false;
-        let cell = measure("0000000000") / 10.;
+        // the host rounds a width up to whole pixels: a long run keeps the cell exact
+        let cell = measure(&"0".repeat(CELL_RUN)) / CELL_RUN as f64;
         if cell > 0. {
             self.cell = cell;
         }

@@ -427,3 +427,23 @@ fn the_clipboard_printing_and_the_status_bar_actions() {
     let icon = w.app.request_at(&json!({"cmd":"icon","size":64}), 0);
     assert_eq!(icon["style"]["width"], 64.);
 }
+
+#[test]
+fn each_highlighted_piece_takes_exactly_its_columns() {
+    // pieces sized by their own text would each be rounded up by the layout and drift from the caret
+    let home = Home::new("columns");
+    let path = home.file("a.rs", "fn f(a: u8) -> u8 { a + 1 }\n");
+    let w = Window::open(&home, json!({"path":path}));
+    fn find<'a>(node: &'a Value, key: &str) -> Option<&'a Value> {
+        if node["key"] == key {
+            return Some(node);
+        }
+        node["children"].as_array()?.iter().find_map(|c| find(c, key))
+    }
+    let pieces = find(&w.tree, "line:0").unwrap()["children"].as_array().unwrap().clone();
+    assert!(pieces.len() > 8);
+    for piece in &pieces {
+        let columns = piece["label"].as_str().unwrap().chars().count() as f64;
+        assert_eq!(piece["style"]["width"].as_f64().unwrap(), columns * w.app.cell, "{piece}");
+    }
+}

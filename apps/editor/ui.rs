@@ -292,6 +292,7 @@ fn text_area(app: &mut App, c: &Colors, now: i64) -> Value {
     // highlighted lines
     {
         let dark = app.dark;
+        let metrics = app.metrics();
         let index = app.index();
         let tab = &mut app.tabs[index];
         let changed = std::mem::replace(&mut tab.doc.first_changed, usize::MAX);
@@ -314,7 +315,10 @@ fn text_area(app: &mut App, c: &Colors, now: i64) -> Value {
                             column += 1;
                         }
                     }
-                    json!({"kind":"text","key":i,"label":shown,"style":{"fontFamily":"monospace","fontSize":FONT,"whiteSpace":"nowrap","flexShrink":0,
+                    // the width of its columns: the text's own would be rounded up to a whole pixel and
+                    // push what follows away from the caret
+                    let width = metrics.width(&shown);
+                    json!({"kind":"text","key":i,"label":shown,"style":{"width":width,"fontFamily":"monospace","fontSize":FONT,"whiteSpace":"nowrap","flexShrink":0,
                         "color":syntax::color(kind, dark),"fontWeight":if matches!(*kind, "bold" | "heading") {700} else {400}}})
                 })
                 .collect();

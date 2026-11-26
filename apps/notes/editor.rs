@@ -44,18 +44,21 @@ fn chars(s: &str) -> Vec<char> {
 fn slice(s: &str, a: usize, b: usize) -> String {
     s.chars().skip(a).take(b.saturating_sub(a)).collect()
 }
+/// The host rounds a measured width up to whole pixels, and a line is the sum of its characters:
+/// each one is measured as a long run of itself, so the error stays below a pixel along a line.
+const RUN: usize = 200;
 pub fn advance(c: char, size: f64) -> f64 {
+    thread_local! {
+        static KNOWN: std::cell::RefCell<std::collections::HashMap<(char, u64), f64>> = Default::default();
+    }
+    if let Some(found) = KNOWN.with(|k| k.borrow().get(&(c, size.to_bits())).copied()) {
+        return found;
+    }
     let mut encoded = [0; 4];
-    crate::native_view::measure_text(
-        if c == '\t' {
-            "    "
-        } else {
-            c.encode_utf8(&mut encoded)
-        },
-        size,
-        1400.,
-    )
-    .max(size * 0.1)
+    let unit: &str = if c == '\t' { "    " } else { c.encode_utf8(&mut encoded) };
+    let measured = (crate::native_view::measure_text(&unit.repeat(RUN), size, 1400.) / RUN as f64).max(size * 0.1);
+    KNOWN.with(|k| k.borrow_mut().insert((c, size.to_bits()), measured));
+    measured
 }
 pub fn width(s: &str, size: f64) -> f64 {
     s.chars().map(|c| advance(c, size)).sum()
