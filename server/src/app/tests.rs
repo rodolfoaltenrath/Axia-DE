@@ -151,3 +151,12 @@ fn system_package_precedes_user_and_rejects_world_writable_system_folder() {
     assert!(spawn::package(c"../notes", &assets, &root).is_none());
     fs::remove_dir_all(dir).unwrap();
 }
+#[test]
+fn window_events_end_in_the_nul_the_json_parser_needs() {
+    for kind in ["close", "focus"] {
+        let message = client::window_event(3, kind);
+        let expected = format!("{{\"key\":3,\"type\":\"{kind}\"}}\0");
+        assert_eq!(message.as_bytes_with_nul(), expected.as_bytes());
+        assert_eq!(message.as_bytes().len(), expected.len() - 1);
+    }
+}

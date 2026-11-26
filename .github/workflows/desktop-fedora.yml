@@ -335,6 +335,9 @@ jobs:
           name: axia-mail
           path: ${{ runner.temp }}/axia-mail
           if-no-files-found: warn
+      - name: The title bar closes isolated system apps
+        if: matrix.gpu == 1
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test isolated_close_runtime -- --ignored --nocapture
       - name: Native screenshot editor, image jobs and ownership
         if: matrix.gpu == 1
         env:

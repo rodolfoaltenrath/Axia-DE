@@ -145,12 +145,17 @@ unsafe fn by_surface(surface: Proxy) -> *mut Window {
         .find(|w| w.used && w.surface == surface)
         .map_or(ptr::null_mut(), |w| &mut **w)
 }
+/// What `__lordBrokerEvent` hears about a window. QuickJS finds the end of a JSON text by the NUL
+/// right after it: without one the text is refused, and the app never hears that it must close.
+pub(super) fn window_event(key: i32, kind: &str) -> CString {
+    CString::new(serde_json::json!({"key":key,"type":kind}).to_string()).expect("JSON escapes NUL")
+}
 unsafe fn event(w: *mut Window, kind: &str) {
     if w.is_null() {
         return;
     }
-    let json = serde_json::to_vec(&serde_json::json!({"key":(*w).key,"type":kind})).unwrap();
-    js_broker_app_event(c"appwindow".as_ptr(), json.as_ptr().cast(), json.len());
+    let json = window_event((*w).key, kind);
+    js_broker_app_event(c"appwindow".as_ptr(), json.as_ptr(), json.as_bytes().len());
 }
 pub(super) fn pixels(w: i32, h: i32) -> Option<usize> {
     if !(1..=8192).contains(&w) || !(1..=8192).contains(&h) {
