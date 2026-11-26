@@ -23,10 +23,10 @@ pub enum Block {
 }
 #[derive(Clone, Debug)]
 pub struct Item {
-    depth: usize,
-    num: Option<usize>,
-    task: Option<bool>,
-    text: String,
+    pub depth: usize,
+    pub num: Option<usize>,
+    pub task: Option<bool>,
+    pub text: String,
 }
 struct Patterns {
     fence: Regex,
@@ -193,15 +193,20 @@ fn parse_at(source: &str, depth: usize) -> Vec<Block> {
     }
     out
 }
+/// A run of inline text with one style.
 #[derive(Clone, Debug, Default)]
-struct Span {
-    text: String,
-    link: Option<String>,
-    image: Option<String>,
-    bold: bool,
-    italic: bool,
-    strike: bool,
-    code: bool,
+pub struct Span {
+    pub text: String,
+    pub link: Option<String>,
+    pub image: Option<String>,
+    pub bold: bool,
+    pub italic: bool,
+    pub strike: bool,
+    pub code: bool,
+}
+/// The styled runs of a block's text, for callers that make something other than widgets.
+pub fn spans(source: &str) -> Vec<Span> {
+    inline(source, &Span::default(), 0)
 }
 fn inline(source: &str, style: &Span, depth: usize) -> Vec<Span> {
     if depth >= 32 {
