@@ -13,8 +13,38 @@ pub struct Row {
     pub end: usize,
     pub line: usize,
 }
+/// The colors the editor paints with. The default is the note paper; Mail passes the theme's.
+#[derive(Clone)]
+pub struct Palette {
+    pub text: String,
+    pub heading: String,
+    pub code: String,
+    pub quote: String,
+    pub caret: String,
+    pub selection: String,
+    pub popup: String,
+    pub popup_text: String,
+    pub border: String,
+}
+impl Default for Palette {
+    fn default() -> Self {
+        let color = |s: &str| s.to_owned();
+        Self {
+            text: color("#2a2a2a"),
+            heading: color("#151515"),
+            code: color("#5b3fa0"),
+            quote: color("#6b6b6b"),
+            caret: color("#0a5fd0"),
+            selection: color("rgba(10,95,208,0.22)"),
+            popup: color("#fff"),
+            popup_text: color("#222"),
+            border: color("rgba(0,0,0,0.15)"),
+        }
+    }
+}
 #[derive(Default)]
 pub struct Editor {
+    pub palette: Palette,
     pub body: String,
     revision: u64,
     layout_key: Option<(u64, u64, u64, u64)>,
@@ -107,6 +137,7 @@ pub fn wrap(text: &str, width: f64, size: f64) -> Vec<Row> {
 impl Editor {
     pub fn reset(&mut self, body: &str) {
         *self = Self {
+            palette: std::mem::take(&mut self.palette),
             body: body.into(),
             a: body.chars().count(),
             b: body.chars().count(),
@@ -305,6 +336,12 @@ impl Editor {
                 if kind == "outdent" {
                     return pattern!(r"^ {1,2}").replace(l, "").into_owned();
                 }
+                if kind == "quote" {
+                    return match l.strip_prefix('>') {
+                        Some(rest) => rest.strip_prefix(char::is_whitespace).unwrap_or(rest).to_owned(),
+                        None => format!("> {l}"),
+                    };
+                }
                 let m = strip.captures(l).unwrap();
                 let prefix = m.get(2).map_or("", |m| m.as_str());
                 let body = &l[m[0].len()..];
@@ -347,8 +384,13 @@ impl Editor {
     pub fn format(&mut self, kind: &str, now: i64) {
         let (a, b) = self.range();
         match kind {
-            "bold" | "italic" => {
-                let mark = if kind == "bold" { "**" } else { "*" };
+            "bold" | "italic" | "strike" | "inlineCode" => {
+                let mark = match kind {
+                    "bold" => "**",
+                    "italic" => "*",
+                    "strike" => "~~",
+                    _ => "`",
+                };
                 let inner = slice(&self.body, a, b);
                 let n = mark.chars().count();
                 if inner.starts_with(mark) && inner.ends_with(mark) && inner.len() >= mark.len() * 2
@@ -372,6 +414,11 @@ impl Editor {
                     );
                     self.commit(body, a + n, b + n, "edit", now);
                 }
+            }
+            "webLink" => {
+                let inner = slice(&self.body, a, b);
+                let caret = if a == b { a + 1 } else { a + inner.chars().count() + 3 };
+                self.replace(a, b, &format!("[{inner}](https://)"), "edit", Some(caret), now);
             }
             "link" => {
                 let inner = slice(&self.body, a, b);
@@ -734,19 +781,19 @@ impl Editor {
                 let right = width(&slice(&self.body, row.start, b.min(row.end)), self.size)
                     + if b > row.end { self.size * 0.4 } else { 0. };
                 if right > left {
-                    nodes.push(json!({"kind":"view","style":{"position":"absolute","left":self.padding+left,"top":y,"width":right-left,"height":self.lh(),"backgroundColor":"rgba(10,95,208,0.22)"}}));
+                    nodes.push(json!({"kind":"view","style":{"position":"absolute","left":self.padding+left,"top":y,"width":right-left,"height":self.lh(),"backgroundColor":self.palette.selection}}));
                 }
             }
             let (line, code) = lines.get(row.line).copied().unwrap_or(("", false));
             let heading = pattern!(r"^#{1,6}\s").is_match(line);
-            nodes.push(json!({"kind":"text","label":cs,"style":{"position":"absolute","left":self.padding,"top":y+(self.lh()-self.size*1.3)/2.,"fontFamily":"monospace","fontSize":self.size,"fontWeight":if heading{700}else{400},"color":if code{"#5b3fa0"}else if heading{"#151515"}else if line.trim_start().starts_with('>'){"#6b6b6b"}else{"#2a2a2a"},"whiteSpace":"nowrap"}}));
+            nodes.push(json!({"kind":"text","label":cs,"style":{"position":"absolute","left":self.padding,"top":y+(self.lh()-self.size*1.3)/2.,"fontFamily":"monospace","fontSize":self.size,"fontWeight":if heading{700}else{400},"color":if code{&self.palette.code}else if heading{&self.palette.heading}else if line.trim_start().starts_with('>'){&self.palette.quote}else{&self.palette.text},"whiteSpace":"nowrap"}}));
         }
         if self.focused && (now / 530) % 2 == 0 {
-            nodes.push(json!({"kind":"view","style":{"position":"absolute","left":self.padding+self.caret_x(self.b)-1.,"top":self.padding+self.row_of(self.b)as f64*self.lh()-self.scroll+2.,"width":2,"height":self.lh()-4.,"backgroundColor":"#0a5fd0"}}));
+            nodes.push(json!({"kind":"view","style":{"position":"absolute","left":self.padding+self.caret_x(self.b)-1.,"top":self.padding+self.row_of(self.b)as f64*self.lh()-self.scroll+2.,"width":2,"height":self.lh()-4.,"backgroundColor":self.palette.caret}}));
         }
         if let Some((_, list, index)) = &self.suggestion {
-            let items:Vec<_>=list.iter().enumerate().map(|(i,e)|json!({"kind":"view","events":{"onMouseDown":["acceptEmoji",i]},"style":{"height":24,"paddingHorizontal":6,"flexDirection":"row","gap":8,"borderRadius":5,"backgroundColor":if i==*index{"#0a5fd0"}else{"transparent"}},"children":[{"kind":"text","label":e.ch,"style":{"fontSize":15}},{"kind":"text","label":format!(":{}:",e.name),"style":{"fontSize":12,"color":if i==*index{"#fff"}else{"#222"}}}]})).collect();
-            nodes.push(json!({"kind":"view","style":{"position":"absolute","left":(self.padding+self.caret_x(self.b)).min((self.width-200.).max(0.)),"top":self.padding+(self.row_of(self.b)+1)as f64*self.lh()-self.scroll+2.,"width":196,"padding":4,"borderRadius":8,"backgroundColor":"#fff","borderWidth":1,"borderColor":"rgba(0,0,0,0.15)"},"children":items}));
+            let items:Vec<_>=list.iter().enumerate().map(|(i,e)|json!({"kind":"view","events":{"onMouseDown":["acceptEmoji",i]},"style":{"height":24,"paddingHorizontal":6,"flexDirection":"row","gap":8,"borderRadius":5,"backgroundColor":if i==*index{self.palette.caret.as_str()}else{"transparent"}},"children":[{"kind":"text","label":e.ch,"style":{"fontSize":15}},{"kind":"text","label":format!(":{}:",e.name),"style":{"fontSize":12,"color":if i==*index{"#fff"}else{self.palette.popup_text.as_str()}}}]})).collect();
+            nodes.push(json!({"kind":"view","style":{"position":"absolute","left":(self.padding+self.caret_x(self.b)).min((self.width-200.).max(0.)),"top":self.padding+(self.row_of(self.b)+1)as f64*self.lh()-self.scroll+2.,"width":196,"padding":4,"borderRadius":8,"backgroundColor":self.palette.popup,"borderWidth":1,"borderColor":self.palette.border},"children":items}));
         }
         json!({"kind":"view","key":"note-editor","style":{"flex":1,"overflow":"hidden","direction":"ltr"},"events":{"onMouseDown":["editorDown"],"onWheel":["editorWheel"]},"children":nodes})
     }
