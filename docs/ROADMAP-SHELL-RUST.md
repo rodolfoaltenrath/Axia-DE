@@ -96,7 +96,7 @@ brilho e energia, método de entrada, aparência.
 
 **Ainda em JavaScript:**
 
-- 4 apps: `editor`, `mail`, `player`, `terminal`. (`screenshots`, `passwords` e `pdf` já
+- 1 app: `mail`. (`screenshots`, `passwords` e `pdf` já
   não têm JSX nem JS na pasta; ficam só os adaptadores de sessão em `runtime/`.)
 - `sdk/`: 122 arquivos JS/JSX na árvore de 2026-11-23. A divisão histórica da Fase 0 está em
   `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
@@ -752,7 +752,10 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       Serviços novos de transporte: `media.probe`, `media.nowPlaying`, `windows.screen`,
       `windows.pip`. Falta: teste GPU com arquivo real (`player_runtime`) e validação gráfica.
 - [ ] `mail` (exibição de HTML; por último)
-- [ ] `editor` (edição de texto complexa; por último)
+- [x] `editor`: documento com vários cursores e desfazer, comandos de edição, realce,
+      busca e substituição, painel de projeto, abas, diálogos e acesso confinado a
+      arquivos em Rust; JSX, JS e manifesto JSON retirados. Falta a validação gráfica
+      (ponteiro, método de entrada, claro e escuro). Ver [EDITOR.md](EDITOR.md).
 - [x] `passwords` (processo isolado; fronteira de segurança mantida): metadados
       compilados, JSX e manifesto JSON retirados. Cofre, arquivos escolhidos,
       FIDO e área de transferência secreta passam por

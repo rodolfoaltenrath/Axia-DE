@@ -1,7 +1,8 @@
 # Text Editor
 
-LordOS's own code editor, TextMate-style (`apps/editor`). It is a native LordOS app in React on
-top of the SDK: it doesn't use CodeMirror or Monaco, nor vendored TextMate grammars.
+The desktop's own code editor, TextMate-style (`apps/editor`). It is a compiled Rust app mounted
+in the native view host: it doesn't use CodeMirror or Monaco, nor vendored TextMate grammars. The
+screenshots below are of the earlier React version, whose layout the Rust window keeps.
 
 | | |
 |---|---|
@@ -47,8 +48,9 @@ top of the SDK: it doesn't use CodeMirror or Monaco, nor vendored TextMate gramm
   (`wm.open('editor', { args: { path } })`). Closing the window or a tab with changes asks first.
   It rejects binary files and files larger than 8 MB.
 - **App menus** (in the theme's menu bar): File, Edit, View and Go, with their shortcuts.
-- **Input methods:** the editor registers with `ime.attach`, so Japanese, Chinese and Korean
-  type at the cursor (the composition and the candidates show up there).
+- **Input methods:** while the text has the keyboard the editor asks for the input method, so
+  Japanese, Chinese and Korean type at the cursor (the composition and the candidates show up
+  there).
 - **Its own icon:** a sheet with colored lines of code.
 
 ## Shortcuts
@@ -82,8 +84,9 @@ sideways).
 
 ## Highlighting
 
-It is our own state-based tokenizer (`apps/editor/syntax.js`):
-- each language is a list of rules `[regex, type, next state]`;
+It is our own state-based tokenizer (`apps/editor/syntax.rs`):
+- each language is a list of rules (pattern, type, next state); the few look-aheads are a second
+  pattern that must or must not follow;
 - it tokenizes line by line, and the state at the end of a line (inside a `/* */` comment, a
   Python `"""` or a JS template) carries over to the next;
 - when editing, it re-tokenizes from the first changed line and only what is visible.
@@ -96,47 +99,43 @@ on the theme's mode.
 
 ## How it's built
 
-- `buffer.js` — the document:
-  - the text is an array of lines;
-  - cursors are a head and an anchor, with the desired column for moving up and down;
-  - every edit is a transaction of ordered replacements that stores its inverse: so undo and redo
-    are just another transaction, and several cursors edit in a single pass.
-- `EditorView.jsx` — the view:
-  - **visible lines:** it draws only the visible ones, plus 6 above and 6 below; each line is a
-    memoized component that redraws only if its tokens change;
-  - **font:** monospace (JetBrains Mono, `fontFamily: 'monospace'`, new in the engine);
-  - **columns:** computed with the width of one cell, measured with `lord.measureText`; wide
-    characters (CJK, emoji) are measured for real;
-  - **direction:** the text area uses `direction: 'ltr'` even when the UI is in Arabic or Hebrew.
-- `index.jsx` — the window: tabs, project, search, dialogs, menus and status bar.
+| File | What it owns |
+|---|---|
+| `buffer.rs` | lines, cursors (head and anchor), transactions with their inverse, undo and redo |
+| `edit.rs` | typing, indentation, comments, line commands, movement, the clipboard, the keyboard map |
+| `syntax.rs` | the languages, the tokenizer and the colors |
+| `search.rs` | find and replace, and the score of Go to File |
+| `files.rs` | confined reading, atomic writing, folder listing and the walk of Go to File |
+| `mod.rs`, `ui.rs` | the window: tabs, project, pointer, dialogs, menus; the widget trees |
 
-For the editor, these were added to the system:
-- **`fontFamily: 'monospace'`** in the engine (`style.c` and `text.c`; JetBrains Mono is loaded
-  the first time it is used). The runtime used to drop `fontFamily`.
-- **`lord.fs.write`, `mkdir` and `rename`** (`server/src/ui/js_sys.c`):
-  - only inside the home folder (and, later, the user's mounts in `/media/$USER` and
-    `/run/media/$USER`), with the destination folder resolved with `realpath`;
-  - they don't follow symlinks on the final file;
-  - writing is atomic (temporary file in the same folder + `fsync` + `rename`) and keeps the
-    permissions;
-  - up to 32 MB;
-  - they can't touch `~/.local/share/applications`, `~/.config/autostart`,
-    `~/.local/share/axia/apps` or `~/.config/axia/settings.json` (nor the other protected
-    files and folders added since, `FILES.md`), not even through a symlink (tested): JS can't create a `.desktop` file, which is the only thing `lord.apps.launch` runs.
+Only the visible lines (plus 6 above and 6 below) and the visible project rows are drawn. The
+list of Go to File is walked on a worker thread.
 
-## Performance (measured)
+Positions count characters. Disk access follows the rules of the desktop's file service
+(`axia_fs::policy`): the home folder and the mounted disks, never the protected files and
+folders; writing is atomic, keeps the permissions and refuses links and special files; up to
+32 MB. The shared services only run what Rust asks for: the file dialog (`files.pick`, which now
+opens, saves and picks folders), `windows.menus`, `windows.events`, `windows.closeGuard`,
+`windows.close`, `print.open` and the input method.
 
-- **10,001-line file (448 KB, JavaScript):**
-  - it opens in under a second;
-  - with the cursor at the end, a keystroke takes 4 ms of JS plus 1 ms of layout and 1–2 ms of
-    painting (1,640 nodes on screen);
-  - the first jump to the end of the file took 67 ms, because it highlights everything in
-    between.
-- **Outside the UI (Node, same code):** tokenizing the 10,001 lines takes 76 ms; a keystroke in
-  the document, 0.004 ms.
-- **Tests of `buffer.js` and `syntax.js`:** 28/28 in Node and in QuickJS (the same engine as
-  axia-server; `/tmp/qjsrun` on the VM): multiple cursors, grouped undo, position mapping, CRLF,
-  «modified» after undo, and the language states.
+Tests: `cargo test -p axia-app-editor` (document, commands, tokenizer, search, and the window
+against the job protocol with a scratch home). During the port the tokenizer was compared with the
+JavaScript one on about 200,000 lines of this repository and the document with 10,000 random
+operations.
+
+## Differences from the React version
+
+- Redoing a run of typed characters now restores it; before, `abc`, undo, redo gave `acb`.
+- SQL keywords are recognized in any case (`Select`), as intended.
+- Files that are not valid UTF-8 are refused like binary files, so saving cannot corrupt them.
+- Regex search uses the Rust `regex` syntax: no look-around and no backreferences (the bar shows
+  "invalid regex"). Replacements keep `$1`, `$&`, `$<name>` and `$$`.
+- Closing a window with several unsaved documents asks about each in turn, and "Save" on an
+  untitled one closes it after the file dialog.
+- Hiding and showing the project keeps the chosen folder.
+
+Performance has not been measured again, and the window still needs the graphical check on a
+desktop (pointer selection, input method, light and dark).
 
 ## Pending
 

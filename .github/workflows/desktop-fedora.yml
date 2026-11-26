@@ -313,6 +313,17 @@ jobs:
           AXIA_PDF_AXIA_OUTPUT: ${{ runner.temp }}/axia-pdf/axia
           AXIA_PDF_ADWAITA_OUTPUT: ${{ runner.temp }}/axia-pdf/adwaita
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test pdf_runtime -- --ignored --nocapture
+      - name: Native Text Editor in the compositor
+        if: matrix.gpu == 1
+        env:
+          AXIA_EDITOR_OUTPUT: ${{ runner.temp }}/axia-editor
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test editor_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-editor
+          path: ${{ runner.temp }}/axia-editor
+          if-no-files-found: warn
       - name: Native screenshot editor, image jobs and ownership
         if: matrix.gpu == 1
         env:

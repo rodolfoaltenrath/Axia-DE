@@ -39,6 +39,7 @@ axia-app-sysinfo = { path = "../axia-app-sysinfo" }
 axia-app-terminal = { path = "../axia-app-terminal" }
 axia-app-camera = { path = "../axia-app-camera" }
 axia-app-player = { path = "../axia-app-player" }
+axia-app-editor = { path = "../axia-app-editor" }
 axia-app-store = { path = "../axia-app-store" }
 axia-app-clock = { path = "../axia-app-clock" }
 axia-app-help = { path = "../axia-app-help" }

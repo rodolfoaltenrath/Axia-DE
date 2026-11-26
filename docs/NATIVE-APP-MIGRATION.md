@@ -53,9 +53,13 @@ and window suites in `apps/player` and `node server/tests/native_media_test.mjs`
 test with a real file, the picture in picture frame in the compositor and graphical checks
 remain for the final desktop validation.
 
+Text Editor is native: document, commands, highlighting, search, window and confined file
+access are Rust (see [EDITOR.md](EDITOR.md)). The runtime gained transport-only services:
+save and folder modes for `files.pick`, `windows.closeGuard` and `windows.close`. Graphical and
+input-method checks remain for the final desktop validation.
+
 Remaining apps (all remain in scope):
-editor and mail. Existing Rust
-models in some of these apps do not count as native-window completion.
+mail. Existing Rust models in it do not count as native-window completion.
 
 Contacts now has only Rust sources, including its manifest, full three-column
 window and icon. Rust owns names, multiword search, book-scoped groups, target

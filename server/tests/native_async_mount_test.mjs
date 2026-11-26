@@ -107,6 +107,30 @@ await windows(['logs','logs#2']);
 globalThis.__nativePickerRecords.at(-1).onClose();
 await windows(['logs','logs#2']);
 assert.equal(lord.nativeAsync.take(first.owner,[cancelled])[0].value,null);
+// the editor saves and opens folders through the same dialog; an unknown mode falls back to open
+for(const [asked,shown] of [['save','save'],['folder','folder'],['delete','open']]) {
+  const job=lord.nativeAsync.start(first.owner,'files.pick',[{title:'Mode',mode:asked,name:'a.txt'}]);
+  await windows(['logs','logs#2']);
+  const dialog=globalThis.__nativePickerRecords.at(-1);
+  assert.equal(dialog.mode,shown);assert.equal(dialog.name,'a.txt');
+  dialog.onClose();
+  await windows(['logs','logs#2']);
+  assert.equal(lord.nativeAsync.take(first.owner,[job])[0].value,null);
+}
+// the close guard holds a window with unsaved work and reports the request to the app
+const {windowServices}=await import('../../runtime/native_window_services.js');
+const guards=[],closed=[],focused=[],emitted=[],stops=[];
+const shell=windowServices({setCloseGuard:(id,fn)=>{guards.push([id,fn]);return()=>stops.push(id);},focus:id=>focused.push(id),close:(...a)=>closed.push(a)});
+const holder={id:9,emit:e=>emitted.push(e),cleanup:fn=>stops.push(fn)};
+shell['windows.closeGuard'].run(['editor',false],holder);
+assert.equal(guards[0][1](),true,'a clean window closes');
+shell['windows.closeGuard'].run(['editor',true],holder);
+assert.equal(guards.length,1,'one guard per window, updated in place');
+assert.equal(guards[0][1](),false);
+assert.deepEqual([emitted,focused],[[{kind:'closeRequested'}],['editor']]);
+stops.pop()();assert.deepEqual(stops,['editor'],'closing the window releases its guard');
+shell['windows.close'].run(['editor']);assert.deepEqual(closed,[['editor',true]]);
+assert.throws(()=>shell['windows.close'].run([7]),/invalidRequest/);
 
 await windows(['logs#2']);
 assert.throws(()=>lord.nativeAsync.start(first.owner,'logs.sources'),/invalidRequest/);

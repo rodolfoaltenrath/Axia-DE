@@ -27,6 +27,7 @@ members = [
     "axia-app-pdf",
     "axia-app-photos",
     "axia-app-player",
+    "axia-app-editor",
     "axia-app-recorder",
     "axia-app-reminders",
     "axia-app-scanner",

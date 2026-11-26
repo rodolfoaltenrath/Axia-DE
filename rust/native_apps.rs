@@ -59,6 +59,8 @@ pub mod pdf;
 pub mod terminal;
 #[path = "../apps/player/manifest.rs"]
 pub mod player;
+#[path = "../apps/editor/manifest.rs"]
+pub mod editor;
 pub fn manifests() -> serde_json::Value {
     serde_json::json!([
         about::manifest(),
@@ -90,7 +92,8 @@ pub fn manifests() -> serde_json::Value {
         passwords::manifest(),
         pdf::manifest(),
         terminal::manifest(),
-        player::manifest()
+        player::manifest(),
+        editor::manifest()
     ])
 }
 #[cfg(test)]
