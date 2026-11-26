@@ -324,6 +324,17 @@ jobs:
           name: axia-editor
           path: ${{ runner.temp }}/axia-editor
           if-no-files-found: warn
+      - name: Native Mail in the compositor
+        if: matrix.gpu == 1
+        env:
+          AXIA_MAIL_OUTPUT: ${{ runner.temp }}/axia-mail
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test mail_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-mail
+          path: ${{ runner.temp }}/axia-mail
+          if-no-files-found: warn
       - name: Native screenshot editor, image jobs and ownership
         if: matrix.gpu == 1
         env:
