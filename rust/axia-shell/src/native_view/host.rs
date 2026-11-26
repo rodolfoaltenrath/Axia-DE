@@ -1337,6 +1337,24 @@ impl Host {
             false
         }
     }
+    /// "onMouseDown" bubbles from the node under the pointer: the first view that listens gets
+    /// it (a drag surface, the backdrop of a dialog), and nothing above the nearest clickable
+    /// node does — what is pressed there belongs to it.
+    fn press_action(&mut self, mut node: i32) -> bool {
+        for _ in 0..4096 {
+            if node <= 0 || node == self.mount {
+                break;
+            }
+            if self.events.get(&node).is_some_and(|e| e["onMouseDown"].is_array()) {
+                return self.pointer_action(node, "onMouseDown");
+            }
+            if matches!(self.targets.get(&node), Some(Target::Click(..))) {
+                break;
+            }
+            node = scene::parent(node);
+        }
+        false
+    }
     fn focus(&mut self, node: i32) {
         if node == self.field {
             return;
@@ -1573,7 +1591,7 @@ impl Host {
                 if self.pressed != 0 {
                     self.restyle(self.pressed);
                 }
-                changed |= self.pointer_action(self.pressed, "onMouseDown");
+                changed |= self.press_action(target);
                 let field = self
                     .target(target, |t| matches!(t, Target::Field))
                     .map_or(0, |(n, _)| n);

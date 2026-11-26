@@ -1291,6 +1291,39 @@ fn pointer_actions_carry_position_and_modifiers_and_the_extra_events_reach_the_a
     scene::destroy(mount);
 }
 
+#[test]
+fn a_press_reaches_the_first_listening_surface_and_stops_at_clickable_nodes() {
+    struct Ev(Rc<RefCell<Vec<Value>>>);
+    impl NativeApp for Ev {
+        fn request(&mut self, input: &Value) -> Value {
+            if input["cmd"] == "sync" {
+                // a surface without onClick (a text area, a drag handle, a dialog's backdrop) with
+                // plain content, a clickable child and an inner surface of its own
+                return json!({"tree":{"kind":"view","children":[{"kind":"view","events":{"onMouseDown":["surface"]},"children":[
+                    {"kind":"view","children":[{"kind":"text","label":"Plain"}]},
+                    {"kind":"view","events":{"onClick":["click"]},"children":[{"kind":"text","label":"Button"}]},
+                    {"kind":"view","events":{"onMouseDown":["card"]},"children":[{"kind":"text","label":"Card"}]}]}]}});
+            }
+            self.0.borrow_mut().push(input["cmd"].clone());
+            json!({})
+        }
+    }
+    let mount = scene::create(scene::VIEW);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut host = Host::new(mount, Box::new(Ev(log.clone())), "", None);
+    host.facts(json!({}));
+    for (label, expected) in [("Plain", vec!["surface"]), ("Button", vec!["click"]), ("Card", vec!["card"])] {
+        log.borrow_mut().clear();
+        let node = node_with_text(mount, label);
+        host.pointer("down", node, 1., 1., 0);
+        host.pointer("up", node, 1., 1., 0);
+        let seen: Vec<_> = log.borrow().iter().filter(|c| *c != "next").cloned().collect();
+        assert_eq!(seen, expected.iter().map(|c| json!(c)).collect::<Vec<_>>(), "{label}");
+    }
+    drop(host);
+    scene::destroy(mount);
+}
+
 struct SurfaceProbe {
     tree: Rc<RefCell<Value>>,
     log: Rc<RefCell<Vec<Value>>>,
