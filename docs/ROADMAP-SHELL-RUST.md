@@ -96,8 +96,8 @@ brilho e energia, método de entrada, aparência.
 
 **Ainda em JavaScript:**
 
-- 1 app: `mail`. (`screenshots`, `passwords` e `pdf` já
-  não têm JSX nem JS na pasta; ficam só os adaptadores de sessão em `runtime/`.)
+- Nenhum app de `apps/`: todas as janelas dos apps nativos são Rust (ficam só os
+  adaptadores de sessão em `runtime/`).
 - `sdk/`: 122 arquivos JS/JSX na árvore de 2026-11-23. A divisão histórica da Fase 0 está em
   `LPK-SDK-BOUNDARY.md`; os módulos novos continuam no escopo da migração.
 - `themes/default/` (a montagem da shell) e `runtime/` (reconciler React e eventos).
@@ -751,7 +751,12 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       arquivos, "Abrir com" e Central de Controle), registrada e sem JSX, JS nem manifesto JSON.
       Serviços novos de transporte: `media.probe`, `media.nowPlaying`, `windows.screen`,
       `windows.pip`. Falta: teste GPU com arquivo real (`player_runtime`) e validação gráfica.
-- [ ] `mail` (exibição de HTML; por último)
+- [x] `mail` (processo isolado): três painéis, lista virtual, leitura do HTML saneado,
+      folhas de conta, certificado, senha e link, e a janela de escrever (o corpo usa o
+      editor do Notes) em Rust; JSX, JS e manifesto JSON retirados. O transporte está em
+      `runtime/native_mail_services.js`; o lado da sessão continua em `sdk/mail.js`.
+      Falta a validação com contas reais (IMAP, SMTP, chaveiro) e a gráfica. Ver
+      [MAIL.md](MAIL.md).
 - [x] `editor`: documento com vários cursores e desfazer, comandos de edição, realce,
       busca e substituição, painel de projeto, abas, diálogos e acesso confinado a
       arquivos em Rust; JSX, JS e manifesto JSON retirados. Falta a validação gráfica

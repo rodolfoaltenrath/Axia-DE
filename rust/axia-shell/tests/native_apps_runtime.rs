@@ -218,7 +218,8 @@ fn real_compiled_app_widgets_and_effects() {
             "pdf",
             "terminal",
             "player",
-            "editor"
+            "editor",
+            "mail"
         ])
     );
     assert_eq!(get("invalid-id")["rejected"], true);

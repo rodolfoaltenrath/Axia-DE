@@ -1,0 +1,11 @@
+[package]
+name = "axia-app-mail"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+axia-native = { path = "../axia-native" }
+libc = "0.2"
+regex = "1"
+serde_json = "1"

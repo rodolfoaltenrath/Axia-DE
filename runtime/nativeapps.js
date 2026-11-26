@@ -29,7 +29,10 @@ import { clipboardServices } from './native_clipboard_services.js';
 import { inputServices } from './native_input_services.js';
 import { startNativeSession } from './native_session_widgets.js';
 import { isolatedApp } from '../sdk/packages.js';
-import { mailRequest, onMailEvent } from '../sdk/mail.js';
+import { mailRequest, onMailEvent, mailAccounts, mailConfig, mailStatus, trackMailStatus, mailAvailable, isolatedPim } from '../sdk/mail.js';
+import { openFileWithApps, revealPath } from '../sdk/sysopen.js';
+import { saveFile } from '../sdk/powerbox.jsx';
+import { mailServices } from './native_mail_services.js';
 import { pimServices } from './native_pim_services.js';
 import { windows } from '../sdk/windows.js';
 import { workArea } from '../sdk/windows.js';
@@ -84,6 +87,19 @@ const methods = {
   ...pimServices({ request: mailRequest, onEvent: onMailEvent, pick: () => lord.broker?.pick(false, ''),
     close: fd => lord.broker.fdClose(fd), releaseImage: image => lord.mail.release(image),
     events: owner => bridge.events(owner) }),
+  ...mailServices({ accounts: mailAccounts, config: mailConfig, status: mailStatus, track: trackMailStatus,
+    closeFd: fd => lord.broker.fdClose(fd), api: {
+      available: mailAvailable, isolated: isolatedPim, request: mailRequest, saveFile, reveal: revealPath,
+      cacheDir: () => lord.mail.cacheDir(),
+      releaseImage: image => lord.mail.release(image),
+      pick: () => lord.broker?.pick?.(false, ''),
+      fdSize: fd => lord.broker.fdSize?.(fd) ?? -1,
+      fdRead: fd => lord.broker.fdRead(fd),
+      attachmentFd: relative => lord.mail.attachmentFd(relative),
+      allowImages: urls => lord.mail.allowImages(urls),
+      openAttachment: (relative, name) => (isolatedPim() ? lord.mail.openAttachment(relative, name)
+        : openFileWithApps(`${lord.mail.cacheDir()}/${relative}`, name)),
+    } }),
   'windows.state': { run([window, state]) { nativeWindowStates.set(window, state); return null; } },
   ...fontServices({ fontInfo, fontSample, fontGrid, releaseImage, list: options => lord.fonts.list(options) }),
   ...documentServices({ decodeImage, convertImage, pdfThumb, releaseImage }),

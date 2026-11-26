@@ -1,7 +1,7 @@
 # Axia apps
 
 `apps/about/`, `apps/characters/`, `apps/clock/`, `apps/forcequit/`, `apps/files/`, `apps/calculator/`,
-`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/`, `apps/backup/`, `apps/camera/`, `apps/notes/`, `apps/player/`, `apps/editor/` and `apps/appabout/` are compiled Rust applications. Their folders
+`apps/monitor/`, `apps/store/`, `apps/help/`, `apps/logs/`, `apps/fonts/`, `apps/scanner/`, `apps/recorder/`, `apps/backup/`, `apps/camera/`, `apps/notes/`, `apps/player/`, `apps/editor/`, `apps/mail/` and `apps/appabout/` are compiled Rust applications. Their folders
 contain only `.rs` files: `mod.rs` owns the application, `ui.rs` its widget trees,
 `tests.rs` its behavior and `manifest.rs` its metadata (some small apps keep
 their UI in `mod.rs`). There are no app JSX or
@@ -244,3 +244,8 @@ Text Editor owns its document, multiple cursors, undo, highlighting, find and
 replace, project panel, tabs and confined file access in Rust; see
 [EDITOR.md](../docs/EDITOR.md). The shared services only open the file dialog,
 publish menus and window events, guard closing, print and carry the input method.
+
+Mail owns its three-pane and compose windows in Rust, including the drawing of
+sanitized HTML; see [MAIL.md](../docs/MAIL.md). It runs in its own process, and
+the shared services only carry requests to its helper, the accounts file and
+keyring, leased file descriptors and attachment opening.

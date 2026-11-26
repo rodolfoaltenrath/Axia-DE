@@ -2,9 +2,8 @@
 
 LordOS ships four native apps for personal information: **Mail** (a three-pane client in the
 spirit of classic desktop mail clients), **Calendar**, **Contacts** and **Reminders**. They are
-ordinary LordOS apps (`apps/mail` still uses
-React on our engine; `apps/calendar`, `apps/contacts` and `apps/reminders` now own their UI and model in Rust — see
-[RUST-REMINDERS.md](RUST-REMINDERS.md)). All the network protocols and every parser of data that comes from outside
+ordinary LordOS apps: `apps/mail`, `apps/calendar`, `apps/contacts` and `apps/reminders` own their
+UI and model in Rust (see [RUST-REMINDERS.md](RUST-REMINDERS.md)). All the network protocols and every parser of data that comes from outside
 run in one sandboxed helper process, **`axia-maild`**.
 
 | Piece | Status |
@@ -176,7 +175,7 @@ LordOS has no web engine (WebKit/Chromium are not allowed), and Mail does not ne
 HTML part goes through **our sanitizer** (`rust/axia-mail/src/html.rs`, see [RUST-MAIL.md](RUST-MAIL.md)): a tolerant tokenizer that
 builds a small tree in JSON — blocks, layout tables (rows, cells, widths, colors, padding,
 alignment), text runs (bold, monospace, color, size, background, underline/strike), images and
-links — and `apps/mail/HtmlView.jsx` draws it with View/Text/Image. Common newsletter markup
+links — and `apps/mail/html.rs` draws it with native views, texts and images. Common newsletter markup
 (nested tables for layout, inline styles, `bgcolor`, `align`, `<font>`, lists, quotes) renders
 close to the intent; anything else degrades to text. Always dropped: `script`, `style`, `iframe`,
 `object`, `embed`, `form` controls, `svg`, `math`, media, comments, `<!DOCTYPE>`, every `on*`
@@ -195,6 +194,24 @@ their own colors are shown on their own light "paper" (also in dark mode), other
   address can be copied. `mailto:` opens a compose window.
 - There is no browser fallback: if HTML is missing or empty, the plain text part is shown, with
   links clickable and quoted lines dimmed.
+
+### How the Mail app is built
+
+`apps/mail` is a compiled Rust app, in its own process like the other three:
+
+| File | What it holds |
+|---|---|
+| `model.rs` | Names and sizes, replies and forwards, outgoing text and HTML, recipients, the provider table, the list request, saving to Downloads |
+| `html.rs` | The sanitized tree and the plain text drawn as widgets, and which images are still missing |
+| `window.rs`, `ui.rs` | The three-pane window: folders, the virtual list, the reading pane, actions and keys |
+| `sheets.rs` | Account setup and management, certificate warning, password, link and category sheets |
+| `compose.rs` | The compose window; the body is the Markdown editor of Notes (`apps/notes/editor.rs`) |
+
+`runtime/native_mail_services.js` only carries I/O: the helper requests, the accounts file and the
+keyring, descriptors leased to the window (from the system file dialog, or a cached attachment) and
+opening or saving an attachment. The session side of Mail (new-mail notifications, passwords on
+demand, the unread count) stays in `sdk/mail.js`. Remote images are asked for only after their
+hosts were allowed, and their handles are released when the message leaves the screen.
 
 ### Compose
 

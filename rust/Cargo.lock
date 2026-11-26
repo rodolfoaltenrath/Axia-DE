@@ -195,6 +195,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "axia-app-mail"
+version = "0.1.0"
+dependencies = [
+ "axia-native",
+ "libc",
+ "regex",
+ "serde_json",
+]
+
+[[package]]
 name = "axia-app-monitor"
 version = "0.1.0"
 dependencies = [
@@ -492,6 +502,7 @@ dependencies = [
  "axia-app-forcequit",
  "axia-app-help",
  "axia-app-logs",
+ "axia-app-mail",
  "axia-app-monitor",
  "axia-app-notes",
  "axia-app-passwords",

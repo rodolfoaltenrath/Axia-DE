@@ -157,6 +157,16 @@ publication, multiple mounts, widget geometry, composition, native-host focus
 and saving, and session restoration before opening a window. Graphical and input
 device checks remain reserved for the final desktop validation.
 
+Mail now has only Rust sources. Rust owns both windows: accounts and folders, the
+virtual message list, the sanitized HTML reading pane, invitations, attachments, the
+sheets for accounts, certificates, passwords and links, and composing with
+suggestions, drafts, scheduled sending and a close guard. The body editor is the
+Notes editor with the theme's colors. Transport services carry helper requests, the
+accounts file and keyring, leased descriptors and attachment opening. Model and
+window tests run against a pretend helper; the compositor test replaces `lord.mail`.
+Real IMAP, SMTP and keyring use and graphical checks remain part of the final
+desktop check.
+
 Before final completion, audit every app folder and registry entry, native host
 registration, remaining JSX/JS policy, complete feature coverage, lifecycle and
 resource ownership, tests, packaging/catalogs and the final desktop build. Keep

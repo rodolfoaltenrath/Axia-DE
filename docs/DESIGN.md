@@ -119,7 +119,7 @@ the Recorder draw their empty-state icons. `↻ ⤮ ♪ ◫ ▣ ☺ ≡` render 
   (`textDirection(body)`), so an English article in an Arabic interface still reads left to right.
 - **Mail / Calendar / Contacts / Reminders:** source lists use monochrome glyphs in the accent
   color; where the glyph would be a color emoji (tray, archive, trash, folder, person) it is drawn
-  with views (`Glyph` in `apps/mail`, `PersonGlyph` in `apps/contacts`). Mail keeps three panes with
+  with views (`glyph` in `apps/mail/ui.rs`, `person` in `apps/contacts/ui.rs`). Mail keeps three panes with
   an icon-only toolbar over the list and the message; list rows are 86 px (sender, subject, two lines
   of preview) with a rounded selection, and under 1000 px the panes shrink to 200 / 290 px.
   Calendar centers the Day/Week/Month switch, puts the period title (22/700) over the grid with
