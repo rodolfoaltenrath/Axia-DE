@@ -313,6 +313,21 @@ fn formatting_menu_and_composition_are_native_and_copy_does_not_erase_empty_clip
     assert!(app.note().unwrap().body.contains("```"));
 }
 #[test]
+fn shift_reported_apart_from_the_other_modifiers_still_selects_and_formats() {
+    let home = Home::new();
+    let mut app = app_at(&home);
+    app.command("new", &json!({}), 1000);
+    app.editor.reset("hello");
+    app.editor.focused = true;
+    app.mode = "edit".into();
+    let shift = crate::native_view::KeyFacts { shift: true, ..Default::default() };
+    app.key_event("ArrowLeft", "", 0, &shift);
+    app.key_event("ArrowLeft", "", 0, &shift);
+    assert_eq!(app.editor.range(), (3, 5));
+    app.key_event("8", "", 2, &shift);
+    assert_eq!(app.note().unwrap().body, "- hello");
+}
+#[test]
 fn closing_after_the_thread_local_session_is_gone_is_a_no_op_and_edits_are_kept() {
     // A host is dropped at process exit, after the thread's session: its `close` must not touch it.
     thread_local! { static LATE: std::cell::RefCell<Option<(App, String)>> = const { std::cell::RefCell::new(None) }; }

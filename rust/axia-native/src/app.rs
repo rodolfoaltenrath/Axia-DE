@@ -77,8 +77,8 @@ pub trait NativeApp {
         None
     }
     /// A key with what the plain form drops (see `KeyFacts`). Apps that care (a terminal)
-    /// override this; the others see `key`.
-    fn key_event(&mut self, key: &str, chr: &str, flags: i32, _facts: &KeyFacts) -> Option<Value> {
-        self.key(key, chr, flags)
+    /// override this; the others see `key`, with Shift back among the flags (1).
+    fn key_event(&mut self, key: &str, chr: &str, flags: i32, facts: &KeyFacts) -> Option<Value> {
+        self.key(key, chr, flags | i32::from(facts.shift))
     }
 }
