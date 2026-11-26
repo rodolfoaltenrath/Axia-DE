@@ -502,17 +502,14 @@ impl Session {
                 })
             }
         };
-        let filter = if let Some(pattern) = args["filter"].as_str().filter(|s| !s.is_empty()) {
-            Some(
-                regex::RegexBuilder::new(pattern)
-                    .case_insensitive(args["ignoreCase"].as_bool().unwrap_or(false))
-                    .size_limit(1024 * 1024)
-                    .build()
-                    .map_err(|_| "sys.badArgument".to_string())?,
-            )
-        } else {
-            None
-        };
+        // a filter that cannot be built shows every file: the dialog must open
+        let filter = args["filter"].as_str().filter(|s| !s.is_empty()).and_then(|pattern| {
+            regex::RegexBuilder::new(pattern)
+                .case_insensitive(args["ignoreCase"].as_bool().unwrap_or(false))
+                .size_limit(super::external::FILTER_SIZE)
+                .build()
+                .ok()
+        });
         let (tx, rx) = mpsc::channel();
         let mut session = Self {
             id,

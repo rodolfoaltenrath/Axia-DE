@@ -77,6 +77,7 @@ mod keygrab;
 mod wayland;
 mod x11;
 mod window_policy;
+mod portal_chooser;
 mod canvas_shadow;
 mod canvas_ops;
 mod glass_pacing;

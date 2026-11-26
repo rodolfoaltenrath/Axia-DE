@@ -1,5 +1,5 @@
 // Broker permissions/descriptor transport. All picker UI/state belongs to Rust.
-import { createElement as h } from 'react';
+import { createElement as h, Component } from 'react';
 import { createStore, useStore } from './store.js';
 import { useLocale, appName } from './i18n.js';
 import { getApp } from './windows.js';
@@ -27,19 +27,26 @@ function finish(item, path) {
     }
   } else lord.broker.pickResult(item.reqid, path || '');
 }
+// A dialog that breaks while drawing is answered as cancelled: the application that asked must
+// never be left waiting, and the next request must still be able to open.
+class DialogGuard extends Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error) { console.log(`File chooser: the dialog failed: ${error?.message || error}`); this.props.onFail(); }
+  render() { return this.state.failed ? null : this.props.children; }
+}
 export function Powerbox() {
   const q = useStore(queue);
   const { t } = useLocale();
   const item = q[0];
   if (!item) return null;
-  if (item.external) {
-    const native = item.native;
-    return h(RustFileDialog, { key: item.key, ...native, filter: native.filter ? new RegExp(native.filter) : null,
-      onPick: (path) => finish(item, path), onClose: () => finish(item, '') });
-  }
-  return h(RustFileDialog, { key: item.key, mode: item.save ? 'save' : 'open', name: item.suggest,
-    title: t(item.save ? 'powerbox.saveTitle' : 'powerbox.openTitle', { app: appName(getApp(item.app)) || item.app }),
-    onPick: (path) => finish(item, path), onClose: () => finish(item, '') });
+  const answer = { onPick: (path) => finish(item, path), onClose: () => finish(item, '') };
+  // only the pattern's text goes on to Rust, which built it: no JavaScript RegExp in between
+  const dialog = item.external
+    ? h(RustFileDialog, { ...item.native, filter: item.native.filter ? { source: item.native.filter } : null, ...answer })
+    : h(RustFileDialog, { mode: item.save ? 'save' : 'open', name: item.suggest,
+      title: t(item.save ? 'powerbox.saveTitle' : 'powerbox.openTitle', { app: appName(getApp(item.app)) || item.app }), ...answer });
+  return h(DialogGuard, { key: item.key, onFail: () => finish(item, '') }, dialog);
 }
 const inApp = () => typeof lord !== 'undefined' && lord.broker && typeof lord.broker.pick === 'function';
 export async function openFile() {

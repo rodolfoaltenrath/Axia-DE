@@ -47,6 +47,64 @@ fn glob(pattern: &str) -> String {
     result
 }
 
+/// The compiled size a file filter may take, here and where the dialog builds it.
+pub(super) const FILTER_SIZE: usize = 8 * 1024 * 1024;
+/// More lines than this and every file is shown.
+const MOST_LINES: usize = 2048;
+
+/// One expression for many globs. Those that start with `*` (extensions, almost all of them)
+/// share it, so hundreds of formats stay small. None when it cannot be built.
+fn expression(globs: &[&str]) -> Option<String> {
+    let (mut endings, mut whole) = (Vec::new(), Vec::new());
+    for pattern in globs {
+        match pattern.strip_prefix('*') {
+            Some(ending) => endings.push(glob(ending)),
+            None => whole.push(glob(pattern)),
+        }
+    }
+    if !endings.is_empty() {
+        whole.push(format!(".*(?:{})", endings.join("|")));
+    }
+    let filter = format!("^(?:{})$", whole.join("|"));
+    regex::RegexBuilder::new(&filter).size_limit(FILTER_SIZE).build().ok().map(|_| filter)
+}
+
+/// The globs a `m:` line stands for. A type we do not know accepts every file.
+fn mime_globs(mime: &str) -> &'static [&'static str] {
+    match mime {
+        "image/*" => &["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.bmp", "*.svg", "*.tif", "*.tiff", "*.avif"],
+        "image/png" => &["*.png"],
+        "image/jpeg" => &["*.jpg", "*.jpeg"],
+        "application/pdf" => &["*.pdf"],
+        "text/plain" => &["*.txt", "*.text"],
+        _ => &["*"],
+    }
+}
+
+/// The dialog's filter for an application's patterns. A filter that cannot be honored in full
+/// shows every file: hiding files the application accepts would be worse.
+fn filter_for(patterns: &str) -> String {
+    if patterns.len() > 65536 || patterns.lines().count() > MOST_LINES {
+        return String::new();
+    }
+    let mut globs = Vec::new();
+    for line in patterns.lines() {
+        if let Some(g) = line.strip_prefix("g:") {
+            globs.push(g);
+        }
+        if let Some(m) = line.strip_prefix("m:") {
+            globs.extend_from_slice(mime_globs(m));
+        }
+    }
+    if globs.is_empty() || globs.contains(&"*") {
+        return String::new();
+    }
+    expression(&globs).unwrap_or_default()
+}
+
+/// The arguments of the dialog for another application's request. Only an unknown mode or a file
+/// name that would leave the chosen folder is an error: everything else falls back to something
+/// that still opens.
 pub fn prepare(args: &Value) -> Result<Value> {
     let mode = args["mode"].as_str().unwrap_or("open");
     if !["open", "save", "folder", "saveFiles"].contains(&mode) {
@@ -62,45 +120,14 @@ pub fn prepare(args: &Value) -> Result<Value> {
     let name = args["name"].as_str().unwrap_or("");
     let mut files = Vec::new();
     if mode == "saveFiles" {
-        for s in name.split('\n').take(129) {
+        for s in name.split('\n').filter(|s| !s.is_empty()).take(129) {
             if !basename(s) || files.len() >= 128 {
                 return Err("sys.badArgument".into());
             }
             files.push(s);
         }
     }
-    let patterns = args["patterns"].as_str().unwrap_or("");
-    if patterns.len() > 16384 {
-        return Err("sys.badArgument".into());
-    }
-    let mut globs = Vec::new();
-    for line in patterns.lines().take(128) {
-        if let Some(g) = line.strip_prefix("g:") {
-            globs.push(glob(g));
-        }
-        if let Some(m) = line.strip_prefix("m:") {
-            let patterns: &[&str] = match m {
-                "image/*" => &[
-                    "*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.bmp", "*.svg", "*.tif",
-                    "*.tiff", "*.avif",
-                ],
-                "image/png" => &["*.png"],
-                "image/jpeg" => &["*.jpg", "*.jpeg"],
-                "application/pdf" => &["*.pdf"],
-                "text/plain" => &["*.txt", "*.text"],
-                _ => &["*"],
-            };
-            globs.extend(patterns.iter().map(|p| glob(p)));
-        }
-    }
-    let filter = if globs.is_empty() {
-        String::new()
-    } else {
-        format!("^(?:{})$", globs.join("|"))
-    };
-    if !filter.is_empty() && regex::Regex::new(&filter).is_err() {
-        return Err("sys.badArgument".into());
-    }
+    let filter = filter_for(args["patterns"].as_str().unwrap_or(""));
     Ok(
         json!({"mode":if mode=="saveFiles"{"folder"}else{mode},"start":start,
         "name":if mode=="save" && basename(name){name}else{""},"files":files,
@@ -175,7 +202,8 @@ mod tests {
         let re = regex::Regex::new(prepared["filter"].as_str().unwrap()).unwrap();
         assert!(re.is_match("PHOTO.PNG"));
         assert!(!re.is_match("picture.pdf"));
-        assert!(prepare(&json!({"patterns":"g:[z-a]"})).is_err());
+        let broken = prepare(&json!({"patterns":"g:[z-a]"})).unwrap();
+        assert_eq!(broken["filter"], "", "a filter that cannot be built shows every file");
         let sensitive = prepare(&json!({"patterns":"g:*.png"})).unwrap();
         let re = regex::Regex::new(sensitive["filter"].as_str().unwrap()).unwrap();
         assert!(!re.is_match("photo.PNG"));
@@ -186,5 +214,28 @@ mod tests {
             .unwrap()
             .ends_with("foto%20%231%25.png"));
         assert!(prepare(&json!({"mode":"saveFiles","name":"../bad"})).is_err());
+    }
+    /// PhotoCraft's "All Formats": three spellings of dozens of extensions.
+    #[test]
+    fn hundreds_of_formats_are_all_kept_and_the_dialog_accepts_the_filter() {
+        let _h = Home::new();
+        let mut patterns = String::new();
+        for i in 0..150 {
+            let classes: String = format!("ext{i}").chars().map(|c| if c.is_ascii_alphabetic() { format!("[{c}{}]", c.to_ascii_uppercase()) } else { c.to_string() }).collect();
+            patterns.push_str(&format!("g:*.ext{i}\ng:*.EXT{i}\ng:*.{classes}\n"));
+        }
+        let prepared = prepare(&json!({"patterns":patterns})).unwrap();
+        let filter = prepared["filter"].as_str().unwrap();
+        let re = regex::RegexBuilder::new(filter).size_limit(FILTER_SIZE).build().unwrap();
+        for name in ["a.ext0", "b.ext127", "c.eXt128", "d.EXT149"] {
+            assert!(re.is_match(name), "{name}");
+        }
+        assert!(!re.is_match("a.txt") && !re.is_match("ext0"));
+        // too many to honor: everything is shown instead of an arbitrary part
+        let huge = "g:*.a\n".repeat(MOST_LINES + 1);
+        assert_eq!(prepare(&json!({"patterns":huge})).unwrap()["filter"], "");
+        assert_eq!(prepare(&json!({"patterns":"g:*.png\ng:*"})).unwrap()["filter"], "");
+        assert_eq!(prepare(&json!({"patterns":"m:application/x-unknown"})).unwrap()["filter"], "");
+        assert_eq!(prepare(&json!({"mode":"saveFiles","name":""})).unwrap()["files"], json!([]));
     }
 }
