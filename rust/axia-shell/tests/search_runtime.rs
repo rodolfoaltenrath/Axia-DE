@@ -129,8 +129,10 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
         String::from_utf8_lossy(&output.stderr)
     );
     let mut command = Command::new(repo.join("server/build/axia-server"));
+    // This 160-cycle lifetime probe also exceeds 90 s with the legacy adapter on
+    // constrained builders. Its deadline is not a latency budget; resource limits stay below.
     command
-        .args(["--headless", "1000x700", "--timeout", "45", "--theme"])
+        .args(["--headless", "1000x700", "--timeout", "180", "--theme"])
         .arg(&bundle)
         .arg("--fonts")
         .arg(repo.join("assets/fonts"))
@@ -165,7 +167,7 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
         }
     }
     let mut child = command.spawn().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let deadline = Instant::now() + Duration::from_secs(195);
     // The headless session renders on its own; wait for the probe to finish.
     while child.try_wait().unwrap().is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
@@ -236,6 +238,9 @@ fn real_search_geometry_input_previews_and_resident_lifetime() {
         assert_eq!(get(stage)["stats"]["managedImageKB"], 0);
     }
     assert_eq!(get("idle")["polls"], get("cycles")["polls"]);
+    assert_eq!(get("idle")["polls"], 0, "the session never polls search from JavaScript");
+    assert!(get("cycles")["pushes"].as_u64().unwrap() > 0, "Rust completions reach the adapter");
+    assert_eq!(get("idle")["pushes"], get("cycles")["pushes"], "closed search sends no idle packets");
     // Captions with unique matches keep the original 1000x700 geometry contract.
     // Native nodes are owned by Rust, so inspect them through nativeViews rather
     // than intercepting React's setText calls. Repeated captions are checked by
@@ -274,19 +279,22 @@ import {treeOwners} from '@ROOT@/sdk/nativetree.js';
 import {useShortcuts,resetShortcuts} from '@ROOT@/sdk/shortcuts.js';
 import {clipboard,clipboardHistory} from '@ROOT@/sdk/clipboard.js';
 
-let handle=0,polls=0,lastReply;
+let handle=0,polls=0,pushes=0,lastReply;
+const started=lord.now();
 const mount=lord.nativeViews.mount,unmount=lord.nativeViews.unmount;
 lord.nativeViews.mount=(node,app,text,...source)=>{const result=mount(node,app,text,...source);if(JSON.parse(text).args?.owner==='spotlight')handle=result;return result;};
 lord.nativeViews.unmount=id=>{if(id===handle)handle=0;return unmount(id);};
 const native=lord.launcher.request.bind(lord.launcher);
 lord.launcher.request=raw=>{const input=JSON.parse(raw),result=native(raw);if(input.op==='search'){if(input.cmd==='poll'){polls++;for(const update of result.updates)lastReply=update;}else if(result?.id)lastReply=result;}return result;};
+const acceptSearch=globalThis.__lordSearchUpdate;
+globalThis.__lordSearchUpdate=reply=>{pushes++;for(const update of reply.updates)lastReply=update;acceptSearch(reply);};
 const stats=()=>native(JSON.stringify({op:'search',cmd:'stats'}));
 const texts=()=>handle?[{text:lord.nativeViews.text(handle)}]:[];
 const nodes=tree=>tree?[tree,...(tree.children||[]).flatMap(nodes)]:[];
 const layout=()=>[...new Set(nodes(lastReply?.tree).filter(n=>n.kind==='text').map(n=>searchCaption(n.label)))].flatMap(text=>{
  const node=lord.nativeViews.findText(handle,text);if(!node)return[];const[x,y,w,h]=lord.getLayout(node);return[{text,x,y,w,h}];});
 const selected=()=>lastReply?.sections?.flatMap(s=>s.items)[lastReply.selected]?.key;
-const snapshot=(name,extra={})=>console.log('search-observation '+JSON.stringify({name,stats:lord.stats(),native:stats(),polls,selected:selected(),...extra}));
+const snapshot=(name,extra={})=>console.log('search-observation '+JSON.stringify({name,elapsedMs:lord.now()-started,stats:lord.stats(),native:stats(),polls,pushes,selected:selected(),...extra}));
 const pause=(ms=120)=>new Promise(resolve=>setTimeout(resolve,ms));
 const key=(code,name,char='',mods=0)=>{__lordKey(code,1,name,char,name,mods);__lordKey(code,0,name,'',name,mods);};
 async function type(text){for(const c of text){key(0,c,c);await pause(20);}await pause(250);}

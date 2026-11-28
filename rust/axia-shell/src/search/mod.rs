@@ -143,6 +143,9 @@ impl Drop for Search {
     }
 }
 impl Search {
+    pub(crate) fn fd(&self) -> i32 {
+        if self.clients.is_empty() { -1 } else { self.worker.as_ref().map_or(-1, Worker::fd) }
+    }
     pub fn configure(&mut self, home: PathBuf, assets: PathBuf) {
         let cache = std::env::var_os("XDG_CACHE_HOME")
             .map(PathBuf::from)

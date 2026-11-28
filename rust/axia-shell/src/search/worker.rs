@@ -3,7 +3,7 @@ use super::{fold, item, s, score, section};
 use crate::files::policy;
 use serde_json::{json, Value};
 use std::os::{
-    fd::{AsRawFd, FromRawFd},
+    fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
     unix::{ffi::OsStrExt, fs::MetadataExt},
 };
 use std::{
@@ -88,6 +88,7 @@ struct Queue {
 }
 pub struct Worker {
     queue: Arc<(Mutex<Queue>, Condvar)>,
+    ready: Arc<OwnedFd>,
 }
 impl Drop for Worker {
     fn drop(&mut self) {
@@ -100,6 +101,11 @@ impl Drop for Worker {
 }
 impl Worker {
     pub fn new(config: Config, usage: Usage) -> Option<Self> {
+        let fd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+        if fd < 0 { return None; }
+        // The worker retains the descriptor until it exits, even if its owner closes first.
+        let ready = Arc::new(unsafe { OwnedFd::from_raw_fd(fd) });
+        let signal = ready.clone();
         let queue = Arc::new((Mutex::new(Queue::default()), Condvar::new()));
         let shared = queue.clone();
         std::thread::Builder::new()
@@ -167,17 +173,25 @@ impl Worker {
                         if q.replies.len() >= MAX_JOBS {
                             q.replies.pop_front();
                         }
+                        let notify = q.replies.is_empty();
                         q.replies.push_back(Reply {
                             id: job.id,
                             generation: job.generation,
                             preview,
                             value,
                         });
+                        if notify {
+                            let one = 1u64;
+                            loop {
+                                let result = unsafe { libc::write(signal.as_raw_fd(), (&one as *const u64).cast(), 8) };
+                                if result >= 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted { break; }
+                            }
+                        }
                     }
                 }
             })
             .ok()?;
-        Some(Self { queue })
+        Some(Self { queue, ready })
     }
     pub fn submit(&self, job: Job) {
         let (m, c) = &*self.queue;
@@ -195,7 +209,18 @@ impl Worker {
         c.notify_one();
     }
     pub fn drain(&self) -> Vec<Reply> {
-        self.queue.0.lock().unwrap().replies.drain(..).collect()
+        let mut queue = self.queue.0.lock().unwrap();
+        self.acknowledge();
+        queue.replies.drain(..).collect()
+    }
+    pub fn fd(&self) -> RawFd { self.ready.as_raw_fd() }
+    // Called under the queue lock: publication cannot race between acknowledgement and drain.
+    fn acknowledge(&self) {
+        let mut value = 0u64;
+        loop {
+            let result = unsafe { libc::read(self.fd(), (&mut value as *mut u64).cast(), 8) };
+            if result >= 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted { break; }
+        }
     }
     pub fn pending(&self) -> usize {
         self.queue.0.lock().unwrap().jobs.len()
@@ -204,6 +229,7 @@ impl Worker {
         let mut q = self.queue.0.lock().unwrap();
         q.jobs.retain(|j| j.id != id);
         q.replies.retain(|j| j.id != id);
+        if q.replies.is_empty() { self.acknowledge(); }
     }
 }
 pub fn read(path: &Path, max: usize) -> Option<String> {

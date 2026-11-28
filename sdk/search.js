@@ -11,7 +11,7 @@ import { focusToken, restoreFocus, clearTextFocus } from './components.jsx';
 const request = args => launcherRequest({ ...args, op: 'search' });
 const sessions = new Map(), sources = new Map();
 const version = createStore(0);
-let timer = 0, dirty = true, queued = false, previousFocus, panelSession;
+let dirty = true, queued = false, previousFocus, panelSession;
 export const spotlightOpen = createStore(false);
 export const spotlight = {
   open() { if (!spotlightOpen.get()) { previousFocus = focusToken(); clearTextFocus(); spotlightOpen.set(true); } },
@@ -65,16 +65,15 @@ function changed() {
 }
 locale.subscribe(changed); clipboardHistory.subscribe(changed); settings.subscribe(changed); appRegistry.subscribe(changed);
 
-function arm() {
-  if (timer || ![...sessions.values()].some(s => s.snapshot.pending)) return;
-  timer = setTimeout(() => {
-    timer = 0; if (!sessions.size) return;
-    const reply = request({ cmd: 'poll' });
-    for (const update of reply.updates) sessions.get(update.id)?.accept(update);
-    if (reply.updates.length) version.set(v => v + 1);
-    arm();
-  }, 16);
-}
+// Completion packets come from the Rust worker's event descriptor in the compositor loop.
+globalThis.__lordSearchUpdate = reply => {
+  let changed = false;
+  for (const update of reply.updates) {
+    const session = sessions.get(update.id);
+    if (session && !session.closed) { session.accept(update); changed = true; }
+  }
+  if (changed) version.set(v => v + 1);
+};
 function execute(action, reveal) {
   if (!action) return;
   const external = action.type === 'external' ? sources.get(action.source)?.callbacks.get(action.key) : null;
@@ -126,7 +125,7 @@ export function createSearchSession(panel = false, context = {}) {
   syncFacts();
   const initial = request({ cmd: 'open', panel, context });
   const session = { id: initial.id, snapshot: initial, store: createStore(initial), closed: false,
-    accept(reply) { if (this.closed) return; this.snapshot = reply; this.store.set(reply); scheduleSources(this); arm(); },
+    accept(reply) { if (this.closed) return; this.snapshot = reply; this.store.set(reply); scheduleSources(this); },
     query(query) { if (this.closed) return this.snapshot; syncFacts(); const reply = request({ cmd: 'query', id: this.id, query }); this.accept(reply); return reply; },
     context(context) { if (!this.closed) this.accept(request({ cmd: 'context', id: this.id, context })); },
     event(action, extra = {}) {
@@ -136,7 +135,7 @@ export function createSearchSession(panel = false, context = {}) {
       if (reply.effects?.some(effect => effect.type === 'close')) spotlight.close();
       return !!reply.handled;
     },
-    close() { if (this.closed) return; this.closed = true; clearTimeout(this.sourceTimer); sessions.delete(this.id); request({ cmd: 'close', id: this.id }); for (const source of sources.values()) for (const key of source.callbacks.keys()) if (key.startsWith(`${this.id}:`)) source.callbacks.delete(key); this.snapshot = { id: this.id, sections: [], tree: null, pending: false }; this.store.set(this.snapshot); if (!sessions.size) { clearTimeout(timer); timer = 0; dirty = true; } },
+    close() { if (this.closed) return; this.closed = true; clearTimeout(this.sourceTimer); sessions.delete(this.id); request({ cmd: 'close', id: this.id }); for (const source of sources.values()) for (const key of source.callbacks.keys()) if (key.startsWith(`${this.id}:`)) source.callbacks.delete(key); this.snapshot = { id: this.id, sections: [], tree: null, pending: false }; this.store.set(this.snapshot); if (!sessions.size) dirty = true; },
   };
   sessions.set(session.id, session); if (panel) panelSession = session;
   return session;

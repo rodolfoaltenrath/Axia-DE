@@ -132,7 +132,6 @@ fn open(search: &mut Search, panel: bool) -> u64 {
 fn settle(search: &mut Search, id: u64) {
     let start = std::time::Instant::now();
     loop {
-        search.request(&json!({"cmd":"poll"})).unwrap();
         let c = &search.clients[&id];
         if !c.pending && !c.preview_pending {
             return;
@@ -141,8 +140,66 @@ fn settle(search: &mut Search, id: u64) {
             start.elapsed() < std::time::Duration::from_secs(8),
             "worker did not settle"
         );
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(readable(search.fd(), 8000), "worker completion did not wake poll");
+        search.request(&json!({"cmd":"poll"})).unwrap();
     }
+}
+fn readable(fd: i32, timeout: i32) -> bool {
+    let mut event = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+    loop {
+        let result = unsafe { libc::poll(&mut event, 1, timeout) };
+        if result >= 0 { return result > 0 && event.revents & libc::POLLIN != 0; }
+        assert_eq!(std::io::Error::last_os_error().kind(), std::io::ErrorKind::Interrupted);
+    }
+}
+
+#[test]
+fn completion_descriptor_is_quiet_after_drain_and_close_and_survives_reopening() {
+    let home = Home::new();
+    home.write("completion.txt", "ready");
+    let mut search = home.engine();
+    assert_eq!(search.fd(), -1);
+    let id = open(&mut search, false);
+    assert_eq!(search.fd(), -1, "opening alone starts no worker");
+    search.request(&json!({"cmd":"query","id":id,"query":"completion"})).unwrap();
+    let fd = search.fd();
+    assert!(fd >= 0 && readable(fd, 2000));
+    search.request(&json!({"cmd":"close","id":id})).unwrap();
+    assert_eq!(search.fd(), -1, "no main-loop registration without clients");
+    assert!(!readable(fd, 0), "close clears a queued completion under the queue lock");
+    assert!(search.request(&json!({"cmd":"poll"})).unwrap()["updates"].as_array().unwrap().is_empty());
+    let next = open(&mut search, false);
+    search.request(&json!({"cmd":"query","id":next,"query":"completion"})).unwrap();
+    assert_eq!(search.fd(), fd);
+    assert!(readable(fd, 2000));
+    let updates = search.request(&json!({"cmd":"poll"})).unwrap();
+    assert_eq!(updates["updates"].as_array().unwrap().len(), 1);
+    assert_eq!(updates["updates"][0]["id"], next);
+    assert!(keys(&search, next).iter().any(|key| key.contains("completion.txt")));
+    assert!(!readable(fd, 0), "draining acknowledges the event once, with no polling timer");
+    search.request(&json!({"cmd":"close","id":next})).unwrap();
+}
+
+#[test]
+fn one_descriptor_coalesces_completions_for_multiple_live_clients() {
+    let home = Home::new();
+    let mut search = home.engine();
+    let first = open(&mut search, false);
+    let second = open(&mut search, false);
+    for id in [first, second] {
+        search.request(&json!({"cmd":"query","id":id,"query":"Files"})).unwrap();
+    }
+    let (started, ready) = std::sync::mpsc::sync_channel(1);
+    let (release, wait) = std::sync::mpsc::channel();
+    search.worker.as_ref().unwrap().submit(Job { id: 0, generation: 0,
+        token: Arc::new(AtomicU64::new(0)), work: Work::Gate(started, wait) });
+    ready.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+    assert!(readable(search.fd(), 0));
+    let reply = search.request(&json!({"cmd":"poll"})).unwrap();
+    assert_eq!(reply["updates"].as_array().unwrap().len(), 2);
+    assert!(!readable(search.fd(), 0));
+    release.send(()).unwrap();
+    for id in [first, second] { search.request(&json!({"cmd":"close","id":id})).unwrap(); }
 }
 fn keys(search: &Search, id: u64) -> Vec<String> {
     search.clients[&id]

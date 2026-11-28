@@ -639,6 +639,22 @@ views nativas lerem direto, sem JSON.
 - [ ] Busca: retirar estado/timers do adaptador `search.js`, manter os provedores
       e substituir ícones descritos por funções JS por recursos serializáveis;
       o host nativo ainda usa placeholder para esses ícones personalizados.
+      Worker completion delivery now uses a Rust-owned event descriptor in the
+      compositor poll set, replacing the 16 ms JavaScript polling loop. Replies
+      are coalesced under the worker queue lock; closing clears obsolete replies
+      and the last client removes the descriptor from the poll set. Rust tests
+      cover acknowledgement, multiple clients, cancellation and reopening; the
+      real-session regression requires zero JS search-poll calls and no idle
+      completion packets. Query/preview generations remain authoritative in Rust.
+      Validation (2026-11-27): 741 shell tests passed (seven ignored), eight LPK
+      contracts, four capture cases and the 160-cycle real-session probe passed.
+      The previous adapter required 1,259 JS polls in the diagnostic control;
+      the event path required zero. The control also exceeded the old 45 s
+      fixture deadline; the larger functional deadline preserves workloads and
+      resource budgets. Single-run timings/RSS and limits are in `SPOTLIGHT.md`;
+      no physical-performance or causal-gain claim is made.
+      Compatibility stores, fact transport, provider scheduling/callbacks, custom
+      icons and panel mounting still remain; this does not complete the search migration item.
 - [ ] Correio, calendário e contatos (`mail.js`, `calendar.js`, `contacts.js`).
 - [ ] Rede, discos e hardware: modelos e vigilância (`netmodel.js`,
       `diskwatch.js`, `hardware.jsx`).

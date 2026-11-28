@@ -351,6 +351,26 @@ fn number(args: &Value, name: &str, default: f64, min: f64, max: f64) -> f64 {
 /// catalog and menu state as the JS bridge. Both run on the UI thread, never inside each other.
 static SHELL: std::sync::atomic::AtomicPtr<AxiaLauncher> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
+/// Main-loop transport: no descriptor is polled while search has no clients.
+#[no_mangle]
+pub extern "C" fn axia_launcher_search_fd() -> i32 {
+    // Same UI-thread handle/lifetime contract as shell_menu_request.
+    unsafe { SHELL.load(std::sync::atomic::Ordering::Acquire).as_ref() }
+        .map_or(-1, |state| state.search.fd())
+}
+
+/// Drain worker completions once. Null means no live client changed. The caller frees
+/// a non-null packet with axia_launcher_reply_free before returning to the main loop.
+#[no_mangle]
+pub extern "C" fn axia_launcher_search_drain() -> *mut c_char {
+    let Some(state) = (unsafe { SHELL.load(std::sync::atomic::Ordering::Acquire).as_mut() }) else {
+        return std::ptr::null_mut();
+    };
+    let Ok(reply) = state.search.request(&json!({"cmd":"poll"})) else { return std::ptr::null_mut(); };
+    if reply["updates"].as_array().is_none_or(Vec::is_empty) { return std::ptr::null_mut(); }
+    CString::new(reply.to_string()).unwrap().into_raw()
+}
+
 /// A request to the shell's launcher, as `lord.launcher.request` makes it.
 pub(crate) fn shell_menu_request(args: &Value, appearance: Option<std::rc::Rc<Value>>) -> Result<Value, &'static str> {
     // SAFETY: the pointer is the live handle that axia_launcher_new gave the registrar, cleared by

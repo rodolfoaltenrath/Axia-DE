@@ -60,8 +60,13 @@ Sections are ordered by their best result; the calculator always goes on top.
 The search core shares the desktop process. Opening a panel creates a small client;
 closing it drops its results, selection, preview and clipboard mirror. There is no
 separate search daemon. The single I/O thread starts on first use and sleeps on a
-condition variable when idle. The UI only polls while work is outstanding; closing
-the last client cancels polling. Typing, ranking apps, calculations, keyboard selection
+condition variable when idle. Worker completions signal a nonblocking, close-on-exec
+Rust-owned event descriptor; the compositor polls that descriptor and delivers one
+packet to the compatibility adapter. There is no JavaScript polling timer, including
+while queries/previews are pending. Queue publication, acknowledgement and draining
+share a lock so a completion cannot lose its wake-up. Closing a client clears its
+queued replies; the last close removes search from the compositor's poll set.
+Typing, ranking apps, calculations, keyboard selection
 and widget geometry are Rust operations. Filesystem scans and previews never run on
 the UI thread. Superseded queries and previews carry cancellation generations, so
 late replies cannot replace the current query or selection.
@@ -113,8 +118,10 @@ cargo test --manifest-path rust/Cargo.toml --target-dir server/build/rust --lock
 The integration test is orchestrated and asserted in Rust. Its temporary embedded
 module drives the QuickJS adapter and Rust native UI. It checks the real shortcut and button,
 Enter/reveal, calculator/conversion, apps/files/images/notes/help/clipboard/providers,
-160 open/search/close cycles, released native pixels and absence of closed-panel
-polling. Native captions and uniquely matched geometry are checked against fixed
+160 open/search/close cycles, released native pixels, zero JavaScript search-poll
+requests and no completion packets after the last close. Rust unit tests also cover
+descriptor acknowledgement, multiple clients and reopening after a queued completion
+is discarded. Native captions and uniquely matched geometry are checked against fixed
 expectations from the validated UI. `AXIA_SEARCH_OBSERVATIONS`
 saves JSON; calculator and conversion cases also have native Rust unit tests.
 The `activeBytes` diagnostic measures serialized active result/query/preview payload,
@@ -122,6 +129,31 @@ not allocator usage; process RSS and managed image bytes are checked separately.
 The test checks cleanup and bounded resident growth; it does not measure
 presented-frame latency. Physical measurements remain deferred to the end of
 `ROADMAP-SHELL-RUST.md`, as requested on 2026-11-19.
+
+Event-delivery validation, 2026-11-27: all 741 shell library tests passed (seven
+ignored), including 14 search tests; eight LPK contracts, the real-session
+160-cycle probe and four light/dark capture cases passed. The compositor was
+built with GPU=1; these captures render headlessly on the CPU. Session and
+isolated-host bundles also built successfully.
+
+A diagnostic reference used the previous `sdk/search.js` adapter from
+`324f0df6` with event-descriptor dispatch disabled, retaining the same Rust worker
+and fixture. Each mode ran once on this machine:
+
+| Delivery | JS poll requests | Completion packets | 160-cycle interval | Warm/late RSS (KiB) |
+| --- | ---: | ---: | ---: | ---: |
+| Previous 16 ms adapter | 1,259 | 0 | 79.03 s | 129,128 / 129,216 |
+| Rust event descriptor | 0 | 324 | 73.27 s | 130,504 / 130,776 |
+
+Both runs ended with zero clients, active result bytes and managed image bytes.
+The event run sent no packets during the final closed-panel idle interval. The
+reference intentionally fails the new zero-JS-poll assertion. Its full fixture
+already took 93.40 s, so the process deadline was raised from 45 to 180 s (195 s
+for the Rust supervisor), preserving all 160 cycles and existing resource limits.
+Stage timestamps are included in the observations. These single runs are
+functional diagnostics, not evidence of a causal latency or memory improvement;
+the 512-app fixture is not the idle-session baseline. Evidence is generated under
+`server/build/validation/native-search-events/` and is not committed.
 
 The native renderer is now unconditional; `spotlightNativeView` is ignored.
 The GPU=1 desktop CI additionally requires a Rust capture driver in light/dark

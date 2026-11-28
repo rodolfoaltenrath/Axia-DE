@@ -743,6 +743,22 @@ void js_native_view_notify(void) {
     }
 }
 
+extern int axia_launcher_search_fd(void);
+extern char *axia_launcher_search_drain(void);
+extern void axia_launcher_reply_free(char *);
+int js_search_fd(void) { return ctx ? axia_launcher_search_fd() : -1; }
+void js_search_dispatch(void) {
+    if (!ctx) return;
+    char *packet = axia_launcher_search_drain();
+    if (!packet) return;
+    JSValue value = JS_ParseJSON(ctx, packet, strlen(packet), "<axia-search>");
+    axia_launcher_reply_free(packet);
+    if (!JS_IsException(value)) JS_FreeValue(ctx, call_global("__lordSearchUpdate", 1, &value));
+    else dump_exception(ctx);
+    JS_FreeValue(ctx, value);
+    drain_jobs();
+}
+
 void js_pointer(const char *type, int target, float x, float y, int button) {
     /* A native view handles its own nodes; JS gets the event on the view's mount node. */
     target = axia_view_pointer(type, target, x, y, button);

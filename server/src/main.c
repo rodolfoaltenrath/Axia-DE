@@ -2489,6 +2489,8 @@ int main(int argc, char **argv) {
         n += nhw;
         int clipboard_fd = axia_clipboard_fd();
         if (clipboard_fd >= 0) pfd[n++] = (struct pollfd){ clipboard_fd, POLLIN, 0 };
+        int search_fd = js_search_fd(), searchbase = search_fd >= 0 ? n : -1;
+        if (searchbase >= 0) pfd[n++] = (struct pollfd){ search_fd, POLLIN, 0 };
         if (poll(pfd, n, wait) < 0 && errno != EINTR) { perror("poll"); break; }
         loop_wake = mono_ns();                  /* LordBench's frame phases: the next frame starts from here */
         loop_wake_flip = 0;
@@ -2516,6 +2518,7 @@ int main(int argc, char **argv) {
             }
         }
         if (pfd[1].revents & POLLIN) break;
+        if (searchbase >= 0 && (pfd[searchbase].revents & POLLIN)) js_search_dispatch();
         int lost[INPUT_MAX_DEVICES], nlost = 0;
         for (int i = 0; i < s.input.count; i++) {
             if (pfd[2 + i].revents & POLLIN) input_dispatch(&s.input, i, on_input, &s);
