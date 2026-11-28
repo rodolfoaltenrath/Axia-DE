@@ -307,6 +307,17 @@ jobs:
       - name: Native tree showing real terminal sessions
         if: matrix.gpu == 1
         run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test terminal_node_runtime -- --ignored --nocapture
+      - name: Native Terminal with real login shells
+        if: matrix.gpu == 1
+        env:
+          AXIA_TERMINAL_OUTPUT: ${{ runner.temp }}/axia-terminal
+        run: cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test terminal_runtime -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.gpu == 1
+        with:
+          name: axia-terminal
+          path: ${{ runner.temp }}/axia-terminal
+          if-no-files-found: warn
       - name: Native PDF viewer with the real document helper
         if: matrix.gpu == 1
         env:

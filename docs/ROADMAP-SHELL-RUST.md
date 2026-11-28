@@ -730,7 +730,7 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       busca, anotações, campos, desfazer, salvar cópia, impressão e menus); JSX, os
       adaptadores JS e o manifesto JSON retirados. Serviços do helper em
       `runtime/native_pdf_services.js`. Ver [RUST-PDF.md](RUST-PDF.md).
-- [ ] `terminal` (registrado e nativo; resta o fechamento descrito abaixo; plano e contrato de transporte em
+- [x] `terminal` (native window and real-shell integration complete; plan and transport contract in
       [RUST-TERMINAL.md](RUST-TERMINAL.md)). Feito e commitado: nó nativo do terminal (1), modelo
       do workspace (2a), caminho de teclas (2b-1), janela com abas/painéis/divisores/teclado/mouse
       (2b), toasts, confirmação de fechar, copiar/colar e busca (3a), popups, compositor,
@@ -740,11 +740,19 @@ Do mais simples ao mais difícil. Podem andar em paralelo com a Fase 3.
       persistência por efeito `settings`, todas as sessões reconfiguradas), gatilhos de perfil, troca
       automática de perfil e eventos da sessão (4c: sino visual, notify, attention, profile, copy,
       host, alerta ao terminar o comando, saída capturada) e cliente tmux em modo de controle (5).
-      Falta (salvar/restaurar arranjos e layout vivo foram para a etapa 6: precisam das molduras
-      das janelas):
+      Stage 6 also includes arrangements, live layouts and new-window geometry:
       - **6** feito: `manifest.rs`, registro, `runtime/native_terminal_services.js`, JSX/JS removidos,
-        arranjos, layout vivo e tamanho da janela nova (`restore.rs`). Falta: teste GPU com shell real
-        (`terminal_runtime`).
+        arranjos, layout vivo e tamanho da janela nova (`restore.rs`).
+      - **Validation (2026-11-27):** `terminal_runtime` exercises the compiled app
+        over real login-shell PTYs, keyboard execution, split-pane input, tabs,
+        minimize/remount, search, geometry, close-guard cancellation/confirmation
+        and release of all sessions. Four light/dark cases cover 360/1000 px app
+        widths (the minimum app is inside a 640 px headless screen). Rust owns
+        assertions, process/account lifetime and capture checks; the embedded
+        driver reaches the current session adapter. Required by GPU=1 CI with
+        logs/captures. The compositor is built with GPU=1; headless rendering is
+        on the CPU. Physical desktop/device checks and performance measurements
+        remain deferred to roadmap closure.
 - [x] `player` (plano e estado em [RUST-PLAYER.md](RUST-PLAYER.md)): janela nativa completa
       (biblioteca por músicas/artistas/álbuns/vídeos, fila, shuffle e repeat, barras de tempo e
       volume, legendas `.srt` e da faixa, faixa de áudio, tela cheia, picture in picture, soltar

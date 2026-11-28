@@ -200,16 +200,38 @@ the PTY and the mouse/search/selection engine are C (`server/src/term`). Every f
    guardian key, gives the ones the layout did not mention a tab each, and opens the other saved windows
    with `args.liveAdopt`); and the frame of a new window from the default profile's columns and rows.
    Transport: `windows.frames` ([ids] → {id: {x,y,w,h} or null}), `term.list`, `term.ackRestored`;
-   `windows.open` takes `frame` and `args`. 129 crate tests. **Not done yet:** the GPU runtime test with
-   a real shell (`terminal_runtime`) and the first look at the window on screen.
+   `windows.open` takes `frame` and `args`. 129 crate tests, plus the real-shell integration
+   described below. Physical desktop validation remains deferred to roadmap closure.
 
 ## Resume here
 
-Stages 1–6 are committed on `main` (not pushed; the owner pushes when everything is done). The
-next step is the GPU test with a real shell. Test workflow: the Fedora WSL clone (`~/axia-check`), `cargo test -p
-axia-app-terminal --locked --offline` from `rust/`; Windows cannot run cargo on this repo. Order
-of the remaining apps after the terminal: `player`, `mail`, `editor`. Commits carry no
-Co-Authored-By trailer.
+All built-in apps now have Rust windows and manifests. Continue with the remaining session
+state/services in `ROADMAP-SHELL-RUST.md`; Player's real-file runtime test and final graphical
+and device checks remain pending. JavaScript session transport is still in scope for phase 6.
+
+## Real-shell integration (2026-11-27)
+
+`rust/xtask/tests/terminal_runtime.rs` mounts the registered compiled app in the real
+compositor. It executes a command through keyboard input and checks the resulting file,
+types into a split pane, opens/closes a tab, minimizes/remounts without losing PTYs,
+searches shell output, checks reported geometry, cancels/confirms the busy-process close
+guard and verifies that all PTYs are released. Four cases cover light/dark at 360/1000 px
+app widths; the minimum app is constrained inside a 640 px headless screen. Captures
+require green ANSI output from the real shell and are inspected alongside the logs.
+
+Rust owns assertions, compositor lifetime, captures and cleanup. The embedded driver only
+reaches the session's current runtime/SDK interface. When run as root, the Rust harness
+creates and removes a temporary account with `/bin/sh` in passwd, instead of altering
+`nobody` or adding a command override to the production PTY launcher. Non-root runs use
+the current account's login shell. Fedora's GPU=1 CI requires the test and publishes evidence
+via `AXIA_TERMINAL_OUTPUT`. The compositor is built with GPU=1; headless captures use the CPU.
+
+Run after building `server/build/axia-server`, `server/build/axia-media` and installing the
+existing npm dependencies:
+
+```console
+cargo test --manifest-path rust/Cargo.toml -p xtask --locked --offline --test terminal_runtime -- --ignored --nocapture
+```
 
 ## Notes for the next stages
 
@@ -229,7 +251,7 @@ Co-Authored-By trailer.
 - The window needs the keyboard before the shell does: `NativeApp::key` receives the
   keys the focused native window sees; Rust resolves them with `keys.rs` and the transport
   writes the bytes with `term.write` (the order today's `index.jsx` uses).
-- A test session cannot rely on a login shell (the harness user has none, so the shell
-  exits at once); a runtime test of the window needs a program that stays alive, or
-  `term.create` with an explicit command (not available yet).
+- The generic harness user has no login shell; the real-shell integration uses the
+  temporary account described above. Production `term.create` still launches only
+  the user's login shell, without an explicit-command override.
 - `term.feed` writes to the screen only for tmux gateway sessions.

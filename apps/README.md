@@ -29,8 +29,9 @@ keeps grouping, selection, disabled actions and errors. Native windows only send
 a group key for termination: the shared Rust controller rechecks current shell
 facts, then the compositor applies its Wayland credential checks. File and
 letter icon descriptors preserve package and Linux-window artwork. The generic
-React widget host for compiled apps has been removed; Files still uses its
-separate browser/dialog renderer.
+React widget host for compiled apps has been removed. Files browser windows
+and icons use the native host; shared selectors and transfers still use the
+widget adapter pending shell roadmap phase 3.
 
 Help mounts its sidebar, search field, reading column, Markdown and six-step
 welcome tour directly in Rust. `apps/help/content.rs` owns the translated
@@ -93,9 +94,13 @@ the camera session, and closing it also stops a recording (and its microphone
 indicator), including one whose permission arrives after close. The folder
 contains only Rust source.
 
-## Remaining apps awaiting migration
+## Native apps and remaining session work
 
-The complete remaining scope is tracked in `docs/NATIVE-APP-MIGRATION.md`.
+All app sources under `apps/` are Rust, including their tests and manifests.
+The registry contract in `rust/native_apps.rs` checks this recursively.
+Remaining session adapters and validation are tracked in
+[`ROADMAP-SHELL-RUST.md`](../docs/ROADMAP-SHELL-RUST.md) and
+[`NATIVE-APP-MIGRATION.md`](../docs/NATIVE-APP-MIGRATION.md).
 
 PDF's transforms, viewport navigation, zoom/input rules, search/selection lifecycle
 annotation/form drafts and mutation ordering, raster-cache policy, thumbnail
@@ -108,8 +113,11 @@ layout/scrolling and bookmark expansion now live in
 release effects.
 See `docs/RUST-PDF.md` for the frozen-reference tests and current migration boundary.
 
-Each remaining app is a folder `apps/<id>/` with two files. Apps don't depend on the theme: any theme shows
-them with its own colors (via `useTheme()`).
+## Isolated JavaScript app compatibility
+
+The following JSX example and SDK reference describe the isolated third-party
+`.lpk` contract. They are not the source format for built-in apps under `apps/`.
+The isolated host remains JavaScript under the shell roadmap's option A.
 
 ```
 apps/quicknotes/

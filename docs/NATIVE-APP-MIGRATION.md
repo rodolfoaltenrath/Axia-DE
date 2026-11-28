@@ -58,8 +58,10 @@ access are Rust (see [EDITOR.md](EDITOR.md)). The runtime gained transport-only 
 save and folder modes for `files.pick`, `windows.closeGuard` and `windows.close`. Graphical and
 input-method checks remain for the final desktop validation.
 
-Remaining apps (all remain in scope):
-mail. Existing Rust models in it do not count as native-window completion.
+No application folders remain to convert from JavaScript/JSX. Mail's complete
+native window is described below. Remaining validation and session adapters
+are tracked in `ROADMAP-SHELL-RUST.md`; Rust models alone still do not count
+as native-window completion.
 
 Contacts now has only Rust sources, including its manifest, full three-column
 window and icon. Rust owns names, multiword search, book-scoped groups, target

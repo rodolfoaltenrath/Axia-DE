@@ -31,11 +31,43 @@ impl Drop for Scratch {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
-fn owned(path: &Path) {
+// A real PTY must use a login shell from passwd, never a test-only command override.
+struct ShellUser(Option<String>);
+impl ShellUser {
+    fn new(required: bool) -> Self {
+        if !required || unsafe { libc::geteuid() } != 0 {
+            return Self(None);
+        }
+        let name = format!("axia-term-{}", std::process::id());
+        let status = Command::new("useradd")
+            .args(["--system", "--no-create-home", "--user-group", "--shell", "/bin/sh", &name])
+            .status().expect("useradd is required for root-run terminal integration");
+        assert!(status.success(), "create the isolated terminal test account");
+        Self(Some(name))
+    }
+    fn identity(&self) -> (u32, u32) {
+        if let Some(name) = &self.0 {
+            let name = std::ffi::CString::new(name.as_str()).unwrap();
+            let pw = unsafe { libc::getpwnam(name.as_ptr()) };
+            assert!(!pw.is_null());
+            unsafe { ((*pw).pw_uid, (*pw).pw_gid) }
+        } else {
+            (65534, 65534)
+        }
+    }
+}
+impl Drop for ShellUser {
+    fn drop(&mut self) {
+        if let Some(name) = &self.0 {
+            let _ = Command::new("userdel").arg(name).status();
+        }
+    }
+}
+fn owned(path: &Path, uid: u32, gid: u32) {
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
     if unsafe { libc::geteuid() } == 0 {
         let name = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
-        assert_eq!(unsafe { libc::chown(name.as_ptr(), 65534, 65534) }, 0);
+        assert_eq!(unsafe { libc::chown(name.as_ptr(), uid, gid) }, 0);
     }
 }
 
@@ -123,6 +155,8 @@ fn run_ui_config(
     check_capture: impl FnOnce(&Path),
     prepare_home: impl FnOnce(&Path),
 ) -> Value {
+    let shell_user = ShellUser::new(kind == "terminal");
+    let (uid, gid) = shell_user.identity();
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -143,7 +177,7 @@ fn run_ui_config(
         home.join(".config/axia"),
     ] {
         fs::create_dir(&path).unwrap();
-        owned(&path);
+        owned(&path, uid, gid);
     }
     let permissions = home.join(".config/axia/permisos.json");
     fs::write(
@@ -151,7 +185,7 @@ fn run_ui_config(
         r#"{"apps":{"screenshots":{"screen":{"state":"allow"}}}}"#,
     )
     .unwrap();
-    owned(&permissions);
+    owned(&permissions, uid, gid);
     prepare_home(&home);
     let image = home.join(image_name);
     let driver = scratch.0.join("probe.jsx");
@@ -244,10 +278,10 @@ fn run_ui_config(
         .process_group(0);
     if unsafe { libc::geteuid() } == 0 {
         unsafe {
-            command.pre_exec(|| {
+            command.pre_exec(move || {
                 if libc::setgroups(0, std::ptr::null()) != 0
-                    || libc::setgid(65534) != 0
-                    || libc::setuid(65534) != 0
+                    || libc::setgid(gid) != 0
+                    || libc::setuid(uid) != 0
                 {
                     return Err(std::io::Error::last_os_error());
                 }
